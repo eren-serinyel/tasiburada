@@ -1,0 +1,14 @@
+export { CustomerService } from './CustomerService';
+// export { ShipmentService } from './ShipmentService';
+export { CarrierAuthService } from './carrier/CarrierAuthService';
+export { CarrierCompanyInfoService } from './carrier/CarrierCompanyInfoService';
+export { CarrierActivityService } from './carrier/CarrierActivityService';
+export { CarrierVehicleTypeService } from './carrier/CarrierVehicleTypeService';
+export { CarrierServiceTypeService } from './carrier/CarrierServiceTypeService';
+export { CarrierVehicleService } from './carrier/CarrierVehicleService';
+export { CarrierDocumentService } from './carrier/CarrierDocumentService';
+export { CarrierEarningsService } from './carrier/CarrierEarningsService';
+export { CarrierSecurityService } from './carrier/CarrierSecurityService';
+export { NotificationPreferenceService } from './carrier/NotificationPreferenceService';
+export { CarrierProfileStatusService } from './carrier/CarrierProfileStatusService';
+export { CarrierProfileQueryService } from './carrier/CarrierProfileQueryService';

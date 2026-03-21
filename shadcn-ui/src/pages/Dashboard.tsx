@@ -1,0 +1,479 @@
+import { getSessionUser } from '@/lib/storage';
+import { useEffect, useState } from 'react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Truck, Package, Star, Clock, MapPin, User, Calendar, MessageCircle, TrendingUp, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { User as UserType, Carrier, Customer, Shipment, Offer } from '@/lib/types';
+import { getCarrierProfileTasks } from '@/lib/utils';
+import { mockShipments, mockCustomers } from '@/lib/mockData';
+import { reviewsApi, type ReviewRecord } from '@/utils/mockDb';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { useToast } from '@/hooks/use-toast';
+
+export default function Dashboard() {
+  const [user, setUser] = useState<UserType | null>(null);
+  const [shipments, setShipments] = useState<Shipment[]>([]);
+  const [offers, setOffers] = useState<Offer[]>([]);
+  const [myReviews, setMyReviews] = useState<ReviewRecord[]>([]);
+  const [reportForId, setReportForId] = useState<string | null>(null);
+  const [reportState, setReportState] = useState<{ reason: string; details: string }>({ reason: '', details: '' });
+  const { toast } = useToast();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const u: UserType | null = getSessionUser() || (localStorage.getItem('currentUser') ? JSON.parse(localStorage.getItem('currentUser') as string) : null);
+    if (!u) {
+      navigate('/login');
+      return;
+    }
+    setUser(u);
+
+    // Load user's shipments and offers
+    if (u.type === 'customer') {
+      const userShipments: Shipment[] = (JSON.parse(localStorage.getItem('shipments') || '[]') as Shipment[])
+        .filter((s: Shipment) => s.customerId === u.id);
+      setShipments(userShipments.length > 0 ? userShipments : mockShipments.filter(s => s.customerId === u.id));
+      
+      // Load offers for user's shipments
+      const allOffers: Offer[] = JSON.parse(localStorage.getItem('offers') || '[]');
+      const userOffers = allOffers.filter((offer: Offer) => 
+        userShipments.some((s: Shipment) => s.id === offer.shipmentId)
+      );
+      setOffers(userOffers);
+    } else {
+      // For carriers, show available shipments
+      setShipments(mockShipments.filter(s => s.status === 'pending'));
+      // Load carrier's reviews
+      const list = reviewsApi.getByCarrier(u.id).filter(r => (r.status ?? 'aktif') === 'aktif');
+      setMyReviews(list.sort((a,b) => (a.tarih < b.tarih ? 1 : -1)));
+    }
+  }, [navigate]);
+
+  if (!user) {
+    return <div>Yükleniyor...</div>;
+  }
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'pending': return 'bg-yellow-100 text-yellow-800';
+      case 'accepted': return 'bg-blue-100 text-blue-800';
+      case 'in-transit': return 'bg-purple-100 text-purple-800';
+      case 'delivered': return 'bg-green-100 text-green-800';
+      case 'cancelled': return 'bg-red-100 text-red-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  const getStatusText = (status: string) => {
+    switch (status) {
+      case 'pending': return 'Bekliyor';
+      case 'accepted': return 'Kabul Edildi';
+      case 'in-transit': return 'Yolda';
+      case 'delivered': return 'Teslim Edildi';
+      case 'cancelled': return 'İptal Edildi';
+      default: return status;
+    }
+  };
+
+  return (
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      {/* Header */}
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-gray-900">
+          {user.type === 'customer' ? `Merhaba ${user.name}, taşınmaya hazır mısın?` : `Hoş geldiniz, ${user.name}!`}
+        </h1>
+        <p className="text-gray-600 mt-2">
+          {user.type === 'customer' ? 'Teklifleri ve taleplerinizi buradan yönetin' : 'Mevcut işleri görüntüleyin ve takviminizi yönetin'}
+        </p>
+      </div>
+
+      {/* Stats Cards */}
+      <div className="grid md:grid-cols-4 gap-6 mb-8">
+        {user.type === 'customer' ? (
+          <>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Toplam Taşıma</CardTitle>
+                <Package className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{shipments.length}</div>
+                <p className="text-xs text-muted-foreground">Tüm zamanlar</p>
+              </CardContent>
+            </Card>
+            
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Bekleyen</CardTitle>
+                <Clock className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">
+                  {shipments.filter(s => s.status === 'pending').length}
+                </div>
+                <p className="text-xs text-muted-foreground">Onay bekliyor</p>
+              </CardContent>
+            </Card>
+            
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Gelen Teklifler</CardTitle>
+                <TrendingUp className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-blue-600">
+                  {offers.filter(o => o.status === 'pending').length}
+                </div>
+                <p className="text-xs text-muted-foreground">Değerlendirme bekliyor</p>
+              </CardContent>
+            </Card>
+            
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Tamamlanan</CardTitle>
+                <Star className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">
+                  {shipments.filter(s => s.status === 'delivered').length}
+                </div>
+                <p className="text-xs text-muted-foreground">Başarılı teslimat</p>
+              </CardContent>
+            </Card>
+          </>
+        ) : (
+          <>
+            {/* Profil Tamamlama - Her nakliyeci için görünür */}
+            <Card className="md:col-span-2">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium">Profil Tamamlama</CardTitle>
+                <CardDescription>Eksik bilgilerinizi tamamlayın, daha çok işe çıkın</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {(() => {
+                  const c = user as Carrier;
+                  const { tasks, percent, isComplete } = getCarrierProfileTasks(c);
+                  return (
+                    <div>
+                      <div className="w-full h-3 bg-gray-100 rounded-full overflow-hidden mb-4">
+                        <div className="h-full bg-gradient-to-r from-blue-500 to-green-500" style={{ width: `${percent}%` }} />
+                      </div>
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="text-sm text-gray-600">Tamamlanma: <span className="font-semibold text-gray-900">%{percent}</span></div>
+                        {!isComplete ? (
+                          <div className="flex items-center text-yellow-700 bg-yellow-50 px-2 py-1 rounded text-xs">
+                            <AlertTriangle className="h-3 w-3 mr-1" /> Eksik bilgiler yüzünden bazı işlere katılamazsınız
+                          </div>
+                        ) : (
+                          <div className="flex items-center text-green-700 bg-green-50 px-2 py-1 rounded text-xs">
+                            <CheckCircle2 className="h-3 w-3 mr-1" /> Öne Çıkan Nakliyeci
+                          </div>
+                        )}
+                      </div>
+                      {!isComplete && (
+                        <div className="mb-3">
+                          <Button size="sm" onClick={() => navigate('/profile')}>
+                            Profili tamamen tamamla
+                          </Button>
+                        </div>
+                      )}
+                      <ul className="space-y-2">
+                        {tasks.map(t => (
+                          <li key={t.key} className="flex items-center justify-between p-2 rounded border bg-white">
+                            <span className="text-sm">{t.label}</span>
+                            {t.done ? (
+                              <Badge className="bg-green-100 text-green-800">Tamamlandı</Badge>
+                            ) : (
+                              <Button size="sm" variant="outline" onClick={() => {
+                                // Basit yönlendirmeler - ileride özel sayfalara bağlanabilir
+                                navigate('/profile');
+                              }}>Tamamla</Button>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  );
+                })()}
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Durum</CardTitle>
+                <User className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-lg font-bold">
+                  {(user as Carrier).isApproved ? (
+                    <Badge className="bg-green-100 text-green-800">Onaylandı</Badge>
+                  ) : (
+                    <Badge className="bg-yellow-100 text-yellow-800">Onay Bekliyor</Badge>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">Hesap durumu</p>
+              </CardContent>
+            </Card>
+            
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Puan</CardTitle>
+                <Star className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                {(() => {
+                  const active = myReviews;
+                  const count = active.length;
+                  const avg = count === 0 ? 0 : Number((active.reduce((sum, y) => sum + ((y.puanlar.dakiklik + y.puanlar.iletisim + y.puanlar.ozen + y.puanlar.profesyonellik) / 4), 0) / count).toFixed(1));
+                  return (
+                    <>
+                      <div className="text-2xl font-bold">{avg}</div>
+                      <p className="text-xs text-muted-foreground">{count} değerlendirme</p>
+                    </>
+                  );
+                })()}
+              </CardContent>
+            </Card>
+            
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Mevcut İşler</CardTitle>
+                <Truck className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{shipments.length}</div>
+                <p className="text-xs text-muted-foreground">Uygun işler</p>
+              </CardContent>
+            </Card>
+            
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Bu Ay Müsaitlik</CardTitle>
+                <Calendar className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold text-green-600">
+                  {JSON.parse(localStorage.getItem(`availability_${user.id}`) || '[]').length}
+                </div>
+                <p className="text-xs text-muted-foreground">Müsait günler</p>
+              </CardContent>
+            </Card>
+          </>
+        )}
+      </div>
+
+      {/* Action Buttons */}
+      <div className="mb-8">
+        {user.type !== 'customer' ? (
+          <div className="flex flex-wrap gap-4">
+            <Link to="/shipments">
+              <Button size="lg">
+                <Truck className="h-4 w-4 mr-2" />
+                Mevcut İşleri Görüntüle
+              </Button>
+            </Link>
+            <Link to="/calendar">
+              <Button variant="outline" size="lg">
+                <Calendar className="h-4 w-4 mr-2" />
+                Takvimi Yönet
+              </Button>
+            </Link>
+          </div>
+        ) : null}
+      </div>
+
+      {/* Carrier: Beni Değerlendirenler */}
+      {user.type === 'carrier' && (
+        <Card className="mt-6">
+          <CardHeader>
+            <CardTitle>Beni Değerlendirenler</CardTitle>
+            <CardDescription>Son müşteri yorumlarını buradan görüntüleyin</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {myReviews.slice(0,3).map(y => {
+              const customer = mockCustomers.find(c => c.id === y.userId);
+              const name = customer ? `${customer.name} ${customer.surname}` : y.kullanici;
+              return (
+                <div key={y.id} className="border-b pb-3 mb-3 last:border-0">
+                  <div className="flex justify-between">
+                    <span className="font-medium text-gray-800">{name.split(' ')[0]} {name.split(' ')[1]?.[0]}***</span>
+                    <span className="text-xs text-gray-500">{new Date(y.tarih).toLocaleDateString('tr-TR')}</span>
+                  </div>
+                  <p className="text-gray-700 mt-1">{y.yorum}</p>
+                  <div className="flex gap-2 text-xs text-gray-600 mt-1">
+                    <span>Dakiklik: {y.puanlar.dakiklik}/5</span>
+                    <span>İletişim: {y.puanlar.iletisim}/5</span>
+                    <span>Özen: {y.puanlar.ozen}/5</span>
+                    <span>Profesyonellik: {y.puanlar.profesyonellik}/5</span>
+                  </div>
+                </div>
+              );
+            })}
+            <div className="mt-2 text-right">
+              <Link to="/carrier/reviews">
+                <Button size="sm" variant="outline">Tümünü Gör</Button>
+              </Link>
+            </div>
+            {myReviews.length === 0 && (
+              <div className="text-gray-500 text-sm">Henüz yorum yapılmamış.</div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Recent Activity + Yan kutular */}
+      <Card>
+        <CardHeader>
+          <CardTitle>{user.type === 'customer' ? 'Son Taşıma Taleplerin' : 'Mevcut İşler'}</CardTitle>
+          <CardDescription>
+            {user.type === 'customer' 
+              ? 'Oluşturduğunuz taşıma taleplerinin durumu ve gelen teklifler'
+              : 'Size uygun taşıma işleri'
+            }
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {shipments.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">
+              {user.type === 'customer' 
+                ? 'Henüz taşıma talebiniz yok. İlk talebinizi oluşturun!'
+                : 'Şu anda uygun iş bulunmuyor.'
+              }
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {shipments.slice(0, 5).map((shipment) => {
+                const shipmentOffers = offers.filter(o => o.shipmentId === shipment.id);
+                return (
+                  <div key={shipment.id} className="flex items-center justify-between p-4 border rounded-lg">
+                    <div className="flex-1">
+                      <div className="flex items-center space-x-2 mb-2">
+                        <MapPin className="h-4 w-4 text-gray-400" />
+                        <span className="text-sm text-gray-600">
+                          {shipment.origin.city} → {shipment.destination.city}
+                        </span>
+                        <Badge className={getStatusColor(shipment.status)}>
+                          {getStatusText(shipment.status)}
+                        </Badge>
+                        {user.type === 'customer' && shipmentOffers.length > 0 && (
+                          <Badge variant="outline" className="bg-blue-50 text-blue-700">
+                            {shipmentOffers.length} Teklif
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="text-sm text-gray-800">{shipment.description}</p>
+                      <div className="flex items-center space-x-4 mt-2 text-xs text-gray-500">
+                        <span>{shipment.weight}kg</span>
+                        <span>{shipment.distance}km</span>
+                        <span>{shipment.price}₺</span>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center space-x-2">
+                      {user.type === 'customer' && shipmentOffers.length > 0 && (
+                        <Link to={`/offers/${shipment.id}`}>
+                          <Button size="sm" variant="outline">
+                            Teklifleri Görüntüle
+                          </Button>
+                        </Link>
+                      )}
+                      {user.type === 'carrier' && shipment.status === 'pending' && (
+                        (() => {
+                          const { isComplete } = getCarrierProfileTasks(user as Carrier);
+                          return isComplete ? (
+                            <Button size="sm" variant="outline" disabled>
+                              Teklif Ver
+                            </Button>
+                          ) : (
+                            <Button size="sm" variant="outline" onClick={() => navigate('/profile')}>
+                              Profili tamamla
+                            </Button>
+                          );
+                        })()
+                      )}
+                      <Button variant="ghost" size="sm">
+                        <MessageCircle className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Report dialog */}
+      {reportForId && (
+        <Dialog open={true} onOpenChange={(open) => { if (!open) setReportForId(null); }}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Yorumu Şikayet Et</DialogTitle>
+              <DialogDescription>Bu yorumu neden şikayet ediyorsunuz?</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3">
+              <div className="grid gap-2">
+                <Label className="text-sm">Gerekçe</Label>
+                <div className="flex flex-wrap gap-2">
+                  {['Argo / küfür', 'Yanlış bilgi', 'Haksız değerlendirme'].map(r => (
+                    <Button key={r} type="button" variant={reportState.reason === r ? 'default' : 'outline'} size="sm" onClick={() => setReportState(s => ({ ...s, reason: r }))}>{r}</Button>
+                  ))}
+                </div>
+              </div>
+              <div className="grid gap-2">
+                <Label className="text-sm">Açıklama</Label>
+                <Textarea rows={3} value={reportState.details} onChange={(e) => setReportState(s => ({ ...s, details: e.target.value }))} />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setReportForId(null)}>İptal</Button>
+              <Button onClick={() => {
+                if (!reportState.reason) { toast({ title: 'Gerekçe seçin' }); return; }
+                reviewsApi.report(reportForId, { reason: reportState.reason, details: reportState.details });
+                setMyReviews(prev => prev.map(r => r.id === reportForId ? { ...r, status: 'askida' } : r));
+                setReportForId(null);
+                setReportState({ reason: '', details: '' });
+                toast({ title: 'Şikayet alındı', description: 'Yorum incelemeye alındı.' });
+              }}>Gönder</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+
+      {user.type === 'customer' && (
+        <div className="grid md:grid-cols-3 gap-4 mt-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Sadakat Durumu</CardTitle>
+              <CardDescription>3 taşımadan sonra %10 indirim</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Badge className="bg-purple-100 text-purple-800">2/3 • Bronze</Badge>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>Kampanyalar</CardTitle>
+              <CardDescription>Güncel promosyonlar</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Link to="/campaigns" className="text-blue-600 text-sm">Tüm kampanyaları gör</Link>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>Destek</CardTitle>
+              <CardDescription>Sorun mu var? Yardımcı olalım.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Link to="/support" className="text-blue-600 text-sm">Destek merkezine git</Link>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+    </div>
+  );
+}
