@@ -23,7 +23,7 @@ export class Shipment {
     @JoinColumn({ name: "customerId" })
     customer: Customer;
 
-    @Column({ nullable: true })
+    @Column({ type: 'char', length: 36, charset: 'utf8mb4', collation: 'utf8mb4_unicode_ci', nullable: true })
     carrierId: string;
 
     @ManyToOne(() => Carrier, { nullable: true })

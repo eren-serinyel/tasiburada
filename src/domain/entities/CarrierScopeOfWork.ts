@@ -8,7 +8,7 @@ export class CarrierScopeOfWork {
     @PrimaryGeneratedColumn('uuid')
     id: string;
 
-    @Column({ type: 'uuid' })
+    @Column({ type: 'char', length: 36, charset: 'utf8mb4', collation: 'utf8mb4_unicode_ci' })
     carrierId: string;
 
     @Column({ type: 'uuid' })

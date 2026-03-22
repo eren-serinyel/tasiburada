@@ -1,4 +1,5 @@
-import { Entity, PrimaryGeneratedColumn, Column, OneToMany, CreateDateColumn, UpdateDateColumn, OneToOne } from 'typeorm';
+import { Entity, PrimaryColumn, Column, OneToMany, CreateDateColumn, UpdateDateColumn, OneToOne } from 'typeorm';
+import { v4 as uuid } from 'uuid';
 import { Vehicle } from './Vehicle';
 import { CarrierDocument } from './CarrierDocument';
 import { CarrierEarnings } from './CarrierEarnings';
@@ -11,8 +12,8 @@ import { CarrierScopeOfWork } from './CarrierScopeOfWork';
 
 @Entity('carriers')
 export class Carrier {
-  @PrimaryGeneratedColumn('uuid')
-  id: string;
+  @PrimaryColumn({ type: 'char', length: 36, charset: 'utf8mb4', collation: 'utf8mb4_unicode_ci' })
+  id: string = uuid();
 
   @Column({ type: 'varchar', length: 255, nullable: false })
   companyName: string;

@@ -6,7 +6,7 @@ export class CarrierEarnings {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ type: 'uuid', unique: true })
+  @Column({ type: 'char', length: 36, charset: 'utf8mb4', collation: 'utf8mb4_unicode_ci', unique: true })
   carrierId: string;
 
   @Column({ type: 'varchar', length: 255 })

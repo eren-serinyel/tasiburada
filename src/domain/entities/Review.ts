@@ -15,7 +15,7 @@ export class Review {
     @JoinColumn({ name: "shipmentId" })
     shipment: Shipment;
 
-    @Column()
+    @Column({ type: 'char', length: 36, charset: 'utf8mb4', collation: 'utf8mb4_unicode_ci' })
     carrierId: string;
 
     @ManyToOne(() => Carrier)
