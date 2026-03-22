@@ -33,6 +33,25 @@ export class CarrierRepository extends BaseRepository<Carrier> {
     super(Carrier);
   }
 
+  async findPublicById(carrierId: string): Promise<Carrier | null> {
+    return await this.repository
+      .createQueryBuilder('carrier')
+      .select([
+        'carrier.id',
+        'carrier.companyName',
+        'carrier.contactName',
+        'carrier.phone',
+        'carrier.email',
+        'carrier.pictureUrl',
+        'carrier.rating',
+        'carrier.completedShipments',
+        'carrier.profileCompletion',
+        'carrier.isActive'
+      ])
+      .where('carrier.id = :carrierId', { carrierId })
+      .getOne();
+  }
+
   async findByEmail(email: string): Promise<Carrier | null> {
     return await this.repository.findOne({
       where: { email },

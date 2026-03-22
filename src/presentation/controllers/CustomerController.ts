@@ -147,11 +147,11 @@ export class CustomerController {
         return;
       }
 
-      const customer = await this.customerService.getCustomerWithShipments(customerId);
+      const shipments = await this.customerService.getCustomerWithShipments(customerId);
 
       res.status(200).json({
         success: true,
-        data: customer
+        data: shipments
       });
     } catch (error: any) {
       res.status(404).json({

@@ -10,7 +10,7 @@ export class CarrierDashboardController {
 
     getStats = async (req: Request, res: Response) => {
         try {
-            const carrierId = req.params.id || (req as any).user?.id;
+            const carrierId = req.params.carrierId || req.user?.carrierId;
             
             if (!carrierId) {
                 return res.status(400).json({ success: false, message: "Carrier ID is required" });

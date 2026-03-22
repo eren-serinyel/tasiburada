@@ -44,7 +44,7 @@ export class Vehicle {
   hasTrackingDevice: boolean; // GPS takip cihazı var mı
 
   // Foreign Key
-  @Column({ type: 'char', length: 36, charset: 'utf8mb4', collation: 'utf8mb4_unicode_ci', nullable: false })
+  @Column({ type: 'uuid', nullable: false })
   carrierId: string;
 
   @CreateDateColumn()

@@ -63,8 +63,11 @@ export class CarrierProfileController {
   };
 
   getCarrierProfile = async (req: Request, res: Response) => {
-    const carrierId = this.ensureCarrier(req, res);
-    if (!carrierId) return;
+    const carrierId = req.params?.carrierId || req.carrierId;
+    if (!carrierId) {
+      res.status(400).json({ success: false, message: 'Carrier ID gereklidir.' });
+      return;
+    }
     try {
       const overview = await this.profileQueryService.getCarrierOverview(carrierId);
       res.status(200).json({ success: true, data: overview });

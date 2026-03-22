@@ -3,6 +3,8 @@ import customerRoutes from './customerRoutes';
 import carrierRoutes from './carrierRoutes';
 import vehicleTypeRoutes from './vehicleTypeRoutes';
 import commonRoutes from './commonRoutes';
+import shipmentRoutes from './shipmentRoutes';
+import offerRoutes from './offerRoutes';
 
 const router = Router();
 router.use('/', commonRoutes);
@@ -21,5 +23,7 @@ router.get('/health', (req, res) => {
 router.use('/customers', customerRoutes);
 router.use('/carriers', carrierRoutes);
 router.use('/vehicle-types', vehicleTypeRoutes);
+router.use('/shipments', shipmentRoutes);
+router.use('/offers', offerRoutes);
 
 export default router;

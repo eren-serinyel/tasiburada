@@ -3,10 +3,11 @@ import { CarrierAuthController } from '../controllers/CarrierAuthController';
 import { CarrierProfileController } from '../controllers/CarrierProfileController';
 import { CarrierDocumentController } from '../controllers/CarrierDocumentController';
 import { authCarrier } from '../middleware/auth';
-import { checkCarrierProfileCompletion } from '../middleware/checkCarrierProfileCompletion';
 import { CarrierSearchController } from '../controllers/CarrierSearchController';
 import { CarrierDetailController } from '../controllers/CarrierDetailController';
 import { CarrierDashboardController } from '../controllers/CarrierDashboardController';
+import { CarrierReviewController } from '../controllers/CarrierReviewController';
+import { OfferController } from '../controllers/OfferController';
 
 const router = Router();
 const authController = new CarrierAuthController();
@@ -15,6 +16,8 @@ const documentController = new CarrierDocumentController();
 const searchController = new CarrierSearchController();
 const detailController = new CarrierDetailController();
 const dashboardController = new CarrierDashboardController();
+const reviewController = new CarrierReviewController();
+const offerController = new OfferController();
 
 
 // Public auth routes
@@ -43,6 +46,8 @@ router.put('/me/profile-picture', authCarrier, profileController.updateProfilePi
 router.put('/me/security', authCarrier, profileController.updateSecurity);
 router.get('/me/notifications', authCarrier, profileController.getNotifications);
 router.put('/me/notifications/toggle', authCarrier, profileController.toggleNotification);
+router.get('/me/reviews', authCarrier, reviewController.getMyReviews);
+router.get('/me/offers', authCarrier, offerController.getMyCarrierOffers);
 
 // ID-based aliases (frontend currently uses /carriers/:carrierId/*)
 router.put('/profile/:carrierId', authCarrier, profileController.updateCompanyInfo);
@@ -55,16 +60,6 @@ router.get('/:carrierId/documents', authCarrier, documentController.getDocuments
 router.put('/:carrierId/documents', authCarrier, documentController.updateDocuments);
 router.put('/:carrierId/profile-picture', authCarrier, profileController.updateProfilePicture);
 router.put('/:carrierId/security', authCarrier, profileController.updateSecurity);
-router.get('/:carrierId', authCarrier, profileController.getCarrierProfile);
-
-// Example restricted action protected by completion middleware
-router.post(
-	'/me/priority-actions/demo',
-	authCarrier,
-	checkCarrierProfileCompletion(70),
-	(req, res) => {
-		res.status(200).json({ success: true, message: 'Profil tamamlandığı için bu işlemi yapabilirsiniz.' });
-	}
-);
+router.get('/:carrierId', profileController.getCarrierProfile);
 
 export default router;

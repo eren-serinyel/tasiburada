@@ -2,6 +2,7 @@ import * as bcrypt from 'bcryptjs';
 import * as jwt from 'jsonwebtoken';
 import { Customer } from '../../domain/entities/Customer';
 import { CustomerRepository } from '../../infrastructure/repositories/CustomerRepository';
+import { ShipmentRepository } from '../../infrastructure/repositories/ShipmentRepository';
 import {
   CreateCustomerDto,
   UpdateCustomerDto,
@@ -12,9 +13,11 @@ import {
 
 export class CustomerService {
   private customerRepository: CustomerRepository;
+  private shipmentRepository: ShipmentRepository;
 
   constructor() {
     this.customerRepository = new CustomerRepository();
+    this.shipmentRepository = new ShipmentRepository();
   }
 
   async createCustomer(createDto: CreateCustomerDto): Promise<CustomerResponseDto> {
@@ -144,16 +147,16 @@ export class CustomerService {
     return this.mapToResponseDto(customer);
   }
 
-  async getCustomerWithShipments(customerId: string): Promise<any> {
-    const customer = await this.customerRepository.findCustomerWithShipments(customerId);
-    if (!customer) {
-      throw new Error('Müşteri bulunamadı.');
-    }
-
-    return {
-      ...this.mapToResponseDto(customer),
-
-    };
+  async getCustomerWithShipments(customerId: string): Promise<any[]> {
+    const shipments = await this.shipmentRepository.findByCustomerId(customerId);
+    return shipments.map(shipment => ({
+      id: shipment.id,
+      status: shipment.status,
+      origin: shipment.origin,
+      destination: shipment.destination,
+      price: shipment.price,
+      shipmentDate: shipment.shipmentDate
+    }));
   }
 
   async verifyCustomer(customerId: string): Promise<void> {

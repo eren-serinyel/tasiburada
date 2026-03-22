@@ -8,9 +8,7 @@ export class CarrierProfileQueryService {
   private activityService = new CarrierActivityService();
 
   async getCarrierOverview(carrierId: string) {
-    const carrier = await this.carrierRepository.findById(carrierId, {
-      relations: ['vehicles', 'documents', 'earnings', 'profileStatus', 'securitySettings', 'notificationPreferences']
-    } as any);
+    const carrier = await this.carrierRepository.findPublicById(carrierId);
     const activity = await this.activityService.getActivityInfo(carrierId);
     const status = await this.profileStatusService.updateProfileCompletion(carrierId);
     if (carrier) {
