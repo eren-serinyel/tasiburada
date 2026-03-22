@@ -110,6 +110,19 @@ export class CarrierRepository extends BaseRepository<Carrier> {
     await this.repository.update(carrierId, { rating: newRating });
   }
 
+  // Teklif verildiğinde ilgili nakliyecinin toplam teklif sayısını 1 artırır.
+  async incrementTotalOffers(carrierId: string): Promise<void> {
+    await this.repository
+      .createQueryBuilder()
+      .update(Carrier)
+      .set({
+        totalOffers: () => 'totalOffers + 1'
+      })
+      .where('id = :id', { id: carrierId })
+      .execute();
+  }
+
+  // Taşıma başarıyla tamamlandığında completedShipments alanını 1 artırır.
   async incrementCompletedShipments(carrierId: string): Promise<void> {
     await this.repository
       .createQueryBuilder()
@@ -121,12 +134,26 @@ export class CarrierRepository extends BaseRepository<Carrier> {
       .execute();
   }
 
-  async incrementTotalOffers(carrierId: string): Promise<void> {
+  // Taşıma iptal edildiğinde cancelledShipments alanını 1 artırır.
+  async incrementCancelledShipments(carrierId: string): Promise<void> {
     await this.repository
       .createQueryBuilder()
       .update(Carrier)
       .set({
-        totalOffers: () => 'totalOffers + 1'
+        cancelledShipments: () => 'cancelledShipments + 1'
+      })
+      .where('id = :id', { id: carrierId })
+      .execute();
+  }
+
+  // Başarı oranını completedShipments / totalOffers * 100 formülüyle yeniden hesaplar.
+  // totalOffers = 0 ise successRate değeri 0 olarak set edilir.
+  async recalculateSuccessRate(carrierId: string): Promise<void> {
+    await this.repository
+      .createQueryBuilder()
+      .update(Carrier)
+      .set({
+        successRate: () => 'CASE WHEN totalOffers > 0 THEN ROUND((completedShipments / totalOffers) * 100, 2) ELSE 0 END'
       })
       .where('id = :id', { id: carrierId })
       .execute();

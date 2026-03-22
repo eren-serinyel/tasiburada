@@ -1,5 +1,6 @@
 import { Offer, OfferStatus } from '../../domain/entities/Offer';
 import { ShipmentStatus } from '../../domain/entities/Shipment';
+import { CarrierRepository } from '../../infrastructure/repositories/CarrierRepository';
 import { OfferRepository } from '../../infrastructure/repositories/OfferRepository';
 import { ShipmentRepository } from '../../infrastructure/repositories/ShipmentRepository';
 
@@ -17,6 +18,7 @@ interface RequestUser {
 export class OfferService {
   private offerRepository = new OfferRepository();
   private shipmentRepository = new ShipmentRepository();
+  private carrierRepository = new CarrierRepository();
 
   private sanitizeOffer(offer: Offer): Offer {
     if (!offer?.carrier) {
@@ -57,6 +59,8 @@ export class OfferService {
       price: payload.price,
       status: OfferStatus.PENDING
     });
+
+    await this.carrierRepository.incrementTotalOffers(carrierId);
 
     if (shipment.status === ShipmentStatus.PENDING) {
       await this.shipmentRepository.update(payload.shipmentId, {

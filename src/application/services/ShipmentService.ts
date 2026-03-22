@@ -2,7 +2,6 @@ import { ShipmentRepository } from '../../infrastructure/repositories/ShipmentRe
 import { Shipment, ShipmentStatus } from '../../domain/entities/Shipment';
 import { CarrierRepository } from '../../infrastructure/repositories/CarrierRepository';
 import { CarrierStatsRepository } from '../../infrastructure/repositories/CarrierStatsRepository';
-import { OfferRepository } from '../../infrastructure/repositories/OfferRepository';
 
 interface CreateShipmentPayload {
   origin: string;
@@ -26,7 +25,6 @@ export class ShipmentService {
   private shipmentRepository = new ShipmentRepository();
   private carrierRepository = new CarrierRepository();
   private carrierStatsRepository = new CarrierStatsRepository();
-  private offerRepository = new OfferRepository();
 
   async getPendingShipmentsForCarrier(_carrierId: string): Promise<Shipment[]> {
     // TODO: Filter by carrier activity/service areas.
@@ -102,6 +100,11 @@ export class ShipmentService {
       throw new Error('Taşıma talebi iptal edilemedi.');
     }
 
+    if (shipment.carrierId) {
+      await this.carrierRepository.incrementCancelledShipments(shipment.carrierId);
+      await this.carrierRepository.recalculateSuccessRate(shipment.carrierId);
+    }
+
     return cancelledShipment;
   }
 
@@ -164,12 +167,9 @@ export class ShipmentService {
     }
 
     await this.carrierRepository.incrementCompletedShipments(carrierId);
+    await this.carrierRepository.recalculateSuccessRate(carrierId);
     await this.carrierStatsRepository.incrementTotalJobs(carrierId, 1);
     await this.carrierStatsRepository.incrementActiveJobs(carrierId, -1);
-
-    const acceptedOffer = await this.offerRepository.findAcceptedByShipmentId(shipmentId);
-    const offerCarrierId = acceptedOffer?.carrierId || carrierId;
-    await this.carrierRepository.incrementTotalOffers(offerCarrierId);
 
     const updatedShipment = await this.shipmentRepository.findById(shipmentId);
     if (!updatedShipment) {
