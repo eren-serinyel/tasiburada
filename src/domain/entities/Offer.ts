@@ -16,14 +16,14 @@ export class Offer {
     @Column()
     shipmentId: string;
 
-    @ManyToOne(() => Shipment)
+    @ManyToOne(() => Shipment, { onDelete: 'CASCADE' })
     @JoinColumn({ name: "shipmentId" })
     shipment: Shipment;
 
     @Column({ type: 'char', length: 36, charset: 'utf8mb4', collation: 'utf8mb4_unicode_ci' })
     carrierId: string;
 
-    @ManyToOne(() => Carrier)
+    @ManyToOne(() => Carrier, { onDelete: 'CASCADE' })
     @JoinColumn({ name: "carrierId" })
     carrier: Carrier;
 
