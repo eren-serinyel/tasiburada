@@ -47,7 +47,7 @@ export default function Payment() {
       localStorage.setItem('notifications', JSON.stringify(notifs));
       setPaying(false);
       alert('Ödeme başarılı! Taşıma süreci başlatıldı.');
-      navigate(`/shipment/${shipment.id}`);
+      navigate(`/ilan/${shipment.id}`);
     }, 800);
   };
 

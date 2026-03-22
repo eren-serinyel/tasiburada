@@ -8,8 +8,17 @@ import { Textarea } from '@/components/ui/textarea';
 import { MapPin, Package, Calendar, Calculator } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { LOAD_TYPES, LoadType } from '@/lib/types';
-import { calculateDistance, calculatePrice } from '@/lib/mockData';
 import { getSessionUser } from '@/lib/storage';
+
+const calculateDistance = (originCity: string, destinationCity: string): number => {
+  if (!originCity || !destinationCity) return 0;
+  return originCity === destinationCity ? 20 : 250;
+};
+
+const calculatePrice = (distance: number, weight: number): number => {
+  const safeWeight = Number.isFinite(weight) ? weight : 0;
+  return Math.max(500, Math.round(distance * 8 + safeWeight * 0.75));
+};
 
 export default function CreateShipment() {
   const [formData, setFormData] = useState({
@@ -36,17 +45,9 @@ export default function CreateShipment() {
     }
 
     // Calculate distance and price
-    const mockDistance = calculateDistance(
-      { address: formData.originAddress, lat: 40, lng: 29, city: formData.originCity },
-      { address: formData.destinationAddress, lat: 40, lng: 29, city: formData.destinationCity }
-    );
+    const mockDistance = calculateDistance(formData.originCity, formData.destinationCity);
     
-    const mockPrice = calculatePrice(
-      mockDistance,
-      parseInt(formData.weight),
-      'kamyonet', // Default vehicle type for calculation
-      150 // Default base fee
-    );
+    const mockPrice = calculatePrice(mockDistance, parseInt(formData.weight));
 
     const newShipment = {
       id: Date.now().toString(),
@@ -79,7 +80,7 @@ export default function CreateShipment() {
     localStorage.setItem('shipments', JSON.stringify(existingShipments));
 
     alert('Taşıma talebiniz başarıyla oluşturuldu!');
-    navigate('/dashboard');
+    navigate('/panel');
   };
 
   const handleCalculatePrice = () => {
@@ -88,17 +89,9 @@ export default function CreateShipment() {
       return;
     }
 
-    const mockDistance = calculateDistance(
-      { address: formData.originAddress, lat: 40, lng: 29, city: formData.originCity },
-      { address: formData.destinationAddress, lat: 40, lng: 29, city: formData.destinationCity }
-    );
+    const mockDistance = calculateDistance(formData.originCity, formData.destinationCity);
     
-    const mockPrice = calculatePrice(
-      mockDistance,
-      parseInt(formData.weight),
-      'kamyonet',
-      150
-    );
+    const mockPrice = calculatePrice(mockDistance, parseInt(formData.weight));
 
     setDistance(mockDistance);
     setCalculatedPrice(mockPrice);
@@ -283,7 +276,7 @@ export default function CreateShipment() {
         </Card>
 
         <div className="flex justify-end space-x-4">
-          <Button type="button" variant="outline" onClick={() => navigate('/dashboard')}>
+          <Button type="button" variant="outline" onClick={() => navigate('/panel')}>
             İptal
           </Button>
           <Button type="submit" size="lg">

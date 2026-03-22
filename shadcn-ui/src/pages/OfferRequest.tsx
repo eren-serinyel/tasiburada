@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -13,7 +13,6 @@ import { MapPin, Package, Truck, Shield, Award, MessageSquare, Star, CheckCircle
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Carrier, LOAD_TYPES, VEHICLE_TYPES } from '@/lib/types';
-import { mockCarriers } from '@/lib/mockData';
 import { mockDb } from '@/utils/mockDb';
 import { getSessionUser } from '@/lib/storage';
 import { CITIES_TR, getDistrictsForCity, formatDateYYYYMMDD } from '@/lib/locations';
@@ -25,10 +24,12 @@ type Step = 1 | 2 | 3;
 
 export default function OfferRequest() {
   const navigate = useNavigate();
+  const { shipmentId } = useParams();
   const [searchParams] = useSearchParams();
   const [step, setStep] = useState<Step>(1);
   const [submitting, setSubmitting] = useState(false);
   const [loadingResults, setLoadingResults] = useState(false);
+  const [carriers, setCarriers] = useState<Carrier[]>([]);
   const [form, setForm] = useState({
     // Step 1
     originCity: '',
@@ -98,6 +99,11 @@ export default function OfferRequest() {
 
   const handleChange = (field: string, value: any) => setForm((f) => ({ ...f, [field]: value }));
 
+  const authHeaders = () => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null;
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  };
+
   // Tarih: bugün ≤ tarih ≤ bugün + 30 gün
   const todayStr = useMemo(() => formatDateYYYYMMDD(new Date()), []);
   const maxDateStr = useMemo(() => { const d = new Date(); d.setDate(d.getDate() + 30); return formatDateYYYYMMDD(d); }, []);
@@ -133,7 +139,7 @@ export default function OfferRequest() {
   const suitableCarriersBase = useMemo(() => {
     if (!(canNextFrom1 && canNextFrom2)) return [] as Carrier[];
     const selectedOptionKeys = Object.values(form.serviceOptions || {}).flat();
-    return mockCarriers.filter((c) => {
+    return carriers.filter((c) => {
       const servesBoth = c.serviceAreas.includes(form.originCity) && c.serviceAreas.includes(form.destinationCity);
       const scopeMatch = !form.scope || !(c.scopes && c.scopes.length) || (c.scopes || []).includes(form.scope);
       const vehicleOk = !form.vehicleType || c.vehicle.type === (form.vehicleType as any);
@@ -149,7 +155,11 @@ export default function OfferRequest() {
       const weightOk = !estWeight || c.vehicle.capacity >= estWeight;
       return servesBoth && scopeMatch && vehicleOk && extrasOk && weightOk && insuranceOk;
     });
-  }, [form, canNextFrom1, canNextFrom2]);
+  }, [form, canNextFrom1, canNextFrom2, carriers]);
+
+  useEffect(() => {
+    setCarriers([]);
+  }, []);
 
   // Ek filtreler ve sıralama
   const [onlyApproved, setOnlyApproved] = useState(false);
@@ -227,7 +237,7 @@ export default function OfferRequest() {
       message: `${user?.name || 'Müşteri'} ${form.originCity}${form.originDistrict ? ' ' + form.originDistrict : ''} → ${form.destinationCity}${form.destinationDistrict ? ' ' + form.destinationDistrict : ''} için teklif istedi.`,
       isRead: false,
       createdAt: new Date().toISOString(),
-  actionUrl: `/carrier/respond/${reqId}`,
+  actionUrl: `/nakliyeci/yanit/${reqId}`,
       relatedId: reqId,
       kind: 'request'
     });
@@ -267,6 +277,34 @@ export default function OfferRequest() {
       setStep(2);
     }
   }, [searchParams]);
+
+  useEffect(() => {
+    if (!shipmentId) return;
+
+    const prefillFromShipment = async () => {
+      try {
+        const res = await fetch(`/api/v1/shipments/${shipmentId}`, {
+          headers: authHeaders()
+        });
+        const json = await res.json();
+        if (!res.ok || !json?.success || !json?.data) return;
+
+        const shipment = json.data as any;
+        setForm(prev => ({
+          ...prev,
+          originCity: shipment.origin || prev.originCity,
+          destinationCity: shipment.destination || prev.destinationCity,
+          date: shipment.shipmentDate ? String(shipment.shipmentDate).slice(0, 10) : prev.date,
+          weightKg: shipment.weight ? String(shipment.weight) : prev.weightKg,
+          note: shipment.loadDetails || prev.note
+        }));
+      } catch {
+        // ignore prefill errors
+      }
+    };
+
+    prefillFromShipment();
+  }, [shipmentId]);
 
   // Step 3'e geçişte ve filtre değişimlerinde kısa loading simülasyonu
   useEffect(() => {
@@ -647,7 +685,7 @@ export default function OfferRequest() {
                   ) : (
                     <div className="space-y-4">
                       {suitableCarriers.map((c) => (
-                        <CarrierCard key={c.id} carrier={c} form={form} onRequest={() => requestOffer(c)} onProfile={() => navigate(`/carrier/${c.id}`)} />
+                        <CarrierCard key={c.id} carrier={c} form={form} onRequest={() => requestOffer(c)} onProfile={() => navigate(`/nakliyeci/${c.id}`)} />
                       ))}
                     </div>
                   )}
@@ -663,7 +701,7 @@ export default function OfferRequest() {
 
           <div className="flex justify-between gap-2">
             <Button variant="outline" onClick={goPrev}>Geri</Button>
-            <Button onClick={() => navigate('/dashboard')}>Bitti</Button>
+            <Button onClick={() => navigate('/panel')}>Bitti</Button>
           </div>
         </div>
       )}

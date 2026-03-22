@@ -6,26 +6,30 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Bell, Package, TrendingUp, CheckCircle, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Notification } from '@/lib/types';
-import { mockNotifications } from '@/lib/mockData';
 import { getSessionUser } from '@/lib/storage';
 
 export default function NotificationBell() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isOpen, setIsOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const user = getSessionUser() || (localStorage.getItem('currentUser') ? JSON.parse(localStorage.getItem('currentUser') as string) : {});
-    if (!user.id) return;
+    if (!user.id) {
+      setNotifications([]);
+      setLoading(false);
+      return;
+    }
 
     // Load notifications for current user
     const storedNotifications = JSON.parse(localStorage.getItem('notifications') || '[]');
-    const userNotifications = [...storedNotifications, ...mockNotifications]
+    const userNotifications = storedNotifications
       .filter(n => n.userId === user.id)
       // Normalize actionUrl for rating notifications to reviews page
       .map((n) => {
         if (n.type === 'rating_received') {
           const highlight = (n as any).relatedId ? `?highlight=${encodeURIComponent((n as any).relatedId)}` : '';
-          return { ...n, actionUrl: `/carrier/reviews${highlight}` };
+          return { ...n, actionUrl: `/nakliyeci/yorumlar${highlight}` };
         }
         return n;
       })
@@ -33,6 +37,7 @@ export default function NotificationBell() {
       .slice(0, 10); // Show last 10 notifications
 
     setNotifications(userNotifications);
+    setLoading(false);
   }, []);
 
   const unreadCount = notifications.filter(n => !n.isRead).length;
@@ -124,7 +129,11 @@ export default function NotificationBell() {
           </CardHeader>
           
           <CardContent className="p-0">
-            {notifications.length === 0 ? (
+            {loading ? (
+              <div className="text-center py-8 text-gray-500">
+                <div className="h-6 w-6 mx-auto rounded-full border-2 border-gray-300 border-t-gray-700 animate-spin" />
+              </div>
+            ) : notifications.length === 0 ? (
               <div className="text-center py-8 text-gray-500">
                 <Bell className="h-8 w-8 mx-auto mb-2 text-gray-400" />
                 <p>Henüz bildiriminiz yok</p>
@@ -165,7 +174,7 @@ export default function NotificationBell() {
                     {notification.actionUrl && (
                       <div className="mt-2 ml-7">
                         <Link 
-                          to={notification.type === 'rating_received' ? (notification.actionUrl || '/carrier/reviews') : notification.actionUrl}
+                          to={notification.type === 'rating_received' ? (notification.actionUrl || '/nakliyeci/yorumlar') : notification.actionUrl}
                           onClick={(e) => e.stopPropagation()}
                         >
                           <Button size="sm" variant="outline" className="text-xs">

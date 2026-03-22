@@ -94,7 +94,7 @@ export default function ShipmentDetail() {
           )}
           {!payment && (
             <Button asChild>
-              <Link to={`/payment/${shipment.id}`}><CreditCard className="h-4 w-4 mr-1" /> Ödeme Yap</Link>
+              <Link to={`/odeme/${shipment.id}`}><CreditCard className="h-4 w-4 mr-1" /> Ödeme Yap</Link>
             </Button>
           )}
         </CardContent>

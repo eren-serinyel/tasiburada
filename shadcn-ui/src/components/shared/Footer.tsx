@@ -11,7 +11,7 @@ export default function Footer() {
     e.preventDefault();
     const u = getSessionUser() || (localStorage.getItem('currentUser') ? JSON.parse(localStorage.getItem('currentUser') as string) : null);
     if (u) {
-      navigate('/offer-request');
+      navigate('/teklif-talebi');
       return;
     }
     navigate('/', { state: { scrollTo: 'quick-form' } });
@@ -19,7 +19,7 @@ export default function Footer() {
 
   const handleCarrierInfoClick = (e: React.MouseEvent) => {
     e.preventDefault();
-    navigate('/carrier-info');
+    navigate('/nakliyeci-bilgi');
   };
 
   const handleHelpClick = (e: React.MouseEvent) => {

@@ -11,9 +11,15 @@ import { Checkbox } from '@/components/ui/checkbox';
 import FileUpload from '@/components/ui/file-upload';
 import { ArrowRight, Calendar as CalendarIcon } from 'lucide-react';
 import { CITIES_TR, formatDateYYYYMMDD, getDistrictsForCity } from '@/lib/locations';
-import { calculateDistance, generateMockOffers } from '@/lib/mockData';
 import type { LoadType, Location, Offer, Shipment } from '@/lib/types';
 import { Link } from 'react-router-dom';
+
+const calculateDistance = (origin: Location, destination: Location): number => {
+  const o = origin.city || origin.address || '';
+  const d = destination.city || destination.address || '';
+  if (!o || !d) return 0;
+  return o === d ? 15 : 120;
+};
 
 const fadeSlide = {
   initial: { opacity: 0, y: 20 },
@@ -158,8 +164,8 @@ export default function HeroQuickForm() {
       status: 'pending',
       createdAt: new Date(),
     };
-    const list = generateMockOffers('tmp', shipment);
-    setOffers(list);
+    void shipment;
+    setOffers([]);
   };
 
   const filteredSortedOffers = useMemo(() => {
@@ -368,7 +374,7 @@ export default function HeroQuickForm() {
                               </div>
                               <div className="grid grid-cols-2 gap-2 pt-2">
                                 <Button variant="outline" asChild>
-                                  <Link to={`/carrier/${o.carrierId}`}>Profil Gör</Link>
+                                  <Link to={`/nakliyeci/${o.carrierId}`}>Profil Gör</Link>
                                 </Button>
                                 <Button className="bg-gradient-to-r from-blue-500 to-blue-700 text-white" onClick={() => { if (!isLoggedIn) { setStep(4); } else { /* proceed to request offer */ } }}>Teklif İste</Button>
                               </div>
@@ -394,8 +400,8 @@ export default function HeroQuickForm() {
                       <CardDescription>Devam etmek için hesabınla giriş yapmalısın.</CardDescription>
                     </CardHeader>
                     <CardContent className="flex gap-2">
-                      <Button variant="outline" asChild><Link to="/login">Giriş Yap</Link></Button>
-                      <Button className="bg-gradient-to-r from-blue-500 to-blue-700 text-white" asChild><Link to="/register-user">Üye Ol</Link></Button>
+                      <Button variant="outline" asChild><Link to="/giris">Giriş Yap</Link></Button>
+                      <Button className="bg-gradient-to-r from-blue-500 to-blue-700 text-white" asChild><Link to="/musteri-kayit">Üye Ol</Link></Button>
                       <Button variant="ghost" onClick={() => setStep(3)}>İptal</Button>
                     </CardContent>
                   </Card>

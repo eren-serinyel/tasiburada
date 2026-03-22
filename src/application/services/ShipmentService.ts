@@ -1,5 +1,8 @@
 import { ShipmentRepository } from '../../infrastructure/repositories/ShipmentRepository';
 import { Shipment, ShipmentStatus } from '../../domain/entities/Shipment';
+import { CarrierRepository } from '../../infrastructure/repositories/CarrierRepository';
+import { CarrierStatsRepository } from '../../infrastructure/repositories/CarrierStatsRepository';
+import { OfferRepository } from '../../infrastructure/repositories/OfferRepository';
 
 interface CreateShipmentPayload {
   origin: string;
@@ -21,6 +24,9 @@ interface UpdateShipmentPayload {
 
 export class ShipmentService {
   private shipmentRepository = new ShipmentRepository();
+  private carrierRepository = new CarrierRepository();
+  private carrierStatsRepository = new CarrierStatsRepository();
+  private offerRepository = new OfferRepository();
 
   async getPendingShipmentsForCarrier(_carrierId: string): Promise<Shipment[]> {
     // TODO: Filter by carrier activity/service areas.
@@ -97,5 +103,107 @@ export class ShipmentService {
     }
 
     return cancelledShipment;
+  }
+
+  async startShipmentByCarrier(carrierId: string, shipmentId: string): Promise<Shipment> {
+    const shipment = await this.shipmentRepository.findById(shipmentId);
+    if (!shipment) {
+      throw new Error('Taşıma talebi bulunamadı.');
+    }
+
+    if (shipment.carrierId !== carrierId) {
+      throw new Error('Bu taşıma talebini başlatma yetkiniz yok.');
+    }
+
+    if (shipment.status !== ShipmentStatus.MATCHED) {
+      throw new Error('Sadece eşleşen taşıma talepleri başlatılabilir.');
+    }
+
+    const transitioned = await this.shipmentRepository.transitionStatusIfCurrent(
+      shipmentId,
+      ShipmentStatus.MATCHED,
+      ShipmentStatus.IN_TRANSIT
+    );
+
+    if (!transitioned) {
+      throw new Error('Taşıma durumu değiştirilemedi. Lütfen tekrar deneyin.');
+    }
+
+    await this.carrierStatsRepository.incrementActiveJobs(carrierId, 1);
+
+    const updatedShipment = await this.shipmentRepository.findById(shipmentId);
+    if (!updatedShipment) {
+      throw new Error('Taşıma başlatıldı ancak kayıt getirilemedi.');
+    }
+
+    return updatedShipment;
+  }
+
+  async completeShipmentByCarrier(carrierId: string, shipmentId: string): Promise<Shipment> {
+    const shipment = await this.shipmentRepository.findById(shipmentId);
+    if (!shipment) {
+      throw new Error('Taşıma talebi bulunamadı.');
+    }
+
+    if (shipment.carrierId !== carrierId) {
+      throw new Error('Bu taşıma talebini tamamlama yetkiniz yok.');
+    }
+
+    if (shipment.status !== ShipmentStatus.IN_TRANSIT) {
+      throw new Error('Sadece yolda olan taşıma talepleri tamamlanabilir.');
+    }
+
+    const transitioned = await this.shipmentRepository.transitionStatusIfCurrent(
+      shipmentId,
+      ShipmentStatus.IN_TRANSIT,
+      ShipmentStatus.DELIVERED
+    );
+
+    if (!transitioned) {
+      throw new Error('Taşıma durumu değiştirilemedi. Lütfen tekrar deneyin.');
+    }
+
+    await this.carrierRepository.incrementCompletedShipments(carrierId);
+    await this.carrierStatsRepository.incrementTotalJobs(carrierId, 1);
+    await this.carrierStatsRepository.incrementActiveJobs(carrierId, -1);
+
+    const acceptedOffer = await this.offerRepository.findAcceptedByShipmentId(shipmentId);
+    const offerCarrierId = acceptedOffer?.carrierId || carrierId;
+    await this.carrierRepository.incrementTotalOffers(offerCarrierId);
+
+    const updatedShipment = await this.shipmentRepository.findById(shipmentId);
+    if (!updatedShipment) {
+      throw new Error('Taşıma tamamlandı ancak kayıt getirilemedi.');
+    }
+
+    return updatedShipment;
+  }
+
+  async startTransitByCustomer(customerId: string, shipmentId: string): Promise<Shipment> {
+    const shipment = await this.shipmentRepository.findByIdAndCustomerId(shipmentId, customerId);
+    if (!shipment) {
+      throw new Error('Taşıma talebi bulunamadı.');
+    }
+
+    if (shipment.status !== ShipmentStatus.MATCHED) {
+      throw new Error('Sadece eşleşen taşıma talepleri yola çıktı olarak onaylanabilir.');
+    }
+
+    const transitioned = await this.shipmentRepository.transitionStatusIfCurrent(
+      shipmentId,
+      ShipmentStatus.MATCHED,
+      ShipmentStatus.IN_TRANSIT
+    );
+
+    if (!transitioned) {
+      throw new Error('Taşıma durumu değiştirilemedi. Lütfen tekrar deneyin.');
+    }
+
+    const updatedShipment = await this.shipmentRepository.findById(shipmentId);
+    if (!updatedShipment) {
+      throw new Error('Taşıma güncellendi ancak kayıt getirilemedi.');
+    }
+
+    return updatedShipment;
   }
 }

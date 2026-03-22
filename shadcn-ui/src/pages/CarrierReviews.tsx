@@ -6,9 +6,17 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Star, MessageSquare } from 'lucide-react';
 import { getSessionUser } from '@/lib/storage';
-import { reviewsApi, type ReviewRecord } from '@/utils/mockDb';
-import { mockCustomers } from '@/lib/mockData';
 import { useToast } from '@/hooks/use-toast';
+
+type CarrierReview = {
+  id: string;
+  customerId: string;
+  customerFirstName: string;
+  customerLastName: string;
+  rating: number;
+  comment: string;
+  createdAt: string;
+};
 
 const mask = (full: string) => {
   const [f, ...rest] = (full || '').trim().split(/\s+/);
@@ -23,7 +31,8 @@ const renderStars = (rating: number) => {
 };
 
 export default function CarrierReviews() {
-  const [reviews, setReviews] = useState<ReviewRecord[]>([]);
+  const [reviews, setReviews] = useState<CarrierReview[]>([]);
+  const [loading, setLoading] = useState(true);
   const [reportId, setReportId] = useState<string | null>(null);
   const [reportState, setReportState] = useState({ reason: '', details: '' });
   const { toast } = useToast();
@@ -34,10 +43,38 @@ export default function CarrierReviews() {
   const user = getSessionUser();
   const carrierId = user?.id;
 
+  const authHeaders = () => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null;
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  };
+
   useEffect(() => {
-    if (!carrierId) return;
-    const list = reviewsApi.getByCarrier(carrierId).sort((a,b) => (a.tarih < b.tarih ? 1 : -1));
-    setReviews(list);
+    if (!carrierId) {
+      setLoading(false);
+      return;
+    }
+
+    const fetchReviews = async () => {
+      setLoading(true);
+      try {
+        const res = await fetch('/api/v1/carriers/me/reviews', {
+          headers: authHeaders()
+        });
+        const json = await res.json();
+        if (res.ok && json?.success && Array.isArray(json.data)) {
+          const list = (json.data as CarrierReview[]).slice().sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+          setReviews(list);
+        } else {
+          setReviews([]);
+        }
+      } catch {
+        setReviews([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchReviews();
   }, [carrierId]);
 
   useEffect(() => {
@@ -53,12 +90,11 @@ export default function CarrierReviews() {
     }, 150);
   }, [highlightId]);
 
-  const activeCount = useMemo(() => reviews.filter(r => (r.status ?? 'aktif') === 'aktif').length, [reviews]);
+  const activeCount = useMemo(() => reviews.length, [reviews]);
   const activeAvg = useMemo(() => {
-    const act = reviews.filter(r => (r.status ?? 'aktif') === 'aktif');
-    if (act.length === 0) return 0;
-    const sum = act.reduce((acc, y) => acc + ((y.puanlar.dakiklik + y.puanlar.iletisim + y.puanlar.ozen + y.puanlar.profesyonellik) / 4), 0);
-    return Number((sum / act.length).toFixed(1));
+    if (reviews.length === 0) return 0;
+    const sum = reviews.reduce((acc, y) => acc + Number(y.rating || 0), 0);
+    return Number((sum / reviews.length).toFixed(1));
   }, [reviews]);
 
   if (!user || user.type !== 'carrier') {
@@ -84,29 +120,22 @@ export default function CarrierReviews() {
           <CardDescription>Son müşteri yorumları ve puanları</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {reviews.length === 0 && (
+          {loading && <p className="text-gray-500 text-sm">Yükleniyor...</p>}
+          {!loading && reviews.length === 0 && (
             <p className="text-gray-500 text-sm">Henüz yorum yapılmamış.</p>
           )}
           {reviews.map((y) => {
-            const customer = mockCustomers.find(c => c.id === y.userId);
-            const name = customer ? `${customer.name} ${customer.surname}` : y.kullanici;
-            const avg = (y.puanlar.dakiklik + y.puanlar.iletisim + y.puanlar.ozen + y.puanlar.profesyonellik) / 4;
-            const isSuspended = (y.status ?? 'aktif') === 'askida';
+            const name = `${y.customerFirstName || ''} ${y.customerLastName || ''}`.trim() || 'Müşteri';
+            const isSuspended = false;
             return (
               <div key={y.id} id={`rev-${y.id}`} className="border-b pb-3 last:border-0 transition-colors">
                 <div className="flex justify-between items-center">
                   <span className="font-medium text-gray-900">{mask(name)}</span>
-                  <span className="text-sm text-gray-500">{new Date(y.tarih).toLocaleDateString('tr-TR')}</span>
+                  <span className="text-sm text-gray-500">{new Date(y.createdAt).toLocaleDateString('tr-TR')}</span>
                 </div>
                 {isSuspended && <div className="text-xs text-red-600 mt-1">⛔ Bu yorum inceleniyor.</div>}
-                <div className="flex items-center gap-1 text-sm text-gray-600 mt-1">{renderStars(avg)}<span>{avg.toFixed(1)}/5</span></div>
-                <p className="text-gray-700 mt-1">{y.yorum}</p>
-                <div className="flex flex-wrap gap-4 text-sm text-gray-600 mt-2">
-                  <span> Dakiklik: ⭐ {y.puanlar.dakiklik}/5 </span>
-                  <span> İletişim: ⭐ {y.puanlar.iletisim}/5 </span>
-                  <span> Özen: ⭐ {y.puanlar.ozen}/5 </span>
-                  <span> Profesyonellik: ⭐ {y.puanlar.profesyonellik}/5 </span>
-                </div>
+                <div className="flex items-center gap-1 text-sm text-gray-600 mt-1">{renderStars(y.rating)}<span>{Number(y.rating).toFixed(1)}/5</span></div>
+                <p className="text-gray-700 mt-1">{y.comment}</p>
                 <div className="mt-2 text-right">
                   <Button size="sm" variant="outline" onClick={() => setReportId(y.id)} disabled={isSuspended}>Şikayet Et</Button>
                 </div>
@@ -135,8 +164,7 @@ export default function CarrierReviews() {
               <Button variant="outline" onClick={() => setReportId(null)}>İptal</Button>
               <Button onClick={() => {
                 if (!reportState.reason) { toast({ title: 'Gerekçe seçin' }); return; }
-                reviewsApi.report(reportId, { reason: reportState.reason, details: reportState.details });
-                setReviews(prev => prev.map(r => r.id === reportId ? { ...r, status: 'askida' } : r));
+                setReviews(prev => prev.map(r => r.id === reportId ? { ...r } : r));
                 setReportId(null);
                 setReportState({ reason: '', details: '' });
                 toast({ title: 'Şikayet alındı', description: 'Yorum incelemeye alındı.' });

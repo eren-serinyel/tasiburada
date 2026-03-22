@@ -5,56 +5,175 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Truck, Package, Star, Clock, MapPin, User, Calendar, MessageCircle, TrendingUp, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
-import { User as UserType, Carrier, Customer, Shipment, Offer } from '@/lib/types';
+import { User as UserType, Carrier, Shipment } from '@/lib/types';
 import { getCarrierProfileTasks } from '@/lib/utils';
-import { mockShipments, mockCustomers } from '@/lib/mockData';
 import { reviewsApi, type ReviewRecord } from '@/utils/mockDb';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 
+const API_BASE_URL = '/api/v1';
+
+type DashboardCarrierStats = {
+  totalEarnings: number;
+  activeJobs: number;
+  completedJobs: number;
+  rating: number;
+};
+
+type BackendShipment = {
+  id: string;
+  customerId?: string;
+  origin?: string;
+  destination?: string;
+  loadDetails?: string;
+  weight?: number | string;
+  price?: number | string;
+  shipmentDate?: string;
+  createdAt?: string;
+  status?: string;
+};
+
 export default function Dashboard() {
   const [user, setUser] = useState<UserType | null>(null);
   const [shipments, setShipments] = useState<Shipment[]>([]);
-  const [offers, setOffers] = useState<Offer[]>([]);
+  const [offerReceivedCount, setOfferReceivedCount] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [carrierStats, setCarrierStats] = useState<DashboardCarrierStats>({
+    totalEarnings: 0,
+    activeJobs: 0,
+    completedJobs: 0,
+    rating: 0
+  });
   const [myReviews, setMyReviews] = useState<ReviewRecord[]>([]);
   const [reportForId, setReportForId] = useState<string | null>(null);
   const [reportState, setReportState] = useState<{ reason: string; details: string }>({ reason: '', details: '' });
   const { toast } = useToast();
   const navigate = useNavigate();
 
-  useEffect(() => {
-    const u: UserType | null = getSessionUser() || (localStorage.getItem('currentUser') ? JSON.parse(localStorage.getItem('currentUser') as string) : null);
-    if (!u) {
-      navigate('/login');
-      return;
-    }
-    setUser(u);
+  const authHeaders = () => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null;
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  };
 
-    // Load user's shipments and offers
-    if (u.type === 'customer') {
-      const userShipments: Shipment[] = (JSON.parse(localStorage.getItem('shipments') || '[]') as Shipment[])
-        .filter((s: Shipment) => s.customerId === u.id);
-      setShipments(userShipments.length > 0 ? userShipments : mockShipments.filter(s => s.customerId === u.id));
-      
-      // Load offers for user's shipments
-      const allOffers: Offer[] = JSON.parse(localStorage.getItem('offers') || '[]');
-      const userOffers = allOffers.filter((offer: Offer) => 
-        userShipments.some((s: Shipment) => s.id === offer.shipmentId)
-      );
-      setOffers(userOffers);
-    } else {
-      // For carriers, show available shipments
-      setShipments(mockShipments.filter(s => s.status === 'pending'));
-      // Load carrier's reviews
-      const list = reviewsApi.getByCarrier(u.id).filter(r => (r.status ?? 'aktif') === 'aktif');
-      setMyReviews(list.sort((a,b) => (a.tarih < b.tarih ? 1 : -1)));
+  const normalizeStatus = (status?: string): Shipment['status'] => {
+    switch (status) {
+      case 'matched':
+        return 'matched';
+      case 'completed':
+        return 'delivered';
+      case 'cancelled':
+        return 'cancelled';
+      case 'in_transit':
+        return 'matched';
+      case 'offer_received':
+      case 'pending':
+      default:
+        return 'pending';
     }
+  };
+
+  const toUiShipment = (item: BackendShipment): Shipment => {
+    const originText = item.origin || '';
+    const destinationText = item.destination || '';
+
+    return {
+      id: item.id,
+      customerId: item.customerId || '',
+      origin: {
+        address: originText,
+        city: originText,
+        lat: 0,
+        lng: 0
+      },
+      destination: {
+        address: destinationText,
+        city: destinationText,
+        lat: 0,
+        lng: 0
+      },
+      loadType: 'ev-esyasi',
+      weight: Number(item.weight || 0),
+      date: item.shipmentDate ? new Date(item.shipmentDate) : new Date(),
+      description: item.loadDetails || '',
+      distance: 0,
+      status: normalizeStatus(item.status),
+      price: Number(item.price || 0),
+      createdAt: item.createdAt ? new Date(item.createdAt) : new Date()
+    };
+  };
+
+  useEffect(() => {
+    const loadDashboard = async () => {
+      const u: UserType | null = getSessionUser() || (localStorage.getItem('currentUser') ? JSON.parse(localStorage.getItem('currentUser') as string) : null);
+      if (!u) {
+        navigate('/giris');
+        return;
+      }
+
+      setUser(u);
+      setLoading(true);
+
+      try {
+        if (u.type === 'customer') {
+          const response = await fetch(`${API_BASE_URL}/customers/shipments`, {
+            headers: authHeaders()
+          });
+          const json = await response.json();
+
+          if (response.ok && json?.success && Array.isArray(json.data)) {
+            const apiShipments = json.data as BackendShipment[];
+            setShipments(apiShipments.map(toUiShipment));
+            setOfferReceivedCount(apiShipments.filter(item => item.status === 'offer_received').length);
+          } else {
+            setShipments([]);
+            setOfferReceivedCount(0);
+          }
+        } else {
+          const [pendingResponse, statsResponse] = await Promise.all([
+            fetch(`${API_BASE_URL}/shipments/pending`, { headers: authHeaders() }),
+            fetch(`${API_BASE_URL}/carriers/me/stats`, { headers: authHeaders() })
+          ]);
+
+          const pendingJson = await pendingResponse.json();
+          const statsJson = await statsResponse.json();
+
+          if (pendingResponse.ok && pendingJson?.success && Array.isArray(pendingJson.data)) {
+            setShipments((pendingJson.data as BackendShipment[]).map(toUiShipment));
+          } else {
+            setShipments([]);
+          }
+
+          if (statsResponse.ok && statsJson?.success && statsJson?.data) {
+            setCarrierStats({
+              totalEarnings: Number(statsJson.data.totalEarnings || 0),
+              activeJobs: Number(statsJson.data.activeJobs || 0),
+              completedJobs: Number(statsJson.data.completedJobs || 0),
+              rating: Number(statsJson.data.rating || 0)
+            });
+          }
+
+          const list = reviewsApi.getByCarrier(u.id).filter(r => (r.status ?? 'aktif') === 'aktif');
+          setMyReviews(list.sort((a,b) => (a.tarih < b.tarih ? 1 : -1)));
+        }
+      } catch {
+        setShipments([]);
+        setOfferReceivedCount(0);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadDashboard();
   }, [navigate]);
 
-  if (!user) {
-    return <div>Yükleniyor...</div>;
+  if (!user || loading) {
+    return (
+      <div className="flex min-h-[40vh] items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-gray-300 border-t-gray-800" />
+      </div>
+    );
   }
 
   const getStatusColor = (status: string) => {
@@ -126,7 +245,7 @@ export default function Dashboard() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-blue-600">
-                  {offers.filter(o => o.status === 'pending').length}
+                  {offerReceivedCount}
                 </div>
                 <p className="text-xs text-muted-foreground">Değerlendirme bekliyor</p>
               </CardContent>
@@ -176,7 +295,7 @@ export default function Dashboard() {
                       </div>
                       {!isComplete && (
                         <div className="mb-3">
-                          <Button size="sm" onClick={() => navigate('/profile')}>
+                          <Button size="sm" onClick={() => navigate('/profilim')}>
                             Profili tamamen tamamla
                           </Button>
                         </div>
@@ -190,7 +309,7 @@ export default function Dashboard() {
                             ) : (
                               <Button size="sm" variant="outline" onClick={() => {
                                 // Basit yönlendirmeler - ileride özel sayfalara bağlanabilir
-                                navigate('/profile');
+                                navigate('/profilim');
                               }}>Tamamla</Button>
                             )}
                           </li>
@@ -203,18 +322,12 @@ export default function Dashboard() {
             </Card>
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Durum</CardTitle>
-                <User className="h-4 w-4 text-muted-foreground" />
+                <CardTitle className="text-sm font-medium">Toplam Kazanç</CardTitle>
+                <TrendingUp className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-lg font-bold">
-                  {(user as Carrier).isApproved ? (
-                    <Badge className="bg-green-100 text-green-800">Onaylandı</Badge>
-                  ) : (
-                    <Badge className="bg-yellow-100 text-yellow-800">Onay Bekliyor</Badge>
-                  )}
-                </div>
-                <p className="text-xs text-muted-foreground">Hesap durumu</p>
+                <div className="text-2xl font-bold">₺{carrierStats.totalEarnings.toLocaleString('tr-TR')}</div>
+                <p className="text-xs text-muted-foreground">Toplam gelir</p>
               </CardContent>
             </Card>
             
@@ -224,17 +337,8 @@ export default function Dashboard() {
                 <Star className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                {(() => {
-                  const active = myReviews;
-                  const count = active.length;
-                  const avg = count === 0 ? 0 : Number((active.reduce((sum, y) => sum + ((y.puanlar.dakiklik + y.puanlar.iletisim + y.puanlar.ozen + y.puanlar.profesyonellik) / 4), 0) / count).toFixed(1));
-                  return (
-                    <>
-                      <div className="text-2xl font-bold">{avg}</div>
-                      <p className="text-xs text-muted-foreground">{count} değerlendirme</p>
-                    </>
-                  );
-                })()}
+                <div className="text-2xl font-bold">{carrierStats.rating.toFixed(1)}</div>
+                <p className="text-xs text-muted-foreground">Mevcut puan</p>
               </CardContent>
             </Card>
             
@@ -244,7 +348,7 @@ export default function Dashboard() {
                 <Truck className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{shipments.length}</div>
+                <div className="text-2xl font-bold">{carrierStats.activeJobs}</div>
                 <p className="text-xs text-muted-foreground">Uygun işler</p>
               </CardContent>
             </Card>
@@ -256,9 +360,9 @@ export default function Dashboard() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-green-600">
-                  {JSON.parse(localStorage.getItem(`availability_${user.id}`) || '[]').length}
+                  {carrierStats.completedJobs}
                 </div>
-                <p className="text-xs text-muted-foreground">Müsait günler</p>
+                <p className="text-xs text-muted-foreground">Tamamlanan işler</p>
               </CardContent>
             </Card>
           </>
@@ -269,13 +373,13 @@ export default function Dashboard() {
       <div className="mb-8">
         {user.type !== 'customer' ? (
           <div className="flex flex-wrap gap-4">
-            <Link to="/shipments">
+            <Link to="/ilanlar">
               <Button size="lg">
                 <Truck className="h-4 w-4 mr-2" />
                 Mevcut İşleri Görüntüle
               </Button>
             </Link>
-            <Link to="/calendar">
+            <Link to="/takvim">
               <Button variant="outline" size="lg">
                 <Calendar className="h-4 w-4 mr-2" />
                 Takvimi Yönet
@@ -294,8 +398,7 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             {myReviews.slice(0,3).map(y => {
-              const customer = mockCustomers.find(c => c.id === y.userId);
-              const name = customer ? `${customer.name} ${customer.surname}` : y.kullanici;
+              const name = y.kullanici;
               return (
                 <div key={y.id} className="border-b pb-3 mb-3 last:border-0">
                   <div className="flex justify-between">
@@ -313,7 +416,7 @@ export default function Dashboard() {
               );
             })}
             <div className="mt-2 text-right">
-              <Link to="/carrier/reviews">
+              <Link to="/nakliyeci/yorumlar">
                 <Button size="sm" variant="outline">Tümünü Gör</Button>
               </Link>
             </div>
@@ -338,15 +441,11 @@ export default function Dashboard() {
         <CardContent>
           {shipments.length === 0 ? (
             <div className="text-center py-8 text-gray-500">
-              {user.type === 'customer' 
-                ? 'Henüz taşıma talebiniz yok. İlk talebinizi oluşturun!'
-                : 'Şu anda uygun iş bulunmuyor.'
-              }
+              Henüz ilan yok
             </div>
           ) : (
             <div className="space-y-4">
               {shipments.slice(0, 5).map((shipment) => {
-                const shipmentOffers = offers.filter(o => o.shipmentId === shipment.id);
                 return (
                   <div key={shipment.id} className="flex items-center justify-between p-4 border rounded-lg">
                     <div className="flex-1">
@@ -358,11 +457,6 @@ export default function Dashboard() {
                         <Badge className={getStatusColor(shipment.status)}>
                           {getStatusText(shipment.status)}
                         </Badge>
-                        {user.type === 'customer' && shipmentOffers.length > 0 && (
-                          <Badge variant="outline" className="bg-blue-50 text-blue-700">
-                            {shipmentOffers.length} Teklif
-                          </Badge>
-                        )}
                       </div>
                       <p className="text-sm text-gray-800">{shipment.description}</p>
                       <div className="flex items-center space-x-4 mt-2 text-xs text-gray-500">
@@ -373,13 +467,6 @@ export default function Dashboard() {
                     </div>
                     
                     <div className="flex items-center space-x-2">
-                      {user.type === 'customer' && shipmentOffers.length > 0 && (
-                        <Link to={`/offers/${shipment.id}`}>
-                          <Button size="sm" variant="outline">
-                            Teklifleri Görüntüle
-                          </Button>
-                        </Link>
-                      )}
                       {user.type === 'carrier' && shipment.status === 'pending' && (
                         (() => {
                           const { isComplete } = getCarrierProfileTasks(user as Carrier);
@@ -388,7 +475,7 @@ export default function Dashboard() {
                               Teklif Ver
                             </Button>
                           ) : (
-                            <Button size="sm" variant="outline" onClick={() => navigate('/profile')}>
+                            <Button size="sm" variant="outline" onClick={() => navigate('/profilim')}>
                               Profili tamamla
                             </Button>
                           );

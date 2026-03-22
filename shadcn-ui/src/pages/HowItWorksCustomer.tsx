@@ -110,7 +110,7 @@ export default function HowItWorksCustomer() {
           <Link to="/create-shipment">
             <Button className="bg-blue-600 hover:bg-blue-700">Hemen Talep Oluştur</Button>
           </Link>
-          <Link to="/shipments">
+          <Link to="/ilanlar">
             <Button variant="outline">Taleplerimi Gör</Button>
           </Link>
         </div>

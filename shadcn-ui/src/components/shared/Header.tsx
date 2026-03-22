@@ -25,7 +25,7 @@ export default function Header() {
 
   const getDashboardLink = () => {
     if (!currentUser) return '/';
-    return '/dashboard';
+    return '/panel';
   };
 
   return (
@@ -78,7 +78,7 @@ export default function Header() {
             </>
           ) : (
             <>
-              <Link to="/auth/login">
+              <Link to="/giris">
                 <Button variant="outline" size="sm">
                   Giriş Yap
                 </Button>

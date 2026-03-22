@@ -107,10 +107,10 @@ export default function HowItWorksCarrier() {
       {/* Nakliyeci sayfasında, giriş yapan kullanıcı müşteri ise CTA'lar gizlenir */}
       {user?.type !== 'customer' && (
         <div className="mt-8 flex flex-wrap items-center gap-3">
-          <Link to="/shipments">
+          <Link to="/ilanlar">
             <Button className="bg-sky-600 hover:bg-sky-700">Mevcut İşlere Göz At</Button>
           </Link>
-          <Link to="/calendar">
+          <Link to="/takvim">
             <Button variant="outline">Takvimim</Button>
           </Link>
         </div>

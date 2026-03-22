@@ -161,7 +161,7 @@ const CarrierDetailPage = () => {
       onRequireLogin('Sadece müşteri hesabı', 'Teklif istemek için müşteri hesabıyla giriş yapmalısınız.');
       return;
     }
-    navigate(`/offer-request?carrierId=${encodeURIComponent(carrierId)}`);
+    navigate(`/teklif-talebi?carrierId=${encodeURIComponent(carrierId)}`);
   };
 
   const canMessage = Boolean(eligibility?.canMessage);

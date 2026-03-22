@@ -8,7 +8,6 @@ import { Star, Truck, MapPin, Package, MessageCircle, Phone, Mail, Calendar, Awa
 import { useParams, useNavigate } from 'react-router-dom';
 import { Carrier } from '@/lib/types';
 import { getCarrierExperienceYears, maskName, computeAverageFromCategories } from '@/lib/utils';
-import { mockCarriers, mockReviews, mockCustomers } from '@/lib/mockData';
 import { reviewsApi, type ReviewRecord } from '@/utils/mockDb';
 import { getSessionUser } from '@/lib/storage';
 import { Label } from '@/components/ui/label';
@@ -18,6 +17,7 @@ import { useToast } from '@/hooks/use-toast';
 export default function CarrierProfile() {
   const [carrier, setCarrier] = useState<Carrier | null>(null);
   const [reviews, setReviews] = useState<ReviewRecord[]>([]);
+  const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const { toast } = useToast();
   const sessionUser = useMemo(() => getSessionUser(), []);
@@ -40,42 +40,55 @@ export default function CarrierProfile() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const foundCarrier = mockCarriers.find(c => c.id === carrierId);
-    if (!foundCarrier) {
-      navigate('/carriers');
-      return;
-    }
-    
-    setCarrier(foundCarrier);
-    // Load reviews for this carrier (combine seeded + stored)
-  const stored: ReviewRecord[] = reviewsApi.getByCarrier(String(carrierId));
-    const seeded: ReviewRecord[] = mockReviews
-      .filter(r => r.revieweeId === carrierId)
-      .map((r) => {
-        const customer = mockCustomers.find(c => c.id === r.reviewerId);
-        const fullName = customer ? `${customer.name} ${customer.surname}` : 'Müşteri';
-        return {
-          id: r.id,
-          nakliyeciId: r.revieweeId,
-          kullanici: fullName,
-          userId: r.reviewerId,
-          puanlar: {
-            dakiklik: r.categories?.punctuality ?? r.rating,
-            iletisim: r.categories?.communication ?? r.rating,
-            ozen: r.categories?.carefulHandling ?? r.rating,
-            profesyonellik: r.categories?.professionalism ?? r.rating,
-          },
-          yorum: r.comment,
-          helpful: r.helpful,
-          tarih: new Date(r.createdAt).toISOString().slice(0, 10),
-          status: 'aktif',
-        } as ReviewRecord;
-      });
-    // De-duplicate by id (prefer stored overrides if same id)
-    const map = new Map<string, ReviewRecord>();
-    [...seeded, ...stored].forEach(rr => map.set(rr.id, rr));
-    const merged = Array.from(map.values()).sort((a,b) => (a.tarih < b.tarih ? 1 : -1));
-    setReviews(merged);
+    const fetchProfile = async () => {
+      if (!carrierId) {
+        setLoading(false);
+        return;
+      }
+
+      try {
+        const res = await fetch(`/api/v1/carriers/${carrierId}`);
+        const json = await res.json();
+        if (res.ok && json?.success && json?.data?.carrier) {
+          const c = json.data.carrier;
+          const mapped: Carrier = {
+            id: c.id,
+            name: c.companyName || c.contactName || 'Nakliyeci',
+            surname: '',
+            email: c.email || '',
+            phone: c.phone || '',
+            city: c.city || '',
+            type: 'carrier',
+            createdAt: c.createdAt ? new Date(c.createdAt) : new Date(),
+            vehicle: {
+              type: 'kamyonet',
+              capacity: 0,
+              licensePlate: ''
+            },
+            serviceAreas: [],
+            loadTypes: [],
+            baseFee: 0,
+            rating: Number(c.rating || 0),
+            reviewCount: 0,
+            isApproved: Boolean(c.isActive),
+            verificationStatus: 'pending'
+          } as Carrier;
+          setCarrier(mapped);
+        } else {
+          navigate('/nakliyeciler');
+          return;
+        }
+
+        const stored: ReviewRecord[] = reviewsApi.getByCarrier(String(carrierId));
+        setReviews(stored.sort((a,b) => (a.tarih < b.tarih ? 1 : -1)));
+      } catch {
+        navigate('/nakliyeciler');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchProfile();
   }, [carrierId, navigate]);
 
   // Hooks must be declared before any early return
@@ -99,7 +112,7 @@ export default function CarrierProfile() {
     return reviews.some(r => (userId ? r.userId === userId : r.kullanici === userFullName));
   }, [carrier, isCustomer, userFullName, userId, reviews]);
 
-  if (!carrier) {
+  if (loading || !carrier) {
     return <div>Yükleniyor...</div>;
   }
 
@@ -167,7 +180,7 @@ export default function CarrierProfile() {
     <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       {/* Header */}
       <div className="mb-8">
-        <Button variant="outline" onClick={() => navigate('/carriers')} className="mb-4">
+        <Button variant="outline" onClick={() => navigate('/nakliyeciler')} className="mb-4">
           ← Nakliyecilere Dön
         </Button>
         <div className="flex items-start space-x-6">

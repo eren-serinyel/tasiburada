@@ -86,7 +86,7 @@ export default function ProfileComplete() {
             <p>• Araç ve hizmet bilgilerinizi doldurmak teklif alma şansınızı yükseltir.</p>
           </div>
           <div className="pt-2">
-            <Button className="w-full h-12" onClick={() => navigate('/profile')}>Profili Tamamlamaya Git</Button>
+            <Button className="w-full h-12" onClick={() => navigate('/profilim')}>Profili Tamamlamaya Git</Button>
           </div>
         </CardContent>
       </Card>

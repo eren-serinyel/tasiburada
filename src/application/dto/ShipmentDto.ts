@@ -1,5 +1,6 @@
 import { IsString, IsOptional, Length, IsEnum, IsNumber, IsDateString, Min, IsBoolean, IsUUID } from 'class-validator';
-import { ShipmentStatus, CargoType } from '../../domain/entities/Shipment';
+import { ShipmentStatus } from '../../domain/entities/Shipment';
+import { CargoType } from '../../domain/valueObjects/CargoType';
 
 export class CreateShipmentDto {
   @IsString()

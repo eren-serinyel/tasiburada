@@ -49,11 +49,11 @@ export default function CarrierRespond() {
       message: `${user?.name || 'Nakliyeci'} teklif gönderdi: ${price} TL, ${eta} saat` ,
       isRead: false,
       createdAt: new Date().toISOString(),
-      actionUrl: `/offers/${request.id}`,
+      actionUrl: `/teklifler/${request.id}`,
       relatedId: offerId,
       kind: 'info'
     });
-    navigate('/notifications');
+    navigate('/bildirimler');
   };
 
   if (!request) return (

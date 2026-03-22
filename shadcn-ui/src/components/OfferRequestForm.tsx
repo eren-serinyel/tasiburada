@@ -12,7 +12,6 @@ import { MapPin, Package, Truck, Shield, Award, MessageSquare, Star, CheckCircle
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Carrier, LOAD_TYPES, VEHICLE_TYPES } from '@/lib/types';
-import { mockCarriers } from '@/lib/mockData';
 import { mockDb } from '@/utils/mockDb';
 import { getSessionUser } from '@/lib/storage';
 import { CITIES_TR, getDistrictsForCity, formatDateYYYYMMDD } from '@/lib/locations';
@@ -31,6 +30,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
   const [submitting, setSubmitting] = useState(false);
   const [loadingResults, setLoadingResults] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(false);
+  const [carriers, setCarriers] = useState<Carrier[]>([]);
   const [form, setForm] = useState({
     originCity: '',
     originDistrict: '',
@@ -118,7 +118,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
   const suitableCarriersBase = useMemo(() => {
     if (!(canNextFrom1 && canNextFrom2)) return [] as Carrier[];
     const selectedOptionKeys = Object.values(form.serviceOptions || {}).flat();
-    return mockCarriers.filter((c) => {
+    return carriers.filter((c) => {
       const servesBoth = c.serviceAreas.includes(form.originCity) && c.serviceAreas.includes(form.destinationCity);
       const scopeMatch = !form.scope || !(c.scopes && c.scopes.length) || (c.scopes || []).includes(form.scope);
       const vehicleOk = !form.vehicleType || c.vehicle.type === (form.vehicleType as any);
@@ -134,7 +134,11 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
       const weightOk = !estWeight || c.vehicle.capacity >= estWeight;
       return servesBoth && scopeMatch && vehicleOk && extrasOk && weightOk && insuranceOk;
     });
-  }, [form, canNextFrom1, canNextFrom2]);
+  }, [form, canNextFrom1, canNextFrom2, carriers]);
+
+  useEffect(() => {
+    setCarriers([]);
+  }, []);
 
   const [onlyApproved, setOnlyApproved] = useState(false);
   const [minRating, setMinRating] = useState(0);
@@ -223,7 +227,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
       message: `${user?.name || 'Müşteri'} ${form.originCity}${form.originDistrict ? ' ' + form.originDistrict : ''} → ${form.destinationCity}${form.destinationDistrict ? ' ' + form.destinationDistrict : ''} için teklif istedi.`,
       isRead: false,
       createdAt: new Date().toISOString(),
-  actionUrl: `/carrier/respond/${reqId}`,
+  actionUrl: `/nakliyeci/yanit/${reqId}`,
       relatedId: reqId,
       kind: 'request'
     });
@@ -674,7 +678,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
               <h3 className="text-lg font-semibold text-gray-900">Devam edebilmek için giriş yapmalısınız</h3>
               <p className="text-sm text-gray-600 mt-2">Teklif isteyebilmek ve nakliyecilerle iletişime geçebilmek için giriş yapın veya ücretsiz kayıt olun.</p>
               <div className="mt-6 flex justify-center gap-4">
-                <Button onClick={() => navigate('/login')}>Giriş Yap</Button>
+                <Button onClick={() => navigate('/giris')}>Giriş Yap</Button>
                 <Button variant="outline" onClick={() => navigate('/register')}>Üye Ol</Button>
               </div>
             </motion.div>

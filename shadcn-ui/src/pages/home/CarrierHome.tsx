@@ -19,15 +19,27 @@ import {
   CheckCircle2,
   AlertCircle
 } from 'lucide-react';
-import { mockShipments } from '@/lib/mockData';
 import { getCarrierProfileTasks } from '@/lib/utils';
 import { Shipment, User } from '@/lib/types';
 import { getSessionUser, setSessionUser } from '@/lib/storage';
 import { Separator } from '@/components/ui/separator';
 
+type PendingShipmentApi = {
+  id: string;
+  origin?: string;
+  destination?: string;
+  loadDetails?: string;
+  weight?: number | string;
+  price?: number | string;
+  shipmentDate?: string;
+  status?: string;
+};
+
 export default function CarrierHome() {
   const [user, setUser] = useState<User | null>(null);
   const [profileCompletion, setProfileCompletion] = useState<number | null>(null);
+  const [pendingJobs, setPendingJobs] = useState<Shipment[]>([]);
+  const [pendingLoading, setPendingLoading] = useState(true);
   const navigate = useNavigate();
   const API_BASE_URL = '/api/v1';
 
@@ -110,9 +122,56 @@ export default function CarrierHome() {
     fetchStats();
   }, [user]);
 
-  const activeJobs = useMemo<Shipment[]>(() => {
-    return mockShipments.filter((s) => ['pending', 'matched'].includes(s.status)).slice(0, 5);
-  }, []);
+  useEffect(() => {
+    if (!user || user.type !== 'carrier') return;
+
+    const fetchPending = async () => {
+      setPendingLoading(true);
+      try {
+        const res = await fetch(`${API_BASE_URL}/shipments/pending`, {
+          headers: authHeaders()
+        });
+        const json = await res.json();
+
+        if (res.ok && json?.success && Array.isArray(json.data)) {
+          const mapped: Shipment[] = (json.data as PendingShipmentApi[]).map(item => ({
+            id: item.id,
+            customerId: '',
+            origin: {
+              address: item.origin || '',
+              city: item.origin || '',
+              lat: 0,
+              lng: 0
+            },
+            destination: {
+              address: item.destination || '',
+              city: item.destination || '',
+              lat: 0,
+              lng: 0
+            },
+            loadType: 'ev-esyasi',
+            weight: Number(item.weight || 0),
+            date: item.shipmentDate ? new Date(item.shipmentDate) : new Date(),
+            requestedDate: item.shipmentDate ? new Date(item.shipmentDate) : new Date(),
+            description: item.loadDetails || '',
+            distance: 0,
+            status: 'pending',
+            price: Number(item.price || 0),
+            createdAt: new Date()
+          }));
+          setPendingJobs(mapped.slice(0, 5));
+        } else {
+          setPendingJobs([]);
+        }
+      } catch {
+        setPendingJobs([]);
+      } finally {
+        setPendingLoading(false);
+      }
+    };
+
+    fetchPending();
+  }, [user]);
 
   const completedJobsCount = stats.completedJobs;
   const totalEarnings = stats.totalEarnings;
@@ -140,7 +199,7 @@ export default function CarrierHome() {
           </div>
           <div className="flex items-center gap-3">
             <Button variant="outline" size="sm" className="hidden sm:flex" asChild>
-              <Link to="/carrier/calendar">
+              <Link to="/takvim">
                 <Calendar className="mr-2 h-4 w-4" />
                 Takvim
               </Link>
@@ -168,7 +227,7 @@ export default function CarrierHome() {
           />
           <StatsCard 
             title="Aktif İşler" 
-            value={activeJobs.length.toString()} 
+            value={pendingJobs.length.toString()} 
             description="3 teslimat yolda" 
             icon={Truck}
           />
@@ -206,7 +265,7 @@ export default function CarrierHome() {
                       Şu an profilin %{percent} tamamlandı.
                     </p>
                     <Button variant="outline" className="mt-4 border-amber-200 text-amber-800 hover:bg-amber-100" asChild>
-                      <Link to="/carrier/profile">Profili Tamamla</Link>
+                      <Link to="/profilim">Profili Tamamla</Link>
                     </Button>
                   </div>
                 </CardContent>
@@ -225,35 +284,43 @@ export default function CarrierHome() {
               </div>
 
               <TabsContent value="available" className="space-y-4">
-                {/* Simulated Marketplace Items */}
-                <MarketplaceItem 
-                  from="İstanbul, Kadıköy" 
-                  to="Ankara, Çankaya" 
-                  price="₺12,000" 
-                  date="Yarın, 09:00"
-                  type="Evden Eve"
-                  distance="450 km"
-                />
-                <MarketplaceItem 
-                  from="İzmir, Bornova" 
-                  to="Bursa, Nilüfer" 
-                  price="₺8,500" 
-                  date="25 Ekim"
-                  type="Parsiyel"
-                  distance="330 km"
-                />
-                <MarketplaceItem 
-                  from="Antalya, Muratpaşa" 
-                  to="İstanbul, Beşiktaş" 
-                  price="₺18,000" 
-                  date="28 Ekim"
-                  type="Ofis Taşıma"
-                  distance="720 km"
-                />
+                {pendingLoading ? (
+                  <Card className="flex items-center justify-center py-10">
+                    <div className="h-8 w-8 rounded-full border-2 border-gray-300 border-t-gray-700 animate-spin" />
+                  </Card>
+                ) : pendingJobs.length === 0 ? (
+                  <Card className="flex items-center justify-center py-10 text-gray-500">Henüz ilan yok</Card>
+                ) : (
+                  pendingJobs.map((job) => (
+                    <Card key={job.id} className="overflow-hidden hover:shadow-md transition-shadow">
+                      <div className="p-6">
+                        <div className="flex items-center justify-between mb-4">
+                          <div className="flex items-center gap-2">
+                            <Badge variant="secondary">Bekliyor</Badge>
+                            <span className="text-xs text-gray-500 font-mono">#{job.id.substring(0,8)}</span>
+                          </div>
+                          <span className="font-bold text-lg text-gray-900">₺{Number(job.price || 0).toLocaleString('tr-TR')}</span>
+                        </div>
+                        <div className="grid md:grid-cols-2 gap-6">
+                          <div className="space-y-2">
+                            <p className="text-sm text-gray-500">Nereden</p>
+                            <p className="font-medium text-gray-900">{job.origin.city || job.origin.address}</p>
+                            <p className="text-sm text-gray-500">Nereye</p>
+                            <p className="font-medium text-gray-900">{job.destination.city || job.destination.address}</p>
+                          </div>
+                          <div className="space-y-2">
+                            <p className="text-sm text-gray-500">Yük</p>
+                            <p className="font-medium text-gray-900">{job.weight} kg</p>
+                          </div>
+                        </div>
+                      </div>
+                    </Card>
+                  ))
+                )}
               </TabsContent>
               
               <TabsContent value="active" className="space-y-4">
-                {activeJobs.length === 0 ? (
+                {pendingJobs.length === 0 ? (
                   <Card className="flex flex-col items-center justify-center py-12 text-center border-dashed">
                     <Package className="h-12 w-12 text-gray-300 mb-4" />
                     <p className="text-lg font-medium text-gray-900">Aktif iş bulunamadı</p>
@@ -263,7 +330,7 @@ export default function CarrierHome() {
                     </Button>
                   </Card>
                 ) : (
-                  activeJobs.map((job) => (
+                  pendingJobs.map((job) => (
                     <Card key={job.id} className="overflow-hidden hover:shadow-md transition-shadow">
                       <div className="p-6">
                         <div className="flex items-center justify-between mb-4">
@@ -350,7 +417,7 @@ export default function CarrierHome() {
               </CardContent>
               <CardFooter className="bg-gray-50 border-t p-4">
                   <Button variant="outline" className="w-full text-xs h-8" asChild>
-                    <Link to="/carrier/profile">Profili Düzenle</Link>
+                    <Link to="/profilim">Profili Düzenle</Link>
                   </Button>
               </CardFooter>
             </Card>

@@ -55,7 +55,25 @@ export class ShipmentRepository extends BaseRepository<Shipment> {
     });
   }
 
+  async findByIdAndCarrierId(shipmentId: string, carrierId: string): Promise<Shipment | null> {
+    return await this.repository.findOne({
+      where: { id: shipmentId, carrierId }
+    });
+  }
+
   async updateShipmentStatus(shipmentId: string, status: ShipmentStatus): Promise<void> {
     await this.repository.update(shipmentId, { status });
+  }
+
+  async transitionStatusIfCurrent(shipmentId: string, current: ShipmentStatus, next: ShipmentStatus): Promise<boolean> {
+    const result = await this.repository
+      .createQueryBuilder()
+      .update(Shipment)
+      .set({ status: next })
+      .where('id = :shipmentId', { shipmentId })
+      .andWhere('status = :current', { current })
+      .execute();
+
+    return (result.affected || 0) > 0;
   }
 }

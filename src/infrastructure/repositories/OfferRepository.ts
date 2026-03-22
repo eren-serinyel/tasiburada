@@ -110,4 +110,13 @@ export class OfferRepository extends BaseRepository<Offer> {
       .andWhere('status = :pendingStatus', { pendingStatus: OfferStatus.PENDING })
       .execute();
   }
+
+  async findAcceptedByShipmentId(shipmentId: string): Promise<Offer | null> {
+    return await this.repository.findOne({
+      where: {
+        shipmentId,
+        status: OfferStatus.ACCEPTED
+      }
+    });
+  }
 }

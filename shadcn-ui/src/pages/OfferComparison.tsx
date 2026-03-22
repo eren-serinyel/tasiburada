@@ -1,87 +1,118 @@
 import { useEffect, useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Star, MessageCircle, Truck, CheckCircle, Clock } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Offer, Carrier, Shipment } from '@/lib/types';
 import { getSessionUser } from '@/lib/storage';
-import { mockCarriers } from '@/lib/mockData';
+
+type OfferApi = {
+  id: string;
+  shipmentId: string;
+  carrierId: string;
+  price: number;
+  status: 'pending' | 'accepted' | 'rejected';
+  carrier?: {
+    id: string;
+    companyName?: string;
+    contactName?: string;
+    rating?: number;
+  };
+};
+
+type ShipmentApi = {
+  id: string;
+  origin?: string;
+  destination?: string;
+  weight?: number;
+  shipmentDate?: string;
+  price?: number;
+};
 
 export default function OfferComparison() {
-  const [offers, setOffers] = useState<(Offer & { carrier: Carrier })[]>([]);
-  const [shipment, setShipment] = useState<Shipment | null>(null);
-  const [selectedOffer, setSelectedOffer] = useState<Offer | null>(null);
+  const [offers, setOffers] = useState<OfferApi[]>([]);
+  const [shipment, setShipment] = useState<ShipmentApi | null>(null);
+  const [selectedOffer, setSelectedOffer] = useState<OfferApi | null>(null);
   const [isAcceptDialogOpen, setIsAcceptDialogOpen] = useState(false);
+  const [loading, setLoading] = useState(true);
   const { shipmentId } = useParams();
   const navigate = useNavigate();
 
+  const authHeaders = () => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null;
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  };
+
   useEffect(() => {
-  const user = getSessionUser() || (localStorage.getItem('currentUser') ? JSON.parse(localStorage.getItem('currentUser') as string) : {});
-    if (!user.id || user.type !== 'customer') {
-      navigate('/login');
-      return;
-    }
+    const loadData = async () => {
+      const user = getSessionUser() || (localStorage.getItem('currentUser') ? JSON.parse(localStorage.getItem('currentUser') as string) : {});
+      if (!user.id || user.type !== 'customer') {
+        navigate('/giris');
+        return;
+      }
 
-    // Load offers for this shipment
-    const allOffers = JSON.parse(localStorage.getItem('offers') || '[]');
-    const shipmentOffers = allOffers.filter((offer: Offer) => offer.shipmentId === shipmentId);
-    
-    // Enrich offers with carrier data
-    const enrichedOffers = shipmentOffers.map((offer: Offer) => ({
-      ...offer,
-      carrier: mockCarriers.find(c => c.id === offer.carrierId) || mockCarriers[0]
-    }));
+      setLoading(true);
+      try {
+        const [offersRes, shipmentRes] = await Promise.all([
+          fetch('/api/v1/customers/offers', { headers: authHeaders() }),
+          shipmentId ? fetch(`/api/v1/shipments/${shipmentId}`, { headers: authHeaders() }) : Promise.resolve(null as any)
+        ]);
 
-    // Sort by price (lowest first)
-    enrichedOffers.sort((a, b) => a.price - b.price);
-    setOffers(enrichedOffers);
+        const offersJson = await offersRes.json();
+        const shipmentJson = shipmentRes ? await shipmentRes.json() : null;
 
-    // Load shipment data
-    const allShipments = JSON.parse(localStorage.getItem('shipments') || '[]');
-    const currentShipment = allShipments.find((s: Shipment) => s.id === shipmentId);
-    setShipment(currentShipment);
+        if (offersRes.ok && offersJson?.success && Array.isArray(offersJson.data)) {
+          const data = (offersJson.data as OfferApi[])
+            .filter(offer => !shipmentId || offer.shipmentId === shipmentId)
+            .sort((a, b) => Number(a.price || 0) - Number(b.price || 0));
+          setOffers(data);
+        } else {
+          setOffers([]);
+        }
+
+        if (shipmentRes && shipmentRes.ok && shipmentJson?.success) {
+          setShipment(shipmentJson.data as ShipmentApi);
+        } else {
+          setShipment(null);
+        }
+      } catch {
+        setOffers([]);
+        setShipment(null);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadData();
   }, [shipmentId, navigate]);
 
-  const handleAcceptOffer = (offer: Offer) => {
+  const handleAcceptOffer = (offer: OfferApi) => {
     setSelectedOffer(offer);
     setIsAcceptDialogOpen(true);
   };
 
-  const confirmAcceptOffer = () => {
+  const confirmAcceptOffer = async () => {
     if (!selectedOffer) return;
 
-    // Update offer status
-    const allOffers = JSON.parse(localStorage.getItem('offers') || '[]');
-    const updatedOffers = allOffers.map((offer: Offer) => {
-      if (offer.id === selectedOffer.id) {
-        return { ...offer, status: 'accepted' };
-      } else if (offer.shipmentId === selectedOffer.shipmentId) {
-        return { ...offer, status: 'rejected' };
-      }
-      return offer;
-    });
-    localStorage.setItem('offers', JSON.stringify(updatedOffers));
+    try {
+      const res = await fetch(`/api/v1/offers/${selectedOffer.id}/accept`, {
+        method: 'PUT',
+        headers: authHeaders()
+      });
+      const json = await res.json();
 
-    // Update shipment status
-    const allShipments = JSON.parse(localStorage.getItem('shipments') || '[]');
-    const updatedShipments = allShipments.map((shipment: Shipment) => {
-      if (shipment.id === selectedOffer.shipmentId) {
-        return { 
-          ...shipment, 
-          status: 'accepted',
-          carrierId: selectedOffer.carrierId,
-          price: selectedOffer.price
-        };
+      if (!res.ok || !json?.success) {
+        alert(json?.message || 'Teklif kabul edilemedi.');
+        return;
       }
-      return shipment;
-    });
-    localStorage.setItem('shipments', JSON.stringify(updatedShipments));
 
-    alert('Teklif kabul edildi! Ödeme adımına yönlendiriliyorsunuz.');
-    navigate(`/payment/${selectedOffer.shipmentId}`);
+      alert('Teklif kabul edildi! Ödeme adımına yönlendiriliyorsunuz.');
+      navigate(`/odeme/${selectedOffer.shipmentId}`);
+    } catch {
+      alert('Teklif kabul edilirken bir hata oluştu.');
+    }
   };
 
   const getStatusColor = (status: string) => {
@@ -100,8 +131,8 @@ export default function OfferComparison() {
     }
   };
 
-  if (!shipment) {
-    return <div>Yükleniyor...</div>;
+  if (loading) {
+    return <div className="text-center py-10">Yükleniyor...</div>;
   }
 
   return (
@@ -109,42 +140,40 @@ export default function OfferComparison() {
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900">Gelen Teklifler</h1>
         <p className="text-gray-600 mt-2">
-          {shipment.origin.city} → {shipment.destination.city} taşıması için gelen teklifleri karşılaştırın
+          {shipment ? `${shipment.origin || '-'} → ${shipment.destination || '-'} taşıması için gelen teklifleri karşılaştırın` : 'Teklifleri karşılaştırın'}
         </p>
       </div>
 
-      {/* Shipment Summary */}
-      <Card className="mb-8">
-        <CardHeader>
-          <CardTitle>Taşıma Detayları</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid md:grid-cols-3 gap-4 text-sm">
-            <div>
-              <span className="font-medium">Rota:</span>
-              <p>{shipment.origin.city} → {shipment.destination.city}</p>
+      {shipment && (
+        <Card className="mb-8">
+          <CardHeader>
+            <CardTitle>Taşıma Detayları</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid md:grid-cols-3 gap-4 text-sm">
+              <div>
+                <span className="font-medium">Rota:</span>
+                <p>{shipment.origin || '-'} → {shipment.destination || '-'}</p>
+              </div>
+              <div>
+                <span className="font-medium">Yük:</span>
+                <p>{shipment.weight || 0}kg</p>
+              </div>
+              <div>
+                <span className="font-medium">Tarih:</span>
+                <p>{shipment.shipmentDate ? new Date(shipment.shipmentDate).toLocaleDateString('tr-TR') : '-'}</p>
+              </div>
             </div>
-            <div>
-              <span className="font-medium">Yük:</span>
-              <p>{shipment.weight}kg - {shipment.loadType}</p>
-            </div>
-            <div>
-              <span className="font-medium">Tarih:</span>
-              <p>{new Date(shipment.requestedDate).toLocaleDateString('tr-TR')}</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
 
-      {/* Offers */}
       {offers.length === 0 ? (
         <Card>
           <CardContent className="text-center py-12">
             <Clock className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">Henüz teklif gelmedi</h3>
-            <p className="text-gray-600">
-              Nakliyeciler talebinizi inceliyor. Kısa süre içinde teklifler gelmeye başlayacak.
-            </p>
+            <h3 className="text-lg font-medium text-gray-900 mb-2">Henüz ilan yok</h3>
+            <p className="text-gray-600">Bu taşıma için görüntülenecek teklif bulunamadı.</p>
           </CardContent>
         </Card>
       ) : (
@@ -156,12 +185,12 @@ export default function OfferComparison() {
                   <div className="flex items-center space-x-4">
                     <Avatar className="h-12 w-12">
                       <AvatarFallback className="bg-blue-100 text-blue-600">
-                        {offer.carrier.name.charAt(0)}
+                        {(offer.carrier?.companyName || 'N').charAt(0)}
                       </AvatarFallback>
                     </Avatar>
                     <div>
                       <CardTitle className="flex items-center space-x-2">
-                        <span>{offer.carrier.name} {offer.carrier.surname}</span>
+                        <span>{offer.carrier?.companyName || offer.carrier?.contactName || 'Nakliyeci'}</span>
                         {index === 0 && <Badge className="bg-green-100 text-green-800">En Uygun</Badge>}
                         <Badge className={getStatusColor(offer.status)}>
                           {getStatusText(offer.status)}
@@ -170,24 +199,17 @@ export default function OfferComparison() {
                       <div className="flex items-center space-x-2 mt-1">
                         <div className="flex items-center space-x-1">
                           <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
-                          <span className="text-sm">{offer.carrier.rating}</span>
-                          <span className="text-sm text-gray-500">({offer.carrier.reviewCount} değerlendirme)</span>
+                          <span className="text-sm">{Number(offer.carrier?.rating || 0).toFixed(1)}</span>
                         </div>
                       </div>
                     </div>
                   </div>
                   <div className="text-right">
                     <div className="text-3xl font-bold text-green-600">{offer.price}₺</div>
-                    <div className="text-sm text-gray-500">
-                      {offer.price < shipment.price ? 
-                        `${shipment.price - offer.price}₺ tasarruf` : 
-                        `+${offer.price - shipment.price}₺`
-                      }
-                    </div>
                   </div>
                 </div>
               </CardHeader>
-              
+
               <CardContent>
                 <div className="grid md:grid-cols-2 gap-6">
                   <div className="space-y-3">
@@ -195,35 +217,20 @@ export default function OfferComparison() {
                       <span className="font-medium text-gray-700">Araç Bilgileri:</span>
                       <div className="flex items-center space-x-2 mt-1">
                         <Truck className="h-4 w-4 text-gray-400" />
-                        <span className="text-sm">{offer.carrier.vehicle.type.toUpperCase()}</span>
-                        <span className="text-sm text-gray-500">({offer.carrier.vehicle.capacity}kg)</span>
+                        <span className="text-sm">-</span>
                       </div>
-                      <p className="text-sm text-gray-600">{offer.carrier.vehicle.licensePlate}</p>
                     </div>
-                    
                     <div>
                       <span className="font-medium text-gray-700">Hizmet Bölgeleri:</span>
-                      <p className="text-sm text-gray-600">{offer.carrier.serviceAreas.join(', ')}</p>
+                      <p className="text-sm text-gray-600">-</p>
                     </div>
                   </div>
-                  
+
                   <div className="space-y-3">
-                    {offer.message && (
-                      <div>
-                        <span className="font-medium text-gray-700">Nakliyeci Notu:</span>
-                        <p className="text-sm text-gray-600 bg-gray-50 p-3 rounded-lg mt-1">
-                          "{offer.message}"
-                        </p>
-                      </div>
-                    )}
-                    
                     <div className="flex space-x-2">
                       {offer.status === 'pending' && (
                         <>
-                          <Button 
-                            onClick={() => handleAcceptOffer(offer)}
-                            className="flex-1"
-                          >
+                          <Button onClick={() => handleAcceptOffer(offer)} className="flex-1">
                             <CheckCircle className="h-4 w-4 mr-2" />
                             Kabul Et
                           </Button>
@@ -247,7 +254,6 @@ export default function OfferComparison() {
         </div>
       )}
 
-      {/* Accept Confirmation Dialog */}
       <Dialog open={isAcceptDialogOpen} onOpenChange={setIsAcceptDialogOpen}>
         <DialogContent>
           <DialogHeader>
@@ -255,13 +261,13 @@ export default function OfferComparison() {
             <DialogDescription>
               {selectedOffer && (
                 <>
-                  {selectedOffer.carrier.name} {selectedOffer.carrier.surname} adlı nakliyecinin 
-                  {selectedOffer.price}₺ tutarındaki teklifini kabul etmek istediğinizden emin misiniz?
+                  {(selectedOffer.carrier?.companyName || selectedOffer.carrier?.contactName || 'Nakliyeci')} adlı nakliyecinin
+                  {' '}{selectedOffer.price}₺ tutarındaki teklifini kabul etmek istediğinizden emin misiniz?
                 </>
               )}
             </DialogDescription>
           </DialogHeader>
-          
+
           <div className="flex space-x-2">
             <Button variant="outline" onClick={() => setIsAcceptDialogOpen(false)} className="flex-1">
               İptal

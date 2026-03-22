@@ -20,7 +20,7 @@ export default function CarrierOffers() {
 
   useEffect(() => {
     const u = getSessionUser() || (localStorage.getItem('currentUser') ? JSON.parse(localStorage.getItem('currentUser') as string) : null);
-    if (!u || u.type !== 'carrier') { navigate('/login'); return; }
+    if (!u || u.type !== 'carrier') { navigate('/giris'); return; }
     setUser(u);
     const allOffers: Offer[] = JSON.parse(localStorage.getItem('offers') || '[]');
     const myOffers = allOffers.map((o: any) => ({
@@ -88,7 +88,7 @@ export default function CarrierOffers() {
                   <Button size="sm" variant="outline" onClick={() => setEdit({ id: o.id, price: String(o.price) })}><Pencil className="h-4 w-4 mr-1" /> Güncelle</Button>
                   <Button size="sm" variant="outline" onClick={() => setConfirm({ id: o.id })}><Trash2 className="h-4 w-4 mr-1" /> İptal Et</Button>
                   {o.status === 'accepted' && s && (
-                    <Button size="sm" onClick={() => navigate(`/shipment/${s.id}`)}><CheckCircle2 className="h-4 w-4 mr-1" /> İşi Aç</Button>
+                    <Button size="sm" onClick={() => navigate(`/ilan/${s.id}`)}><CheckCircle2 className="h-4 w-4 mr-1" /> İşi Aç</Button>
                   )}
                 </CardContent>
               </Card>

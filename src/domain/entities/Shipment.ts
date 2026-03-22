@@ -8,6 +8,7 @@ export enum ShipmentStatus {
     MATCHED = "matched",
     IN_TRANSIT = "in_transit",
     COMPLETED = "completed",
+    DELIVERED = "completed",
     CANCELLED = "cancelled"
 }
 

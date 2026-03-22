@@ -60,19 +60,18 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/home" element={<RoleHome />} />
-            {/* Auth aliases */}
-            <Route path="/login" element={<Login />} />
+            {/* Auth */}
             <Route path="/giris" element={<Login />} />
-            <Route path="/register-user" element={<RegisterUser />} />
-            <Route path="/register-carrier" element={<RegisterCarrier />} />
+            <Route path="/musteri-kayit" element={<RegisterUser />} />
+            <Route path="/nakliyeci-kayit" element={<RegisterCarrier />} />
             <Route path="/nakliyeci-ol" element={<RegisterCarrierPage />} />
             <Route path="/profil-tamamla" element={<ProfileComplete />} />
-            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/panel" element={<Dashboard />} />
             {/** Talep oluşturma akışı devre dışı (müşteri sadece nakliyeci arıyor) */}
-            <Route path="/offer-request" element={<OfferRequest />} />
-            <Route path="/shipments" element={<ShipmentList />} />
-            <Route path="/shipment/:id" element={<ShipmentDetail />} />
-            <Route path="/history" element={<History />} />
+            <Route path="/teklif-talebi" element={<OfferRequest />} />
+            <Route path="/ilanlar" element={<ShipmentList />} />
+            <Route path="/ilan/:id" element={<ShipmentDetail />} />
+            <Route path="/gecmis" element={<History />} />
             <Route path="/campaigns" element={<Campaigns />} />
             <Route path="/support" element={<Support />} />
             <Route path="/loyalty" element={<Loyalty />} />
@@ -83,30 +82,49 @@ const App = () => (
             <Route path="/kullanim-sartlari" element={<Terms />} />
             <Route path="/cerez-politikasi" element={<CookiesPolicy />} />
             <Route path="/yardim" element={<Help />} />
-            <Route path="/carrier-info" element={<CarrierInfo />} />
-            <Route path="/offers/:shipmentId" element={<OfferComparison />} />
+            <Route path="/nakliyeci-bilgi" element={<CarrierInfo />} />
+            <Route path="/teklifler/:shipmentId" element={<OfferComparison />} />
             {/** send-offer rotası kaldırıldı */}
             {/* Yeni akış rotaları */}
-            <Route path="/carrier/respond/:requestId" element={<CarrierRespond />} />
-            <Route path="/my-offers" element={<MyOffers />} />
-            <Route path="/payment/:shipmentId" element={<Payment />} />
-            <Route path="/payments" element={<Payments />} />
-            <Route path="/carrier/offers" element={<CarrierOffers />} />
-            <Route path="/carrier/earnings" element={<Earnings />} />
-            <Route path="/notifications" element={<Notifications />} />
-            <Route path="/carriers" element={<CarrierList />} />
+            <Route path="/nakliyeci/yanit/:requestId" element={<CarrierRespond />} />
+            <Route path="/tekliflerim" element={<MyOffers />} />
+            <Route path="/odeme/:shipmentId" element={<Payment />} />
+            <Route path="/odemeler" element={<Payments />} />
+            <Route path="/nakliyeci/teklifler" element={<CarrierOffers />} />
+            <Route path="/nakliyeci/kazanc" element={<Earnings />} />
+            <Route path="/bildirimler" element={<Notifications />} />
             <Route path="/nakliyeciler" element={<CarrierList />} />
             <Route path="/nakliyeciler/tumu" element={<CarrierDirectory />} />
             <Route path="/nakliyeciler/:carrierId/:slug?" element={<CarrierDetailPage />} />
             <Route path="/mesajlar" element={<Messages />} />
-            <Route path="/carrier/:carrierId" element={<CarrierProfile />} />
-            <Route path="/carrier/reviews" element={<CarrierReviews />} />
-            <Route path="/calendar" element={<CarrierCalendar />} />
-            <Route path="/profile" element={<Profile />} />
-            <Route path="/debug" element={<Debug />} />
-            <Route path="/how-it-works-customer" element={<HowItWorksCustomer />} />
-            <Route path="/how-it-works-carrier" element={<HowItWorksCarrier />} />
+            <Route path="/nakliyeci/:carrierId" element={<CarrierProfile />} />
+            <Route path="/nakliyeci/yorumlar" element={<CarrierReviews />} />
+            <Route path="/takvim" element={<CarrierCalendar />} />
+            <Route path="/profilim" element={<Profile />} />
+            <Route path="/hata-ayiklama" element={<Debug />} />
+            <Route path="/nasil-calisir-musteri" element={<HowItWorksCustomer />} />
+            <Route path="/nasil-calisir-nakliyeci" element={<HowItWorksCarrier />} />
             {/* Legacy aliases */}
+            <Route path="/login" element={<Navigate to="/giris" replace />} />
+            <Route path="/register-user" element={<Navigate to="/musteri-kayit" replace />} />
+            <Route path="/register-carrier" element={<Navigate to="/nakliyeci-kayit" replace />} />
+            <Route path="/dashboard" element={<Navigate to="/panel" replace />} />
+            <Route path="/shipments" element={<Navigate to="/ilanlar" replace />} />
+            <Route path="/offer-request" element={<Navigate to="/teklif-talebi" replace />} />
+            <Route path="/my-offers" element={<Navigate to="/tekliflerim" replace />} />
+            <Route path="/carrier/offers" element={<Navigate to="/nakliyeci/teklifler" replace />} />
+            <Route path="/carrier/reviews" element={<Navigate to="/nakliyeci/yorumlar" replace />} />
+            <Route path="/carrier/earnings" element={<Navigate to="/nakliyeci/kazanc" replace />} />
+            <Route path="/payments" element={<Navigate to="/odemeler" replace />} />
+            <Route path="/notifications" element={<Navigate to="/bildirimler" replace />} />
+            <Route path="/carriers" element={<Navigate to="/nakliyeciler" replace />} />
+            <Route path="/profile" element={<Navigate to="/profilim" replace />} />
+            <Route path="/history" element={<Navigate to="/gecmis" replace />} />
+            <Route path="/calendar" element={<Navigate to="/takvim" replace />} />
+            <Route path="/how-it-works-customer" element={<Navigate to="/nasil-calisir-musteri" replace />} />
+            <Route path="/how-it-works-carrier" element={<Navigate to="/nasil-calisir-nakliyeci" replace />} />
+            <Route path="/debug" element={<Navigate to="/hata-ayiklama" replace />} />
+            <Route path="/carrier-info" element={<Navigate to="/nakliyeci-bilgi" replace />} />
             <Route path="/pricing" element={<Navigate to="/fiyatlandirma" replace />} />
             <Route path="/privacy" element={<Navigate to="/gizlilik-politikasi" replace />} />
             <Route path="/terms" element={<Navigate to="/kullanim-sartlari" replace />} />

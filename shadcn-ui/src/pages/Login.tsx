@@ -311,13 +311,13 @@ export default function Login() {
                   </p>
                   <div className="grid grid-cols-2 gap-3">
                     <Link 
-                      to="/register-user" 
+                      to="/musteri-kayit" 
                       className="group p-3 bg-gradient-to-r from-green-500/10 to-emerald-500/10 backdrop-blur-sm border border-green-200/50 text-green-700 rounded-xl hover:from-green-500/20 hover:to-emerald-500/20 transition-all duration-300 text-center font-medium hover:scale-105"
                     >
                       Müşteri Kaydı
                     </Link>
                     <Link 
-                      to="/register-carrier" 
+                      to="/nakliyeci-kayit" 
                       className="group p-3 bg-gradient-to-r from-orange-500/10 to-red-500/10 backdrop-blur-sm border border-orange-200/50 text-orange-700 rounded-xl hover:from-orange-500/20 hover:to-red-500/20 transition-all duration-300 text-center font-medium hover:scale-105"
                     >
                       Nakliyeci Kaydı

@@ -131,7 +131,7 @@ export const reviewsApi = {
         message: `${review.kullanici?.split(' ')?.[0] || 'Müşteri'} tarafından yeni bir yorum yapıldı.`,
         isRead: false,
         createdAt: new Date().toISOString(),
-        actionUrl: `/carrier/reviews?highlight=${encodeURIComponent(review.id)}`,
+        actionUrl: `/nakliyeci/yorumlar?highlight=${encodeURIComponent(review.id)}`,
         relatedId: review.id,
       });
       write(KEYS.NOTIFICATIONS, notifications);

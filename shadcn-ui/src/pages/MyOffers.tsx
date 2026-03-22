@@ -34,7 +34,7 @@ export default function MyOffers() {
         isRead: false,
         createdAt: new Date().toISOString(),
         relatedId: offerId,
-        actionUrl: '/carrier/offers',
+        actionUrl: '/nakliyeci/teklifler',
         kind: 'decision'
       });
     }
@@ -71,7 +71,7 @@ export default function MyOffers() {
           ))}
         </div>
       )}
-      <div className="pt-2"><Button variant="outline" onClick={() => navigate('/notifications')}>Bildirimlere Dön</Button></div>
+      <div className="pt-2"><Button variant="outline" onClick={() => navigate('/bildirimler')}>Bildirimlere Dön</Button></div>
     </div>
   );
 }

@@ -37,7 +37,7 @@ export default function CustomerHome() {
 
           {/* CTA buttons */}
           <div className="flex justify-center items-center gap-3 md:gap-4 mt-10 flex-col sm:flex-row">
-            <Link to="/offer-request" className="w-full sm:w-auto">
+            <Link to="/teklif-talebi" className="w-full sm:w-auto">
               <Button
                 size="lg"
                 className="w-full sm:w-auto rounded-xl px-8 h-12 bg-gradient-to-r from-blue-600 to-indigo-500 hover:from-indigo-500 hover:to-blue-600 text-white font-semibold shadow-md hover:shadow-lg hover:brightness-110 transition-all"
@@ -45,7 +45,7 @@ export default function CustomerHome() {
                 <span className="mr-1">🚚</span> Randevunu Oluştur
               </Button>
             </Link>
-            <Link to="/how-it-works-customer" className="w-full sm:w-auto">
+            <Link to="/nasil-calisir-musteri" className="w-full sm:w-auto">
               <Button
                 size="lg"
                 variant="outline"
@@ -59,7 +59,7 @@ export default function CustomerHome() {
           {/* Helper text */}
           <p className="mt-6 text-sm text-slate-500">
             Randevularını ve tekliflerini görmek için{' '}
-            <Link to="/dashboard" className="text-blue-600 font-medium hover:underline">İşlemlerim</Link>{' '}sekmesine geçebilirsin.
+            <Link to="/panel" className="text-blue-600 font-medium hover:underline">İşlemlerim</Link>{' '}sekmesine geçebilirsin.
           </p>
         </div>
       </section>
@@ -223,7 +223,7 @@ export default function CustomerHome() {
         <div className="max-w-6xl mx-auto">
           <div className="flex items-center justify-between bg-white/80 backdrop-blur-md border border-blue-100 rounded-2xl p-5">
             <div className="text-gray-800 text-sm md:text-base">Randevularını ve tekliflerini yönetmek için {getDashboardTitleForRole(user?.type)}’a gidebilirsin.</div>
-            <Link to="/dashboard">
+            <Link to="/panel">
               <Button className="rounded-xl bg-gradient-to-r from-blue-700 to-indigo-700 hover:from-indigo-700 hover:to-blue-700 text-white">{getDashboardTitleForRole(user?.type)}’a Git →</Button>
             </Link>
           </div>

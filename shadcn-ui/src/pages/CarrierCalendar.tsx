@@ -24,13 +24,13 @@ export default function CarrierCalendar() {
   useEffect(() => {
     const storedUser = localStorage.getItem('currentUser');
     if (!storedUser) {
-      navigate('/login');
+      navigate('/giris');
       return;
     }
     
     const userData = JSON.parse(storedUser);
     if (userData.type !== 'carrier') {
-      navigate('/dashboard');
+      navigate('/panel');
       return;
     }
     

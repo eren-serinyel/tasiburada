@@ -190,7 +190,7 @@ export default function RegisterUser() {
         // Başarılı kayıt
         console.log('✅ Registration successful:', result.data);
         alert('Kayıt başarıyla tamamlandı! Giriş yapabilirsiniz.');
-        navigate('/login');
+        navigate('/giris');
       } else {
         // Hata durumu
         const errorMessage = result?.message || `HTTP ${response.status}: ${response.statusText}`;
@@ -470,7 +470,7 @@ export default function RegisterUser() {
             </form>
 
             <div className="text-center pt-4 border-t">
-              <p className="text-sm text-gray-600">Zaten hesabınız var mı? <Link to="/login" className="text-blue-600 hover:underline font-medium">Giriş yapın</Link></p>
+              <p className="text-sm text-gray-600">Zaten hesabınız var mı? <Link to="/giris" className="text-blue-600 hover:underline font-medium">Giriş yapın</Link></p>
             </div>
           </CardContent>
         </Card>

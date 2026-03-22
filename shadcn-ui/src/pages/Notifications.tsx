@@ -37,7 +37,7 @@ export default function Notifications() {
                 </div>
                 <div className="flex items-center gap-2">
                   <Badge variant="outline" className={`${n.isRead ? 'bg-gray-50 text-gray-600' : 'bg-blue-50 text-blue-700'}`}>{n.isRead ? 'okundu' : 'yeni'}</Badge>
-                  <Button variant="outline" onClick={() => navigate(n.actionUrl || (n.kind === 'request' && n.relatedId ? `/carrier/respond/${n.relatedId}` : '/my-offers'))}>Aç</Button>
+                  <Button variant="outline" onClick={() => navigate(n.actionUrl || (n.kind === 'request' && n.relatedId ? `/nakliyeci/yanit/${n.relatedId}` : '/tekliflerim'))}>Aç</Button>
                   {!n.isRead && (
                     <Button size="sm" onClick={() => markAsRead(n.id)}><Check className="h-4 w-4 mr-1" /> Okundu</Button>
                   )}

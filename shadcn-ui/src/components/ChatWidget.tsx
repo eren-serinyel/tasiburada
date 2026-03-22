@@ -37,7 +37,7 @@ export default function Navbar() {
           <div className="hidden md:flex items-center space-x-8">
             {user ? (
               <>
-                <Link to="/dashboard" className="text-gray-700 hover:text-blue-600 transition-colors">
+                <Link to="/panel" className="text-gray-700 hover:text-blue-600 transition-colors">
                   {getDashboardTitleForRole(user.type)}
                 </Link>
                 
@@ -46,22 +46,22 @@ export default function Navbar() {
                     <Link to="/create-shipment" className="text-gray-700 hover:text-blue-600 transition-colors">
                       Yeni Talep
                     </Link>
-                    <Link to="/shipments" className="text-gray-700 hover:text-blue-600 transition-colors">
+                    <Link to="/ilanlar" className="text-gray-700 hover:text-blue-600 transition-colors">
                       Taleplerim
                     </Link>
-                    <Link to="/carriers" className="text-gray-700 hover:text-blue-600 transition-colors">
+                    <Link to="/nakliyeciler" className="text-gray-700 hover:text-blue-600 transition-colors">
                       Nakliyeciler
                     </Link>
                   </>
                 ) : (
                   <>
-                    <Link to="/shipments" className="text-gray-700 hover:text-blue-600 transition-colors">
+                    <Link to="/ilanlar" className="text-gray-700 hover:text-blue-600 transition-colors">
                       Mevcut İşler
                     </Link>
-                    <Link to="/carriers" className="text-gray-700 hover:text-blue-600 transition-colors">
+                    <Link to="/nakliyeciler" className="text-gray-700 hover:text-blue-600 transition-colors">
                       Nakliyeciler
                     </Link>
-                    <Link to="/calendar" className="text-gray-700 hover:text-blue-600 transition-colors">
+                    <Link to="/takvim" className="text-gray-700 hover:text-blue-600 transition-colors">
                       Takvim
                     </Link>
                   </>
@@ -81,13 +81,13 @@ export default function Navbar() {
               </>
             ) : (
               <div className="flex items-center space-x-4">
-                <Link to="/carriers" className="text-gray-700 hover:text-blue-600 transition-colors">
+                <Link to="/nakliyeciler" className="text-gray-700 hover:text-blue-600 transition-colors">
                   Nakliyeciler
                 </Link>
-                <Link to="/login">
+                <Link to="/giris">
                   <Button variant="outline">Giriş Yap</Button>
                 </Link>
-                <Link to="/register-user">
+                <Link to="/musteri-kayit">
                   <Button>Kayıt Ol</Button>
                 </Link>
               </div>
@@ -113,7 +113,7 @@ export default function Navbar() {
               {user ? (
                 <>
                   <Link 
-                    to="/dashboard" 
+                    to="/panel" 
                     className="text-gray-700 hover:text-blue-600 transition-colors"
                     onClick={() => setIsMenuOpen(false)}
                   >
@@ -130,7 +130,7 @@ export default function Navbar() {
                         Yeni Talep
                       </Link>
                       <Link 
-                        to="/shipments" 
+                        to="/ilanlar" 
                         className="text-gray-700 hover:text-blue-600 transition-colors"
                         onClick={() => setIsMenuOpen(false)}
                       >
@@ -140,14 +140,14 @@ export default function Navbar() {
                   ) : (
                     <>
                       <Link 
-                        to="/shipments" 
+                        to="/ilanlar" 
                         className="text-gray-700 hover:text-blue-600 transition-colors"
                         onClick={() => setIsMenuOpen(false)}
                       >
                         Mevcut İşler
                       </Link>
                       <Link 
-                        to="/calendar" 
+                        to="/takvim" 
                         className="text-gray-700 hover:text-blue-600 transition-colors"
                         onClick={() => setIsMenuOpen(false)}
                       >
@@ -157,7 +157,7 @@ export default function Navbar() {
                   )}
                   
                   <Link 
-                    to="/carriers" 
+                    to="/nakliyeciler" 
                     className="text-gray-700 hover:text-blue-600 transition-colors"
                     onClick={() => setIsMenuOpen(false)}
                   >
@@ -180,17 +180,17 @@ export default function Navbar() {
               ) : (
                 <>
                   <Link 
-                    to="/carriers" 
+                    to="/nakliyeciler" 
                     className="text-gray-700 hover:text-blue-600 transition-colors"
                     onClick={() => setIsMenuOpen(false)}
                   >
                     Nakliyeciler
                   </Link>
                   <div className="flex flex-col space-y-2 pt-4 border-t">
-                    <Link to="/login" onClick={() => setIsMenuOpen(false)}>
+                    <Link to="/giris" onClick={() => setIsMenuOpen(false)}>
                       <Button variant="outline" className="w-full">Giriş Yap</Button>
                     </Link>
-                    <Link to="/register-user" onClick={() => setIsMenuOpen(false)}>
+                    <Link to="/musteri-kayit" onClick={() => setIsMenuOpen(false)}>
                       <Button className="w-full">Kayıt Ol</Button>
                     </Link>
                   </div>

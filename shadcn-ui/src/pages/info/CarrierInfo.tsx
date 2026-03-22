@@ -51,7 +51,7 @@ export default function CarrierInfo() {
       </div>
 
       <div className="mt-8 flex justify-center">
-        <Button onClick={() => navigate('/register-carrier')} className="bg-sky-600 hover:bg-sky-700">Nakliyeci olarak kayıt olmak istiyorum</Button>
+        <Button onClick={() => navigate('/nakliyeci-kayit')} className="bg-sky-600 hover:bg-sky-700">Nakliyeci olarak kayıt olmak istiyorum</Button>
       </div>
     </div>
   );

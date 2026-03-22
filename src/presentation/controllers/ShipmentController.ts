@@ -155,4 +155,103 @@ export class ShipmentController {
       });
     }
   };
+
+  start = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const carrierId = req.user?.carrierId;
+      if (!carrierId) {
+        res.status(401).json({
+          success: false,
+          message: 'Yetkisiz erişim.'
+        });
+        return;
+      }
+
+      const { id } = req.params;
+      const startedShipment = await this.shipmentService.startShipmentByCarrier(carrierId, id);
+      res.status(200).json({
+        success: true,
+        message: 'Taşıma başlatıldı.',
+        data: startedShipment
+      });
+    } catch (error: any) {
+      let statusCode = 400;
+      if (error.message?.includes('bulunamadı')) {
+        statusCode = 404;
+      } else if (error.message?.includes('yetkiniz yok')) {
+        statusCode = 403;
+      }
+
+      res.status(statusCode).json({
+        success: false,
+        message: error.message || 'Taşıma başlatılırken hata oluştu.'
+      });
+    }
+  };
+
+  complete = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const carrierId = req.user?.carrierId;
+      if (!carrierId) {
+        res.status(401).json({
+          success: false,
+          message: 'Yetkisiz erişim.'
+        });
+        return;
+      }
+
+      const { id } = req.params;
+      const completedShipment = await this.shipmentService.completeShipmentByCarrier(carrierId, id);
+      res.status(200).json({
+        success: true,
+        message: 'Taşıma teslim edildi olarak işaretlendi.',
+        data: completedShipment
+      });
+    } catch (error: any) {
+      let statusCode = 400;
+      if (error.message?.includes('bulunamadı')) {
+        statusCode = 404;
+      } else if (error.message?.includes('yetkiniz yok')) {
+        statusCode = 403;
+      }
+
+      res.status(statusCode).json({
+        success: false,
+        message: error.message || 'Taşıma tamamlanırken hata oluştu.'
+      });
+    }
+  };
+
+  startTransit = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const customerId = req.user?.customerId;
+      if (!customerId) {
+        res.status(401).json({
+          success: false,
+          message: 'Yetkisiz erişim.'
+        });
+        return;
+      }
+
+      const { id } = req.params;
+      const updatedShipment = await this.shipmentService.startTransitByCustomer(customerId, id);
+      res.status(200).json({
+        success: true,
+        message: 'Taşımanın yola çıktığı onaylandı.',
+        data: updatedShipment
+      });
+    } catch (error: any) {
+      let statusCode = 400;
+      if (error.message?.includes('bulunamadı')) {
+        statusCode = 404;
+      } else if (error.message?.includes('yetkiniz yok')) {
+        statusCode = 403;
+      }
+
+      res.status(statusCode).json({
+        success: false,
+        message: error.message || 'Taşıma durumu güncellenirken hata oluştu.'
+      });
+    }
+  };
 }

@@ -287,7 +287,7 @@ export default function Index() {
                 </div>
                 <h3 className="text-xl sm:text-2xl font-bold text-white mb-3 sm:mb-4">Müşteri</h3>
                 <p className="text-blue-100 mb-4 sm:mb-6 text-sm sm:text-base">Taşıma talebinizi oluşturun, en uygun nakliyeciyi bulun</p>
-                <Link to="/register-user" className="block">
+                <Link to="/musteri-kayit" className="block">
                   <Button className="w-full bg-gradient-to-r from-blue-500 to-sky-500 hover:from-blue-600 hover:to-sky-600 text-white font-semibold py-3 rounded-full transition-all duration-300 shadow-lg hover:shadow-xl">
                     Taşıma Talebi Oluştur
                     <ArrowRight className="ml-2 h-4 w-4" />
@@ -304,7 +304,7 @@ export default function Index() {
                 </div>
                 <h3 className="text-xl sm:text-2xl font-bold text-white mb-3 sm:mb-4">Nakliyeci</h3>
                 <p className="text-blue-100 mb-4 sm:mb-6 text-sm sm:text-base">İş bulun, para kazanın, işletmenizi büyütün</p>
-                <Link to="/register-carrier" className="block">
+                <Link to="/nakliyeci-kayit" className="block">
                   <Button className="w-full bg-gradient-to-r from-sky-500 to-cyan-500 hover:from-sky-600 hover:to-cyan-600 text-white font-semibold py-3 rounded-full transition-all duration-300 shadow-lg hover:shadow-xl">
                     Nakliyeci Olarak Katıl
                     <ArrowRight className="ml-2 h-4 w-4" />

@@ -4,59 +4,171 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { MapPin, Package, Clock, Search, Filter, Truck, Send, Star } from 'lucide-react';
+import { MapPin, Package, Clock, Search, Filter, Send, Star } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Shipment, User, Carrier, Offer, LOAD_TYPES } from '@/lib/types';
+import { Shipment, User, Carrier, LOAD_TYPES } from '@/lib/types';
 import { getCarrierProfileTasks } from '@/lib/utils';
-import { mockShipments } from '@/lib/mockData';
 import { getSessionUser } from '@/lib/storage';
+
+const API_BASE_URL = '/api/v1';
+const ALL_FILTER_VALUE = '__all__';
+
+type BackendShipment = {
+  id: string;
+  customerId?: string;
+  origin?: string;
+  destination?: string;
+  loadDetails?: string;
+  weight?: number | string | null;
+  shipmentDate?: string;
+  createdAt?: string;
+  status?: string;
+  price?: number | string | null;
+  offerCount?: number;
+};
+
+const normalizeStatus = (status?: string): Shipment['status'] => {
+  switch (status) {
+    case 'matched':
+      return 'matched';
+    case 'completed':
+      return 'delivered';
+    case 'cancelled':
+      return 'cancelled';
+    case 'in_transit':
+      return 'matched';
+    case 'offer_received':
+    case 'pending':
+    default:
+      return 'pending';
+  }
+};
+
+const toUiShipment = (shipment: BackendShipment): Shipment => {
+  const originText = shipment.origin || '';
+  const destinationText = shipment.destination || '';
+
+  return {
+    id: shipment.id,
+    customerId: shipment.customerId || '',
+    origin: {
+      address: originText,
+      city: originText,
+      lat: 0,
+      lng: 0
+    },
+    destination: {
+      address: destinationText,
+      city: destinationText,
+      lat: 0,
+      lng: 0
+    },
+    loadType: 'ev-esyasi',
+    weight: Number(shipment.weight || 0),
+    date: shipment.shipmentDate ? new Date(shipment.shipmentDate) : new Date(),
+    requestedDate: shipment.shipmentDate ? new Date(shipment.shipmentDate) : new Date(),
+    distance: 0,
+    description: shipment.loadDetails || '',
+    status: normalizeStatus(shipment.status),
+    price: Number(shipment.price || 0),
+    createdAt: shipment.createdAt ? new Date(shipment.createdAt) : new Date()
+  };
+};
+
+const detectUserType = (sessionUser: User | null): 'customer' | 'carrier' => {
+  const savedType = localStorage.getItem('userType');
+  if (savedType === 'customer' || savedType === 'carrier') {
+    return savedType;
+  }
+
+  if (sessionUser?.type === 'customer' || sessionUser?.type === 'carrier') {
+    return sessionUser.type;
+  }
+
+  const token = localStorage.getItem('authToken');
+  if (!token) {
+    return 'customer';
+  }
+
+  try {
+    const payloadPart = token.split('.')[1] || '';
+    const base64 = payloadPart.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), '=');
+    const decoded = JSON.parse(atob(padded));
+    if (decoded?.type === 'customer' || decoded?.type === 'carrier') {
+      return decoded.type;
+    }
+  } catch {
+    // Fall back to default
+  }
+
+  return 'customer';
+};
 
 export default function ShipmentList() {
   const [user, setUser] = useState<User | null>(null);
   const [shipments, setShipments] = useState<Shipment[]>([]);
   const [filteredShipments, setFilteredShipments] = useState<Shipment[]>([]);
-  const [offers, setOffers] = useState<Offer[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedCity, setSelectedCity] = useState('');
-  const [selectedLoadType, setSelectedLoadType] = useState('');
-  const [statusFilter, setStatusFilter] = useState('');
+  const [selectedCity, setSelectedCity] = useState(ALL_FILTER_VALUE);
+  const [selectedLoadType, setSelectedLoadType] = useState(ALL_FILTER_VALUE);
+  const [statusFilter, setStatusFilter] = useState(ALL_FILTER_VALUE);
   const navigate = useNavigate();
 
+  const authHeaders = () => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null;
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  };
+
   useEffect(() => {
-    const u = getSessionUser() || (localStorage.getItem('currentUser') ? JSON.parse(localStorage.getItem('currentUser') as string) : null);
-    if (!u) {
-      navigate('/login');
-      return;
-    }
-    const userData = u;
-    setUser(u);
-    
-    // Load shipments based on user type
-    const allShipments = JSON.parse(localStorage.getItem('shipments') || '[]');
-    const combinedShipments = [...allShipments, ...mockShipments];
-    
-    if (userData.type === 'customer') {
-      // For customers, show their own shipments
-      const userShipments = combinedShipments.filter(s => s.customerId === userData.id);
-      setShipments(userShipments);
-    } else {
-      // For carriers, show available shipments they can bid on
-      const carrier = userData as Carrier;
-      const availableShipments = combinedShipments.filter(shipment => {
-        // Check if carrier can handle this shipment
-        const canHandle = carrier.serviceAreas.includes(shipment.origin.city) &&
-                         carrier.serviceAreas.includes(shipment.destination.city) &&
-                         carrier.loadTypes.includes(shipment.loadType) &&
-                         carrier.vehicle.capacity >= shipment.weight;
-        
-        return shipment.status === 'pending' && canHandle;
-      });
-      setShipments(availableShipments);
-    }
-    
-    // Load offers
-    const allOffers = JSON.parse(localStorage.getItem('offers') || '[]');
-    setOffers(allOffers);
+    const loadShipments = async () => {
+      const u = getSessionUser() || (localStorage.getItem('currentUser') ? JSON.parse(localStorage.getItem('currentUser') as string) : null);
+      if (!u) {
+        navigate('/giris');
+        return;
+      }
+
+      setUser(u);
+      setLoading(true);
+
+      try {
+        const userType = detectUserType(u);
+        const endpoint = userType === 'carrier'
+          ? `${API_BASE_URL}/shipments/pending`
+          : `${API_BASE_URL}/shipments/my-shipments`;
+
+        const response = await fetch(endpoint, {
+          headers: authHeaders()
+        });
+        const json = await response.json();
+        console.log('[ShipmentList] API raw shipment data:', json?.data);
+
+        if (response.ok && json?.success && Array.isArray(json.data)) {
+          const emptyFieldRows = (json.data as BackendShipment[]).filter(item => !item.origin || !item.destination || !item.status);
+          if (emptyFieldRows.length > 0) {
+            console.log(
+              '[ShipmentList] Shipments with empty critical fields (origin/destination/status):',
+              emptyFieldRows.map(item => ({
+                id: item.id,
+                origin: item.origin,
+                destination: item.destination,
+                status: item.status
+              }))
+            );
+          }
+          setShipments((json.data as BackendShipment[]).map(toUiShipment));
+        } else {
+          setShipments([]);
+        }
+      } catch {
+        setShipments([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadShipments();
   }, [navigate]);
 
   useEffect(() => {
@@ -64,9 +176,9 @@ export default function ShipmentList() {
       const matchesSearch = shipment.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
                            shipment.origin.city.toLowerCase().includes(searchTerm.toLowerCase()) ||
                            shipment.destination.city.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesCity = !selectedCity || shipment.origin.city === selectedCity || shipment.destination.city === selectedCity;
-      const matchesLoadType = !selectedLoadType || shipment.loadType === selectedLoadType;
-      const matchesStatus = !statusFilter || shipment.status === statusFilter;
+      const matchesCity = selectedCity === ALL_FILTER_VALUE || shipment.origin.city === selectedCity || shipment.destination.city === selectedCity;
+      const matchesLoadType = selectedLoadType === ALL_FILTER_VALUE || shipment.loadType === selectedLoadType;
+      const matchesStatus = statusFilter === ALL_FILTER_VALUE || shipment.status === statusFilter;
       
       return matchesSearch && matchesCity && matchesLoadType && matchesStatus;
     });
@@ -80,8 +192,7 @@ export default function ShipmentList() {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'pending': return 'bg-yellow-100 text-yellow-800';
-      case 'accepted': return 'bg-blue-100 text-blue-800';
-      case 'in-transit': return 'bg-purple-100 text-purple-800';
+      case 'matched': return 'bg-blue-100 text-blue-800';
       case 'delivered': return 'bg-green-100 text-green-800';
       case 'cancelled': return 'bg-red-100 text-red-800';
       default: return 'bg-gray-100 text-gray-800';
@@ -91,36 +202,25 @@ export default function ShipmentList() {
   const getStatusText = (status: string) => {
     switch (status) {
       case 'pending': return 'Bekliyor';
-      case 'accepted': return 'Kabul Edildi';
-      case 'in-transit': return 'Yolda';
+      case 'matched': return 'Eşleşti';
       case 'delivered': return 'Teslim Edildi';
       case 'cancelled': return 'İptal Edildi';
       default: return status;
     }
   };
 
-  const hasUserOffered = (shipmentId: string) => {
-    if (!user || user.type !== 'carrier') return false;
-    return offers.some(offer => offer.shipmentId === shipmentId && offer.carrierId === user.id);
-  };
-
-  const getUserOffer = (shipmentId: string) => {
-    if (!user || user.type !== 'carrier') return null;
-    return offers.find(offer => offer.shipmentId === shipmentId && offer.carrierId === user.id);
-  };
-
-  const getShipmentOfferCount = (shipmentId: string) => {
-    return offers.filter(offer => offer.shipmentId === shipmentId).length;
-  };
-
-  if (!user) {
-    return <div>Yükleniyor...</div>;
+  if (!user || loading) {
+    return (
+      <div className="flex min-h-[40vh] items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-gray-300 border-t-gray-800" />
+      </div>
+    );
   }
 
   const cities = Array.from(new Set([
     ...shipments.map(s => s.origin.city),
     ...shipments.map(s => s.destination.city)
-  ])).sort();
+  ])).filter(Boolean).sort();
 
   const profileGate = user && user.type === 'carrier' ? getCarrierProfileTasks(user as Carrier) : null;
 
@@ -148,7 +248,7 @@ export default function ShipmentList() {
             </Button>
           </Link>
         ) : (
-          <Link to="/carriers">
+          <Link to="/nakliyeciler">
             <Button variant="outline" size="lg">
               <Star className="h-4 w-4 mr-2" />
               Diğer Nakliyecileri Görüntüle
@@ -181,7 +281,7 @@ export default function ShipmentList() {
                 <SelectValue placeholder="Şehir seçin" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Tüm şehirler</SelectItem>
+                <SelectItem value={ALL_FILTER_VALUE}>Tüm şehirler</SelectItem>
                 {cities.map((city) => (
                   <SelectItem key={city} value={city}>{city}</SelectItem>
                 ))}
@@ -193,7 +293,7 @@ export default function ShipmentList() {
                 <SelectValue placeholder="Yük türü" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Tüm yük türleri</SelectItem>
+                <SelectItem value={ALL_FILTER_VALUE}>Tüm yük türleri</SelectItem>
                 {Object.entries(LOAD_TYPES).map(([key, value]) => (
                   <SelectItem key={key} value={key}>{value}</SelectItem>
                 ))}
@@ -206,10 +306,9 @@ export default function ShipmentList() {
                   <SelectValue placeholder="Durum" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Tüm durumlar</SelectItem>
+                  <SelectItem value={ALL_FILTER_VALUE}>Tüm durumlar</SelectItem>
                   <SelectItem value="pending">Bekliyor</SelectItem>
-                  <SelectItem value="accepted">Kabul Edildi</SelectItem>
-                  <SelectItem value="in-transit">Yolda</SelectItem>
+                  <SelectItem value="matched">Eşleşti</SelectItem>
                   <SelectItem value="delivered">Teslim Edildi</SelectItem>
                   <SelectItem value="cancelled">İptal Edildi</SelectItem>
                 </SelectContent>
@@ -231,22 +330,13 @@ export default function ShipmentList() {
           <CardContent className="text-center py-12">
             <Search className="h-12 w-12 text-gray-400 mx-auto mb-4" />
             <h3 className="text-lg font-medium text-gray-900 mb-2">
-              {user.type === 'customer' ? 'Taşıma talebiniz yok' : 'Uygun iş bulunamadı'}
+              Henüz ilan yok
             </h3>
-            <p className="text-gray-600">
-              {user.type === 'customer' 
-                ? 'İlk taşıma talebinizi oluşturun.'
-                : 'Arama kriterlerinizi değiştirerek tekrar deneyin.'
-              }
-            </p>
           </CardContent>
         </Card>
       ) : (
         <div className="space-y-6">
           {filteredShipments.map((shipment) => {
-            const userOffer = getUserOffer(shipment.id);
-            const offerCount = getShipmentOfferCount(shipment.id);
-            
             return (
               <Card key={shipment.id} className="hover:shadow-md transition-shadow">
                 <CardHeader>
@@ -260,16 +350,6 @@ export default function ShipmentList() {
                         <Badge className={getStatusColor(shipment.status)}>
                           {getStatusText(shipment.status)}
                         </Badge>
-                        {user.type === 'customer' && offerCount > 0 && (
-                          <Badge variant="outline" className="bg-blue-50 text-blue-700">
-                            {offerCount} Teklif
-                          </Badge>
-                        )}
-                        {user.type === 'carrier' && userOffer && (
-                          <Badge variant="outline" className="bg-green-50 text-green-700">
-                            Teklif Verildi
-                          </Badge>
-                        )}
                       </div>
                       <CardTitle className="text-lg">{shipment.description}</CardTitle>
                       <CardDescription className="mt-1">
@@ -280,7 +360,7 @@ export default function ShipmentList() {
                     <div className="text-right">
                       <div className="text-2xl font-bold text-green-600">{shipment.price}₺</div>
                       <div className="text-sm text-gray-500">
-                        {new Date(shipment.requestedDate).toLocaleDateString('tr-TR')}
+                        {shipment.requestedDate ? new Date(shipment.requestedDate).toLocaleDateString('tr-TR') : '-'}
                       </div>
                     </div>
                   </div>
@@ -331,14 +411,7 @@ export default function ShipmentList() {
                     <div className="flex items-center space-x-2">
                       {user.type === 'customer' ? (
                         <>
-                          {offerCount > 0 && (
-                            <Link to={`/offers/${shipment.id}`}>
-                              <Button size="sm">
-                                Teklifleri Görüntüle ({offerCount})
-                              </Button>
-                            </Link>
-                          )}
-                          {shipment.status === 'pending' && offerCount === 0 && (
+                          {shipment.status === 'pending' && (
                             <Button size="sm" variant="outline" disabled>
                               Teklif Bekleniyor
                             </Button>
@@ -346,27 +419,15 @@ export default function ShipmentList() {
                         </>
                       ) : (
                         <>
-                          {userOffer ? (
-                            <div className="flex items-center space-x-2">
-                              <Badge variant="outline" className="bg-green-50 text-green-700">
-                                {userOffer.price}₺ teklif verildi
-                              </Badge>
-                              <Badge className={getStatusColor(userOffer.status)}>
-                                {userOffer.status === 'pending' ? 'Bekliyor' : 
-                                 userOffer.status === 'accepted' ? 'Kabul Edildi' : 'Reddedildi'}
-                              </Badge>
-                            </div>
+                          {profileGate && !profileGate.isComplete ? (
+                            <Button size="sm" variant="outline" onClick={() => navigate('/profilim')}>
+                              Profilini tamamla
+                            </Button>
                           ) : (
-                            profileGate && !profileGate.isComplete ? (
-                              <Button size="sm" variant="outline" onClick={() => navigate('/profile')}>
-                                Profilini tamamla
-                              </Button>
-                            ) : (
-                              <Button size="sm" variant="outline" disabled>
-                                <Send className="h-4 w-4 mr-2" />
-                                Teklif Ver
-                              </Button>
-                            )
+                            <Button size="sm" variant="outline" disabled>
+                              <Send className="h-4 w-4 mr-2" />
+                              Teklif Ver
+                            </Button>
                           )}
                         </>
                       )}

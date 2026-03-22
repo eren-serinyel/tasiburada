@@ -121,6 +121,17 @@ export class CarrierRepository extends BaseRepository<Carrier> {
       .execute();
   }
 
+  async incrementTotalOffers(carrierId: string): Promise<void> {
+    await this.repository
+      .createQueryBuilder()
+      .update(Carrier)
+      .set({
+        totalOffers: () => 'totalOffers + 1'
+      })
+      .where('id = :id', { id: carrierId })
+      .execute();
+  }
+
   async getTopCarriers(limit: number = 10): Promise<Carrier[]> {
     return await this.repository.find({
       where: { isActive: true },

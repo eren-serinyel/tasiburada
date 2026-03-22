@@ -116,12 +116,12 @@ export default function Navbar() {
                     <span className="text-sm font-medium text-gray-700 group-hover:text-blue-600">Ana Sayfa</span>
                   </Link>
                   
-                  <Link to="/carriers" className="flex items-center space-x-2 px-4 py-2 rounded-lg hover:bg-blue-50 transition-colors group">
+                  <Link to="/nakliyeciler" className="flex items-center space-x-2 px-4 py-2 rounded-lg hover:bg-blue-50 transition-colors group">
                     <Users className="h-4 w-4 text-gray-600 group-hover:text-blue-600" />
                     <span className="text-sm font-medium text-gray-700 group-hover:text-blue-600">Nakliyeciler</span>
                   </Link>
                   {user?.type === 'customer' && (
-                    <Link to="/offer-request" className="flex items-center space-x-2 px-4 py-2 rounded-lg hover:bg-green-50 transition-colors group">
+                    <Link to="/teklif-talebi" className="flex items-center space-x-2 px-4 py-2 rounded-lg hover:bg-green-50 transition-colors group">
                       <Truck className="h-4 w-4 text-green-600 group-hover:text-green-700" />
                       <span className="text-sm font-medium text-gray-700 group-hover:text-green-700">Teklif Talebi</span>
                     </Link>
@@ -137,7 +137,7 @@ export default function Navbar() {
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="start" className="w-64 p-2 bg-white/95 backdrop-blur-lg border border-gray-200 rounded-xl shadow-xl">
                       <DropdownMenuItem asChild className="p-0">
-                        <Link to="/how-it-works-customer" className="w-full cursor-pointer group">
+                        <Link to="/nasil-calisir-musteri" className="w-full cursor-pointer group">
                           <div className="flex items-center p-3 rounded-lg hover:bg-blue-50 transition-all">
                             <User className="h-4 w-4 text-blue-600 mr-3" />
                             <div>
@@ -148,7 +148,7 @@ export default function Navbar() {
                         </Link>
                       </DropdownMenuItem>
                       <DropdownMenuItem asChild className="p-0">
-                        <Link to="/how-it-works-carrier" className="w-full cursor-pointer group">
+                        <Link to="/nasil-calisir-nakliyeci" className="w-full cursor-pointer group">
                           <div className="flex items-center p-3 rounded-lg hover:bg-blue-50 transition-all">
                             <Truck className="h-4 w-4 text-sky-600 mr-3" />
                             <div>
@@ -177,7 +177,7 @@ export default function Navbar() {
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-64 p-2 bg-white/95 backdrop-blur-lg border border-gray-200 rounded-2xl shadow-2xl">
                     <DropdownMenuItem asChild className="p-0">
-                      <Link to="/dashboard" className="w-full cursor-pointer group">
+                      <Link to="/panel" className="w-full cursor-pointer group">
                         <div className="flex items-center space-x-3 p-3 rounded-xl hover:bg-gradient-to-r hover:from-blue-50 hover:to-sky-50 transition-all duration-300">
                           <div className="p-2 bg-gradient-to-r from-blue-100 to-sky-100 rounded-lg group-hover:from-blue-200 group-hover:to-sky-200">
                             <Home className="h-4 w-4 text-blue-600" />
@@ -192,7 +192,7 @@ export default function Navbar() {
                     {user.type === 'customer' && (
                       <>
                         <DropdownMenuItem asChild className="p-0">
-                          <Link to="/history" className="w-full cursor-pointer group">
+                          <Link to="/gecmis" className="w-full cursor-pointer group">
                             <div className="flex items-center space-x-3 p-3 rounded-xl hover:bg-blue-50 transition-all duration-300">
                               <div className="p-2 bg-blue-100 rounded-lg">
                                 <Home className="h-4 w-4 text-blue-600" />
@@ -246,7 +246,7 @@ export default function Navbar() {
                       </>
                     )}
                     <DropdownMenuItem asChild className="p-0">
-                      <Link to="/profile" className="w-full cursor-pointer group">
+                      <Link to="/profilim" className="w-full cursor-pointer group">
                         <div className="flex items-center space-x-3 p-3 rounded-xl hover:bg-gradient-to-r hover:from-blue-50 hover:to-sky-50 transition-all duration-300">
                           <div className="p-2 bg-gradient-to-r from-blue-100 to-sky-100 rounded-lg group-hover:from-blue-200 group-hover:to-sky-200">
                             <User className="h-4 w-4 text-blue-600" />
@@ -277,7 +277,7 @@ export default function Navbar() {
             ) : (
               <div className="flex items-center space-x-2">
                 {/* Compact Auth Buttons */}
-                <Link to="/login">
+                <Link to="/giris">
                   <Button 
                     variant="ghost" 
                     size="sm"
@@ -299,7 +299,7 @@ export default function Navbar() {
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-56 p-2 bg-white/95 backdrop-blur-lg border border-gray-200 rounded-2xl shadow-2xl">
                     <DropdownMenuItem asChild className="p-0">
-                      <Link to="/register-user" className="w-full cursor-pointer group">
+                      <Link to="/musteri-kayit" className="w-full cursor-pointer group">
                         <div className="flex items-center p-3 rounded-xl hover:bg-gradient-to-r hover:from-blue-50 hover:to-sky-50 transition-all duration-300">
                           <div className="p-2 bg-gradient-to-r from-blue-500 to-sky-500 rounded-lg mr-3 group-hover:shadow-lg transition-shadow">
                             <User className="h-4 w-4 text-white" />
@@ -312,7 +312,7 @@ export default function Navbar() {
                       </Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild className="p-0">
-                      <Link to="/carrier-info" className="w-full cursor-pointer group">
+                      <Link to="/nakliyeci-bilgi" className="w-full cursor-pointer group">
                         <div className="flex items-center p-3 rounded-xl hover:bg-gradient-to-r hover:from-sky-50 hover:to-cyan-50 transition-all duration-300">
                           <div className="p-2 bg-gradient-to-r from-sky-500 to-cyan-500 rounded-lg mr-3 group-hover:shadow-lg transition-shadow">
                             <Truck className="h-4 w-4 text-white" />
@@ -375,7 +375,7 @@ export default function Navbar() {
                   </Link>
                   
                   <Link 
-                    to="/carriers" 
+                    to="/nakliyeciler" 
                     className="flex items-center space-x-3 text-gray-700 hover:text-blue-600 transition-colors py-2 px-3 rounded-lg hover:bg-blue-50"
                     onClick={() => setIsMenuOpen(false)}
                   >
@@ -384,7 +384,7 @@ export default function Navbar() {
                   </Link>
                   
                   <Link 
-                    to="/dashboard" 
+                    to="/panel" 
                     className="flex items-center space-x-3 text-gray-700 hover:text-blue-600 transition-colors py-2 px-3 rounded-lg hover:bg-blue-50"
                     onClick={() => setIsMenuOpen(false)}
                   >
@@ -393,7 +393,7 @@ export default function Navbar() {
                   </Link>
                   
                   <Link 
-                    to="/debug" 
+                    to="/hata-ayiklama" 
                     className="flex items-center space-x-3 text-gray-700 hover:text-red-600 transition-colors py-2 px-3 rounded-lg hover:bg-red-50"
                     onClick={() => setIsMenuOpen(false)}
                   >
@@ -404,7 +404,7 @@ export default function Navbar() {
                   {user.type === 'customer' ? (
                     <>
                       <Link 
-                        to="/offer-request" 
+                        to="/teklif-talebi" 
                         className="flex items-center space-x-3 text-gray-700 hover:text-green-600 transition-colors py-2 px-3 rounded-lg hover:bg-green-50"
                         onClick={() => setIsMenuOpen(false)}
                       >
@@ -412,7 +412,7 @@ export default function Navbar() {
                         <span>Teklif Talebi</span>
                       </Link>
                       <Link 
-                        to="/shipments" 
+                        to="/ilanlar" 
                         className="flex items-center space-x-3 text-gray-700 hover:text-blue-600 transition-colors py-2 px-3 rounded-lg hover:bg-blue-50"
                         onClick={() => setIsMenuOpen(false)}
                       >
@@ -423,7 +423,7 @@ export default function Navbar() {
                   ) : (
                     <>
                       <Link 
-                        to="/shipments" 
+                        to="/ilanlar" 
                         className="flex items-center space-x-3 text-gray-700 hover:text-orange-600 transition-colors py-2 px-3 rounded-lg hover:bg-orange-50"
                         onClick={() => setIsMenuOpen(false)}
                       >
@@ -431,7 +431,7 @@ export default function Navbar() {
                         <span>Mevcut İşler</span>
                       </Link>
                       <Link 
-                        to="/calendar" 
+                        to="/takvim" 
                         className="flex items-center space-x-3 text-gray-700 hover:text-orange-600 transition-colors py-2 px-3 rounded-lg hover:bg-orange-50"
                         onClick={() => setIsMenuOpen(false)}
                       >
@@ -442,7 +442,7 @@ export default function Navbar() {
                   )}
                   
                   <Link 
-                    to="/carriers" 
+                    to="/nakliyeciler" 
                     className="flex items-center space-x-3 text-gray-700 hover:text-blue-600 transition-colors py-2 px-3 rounded-lg hover:bg-blue-50"
                     onClick={() => setIsMenuOpen(false)}
                   >
@@ -451,7 +451,7 @@ export default function Navbar() {
                   </Link>
 
                   <Link 
-                    to="/profile" 
+                    to="/profilim" 
                     className="flex items-center space-x-3 text-gray-700 hover:text-blue-600 transition-colors py-2 px-3 rounded-lg hover:bg-blue-50"
                     onClick={() => setIsMenuOpen(false)}
                   >
@@ -481,7 +481,7 @@ export default function Navbar() {
                 <>
                   {/* Auth Section */}
                   <div className="space-y-3">
-                    <Link to="/login" onClick={() => setIsMenuOpen(false)}>
+                    <Link to="/giris" onClick={() => setIsMenuOpen(false)}>
                       <div className="flex items-center justify-center space-x-2 w-full py-3 px-4 rounded-lg border border-blue-200 text-blue-600 hover:bg-blue-50 transition-all">
                         <User className="h-4 w-4" />
                         <span className="font-medium">Giriş Yap</span>
@@ -491,7 +491,7 @@ export default function Navbar() {
                     {/* Mobile Kayıt Seçenekleri */}
                     <div className="space-y-2">
                       <div className="text-sm font-medium text-gray-500 px-2">Kayıt Ol</div>
-                      <Link to="/register-user" onClick={() => setIsMenuOpen(false)}>
+                      <Link to="/musteri-kayit" onClick={() => setIsMenuOpen(false)}>
                         <div className="flex items-center p-3 rounded-xl bg-gradient-to-r from-blue-50 to-sky-50 hover:from-blue-100 hover:to-sky-100 transition-all">
                           <div className="p-2 bg-gradient-to-r from-blue-500 to-sky-500 rounded-lg mr-3">
                             <User className="h-4 w-4 text-white" />
@@ -502,7 +502,7 @@ export default function Navbar() {
                           </div>
                         </div>
                       </Link>
-                      <Link to="/carrier-info" onClick={() => setIsMenuOpen(false)}>
+                      <Link to="/nakliyeci-bilgi" onClick={() => setIsMenuOpen(false)}>
                         <div className="flex items-center p-3 rounded-xl bg-gradient-to-r from-sky-50 to-cyan-50 hover:from-sky-100 hover:to-cyan-100 transition-all">
                           <div className="p-2 bg-gradient-to-r from-sky-500 to-cyan-500 rounded-lg mr-3">
                             <Truck className="h-4 w-4 text-white" />
