@@ -5,6 +5,7 @@ import vehicleTypeRoutes from './vehicleTypeRoutes';
 import commonRoutes from './commonRoutes';
 import shipmentRoutes from './shipmentRoutes';
 import offerRoutes from './offerRoutes';
+import reviewRoutes from './reviewRoutes';
 
 const router = Router();
 router.use('/', commonRoutes);
@@ -25,5 +26,6 @@ router.use('/carriers', carrierRoutes);
 router.use('/vehicle-types', vehicleTypeRoutes);
 router.use('/shipments', shipmentRoutes);
 router.use('/offers', offerRoutes);
+router.use('/', reviewRoutes);
 
 export default router;
