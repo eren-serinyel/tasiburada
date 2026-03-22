@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Star, MessageCircle, Truck, CheckCircle, Clock } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { getSessionUser } from '@/lib/storage';
+import { apiClient } from '@/lib/apiClient';
 
 type OfferApi = {
   id: string;
@@ -40,11 +41,6 @@ export default function OfferComparison() {
   const { shipmentId } = useParams();
   const navigate = useNavigate();
 
-  const authHeaders = () => {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null;
-    return token ? { Authorization: `Bearer ${token}` } : {};
-  };
-
   useEffect(() => {
     const loadData = async () => {
       const user = getSessionUser() || (localStorage.getItem('currentUser') ? JSON.parse(localStorage.getItem('currentUser') as string) : {});
@@ -56,8 +52,8 @@ export default function OfferComparison() {
       setLoading(true);
       try {
         const [offersRes, shipmentRes] = await Promise.all([
-          fetch('/api/v1/customers/offers', { headers: authHeaders() }),
-          shipmentId ? fetch(`/api/v1/shipments/${shipmentId}`, { headers: authHeaders() }) : Promise.resolve(null as any)
+          apiClient('/api/v1/customers/offers'),
+          shipmentId ? apiClient(`/api/v1/shipments/${shipmentId}`) : Promise.resolve(null as any)
         ]);
 
         const offersJson = await offersRes.json();
@@ -97,9 +93,8 @@ export default function OfferComparison() {
     if (!selectedOffer) return;
 
     try {
-      const res = await fetch(`/api/v1/offers/${selectedOffer.id}/accept`, {
+      const res = await apiClient(`/api/v1/offers/${selectedOffer.id}/accept`, {
         method: 'PUT',
-        headers: authHeaders()
       });
       const json = await res.json();
 

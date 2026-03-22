@@ -8,6 +8,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { User as UserType, Carrier, Shipment } from '@/lib/types';
 import { getCarrierProfileTasks } from '@/lib/utils';
 import { reviewsApi, type ReviewRecord } from '@/utils/mockDb';
+import { apiClient } from '@/lib/apiClient';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -51,11 +52,6 @@ export default function Dashboard() {
   const [reportState, setReportState] = useState<{ reason: string; details: string }>({ reason: '', details: '' });
   const { toast } = useToast();
   const navigate = useNavigate();
-
-  const authHeaders = () => {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null;
-    return token ? { Authorization: `Bearer ${token}` } : {};
-  };
 
   const normalizeStatus = (status?: string): Shipment['status'] => {
     switch (status) {
@@ -117,9 +113,7 @@ export default function Dashboard() {
 
       try {
         if (u.type === 'customer') {
-          const response = await fetch(`${API_BASE_URL}/customers/shipments`, {
-            headers: authHeaders()
-          });
+          const response = await apiClient(`${API_BASE_URL}/customers/shipments`);
           const json = await response.json();
 
           if (response.ok && json?.success && Array.isArray(json.data)) {
@@ -132,8 +126,8 @@ export default function Dashboard() {
           }
         } else {
           const [pendingResponse, statsResponse] = await Promise.all([
-            fetch(`${API_BASE_URL}/shipments/pending`, { headers: authHeaders() }),
-            fetch(`${API_BASE_URL}/carriers/me/stats`, { headers: authHeaders() })
+            apiClient(`${API_BASE_URL}/shipments/pending`),
+            apiClient(`${API_BASE_URL}/carriers/me/stats`)
           ]);
 
           const pendingJson = await pendingResponse.json();

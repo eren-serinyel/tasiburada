@@ -15,11 +15,12 @@ import { ChevronLeft, MapPin, ShieldCheck, CheckCircle2, AlertTriangle, Star, Tr
 import { cn, formatPrice, formatDate } from '@/lib/utils';
 import type { CarrierDetail, CarrierDetailDocument } from '@/lib/types';
 import { getSessionUser } from '@/lib/storage';
+import { apiClient } from '@/lib/apiClient';
 
 const API_BASE_URL = '/api/v1';
 
 const fetchCarrierDetail = async (carrierId: string, signal?: AbortSignal): Promise<CarrierDetail> => {
-  const response = await fetch(`${API_BASE_URL}/carriers/${carrierId}/detail`, {
+  const response = await apiClient(`${API_BASE_URL}/carriers/${carrierId}/detail`, {
     signal,
     headers: { accept: 'application/json' }
   });
@@ -36,15 +37,10 @@ type MessagingEligibility = {
   conversationId?: string | null;
 };
 
-const authHeaders = (): Record<string, string> => {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null;
-  return token ? { Authorization: `Bearer ${token}` } : {};
-};
-
 const fetchEligibility = async (carrierId: string, signal?: AbortSignal): Promise<MessagingEligibility> => {
-  const response = await fetch(`${API_BASE_URL}/conversations/eligibility/${carrierId}`, {
+  const response = await apiClient(`${API_BASE_URL}/conversations/eligibility/${carrierId}`, {
     signal,
-    headers: { accept: 'application/json', ...authHeaders() }
+    headers: { accept: 'application/json' }
   });
   const json = await response.json().catch(() => ({}));
   if (!response.ok || json?.success === false || !json?.data) {
@@ -54,9 +50,9 @@ const fetchEligibility = async (carrierId: string, signal?: AbortSignal): Promis
 };
 
 const startConversation = async (carrierId: string): Promise<string> => {
-  const response = await fetch(`${API_BASE_URL}/conversations`, {
+  const response = await apiClient(`${API_BASE_URL}/conversations`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', accept: 'application/json', ...authHeaders() },
+    headers: { 'Content-Type': 'application/json', accept: 'application/json' },
     body: JSON.stringify({ carrierId })
   });
   const json = await response.json().catch(() => ({}));

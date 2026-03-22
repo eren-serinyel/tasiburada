@@ -23,6 +23,7 @@ import { getCarrierProfileTasks } from '@/lib/utils';
 import { Shipment, User } from '@/lib/types';
 import { getSessionUser, setSessionUser } from '@/lib/storage';
 import { Separator } from '@/components/ui/separator';
+import { apiClient } from '@/lib/apiClient';
 
 type PendingShipmentApi = {
   id: string;
@@ -43,11 +44,6 @@ export default function CarrierHome() {
   const navigate = useNavigate();
   const API_BASE_URL = '/api/v1';
 
-  const authHeaders = () => {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null;
-    return token ? { Authorization: `Bearer ${token}` } : {};
-  };
-
   useEffect(() => {
     const u = getSessionUser() || (localStorage.getItem('currentUser') ? JSON.parse(localStorage.getItem('currentUser') as string) : null);
     setUser(u);
@@ -60,9 +56,7 @@ export default function CarrierHome() {
     const fetchProfileCompletion = async () => {
       try {
         // Use the dedicated status endpoint for fresh calculation
-        const res = await fetch(`${API_BASE_URL}/carriers/me/profile-status`, {
-          headers: authHeaders()
-        });
+        const res = await apiClient(`${API_BASE_URL}/carriers/me/profile-status`);
         const json = await res.json();
         if (!res.ok || !json?.success) return;
         
@@ -102,9 +96,7 @@ export default function CarrierHome() {
     
     const fetchStats = async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/carriers/me/stats`, {
-          headers: authHeaders()
-        });
+        const res = await apiClient(`${API_BASE_URL}/carriers/me/stats`);
         const json = await res.json();
         if (res.ok && json.success && json.data) {
           setStats({
@@ -128,9 +120,7 @@ export default function CarrierHome() {
     const fetchPending = async () => {
       setPendingLoading(true);
       try {
-        const res = await fetch(`${API_BASE_URL}/shipments/pending`, {
-          headers: authHeaders()
-        });
+        const res = await apiClient(`${API_BASE_URL}/shipments/pending`);
         const json = await res.json();
 
         if (res.ok && json?.success && Array.isArray(json.data)) {

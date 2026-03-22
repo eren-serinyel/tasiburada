@@ -9,6 +9,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Shipment, User, Carrier, LOAD_TYPES } from '@/lib/types';
 import { getCarrierProfileTasks } from '@/lib/utils';
 import { getSessionUser } from '@/lib/storage';
+import { apiClient } from '@/lib/apiClient';
 
 const API_BASE_URL = '/api/v1';
 const ALL_FILTER_VALUE = '__all__';
@@ -116,11 +117,6 @@ export default function ShipmentList() {
   const [statusFilter, setStatusFilter] = useState(ALL_FILTER_VALUE);
   const navigate = useNavigate();
 
-  const authHeaders = () => {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null;
-    return token ? { Authorization: `Bearer ${token}` } : {};
-  };
-
   useEffect(() => {
     const loadShipments = async () => {
       const u = getSessionUser() || (localStorage.getItem('currentUser') ? JSON.parse(localStorage.getItem('currentUser') as string) : null);
@@ -138,9 +134,7 @@ export default function ShipmentList() {
           ? `${API_BASE_URL}/shipments/pending`
           : `${API_BASE_URL}/shipments/my-shipments`;
 
-        const response = await fetch(endpoint, {
-          headers: authHeaders()
-        });
+        const response = await apiClient(endpoint);
         const json = await response.json();
         console.log('[ShipmentList] API raw shipment data:', json?.data);
 

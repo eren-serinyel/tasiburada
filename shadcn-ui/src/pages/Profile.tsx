@@ -12,6 +12,7 @@ import { Progress } from '@/components/ui/progress';
 import { toast } from '@/components/ui/sonner';
 import { User as UserType } from '@/lib/types';
 import { getSessionUser, setSessionUser } from '@/lib/storage';
+import { apiClient } from '@/lib/apiClient';
 import { cn } from '@/lib/utils';
 import { User, Shield, CreditCard, Bell, Home, Lock, Save, Image as ImageIcon, Plus, PencilLine, Trash2, ChevronDown, Building2, MapPin, FileBadge, Wallet2, Send, Eye, EyeOff } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -231,23 +232,13 @@ export default function Profile() {
     Object.fromEntries(defaultNotif().groups.map(g => [g.id, true]))
   ));
 
-  const authHeaders = (headers?: Record<string, string>) => {
-    const base: Record<string, string> = headers ? { ...headers } : {};
-    if (typeof window === 'undefined') return base;
-    const token = localStorage.getItem('authToken');
-    if (token) {
-      base.Authorization = `Bearer ${token}`;
-    }
-    return base;
-  };
-
   const fetchProfileStatus = useCallback(async () => {
     if (!user || user.type !== 'carrier') return;
     setIsProfileStatusLoading(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/carriers/me/profile-status`, {
+      const res = await apiClient(`${API_BASE_URL}/carriers/me/profile-status`, {
         method: 'GET',
-        headers: authHeaders({ 'Content-Type': 'application/json' })
+        headers: { 'Content-Type': 'application/json' }
       });
       const json = await res.json();
       const percentRaw = json?.data?.overallPercentage;
@@ -264,9 +255,9 @@ export default function Profile() {
     if (!user || user.type !== 'carrier') return;
     setIsProfileStatusLoading(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/carriers/me/profile-status`, {
+      const res = await apiClient(`${API_BASE_URL}/carriers/me/profile-status`, {
         method: 'PUT',
-        headers: authHeaders({ 'Content-Type': 'application/json' })
+        headers: { 'Content-Type': 'application/json' }
       });
       const json = await res.json();
       const percentRaw = json?.data?.overallPercentage;
@@ -297,11 +288,11 @@ export default function Profile() {
   // Init
   useEffect(() => {
     // Fetch master data
-    fetch(`${API_BASE_URL}/service-types`).then(r => r.json()).then(d => {
+    apiClient(`${API_BASE_URL}/service-types`).then(r => r.json()).then(d => {
         if (d.success) setServiceTypeOptions(d.data);
     }).catch(() => {});
     
-    fetch(`${API_BASE_URL}/scope-of-works`).then(r => r.json()).then(d => {
+    apiClient(`${API_BASE_URL}/scope-of-works`).then(r => r.json()).then(d => {
          if (d.success) setScopeOptions(d.data);
     }).catch(() => {});
 
@@ -395,7 +386,7 @@ export default function Profile() {
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/vehicle-types`);
+        const res = await apiClient(`${API_BASE_URL}/vehicle-types`);
         const json = await res.json();
         if (res.ok && json?.success && Array.isArray(json.data)) setVehicleTypesList(json.data);
       } catch {}
@@ -425,9 +416,7 @@ export default function Profile() {
     if (!user || user.type !== 'carrier') return;
     (async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/carriers/${user.id}`, {
-          headers: authHeaders()
-        });
+        const res = await apiClient(`${API_BASE_URL}/carriers/${user.id}`);
         const json = await res.json();
         if (!res.ok || !json?.success || !json?.data) return;
         const carrierData = json.data?.carrier;
@@ -537,9 +526,7 @@ export default function Profile() {
     if (!user || user.type !== 'carrier') return;
     (async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/carriers/${user.id}/vehicles`, {
-          headers: authHeaders()
-        });
+        const res = await apiClient(`${API_BASE_URL}/carriers/${user.id}/vehicles`);
         const json = await res.json();
         if (!res.ok || !json?.success || !Array.isArray(json.data)) return;
         const capacities: Record<string, string> = {};
@@ -586,9 +573,9 @@ export default function Profile() {
         return;
       }
       try {
-        const res = await fetch(`${API_BASE_URL}/carriers/${user.id}/security`, {
+        const res = await apiClient(`${API_BASE_URL}/carriers/${user.id}/security`, {
           method: 'PUT',
-          headers: authHeaders({ 'Content-Type': 'application/json' }),
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             twoFactorEnabled: twoFA,
             suspiciousLoginAlertsEnabled: suspiciousAlerts,
@@ -644,9 +631,9 @@ export default function Profile() {
     if (!user || !photo) return;
     setIsSavingPhoto(true);
     try {
-      const res = await fetch(`${API_BASE_URL}/carriers/${user.id}/profile-picture`, {
+      const res = await apiClient(`${API_BASE_URL}/carriers/${user.id}/profile-picture`, {
         method: 'PUT',
-        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ pictureUrl: photo })
       });
       const json = await res.json();
@@ -731,9 +718,9 @@ export default function Profile() {
 
     try {
       // Save company-level fields
-      await fetch(`${API_BASE_URL}/carriers/profile/${user.id}`, {
+      await apiClient(`${API_BASE_URL}/carriers/profile/${user.id}`, {
         method: 'PUT',
-        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           companyName: company.name || undefined,
           taxNumber: company.taxNumber || undefined,
@@ -748,9 +735,9 @@ export default function Profile() {
 
       // Save vehicles to backend (only if we have a mapping)
       if (selectedVehicles.length > 0) {
-        await fetch(`${API_BASE_URL}/carriers/${user.id}/vehicles`, {
+        await apiClient(`${API_BASE_URL}/carriers/${user.id}/vehicles`, {
           method: 'PUT',
-          headers: authHeaders({ 'Content-Type': 'application/json' }),
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ selectedVehicles }),
         });
       }
@@ -766,9 +753,9 @@ export default function Profile() {
     if (!user) return;
     const documentsPayload = buildDocumentPayload();
     try {
-      const res = await fetch(`${API_BASE_URL}/carriers/${user.id}/documents`, {
+      const res = await apiClient(`${API_BASE_URL}/carriers/${user.id}/documents`, {
         method: 'PUT',
-        headers: authHeaders({ 'Content-Type': 'application/json' }),
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ documents: documentsPayload })
       });
       const json = await res.json();
@@ -1058,9 +1045,9 @@ export default function Profile() {
                     <div className="mt-4 text-right"><Button variant="outline" onClick={async ()=>{
                       if (!user) return;
                       try {
-                        await fetch(`${API_BASE_URL}/carriers/${user.id}/activity`, {
+                        await apiClient(`${API_BASE_URL}/carriers/${user.id}/activity`, {
                           method: 'PUT',
-                          headers: authHeaders({ 'Content-Type': 'application/json' }),
+                          headers: { 'Content-Type': 'application/json' },
                           body: JSON.stringify({
                             city: ops.city || undefined,
                             district: ops.district || undefined,
@@ -1118,9 +1105,9 @@ export default function Profile() {
                     <div className="mt-4 text-right"><Button variant="outline" onClick={async ()=>{
                       if (!user) return;
                       try {
-                        await fetch(`${API_BASE_URL}/carriers/profile/${user.id}`, {
+                        await apiClient(`${API_BASE_URL}/carriers/profile/${user.id}`, {
                           method: 'PUT',
-                          headers: authHeaders({ 'Content-Type': 'application/json' }),
+                          headers: { 'Content-Type': 'application/json' },
                           body: JSON.stringify({
                             bankName: payout.bank || undefined,
                             iban: payout.iban || undefined,

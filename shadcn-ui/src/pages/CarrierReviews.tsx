@@ -7,6 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Star, MessageSquare } from 'lucide-react';
 import { getSessionUser } from '@/lib/storage';
 import { useToast } from '@/hooks/use-toast';
+import { apiClient } from '@/lib/apiClient';
 
 type CarrierReview = {
   id: string;
@@ -43,11 +44,6 @@ export default function CarrierReviews() {
   const user = getSessionUser();
   const carrierId = user?.id;
 
-  const authHeaders = () => {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null;
-    return token ? { Authorization: `Bearer ${token}` } : {};
-  };
-
   useEffect(() => {
     if (!carrierId) {
       setLoading(false);
@@ -57,9 +53,7 @@ export default function CarrierReviews() {
     const fetchReviews = async () => {
       setLoading(true);
       try {
-        const res = await fetch('/api/v1/carriers/me/reviews', {
-          headers: authHeaders()
-        });
+        const res = await apiClient('/api/v1/carriers/me/reviews');
         const json = await res.json();
         if (res.ok && json?.success && Array.isArray(json.data)) {
           const list = (json.data as CarrierReview[]).slice().sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));

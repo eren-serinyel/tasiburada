@@ -17,6 +17,7 @@ import { mockDb } from '@/utils/mockDb';
 import { getSessionUser } from '@/lib/storage';
 import { CITIES_TR, getDistrictsForCity, formatDateYYYYMMDD } from '@/lib/locations';
 import { TURKISH_CITIES } from '@/lib/constants';
+import { apiClient } from '@/lib/apiClient';
 import FileUpload from '@/components/ui/file-upload';
 import { ADDITIONAL_SERVICE_OPTIONS, SPECIAL_SERVICES } from '@/lib/carrierFormConstants';
 
@@ -98,11 +99,6 @@ export default function OfferRequest() {
   }, [step]);
 
   const handleChange = (field: string, value: any) => setForm((f) => ({ ...f, [field]: value }));
-
-  const authHeaders = () => {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null;
-    return token ? { Authorization: `Bearer ${token}` } : {};
-  };
 
   // Tarih: bugün ≤ tarih ≤ bugün + 30 gün
   const todayStr = useMemo(() => formatDateYYYYMMDD(new Date()), []);
@@ -283,9 +279,7 @@ export default function OfferRequest() {
 
     const prefillFromShipment = async () => {
       try {
-        const res = await fetch(`/api/v1/shipments/${shipmentId}`, {
-          headers: authHeaders()
-        });
+        const res = await apiClient(`/api/v1/shipments/${shipmentId}`);
         const json = await res.json();
         if (!res.ok || !json?.success || !json?.data) return;
 

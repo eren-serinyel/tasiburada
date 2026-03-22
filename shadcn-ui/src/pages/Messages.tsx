@@ -9,6 +9,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import AuthModal from '@/components/AuthModal';
 import { getSessionUser } from '@/lib/storage';
 import { formatDate } from '@/lib/utils';
+import { apiClient } from '@/lib/apiClient';
 import { ChevronLeft, Send } from 'lucide-react';
 
 const API_BASE_URL = '/api/v1';
@@ -22,20 +23,15 @@ type MessageDto = {
   createdAt: string;
 };
 
-const authHeaders = (): Record<string, string> => {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null;
-  return token ? { Authorization: `Bearer ${token}` } : {};
-};
-
 const useQueryParam = (key: string): string | null => {
   const location = useLocation();
   return useMemo(() => new URLSearchParams(location.search).get(key), [location.search, key]);
 };
 
 const fetchMessages = async (conversationId: string, signal?: AbortSignal): Promise<MessageDto[]> => {
-  const response = await fetch(`${API_BASE_URL}/messages/${conversationId}`, {
+  const response = await apiClient(`${API_BASE_URL}/messages/${conversationId}`, {
     signal,
-    headers: { accept: 'application/json', ...authHeaders() }
+    headers: { accept: 'application/json' }
   });
   const json = await response.json().catch(() => ({}));
   if (!response.ok || json?.success === false) {
@@ -45,12 +41,11 @@ const fetchMessages = async (conversationId: string, signal?: AbortSignal): Prom
 };
 
 const sendMessage = async (conversationId: string, content: string): Promise<void> => {
-  const response = await fetch(`${API_BASE_URL}/messages`, {
+  const response = await apiClient(`${API_BASE_URL}/messages`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      accept: 'application/json',
-      ...authHeaders()
+      accept: 'application/json'
     },
     body: JSON.stringify({ conversationId, content })
   });

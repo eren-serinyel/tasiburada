@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { toast } from '@/components/ui/sonner';
 import { getSessionUser, setSessionUser } from '@/lib/storage';
+import { apiClient } from '@/lib/apiClient';
 
 export default function ProfileComplete() {
   const navigate = useNavigate();
@@ -19,11 +20,6 @@ export default function ProfileComplete() {
   })();
   const [completion, setCompletion] = useState<number>(initialCompletion);
 
-  const authHeaders = () => {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('authToken') : null;
-    return token ? { Authorization: `Bearer ${token}` } : {};
-  };
-
   useEffect(() => {
     const sessionUser = getSessionUser();
     if (!sessionUser || sessionUser.type !== 'carrier') return;
@@ -31,9 +27,7 @@ export default function ProfileComplete() {
 
     const fetchCompletion = async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/carriers/${sessionUser.id}`, {
-          headers: authHeaders()
-        });
+        const res = await apiClient(`${API_BASE_URL}/carriers/${sessionUser.id}`);
         const json = await res.json();
         if (!res.ok || !json?.success) return;
         const percent = Number(
