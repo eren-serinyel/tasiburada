@@ -34,6 +34,21 @@ export class CarrierDocumentController {
     const carrierId = this.ensureCarrier(req, res);
     if (!carrierId) return;
     try {
+      if (req.file) {
+        const rawType = String(req.body?.type || '').trim();
+        if (!rawType) {
+          res.status(400).json({ success: false, message: 'Belge tipi (type) zorunludur.' });
+          return;
+        }
+
+        const fileUrl = `/uploads/documents/${req.file.filename}`;
+        const result = await this.documentService.saveDocumentsDraft(carrierId, [
+          { type: rawType, fileUrl }
+        ]);
+        res.status(200).json({ success: true, allRequiredHaveDoc: result.allRequiredHaveDoc, fileUrl });
+        return;
+      }
+
       const documents = Array.isArray(req.body?.documents) ? req.body.documents : [];
       const result = await this.documentService.saveDocumentsDraft(carrierId, documents);
       res.status(200).json({ success: true, allRequiredHaveDoc: result.allRequiredHaveDoc });

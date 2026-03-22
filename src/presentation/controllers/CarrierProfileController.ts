@@ -130,13 +130,13 @@ export class CarrierProfileController {
     const carrierId = this.ensureCarrier(req, res);
     if (!carrierId) return;
 
-    const { pictureUrl } = req.body || {};
-    if (pictureUrl !== null && pictureUrl !== undefined && typeof pictureUrl !== 'string') {
-      res.status(400).json({ success: false, message: 'pictureUrl değeri string olmalıdır.' });
+    if (!req.file) {
+      res.status(400).json({ success: false, message: 'Profil fotoğrafı dosyası zorunludur.' });
       return;
     }
 
     try {
+      const pictureUrl = `/uploads/pictures/${req.file.filename}`;
       const updatedCarrier = await this.companyInfoService.updateProfilePicture(carrierId, pictureUrl ?? null);
       res.status(200).json({ success: true, pictureUrl: updatedCarrier?.pictureUrl ?? null });
     } catch (error: any) {

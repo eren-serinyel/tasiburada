@@ -8,6 +8,7 @@ import { CarrierDetailController } from '../controllers/CarrierDetailController'
 import { CarrierDashboardController } from '../controllers/CarrierDashboardController';
 import { CarrierReviewController } from '../controllers/CarrierReviewController';
 import { OfferController } from '../controllers/OfferController';
+import { documentUpload, pictureUpload } from '../../infrastructure/upload/uploadMiddleware';
 
 const router = Router();
 const authController = new CarrierAuthController();
@@ -40,9 +41,9 @@ router.put('/me/vehicle-types', authCarrier, profileController.updateVehicleType
 router.put('/me/service-types', authCarrier, profileController.updateServiceTypes);
 router.put('/me/vehicles', authCarrier, profileController.upsertVehicles);
 router.get('/me/documents', authCarrier, documentController.getDocuments);
-router.put('/me/documents', authCarrier, documentController.updateDocuments);
+router.put('/me/documents', authCarrier, documentUpload.single('file'), documentController.updateDocuments);
 router.put('/me/earnings', authCarrier, profileController.updateEarnings);
-router.put('/me/profile-picture', authCarrier, profileController.updateProfilePicture);
+router.put('/me/profile-picture', authCarrier, pictureUpload.single('picture'), profileController.updateProfilePicture);
 router.put('/me/security', authCarrier, profileController.updateSecurity);
 router.get('/me/notifications', authCarrier, profileController.getNotifications);
 router.put('/me/notifications/toggle', authCarrier, profileController.toggleNotification);
@@ -57,8 +58,8 @@ router.get('/:carrierId/vehicles', authCarrier, profileController.listVehicles);
 router.put('/:carrierId/vehicles', authCarrier, profileController.upsertVehicles);
 router.put('/:carrierId/service-types', authCarrier, profileController.updateServiceTypes);
 router.get('/:carrierId/documents', authCarrier, documentController.getDocuments);
-router.put('/:carrierId/documents', authCarrier, documentController.updateDocuments);
-router.put('/:carrierId/profile-picture', authCarrier, profileController.updateProfilePicture);
+router.put('/:carrierId/documents', authCarrier, documentUpload.single('file'), documentController.updateDocuments);
+router.put('/:carrierId/profile-picture', authCarrier, pictureUpload.single('picture'), profileController.updateProfilePicture);
 router.put('/:carrierId/security', authCarrier, profileController.updateSecurity);
 router.get('/:carrierId', profileController.getCarrierProfile);
 
