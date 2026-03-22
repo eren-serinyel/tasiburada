@@ -136,21 +136,8 @@ export default function ShipmentList() {
 
         const response = await apiClient(endpoint);
         const json = await response.json();
-        console.log('[ShipmentList] API raw shipment data:', json?.data);
 
         if (response.ok && json?.success && Array.isArray(json.data)) {
-          const emptyFieldRows = (json.data as BackendShipment[]).filter(item => !item.origin || !item.destination || !item.status);
-          if (emptyFieldRows.length > 0) {
-            console.log(
-              '[ShipmentList] Shipments with empty critical fields (origin/destination/status):',
-              emptyFieldRows.map(item => ({
-                id: item.id,
-                origin: item.origin,
-                destination: item.destination,
-                status: item.status
-              }))
-            );
-          }
           setShipments((json.data as BackendShipment[]).map(toUiShipment));
         } else {
           setShipments([]);

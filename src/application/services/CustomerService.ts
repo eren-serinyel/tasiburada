@@ -21,12 +21,9 @@ export class CustomerService {
   }
 
   async createCustomer(createDto: CreateCustomerDto): Promise<CustomerResponseDto> {
-    console.log('🔄 CustomerService.createCustomer called with:', JSON.stringify(createDto, null, 2));
-
     // Email zaten kayıtlı mı kontrol et
     const existingCustomer = await this.customerRepository.findByEmail(createDto.email);
     if (existingCustomer) {
-      console.log('❌ Email already exists:', createDto.email);
       throw new Error('Bu email adresi zaten kayıtlı.');
     }
 
@@ -40,7 +37,6 @@ export class CustomerService {
     const passwordHash = await bcrypt.hash(createDto.password, 12);
 
     // Müşteri oluştur
-    console.log('💾 Creating customer in database...');
     const customer = await this.customerRepository.create({
       firstName: createDto.firstName,
       lastName: createDto.lastName,
@@ -54,9 +50,6 @@ export class CustomerService {
       isActive: true,
       isVerified: false
     });
-
-    console.log('✅ Customer created successfully:', customer.id);
-    console.log('📊 Customer data:', JSON.stringify(customer, null, 2));
 
     return this.mapToResponseDto(customer);
   }

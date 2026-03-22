@@ -69,10 +69,6 @@ export const initializeDatabase = async (): Promise<void> => {
     await AppDataSource.initialize();
     const opts = AppDataSource.options as any;
     console.log(`✅ DB connected → ${opts.type}://${opts.host}:${opts.port}/${opts.database}`);
-    if (isDev) {
-      console.log(`ℹ️  Pool Size: ${poolSize} | Logging: ${isDev}`);
-      console.log(`📦 Runtime: ${usingTsRuntime ? 'ts-node' : 'compiled-js'} | Entities: ${entityPatterns.join(', ')}`);
-    }
   } catch (err: any) {
     console.error('❌ DB connection failed');
     console.error(err?.message);
@@ -86,7 +82,6 @@ export const closeDatabase = async (): Promise<void> => {
   try {
     if (AppDataSource.isInitialized) {
       await AppDataSource.destroy();
-      console.log('📴 DB connection closed');
     }
   } catch (err: any) {
     console.error('❌ DB close failed');

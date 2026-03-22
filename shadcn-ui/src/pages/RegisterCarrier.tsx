@@ -254,7 +254,6 @@ export default function RegisterCarrier() {
       navigate('/profil-tamamla');
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Kayıt sırasında bir hata oluştu.';
-      console.error(err);
       setIsLoading(false);
       alert(message);
     }

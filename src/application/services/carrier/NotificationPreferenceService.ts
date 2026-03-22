@@ -41,7 +41,6 @@ export class NotificationPreferenceService {
    */
   async togglePreference(carrierId: string, data: NotificationPreferenceToggleDto): Promise<CarrierNotificationPreferencesDto> {
     // TODO: Veritabanında güncelleme yapılacak.
-    console.log(`[Mock] Carrier ${carrierId} toggled notification:`, data);
 
     // Güncel durumu dön
     return this.getPreferences(carrierId);

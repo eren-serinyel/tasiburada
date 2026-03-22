@@ -103,8 +103,6 @@ export class CarrierProfileStatusService {
     // 4) Kazanç Bilgileri tamam → bankName, iban doluysa
     const earningsCompleted = this.hasText((earnings as any)?.bankName) && this.hasText((earnings as any)?.iban);
 
-    console.log(`Profile Calc [${carrierId}]: Company=${companyInfoCompleted}, Activity=${activityInfoCompleted} (Areas:${serviceAreas.length}), Docs=${documentsCompleted}, Earnings=${earningsCompleted}`);
-
     status.companyInfoCompleted = companyInfoCompleted;
     status.activityInfoCompleted = activityInfoCompleted;
     status.documentsCompleted = documentsCompleted;

@@ -764,8 +764,7 @@ export default function Profile() {
       }
       toast.success(json?.allRequiredHaveDoc ? 'Tüm belgeler kaydedildi.' : 'Belgeler taslak olarak kaydedildi.');
       await refreshProfileStatus();
-    } catch (error) {
-      console.error(error);
+    } catch {
       toast.error('Belgeler kaydedilemedi.');
     }
   };

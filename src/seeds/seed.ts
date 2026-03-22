@@ -32,9 +32,6 @@ async function seed() {
           `INSERT INTO vehicle_types (id, name, defaultCapacityKg, defaultCapacityM3) VALUES (UUID(), ?, ?, ?)`,
           [vt.name, vt.defaultCapacityKg, vt.defaultCapacityM3]
         );
-        console.log(`  ✅ VehicleType: ${vt.name}`);
-      } else {
-        console.log(`  ⏭️  VehicleType: ${vt.name} (zaten var)`);
       }
     }
 
@@ -58,9 +55,6 @@ async function seed() {
           `INSERT INTO service_types (id, name) VALUES (UUID(), ?)`,
           [name]
         );
-        console.log(`  ✅ ServiceType: ${name}`);
-      } else {
-        console.log(`  ⏭️  ServiceType: ${name} (zaten var)`);
       }
     }
 
@@ -81,14 +75,10 @@ async function seed() {
           `INSERT INTO scope_of_work (id, name) VALUES (UUID(), ?)`,
           [name]
         );
-        console.log(`  ✅ ScopeOfWork: ${name}`);
-      } else {
-        console.log(`  ⏭️  ScopeOfWork: ${name} (zaten var)`);
       }
     }
 
     await qr.commitTransaction();
-    console.log('\n🎉 Seed tamamlandı!');
   } catch (err) {
     await qr.rollbackTransaction();
     console.error('❌ Seed hatası:', err);

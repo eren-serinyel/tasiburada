@@ -106,8 +106,7 @@ export default function CarrierHome() {
             rating: Number(json.data.averageRating) || 0
           });
         }
-      } catch (err) {
-        console.error("Stats fetch error:", err);
+      } catch {
       }
     };
     

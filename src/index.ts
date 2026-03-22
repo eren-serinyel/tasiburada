@@ -73,12 +73,6 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use('/uploads', express.static(path.resolve(process.cwd(), 'uploads')));
 
-// Request logging middleware for debugging
-app.use((req, res, next) => {
-  console.log(`📥 ${req.method} ${req.path} - Origin: ${req.headers.origin}`);
-  next();
-});
-
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 200,
@@ -141,13 +135,11 @@ app.use('*', (req: express.Request, res: express.Response) => {
 
 // Graceful shutdown handler
 process.on('SIGTERM', async () => {
-  console.log('🔄 SIGTERM received. Shutting down gracefully...');
   await closeDatabase();
   process.exit(0);
 });
 
 process.on('SIGINT', async () => {
-  console.log('🔄 SIGINT received. Shutting down gracefully...');
   await closeDatabase();
   process.exit(0);
 });
@@ -160,10 +152,6 @@ const startServer = async (): Promise<void> => {
 
     const preferredPort = resolvePort(process.env.PORT);
     const { port, conflicted } = await findAvailablePort(preferredPort);
-
-    if (conflicted) {
-      console.warn(`⚠️  Port ${preferredPort} in use. Switching to available port ${port}.`);
-    }
 
     // Express sunucusunu başlat
     app.listen(port, () => {

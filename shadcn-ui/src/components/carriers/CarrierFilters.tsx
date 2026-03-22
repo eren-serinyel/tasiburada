@@ -94,8 +94,7 @@ const CarrierFilters = ({ filters, onChange, hideHeader }: CarrierFiltersProps) 
 				if (!ignore && res.ok && Array.isArray(json?.data)) {
 					setVehicleOptions(json.data.map((item: VehicleTypeApiItem) => ({ value: String(item.id), label: item.name })));
 				}
-			} catch (error) {
-				console.error('vehicle type fetch failed', error);
+			} catch {
 			} finally {
 				if (!ignore) setVehiclesLoading(false);
 			}

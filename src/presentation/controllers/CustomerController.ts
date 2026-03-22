@@ -16,9 +16,6 @@ export class CustomerController {
 
   register = async (req: Request, res: Response): Promise<void> => {
     try {
-      console.log('🚀 POST /api/v1/customers/register endpoint called');
-      console.log('📥 Request body:', JSON.stringify(req.body, null, 2));
-      
       const createCustomerDto: CreateCustomerDto = req.body;
       const customer = await this.customerService.createCustomer(createCustomerDto);
 

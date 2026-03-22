@@ -57,8 +57,6 @@ export default function Login() {
       
       if (response.ok && result.success) {
         // Başarılı giriş
-        console.log('✅ Login successful:', result.data);
-        
         // Token'ı localStorage'a kaydet
         if (result.data.token) {
           localStorage.setItem('authToken', result.data.token);
@@ -105,10 +103,8 @@ export default function Login() {
         // Hata durumu
         const errorMessage = result.message || 'Giriş sırasında bir hata oluştu.';
         setError(`❌ ${errorMessage}`);
-        console.error('Login error:', result);
       }
-    } catch (error) {
-      console.error('❌ Network error:', error);
+    } catch {
       setError('🔴 Bağlantı hatası! Lütfen internet bağlantınızı kontrol edin.');
     } finally {
       setIsLoading(false);

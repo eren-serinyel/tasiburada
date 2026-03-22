@@ -134,19 +134,6 @@ export default function RegisterUser() {
     setIsLoading(true);
     
     try {
-      console.log('🚀 Sending registration request to:', `${API_BASE_URL}/customers/register`);
-      console.log('📦 Request body:', JSON.stringify({
-        firstName: formData.name,
-        lastName: formData.surname,
-        email: formData.email,
-        phone: formData.phone,
-        addressLine1: formData.addressLine1,
-        addressLine2: formData.addressLine2,
-        city: formData.cityText,
-        district: formData.district,
-        password: formData.password,
-      }, null, 2));
-      
       // Gerçek API'ye POST isteği gönder
       const response = await fetch(`${API_BASE_URL}/customers/register`, {
         method: 'POST',
@@ -168,8 +155,6 @@ export default function RegisterUser() {
 
       // Response'un content type'ını kontrol et
       const contentType = response.headers.get('content-type');
-      console.log('Response status:', response.status);
-      console.log('Content-Type:', contentType);
       
       let result;
       try {
@@ -178,28 +163,22 @@ export default function RegisterUser() {
         } else {
           // JSON değilse text olarak al
           const textResponse = await response.text();
-          console.log('Non-JSON response:', textResponse);
           throw new Error(`Server returned non-JSON response: ${textResponse.substring(0, 200)}...`);
         }
-      } catch (jsonError) {
-        console.error('JSON parsing error:', jsonError);
+      } catch {
         throw new Error('Server response could not be parsed as JSON. Backend might be down or returning HTML error page.');
       }
       
       if (response.ok && result && result.success) {
         // Başarılı kayıt
-        console.log('✅ Registration successful:', result.data);
         alert('Kayıt başarıyla tamamlandı! Giriş yapabilirsiniz.');
         navigate('/giris');
       } else {
         // Hata durumu
         const errorMessage = result?.message || `HTTP ${response.status}: ${response.statusText}`;
         alert(`❌ Hata: ${errorMessage}`);
-        console.error('Registration error:', result || response);
       }
     } catch (error) {
-      console.error('❌ Network error:', error);
-      
       // Daha detaylı hata mesajı
       if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
         alert('🔴 Backend sunucusuna erişim sorunu! Sunucu çalışıyor mu kontrol edin.\n\nHata: Failed to fetch - CORS veya network sorunu olabilir.');
