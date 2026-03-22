@@ -3,6 +3,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
+import rateLimit from 'express-rate-limit';
 import net from 'node:net';
 import path from 'node:path';
 import { config } from 'dotenv';
@@ -78,8 +79,45 @@ app.use((req, res, next) => {
   next();
 });
 
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 200,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    message: 'Çok fazla istek gönderdiniz. Lütfen bekleyin.'
+  }
+});
+
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    message: 'Çok fazla giriş denemesi. 15 dakika bekleyin.'
+  }
+});
+
+const registerLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    message: 'Çok fazla kayıt denemesi.'
+  }
+});
+
 // Routes
-app.use('/api/v1', routes);
+app.use('/api/v1/customers/login', loginLimiter);
+app.use('/api/v1/carriers/login', loginLimiter);
+app.use('/api/v1/customers/register', registerLimiter);
+app.use('/api/v1/carriers/register', registerLimiter);
+app.use('/api/v1', apiLimiter, routes);
 
 // Global error handler
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
