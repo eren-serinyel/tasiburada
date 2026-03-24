@@ -101,7 +101,9 @@ const App = () => (
             <Route path="/nakliyeci/yorumlar" element={<CarrierReviews />} />
             <Route path="/takvim" element={<CarrierCalendar />} />
             <Route path="/profilim" element={<Profile />} />
-            <Route path="/hata-ayiklama" element={<Debug />} />
+            {import.meta.env.DEV && (
+              <Route path="/hata-ayiklama" element={<Debug />} />
+            )}
             <Route path="/nasil-calisir-musteri" element={<HowItWorksCustomer />} />
             <Route path="/nasil-calisir-nakliyeci" element={<HowItWorksCarrier />} />
             {/* Legacy aliases */}

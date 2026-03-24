@@ -31,3 +31,7 @@ export async function apiClient(input: RequestInfo | URL, init: RequestInit = {}
 
   return response;
 }
+
+window.addEventListener('focus', () => {
+  redirectInProgress = false;
+});

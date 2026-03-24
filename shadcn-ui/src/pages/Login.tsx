@@ -321,36 +321,37 @@ export default function Login() {
                   </div>
                 </div>
                 
-                {/* Demo Hesapları - Tek tıkla doldur */}
-                <div className="p-6 bg-gradient-to-r from-blue-50/80 to-indigo-50/80 backdrop-blur-sm rounded-2xl border border-blue-200/30">
-                  <div className="flex items-center space-x-2 mb-3">
-                    <Award className="h-5 w-5 text-blue-600" />
-                    <p className="font-bold text-blue-900">Demo Hesapları</p>
+                {import.meta.env.DEV && (
+                  <div className="p-6 bg-gradient-to-r from-blue-50/80 to-indigo-50/80 backdrop-blur-sm rounded-2xl border border-blue-200/30">
+                    <div className="flex items-center space-x-2 mb-3">
+                      <Award className="h-5 w-5 text-blue-600" />
+                      <p className="font-bold text-blue-900">Demo Hesapları</p>
+                    </div>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-blue-800 font-medium">👤 Müşteri: eren@gmail.com (ues2141)</p>
+                        <Button size="sm" variant="secondary" className="bg-white/70"
+                          onClick={() => { setUserType('customer'); setEmail('eren@gmail.com'); setPassword('ues2141'); }}>
+                          Doldur
+                        </Button>
+                      </div>
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-blue-800 font-medium">👤 Müşteri: customer1@example.com (customer123)</p>
+                        <Button size="sm" variant="secondary" className="bg-white/70"
+                          onClick={() => { setUserType('customer'); setEmail('customer1@example.com'); setPassword('customer123'); }}>
+                          Doldur
+                        </Button>
+                      </div>
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-blue-800 font-medium">🚛 Nakliyeci: demo@tasiburada.com (demo123)</p>
+                        <Button size="sm" variant="secondary" className="bg-white/70"
+                          onClick={() => { setUserType('carrier'); setEmail('demo@tasiburada.com'); setPassword('demo123'); }}>
+                          Doldur
+                        </Button>
+                      </div>
+                    </div>
                   </div>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-blue-800 font-medium">👤 Müşteri: eren@gmail.com (ues2141)</p>
-                      <Button size="sm" variant="secondary" className="bg-white/70"
-                        onClick={() => { setUserType('customer'); setEmail('eren@gmail.com'); setPassword('ues2141'); }}>
-                        Doldur
-                      </Button>
-                    </div>
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-blue-800 font-medium">👤 Müşteri: customer1@example.com (customer123)</p>
-                      <Button size="sm" variant="secondary" className="bg-white/70"
-                        onClick={() => { setUserType('customer'); setEmail('customer1@example.com'); setPassword('customer123'); }}>
-                        Doldur
-                      </Button>
-                    </div>
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-blue-800 font-medium">🚛 Nakliyeci: demo@tasiburada.com (demo123)</p>
-                      <Button size="sm" variant="secondary" className="bg-white/70"
-                        onClick={() => { setUserType('carrier'); setEmail('demo@tasiburada.com'); setPassword('demo123'); }}>
-                        Doldur
-                      </Button>
-                    </div>
-                  </div>
-                </div>
+                )}
               </CardContent>
             </Card>
           </div>
