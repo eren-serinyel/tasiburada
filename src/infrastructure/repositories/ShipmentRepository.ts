@@ -7,6 +7,10 @@ export class ShipmentRepository extends BaseRepository<Shipment> {
     super(Shipment);
   }
 
+  async createShipmentRecord(payload: Partial<Shipment>): Promise<Shipment> {
+    return await this.create(payload);
+  }
+
   async findByCustomerId(customerId: string): Promise<Shipment[]> {
     return await this.repository.find({
       where: { customerId },

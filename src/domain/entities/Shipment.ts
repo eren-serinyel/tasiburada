@@ -49,6 +49,27 @@ export class Shipment {
     @Column()
     loadDetails: string;
 
+    @Column({ nullable: true })
+    transportType: string;
+
+    @Column({ nullable: true })
+    placeType: string;
+
+    @Column({ type: 'boolean', default: false })
+    hasElevator: boolean;
+
+    @Column({ type: 'int', nullable: true })
+    floor: number;
+
+    @Column({ default: 'none' })
+    insuranceType: string;
+
+    @Column({ nullable: true })
+    timePreference: string;
+
+    @Column({ type: 'json', nullable: true })
+    extraServices: string[];
+
     @Column({ type: "decimal", precision: 10, scale: 2, nullable: true })
     weight: number;
 

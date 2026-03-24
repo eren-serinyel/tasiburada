@@ -7,6 +7,13 @@ interface CreateShipmentPayload {
   origin: string;
   destination: string;
   loadDetails: string;
+  transportType?: string;
+  placeType?: string;
+  hasElevator?: boolean;
+  floor?: number;
+  insuranceType?: string;
+  timePreference?: string;
+  extraServices?: string[];
   weight?: number;
   shipmentDate: string | Date;
   price?: number;
@@ -16,6 +23,13 @@ interface UpdateShipmentPayload {
   origin?: string;
   destination?: string;
   loadDetails?: string;
+  transportType?: string;
+  placeType?: string;
+  hasElevator?: boolean;
+  floor?: number;
+  insuranceType?: string;
+  timePreference?: string;
+  extraServices?: string[];
   weight?: number;
   shipmentDate?: string | Date;
   price?: number;
@@ -36,11 +50,18 @@ export class ShipmentService {
       throw new Error('origin, destination, loadDetails ve shipmentDate alanları zorunludur.');
     }
 
-    return await this.shipmentRepository.create({
+    return await this.shipmentRepository.createShipmentRecord({
       customerId,
       origin: payload.origin,
       destination: payload.destination,
       loadDetails: payload.loadDetails,
+      transportType: payload.transportType,
+      placeType: payload.placeType,
+      hasElevator: payload.hasElevator ?? false,
+      floor: payload.floor,
+      insuranceType: payload.insuranceType ?? 'none',
+      timePreference: payload.timePreference,
+      extraServices: payload.extraServices,
       weight: payload.weight,
       shipmentDate: new Date(payload.shipmentDate),
       price: payload.price,
@@ -70,6 +91,13 @@ export class ShipmentService {
       origin: payload.origin,
       destination: payload.destination,
       loadDetails: payload.loadDetails,
+      transportType: payload.transportType,
+      placeType: payload.placeType,
+      hasElevator: payload.hasElevator,
+      floor: payload.floor,
+      insuranceType: payload.insuranceType,
+      timePreference: payload.timePreference,
+      extraServices: payload.extraServices,
       weight: payload.weight,
       shipmentDate: payload.shipmentDate ? new Date(payload.shipmentDate) : undefined,
       price: payload.price

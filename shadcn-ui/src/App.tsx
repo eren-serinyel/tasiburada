@@ -38,7 +38,6 @@ import History from './pages/History';
 import Campaigns from './pages/Campaigns';
 import Support from './pages/Support';
 import Loyalty from './pages/Loyalty';
-import CreateShipment from '@/pages/CreateShipment';
 import Pricing from '@/pages/info/Pricing';
 import CarrierInfo from '@/pages/info/CarrierInfo';
 import PrivacyPolicy from '@/pages/info/PrivacyPolicy';
@@ -70,13 +69,14 @@ const App = () => (
             {/** Talep oluşturma akışı devre dışı (müşteri sadece nakliyeci arıyor) */}
             <Route path="/teklif-talebi" element={<OfferRequest />} />
             <Route path="/ilanlar" element={<ShipmentList />} />
+            <Route path="/ilanlarim" element={<ShipmentList />} />
             <Route path="/ilan/:id" element={<ShipmentDetail />} />
             <Route path="/gecmis" element={<History />} />
             <Route path="/campaigns" element={<Campaigns />} />
             <Route path="/support" element={<Support />} />
             <Route path="/loyalty" element={<Loyalty />} />
             {/* Turkish slugs and info pages */}
-            <Route path="/talep-olustur" element={<CreateShipment />} />
+            <Route path="/talep-olustur" element={<OfferRequest />} />
             <Route path="/fiyatlandirma" element={<Pricing />} />
             <Route path="/gizlilik-politikasi" element={<PrivacyPolicy />} />
             <Route path="/kullanim-sartlari" element={<Terms />} />
