@@ -8,11 +8,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { MapPin, Package, Truck, Shield, Award, MessageSquare, Star, CheckCircle2, XCircle, Info, Images, Lock, X } from 'lucide-react';
+import { MapPin, Package, Truck, Shield, Award, Star, CheckCircle2, XCircle, Info, Images, Lock, X } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Carrier, LOAD_TYPES, VEHICLE_TYPES } from '@/lib/types';
-import { mockDb } from '@/utils/mockDb';
 import { getSessionUser } from '@/lib/storage';
 import { CITIES_TR, getDistrictsForCity, formatDateYYYYMMDD } from '@/lib/locations';
 import FileUpload from '@/components/ui/file-upload';
@@ -20,8 +19,23 @@ import { ADDITIONAL_SERVICE_OPTIONS, SPECIAL_SERVICES } from '@/lib/carrierFormC
 import { AnimatePresence, motion } from 'framer-motion';
 import { useToast } from '@/hooks/use-toast';
 import { useNavigate } from 'react-router-dom';
+import { apiClient } from '@/lib/apiClient';
 
 type Step = 1 | 2 | 3;
+
+const buildLoadDetails = (form: {
+  loadType: string;
+  note: string;
+  transportType: string;
+  placeType: string;
+}) => {
+  const loadTypeLabel = form.loadType
+    ? LOAD_TYPES[form.loadType as keyof typeof LOAD_TYPES]
+    : form.transportType || 'Taşıma talebi';
+  const description = form.note || form.placeType || form.transportType || 'Detay belirtilmedi';
+
+  return `${loadTypeLabel} - ${description}`;
+};
 
 export default function OfferRequestForm({ showHeader = false }: { showHeader?: boolean }) {
   const navigate = useNavigate();
@@ -162,7 +176,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
 
   const isLoggedIn = useMemo(() => {
     try {
-      return Boolean(localStorage.getItem('userToken')) || Boolean(getSessionUser());
+      return Boolean(localStorage.getItem('authToken')) || Boolean(getSessionUser());
     } catch {
       return Boolean(getSessionUser());
     }
@@ -216,22 +230,71 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
     })();
   }, [form.destinationCity]);
 
-  const requestOffer = (carrier: Carrier) => {
-    const user = getSessionUser() || (localStorage.getItem('currentUser') ? JSON.parse(localStorage.getItem('currentUser') as string) : null);
-    const reqId = `req_${Date.now()}`;
-    mockDb.addOfferRequest({ id: reqId, carrierId: carrier.id, customerId: user?.id || 'c1', createdAt: new Date().toISOString(), form });
-    mockDb.addNotification({
-      id: `n_${Date.now()}`,
-      userId: carrier.id,
-      title: 'Yeni Teklif Talebi',
-      message: `${user?.name || 'Müşteri'} ${form.originCity}${form.originDistrict ? ' ' + form.originDistrict : ''} → ${form.destinationCity}${form.destinationDistrict ? ' ' + form.destinationDistrict : ''} için teklif istedi.`,
-      isRead: false,
-      createdAt: new Date().toISOString(),
-  actionUrl: `/nakliyeci/yanit/${reqId}`,
-      relatedId: reqId,
-      kind: 'request'
-    });
-    alert(`${carrier.name} ${carrier.surname} adlı nakliyeciye teklif isteği gönderildi.`);
+  const publishShipmentRequest = async () => {
+    const user = getSessionUser();
+    if (!user?.id) {
+      toast({ title: 'Giriş gerekli', description: 'Taşıma talebi oluşturmak için giriş yapmalısınız.' });
+      setShowLoginModal(true);
+      return;
+    }
+
+    const parsedWeight = form.weightKg ? Number(form.weightKg) : null;
+    if (form.weightKg && (!Number.isFinite(parsedWeight) || Number(parsedWeight) <= 0)) {
+      toast({
+        title: 'Geçersiz ağırlık',
+        description: 'Ağırlık alanına geçerli bir sayı girin.',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const response = await apiClient('/api/v1/shipments', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          origin: `${form.originCity}, ${form.originDistrict}`,
+          destination: `${form.destinationCity}, ${form.destinationDistrict}`,
+          loadDetails: buildLoadDetails(form),
+          weight: parsedWeight,
+          shipmentDate: form.date,
+          price: null
+        })
+      });
+
+      let data: any = null;
+      try {
+        data = await response.json();
+      } catch {
+        data = null;
+      }
+
+      if (!response.ok || (data && data.success === false)) {
+        toast({
+          title: 'Hata',
+          description: data?.message || 'Taşıma talebiniz oluşturulamadı.',
+          variant: 'destructive'
+        });
+        return;
+      }
+
+      toast({
+        title: 'Başarılı',
+        description: 'Taşıma talebiniz oluşturuldu!'
+      });
+      navigate('/ilanlar');
+    } catch {
+      toast({
+        title: 'Bağlantı hatası',
+        description: 'İşlem sırasında bir hata oluştu. Lütfen tekrar deneyin.',
+        variant: 'destructive'
+      });
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const submitStep1 = (e: React.FormEvent) => {
@@ -284,8 +347,8 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
     <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 overflow-visible relative">
       {showHeader && (
         <div className="mb-6">
-          <h1 className="text-3xl font-bold text-gray-900 inline-block overflow-visible pb-2 leading-[1.15] md:leading-[1.1]">Müşteri Teklif Talebi</h1>
-          <p className="text-gray-600 mt-1">İhtiyacınızı tarif edin, uygun nakliyecilerden teklif isteyin.</p>
+          <h1 className="text-3xl font-bold text-gray-900 inline-block overflow-visible pb-2 leading-[1.15] md:leading-[1.1]">Taşıma Talebi Oluştur</h1>
+          <p className="text-gray-600 mt-1">İlanınızı yayınlayın, uygun nakliyeciler teklif versin.</p>
         </div>
       )}
 
@@ -570,7 +633,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2"><Truck className="h-5 w-5" /> Uygun Nakliyeciler</CardTitle>
-                  <CardDescription>Seçtiğiniz kriterlere göre listelenen nakliyeciler</CardDescription>
+                  <CardDescription>Talebiniz yayınlandığında bu kriterlere uyan nakliyeciler ilanınızı görebilir</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="flex flex-wrap items-end gap-3">
@@ -625,13 +688,13 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
                   ) : suitableCarriers.length === 0 ? (
                     <Card className="border-dashed">
                       <CardContent className="p-6 text-sm text-gray-600 flex items-center gap-2">
-                        <Info className="h-4 w-4" /> Kriterlerinize uygun nakliyeci bulunamadı. Tercihleri değiştirerek tekrar deneyin.
+                        <Info className="h-4 w-4" /> Şu anda eşleşen nakliyeci görünmüyor. Yine de talebinizi yayınlayabilirsiniz.
                       </CardContent>
                     </Card>
                   ) : (
                     <div className="space-y-4">
                       {suitableCarriers.map((c) => (
-                        <CarrierCard key={c.id} carrier={c} form={form} onRequest={() => requestOffer(c)} />
+                        <CarrierCard key={c.id} carrier={c} form={form} />
                       ))}
                     </div>
                   )}
@@ -646,8 +709,10 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
           </div>
 
           <div className="flex justify-between gap-2">
-            <Button variant="outline" onClick={goPrev}>Geri</Button>
-            <Button>Bitti</Button>
+            <Button variant="outline" onClick={goPrev} disabled={submitting}>Geri</Button>
+            <Button onClick={publishShipmentRequest} disabled={submitting} className="bg-gradient-to-r from-blue-600 to-sky-600">
+              {submitting ? 'Yayınlanıyor...' : 'Talebi Yayınla'}
+            </Button>
           </div>
         </div>
       )}
@@ -676,10 +741,10 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
                 <Lock className="h-6 w-6" />
               </div>
               <h3 className="text-lg font-semibold text-gray-900">Devam edebilmek için giriş yapmalısınız</h3>
-              <p className="text-sm text-gray-600 mt-2">Teklif isteyebilmek ve nakliyecilerle iletişime geçebilmek için giriş yapın veya ücretsiz kayıt olun.</p>
+              <p className="text-sm text-gray-600 mt-2">Taşıma talebi oluşturmak ve teklifleri yönetmek için giriş yapın veya ücretsiz kayıt olun.</p>
               <div className="mt-6 flex justify-center gap-4">
                 <Button onClick={() => navigate('/giris')}>Giriş Yap</Button>
-                <Button variant="outline" onClick={() => navigate('/register')}>Üye Ol</Button>
+                <Button variant="outline" onClick={() => navigate('/musteri-kayit')}>Üye Ol</Button>
               </div>
             </motion.div>
           </motion.div>
@@ -763,7 +828,7 @@ function SummaryCard({ step, form, onEditStep }: { step: Step; form: any; onEdit
   );
 }
 
-function CarrierCard({ carrier, form, onRequest }: { carrier: Carrier; form: any; onRequest: () => void; }) {
+function CarrierCard({ carrier, form }: { carrier: Carrier; form: any; }) {
   const weight = Number(form.weightKg || 0);
   const capacityOk = !weight || carrier.vehicle.capacity >= weight;
   const insuranceNeeded = form.insurance !== 'none' || form.extras?.sigorta || (form.extraServices || []).includes('sigorta');
@@ -841,11 +906,7 @@ function CarrierCard({ carrier, form, onRequest }: { carrier: Carrier; form: any
             <Award className="h-4 w-4 text-yellow-500" />
             <span>Güven Puanı: {carrier.rating} ({carrier.reviewCount} değerlendirme)</span>
           </div>
-          <div className="flex gap-2">
-            <Button onClick={onRequest}>
-              <MessageSquare className="h-4 w-4 mr-2" /> Teklif İste
-            </Button>
-          </div>
+          <div className="text-sm text-gray-500">Talep yayınlandığında teklif verebilir</div>
         </div>
       </CardContent>
     </Card>

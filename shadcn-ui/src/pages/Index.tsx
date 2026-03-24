@@ -390,7 +390,7 @@ export default function Index() {
                   <AccordionItem value="q1">
                     <AccordionTrigger>Nasıl teklif alırım?</AccordionTrigger>
                     <AccordionContent>
-                      Ana sayfadaki formdan rota ve tercihlerinizi doldurun. Uygun nakliyeciler listelenir; giriş yaptıktan sonra “Teklif İste” diyebilirsiniz.
+                      Ana sayfadaki formdan rota ve tercihlerinizi doldurun. Talebinizi yayınladıktan sonra uygun nakliyeciler ilanınızı görüp teklif verebilir.
                     </AccordionContent>
                   </AccordionItem>
                   <AccordionItem value="q2">

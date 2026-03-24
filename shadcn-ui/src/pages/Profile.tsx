@@ -173,11 +173,18 @@ export default function Profile() {
   const [profileCompletion, setProfileCompletion] = useState<number>(0);
   const [isProfileStatusLoading, setIsProfileStatusLoading] = useState(false);
   const [form, setForm] = useState({ name: '', surname: '', email: '', phone: '' });
+  const [customerProfileForm, setCustomerProfileForm] = useState({ city: '', district: '', addressLine1: '', addressLine2: '' });
+  const [customerProfileInitial, setCustomerProfileInitial] = useState({ city: '', district: '', addressLine1: '', addressLine2: '' });
+  const [isCustomerProfileLoading, setIsCustomerProfileLoading] = useState(false);
+  const [isCustomerProfileSaving, setIsCustomerProfileSaving] = useState(false);
+  const [isCustomerPasswordSaving, setIsCustomerPasswordSaving] = useState(false);
   // Photo state
   const [photo, setPhoto] = useState<string | null>(null);
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [dirtyPhoto, setDirtyPhoto] = useState(false);
   const [isSavingPhoto, setIsSavingPhoto] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const photoPreviewUrlRef = useRef<string | null>(null);
   // Carrier-specific states
   const isCarrier = user?.type === 'carrier';
   const [company, setCompany] = useState({
@@ -312,40 +319,38 @@ export default function Profile() {
       }
       setDirtyPhoto(false);
     }
-    // Load carrier setup drafts
-    try {
-      const c = localStorage.getItem(`carrier_company_${u.id}`);
-      if (c) {
-        const parsed = JSON.parse(c);
-        // migrate: if only vehicleType exists, map to vehicleTypes array
-        if (parsed && !parsed.vehicleTypes) {
-          parsed.vehicleTypes = parsed.vehicleType ? [parsed.vehicleType] : [];
-        }
-        // migrate: tekil vehicleCapacity -> ilk seçili türe ata
-        if (parsed && parsed.vehicleCapacity && (!parsed.vehicleCapacities || Object.keys(parsed.vehicleCapacities||{}).length===0)) {
-          const first = (parsed.vehicleTypes && parsed.vehicleTypes[0]) || parsed.vehicleType;
-          if (first) {
-            parsed.vehicleCapacities = { [first]: String(parsed.vehicleCapacity) };
+    // Load drafts only for carrier side
+    if (u.type === 'carrier') {
+      try {
+        const c = localStorage.getItem(`carrier_company_${u.id}`);
+        if (c) {
+          const parsed = JSON.parse(c);
+          // migrate: if only vehicleType exists, map to vehicleTypes array
+          if (parsed && !parsed.vehicleTypes) {
+            parsed.vehicleTypes = parsed.vehicleType ? [parsed.vehicleType] : [];
           }
+          // migrate: tekil vehicleCapacity -> ilk seçili türe ata
+          if (parsed && parsed.vehicleCapacity && (!parsed.vehicleCapacities || Object.keys(parsed.vehicleCapacities||{}).length===0)) {
+            const first = (parsed.vehicleTypes && parsed.vehicleTypes[0]) || parsed.vehicleType;
+            if (first) {
+              parsed.vehicleCapacities = { [first]: String(parsed.vehicleCapacity) };
+            }
+          }
+          setCompany(parsed);
         }
-        setCompany(parsed);
-      }
-      const o = localStorage.getItem(`carrier_ops_${u.id}`); if (o) setOps(JSON.parse(o));
-      const pay = localStorage.getItem(`carrier_payout_${u.id}`); if (pay) setPayout(JSON.parse(pay));
-      const appr = localStorage.getItem(`carrier_approval_${u.id}`) as any; if (appr) setApprovalStatus(appr);
-      const docsFlags = localStorage.getItem(`carrier_docs_flags_${u.id}`);
-      if (docsFlags) {
-        // Only restore counts, cannot restore File objects; leave arrays empty
-      }
-    } catch {}
-    try { const raw = localStorage.getItem(`profile_addresses_${u.id}`); setAddresses(raw ? JSON.parse(raw) : []); } catch {}
-    try { const raw = localStorage.getItem(`profile_cards_${u.id}`); setCards(raw ? JSON.parse(raw) : []); } catch {}
-    try {
-      const raw = localStorage.getItem(`profile_notif_${u.id}`);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (u.type === 'carrier') {
-          // If stored shape doesn't match carrier groups, reset to carrier defaults
+        const o = localStorage.getItem(`carrier_ops_${u.id}`); if (o) setOps(JSON.parse(o));
+        const pay = localStorage.getItem(`carrier_payout_${u.id}`); if (pay) setPayout(JSON.parse(pay));
+        const appr = localStorage.getItem(`carrier_approval_${u.id}`) as any; if (appr) setApprovalStatus(appr);
+        const docsFlags = localStorage.getItem(`carrier_docs_flags_${u.id}`);
+        if (docsFlags) {
+          // Only restore counts, cannot restore File objects; leave arrays empty
+        }
+      } catch {}
+
+      try {
+        const raw = localStorage.getItem(`profile_notif_${u.id}`);
+        if (raw) {
+          const parsed = JSON.parse(raw);
           const carrierGroupIds = new Set(['process','reviews','security','system']);
           const ok = parsed?.groups && Array.isArray(parsed.groups) && parsed.groups.every((g: any) => carrierGroupIds.has(g.id));
           if (ok) {
@@ -357,30 +362,72 @@ export default function Profile() {
             setGroupOpen(Object.fromEntries(dn.groups.map(g => [g.id, true])));
           }
         } else {
-          // Detect old shape (has offers/status keys) -> migrate for non-carrier
-          if (parsed && (parsed.offers !== undefined || parsed.status !== undefined || parsed.campaigns !== undefined || parsed.security !== undefined)) {
-            const migrated = migrateOldNotif(parsed);
-            setNotif(migrated);
-            setGroupOpen(Object.fromEntries(migrated.groups.map(g => [g.id, true])));
-          } else {
-            setNotif(parsed);
-            setGroupOpen(Object.fromEntries(parsed.groups.map((g: any) => [g.id, true])));
-          }
-        }
-      } else {
-        // No saved state -> set defaults by role
-        if (u.type === 'carrier') {
           const dn = defaultCarrierNotif();
           setNotif(dn);
           setGroupOpen(Object.fromEntries(dn.groups.map(g => [g.id, true])));
-        } else {
-          const dn = defaultNotif();
-          setNotif(dn);
-          setGroupOpen(Object.fromEntries(dn.groups.map(g => [g.id, true])));
         }
-      }
-    } catch {}
+      } catch {}
+    } else {
+      const dn = defaultNotif();
+      setNotif(dn);
+      setGroupOpen(Object.fromEntries(dn.groups.map(g => [g.id, true])));
+      setAddresses([]);
+      setCards([]);
+    }
   }, []);
+
+  useEffect(() => {
+    if (!user || user.type === 'carrier') return;
+
+    const fetchCustomerProfile = async () => {
+      setIsCustomerProfileLoading(true);
+      try {
+        const res = await apiClient(`${API_BASE_URL}/customers/profile`, {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' }
+        });
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok || !json?.success) {
+          throw new Error(json?.message || 'Profil bilgileri alınamadı.');
+        }
+
+        const data = json?.data || {};
+        const updatedForm = {
+          name: data.firstName ?? form.name,
+          surname: data.lastName ?? form.surname,
+          email: data.email ?? form.email,
+          phone: data.phone ?? form.phone
+        };
+        const updatedCustomerProfile = {
+          city: data.city ?? '',
+          district: data.district ?? '',
+          addressLine1: data.addressLine1 ?? '',
+          addressLine2: data.addressLine2 ?? ''
+        };
+
+        setForm(updatedForm);
+        setCustomerProfileForm(updatedCustomerProfile);
+        setCustomerProfileInitial(updatedCustomerProfile);
+
+        const updatedUser = {
+          ...user,
+          name: updatedForm.name,
+          surname: updatedForm.surname,
+          phone: updatedForm.phone,
+          email: updatedForm.email
+        };
+        setUser(updatedUser);
+        setSessionUser(updatedUser);
+      } catch (error: any) {
+        toast.error(error?.message || 'Profil bilgileri alınamadı.');
+      } finally {
+        setIsCustomerProfileLoading(false);
+      }
+    };
+
+    fetchCustomerProfile();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, user?.type]);
 
   // Fetch vehicle types for dynamic mapping
   useEffect(() => {
@@ -545,10 +592,31 @@ export default function Profile() {
   }, [user?.id]);
 
   // Derived dirty states
-  useEffect(() => { if (!user) return; setDirtyAccount(form.name !== (user.name||'') || form.surname !== (user.surname||'') || form.email !== (user.email||'') || form.phone !== (user.phone||'')); }, [form, user]);
+  useEffect(() => {
+    if (!user) return;
+    const baseDirty = form.name !== (user.name||'') || form.surname !== (user.surname||'') || form.email !== (user.email||'') || form.phone !== (user.phone||'');
+    if (user.type === 'carrier') {
+      setDirtyAccount(baseDirty);
+      return;
+    }
+
+    const customerAddressDirty =
+      customerProfileForm.city !== customerProfileInitial.city ||
+      customerProfileForm.district !== customerProfileInitial.district ||
+      customerProfileForm.addressLine1 !== customerProfileInitial.addressLine1 ||
+      customerProfileForm.addressLine2 !== customerProfileInitial.addressLine2;
+
+    setDirtyAccount(baseDirty || customerAddressDirty);
+  }, [form, user, customerProfileForm, customerProfileInitial]);
   useEffect(() => setDirtyAddresses(true), [addresses]);
   useEffect(() => setDirtyPayments(true), [cards]);
   useEffect(() => {
+    if (!user) return;
+    if (user.type !== 'carrier') {
+      setDirtySecurity(Boolean(currentPwd || newPwd || newPwd2));
+      return;
+    }
+
     setDirtySecurity(Boolean(
       currentPwd ||
       newPwd ||
@@ -556,12 +624,93 @@ export default function Profile() {
       twoFA !== securityDefaults.twoFactorEnabled ||
       suspiciousAlerts !== securityDefaults.suspiciousLoginAlertsEnabled
     ));
-  }, [currentPwd, newPwd, newPwd2, twoFA, suspiciousAlerts, securityDefaults]);
+  }, [user, currentPwd, newPwd, newPwd2, twoFA, suspiciousAlerts, securityDefaults]);
   useEffect(() => setDirtyNotifications(true), [notif]);
 
   // Actions
   const saveAll = async () => {
     if (!user) return;
+
+    if (user.type !== 'carrier') {
+      if (dirtyAccount) {
+        setIsCustomerProfileSaving(true);
+        try {
+          const res = await apiClient(`${API_BASE_URL}/customers/profile`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              firstName: form.name,
+              lastName: form.surname,
+              phone: form.phone,
+              city: customerProfileForm.city,
+              district: customerProfileForm.district,
+              addressLine1: customerProfileForm.addressLine1,
+              addressLine2: customerProfileForm.addressLine2 || undefined
+            })
+          });
+
+          const json = await res.json().catch(() => ({}));
+          if (!res.ok || !json?.success) {
+            throw new Error(json?.message || 'Profil güncellenemedi.');
+          }
+
+          const updated: UserType = { ...user, name: form.name, surname: form.surname, email: form.email, phone: form.phone };
+          setSessionUser(updated);
+          setUser(updated);
+          setCustomerProfileInitial(customerProfileForm);
+          setDirtyAccount(false);
+          toast.success('Profil bilgileri güncellendi.');
+        } catch (error: any) {
+          toast.error(error?.message || 'Profil güncellenemedi.');
+          return;
+        } finally {
+          setIsCustomerProfileSaving(false);
+        }
+      }
+
+      if (dirtySecurity) {
+        if (newPwd !== newPwd2) {
+          toast.error('Şifreler eşleşmiyor.');
+          return;
+        }
+        if (!currentPwd || !newPwd) {
+          toast.error('Mevcut şifre ve yeni şifre zorunludur.');
+          return;
+        }
+
+        setIsCustomerPasswordSaving(true);
+        try {
+          const res = await apiClient(`${API_BASE_URL}/customers/change-password`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              currentPassword: currentPwd,
+              newPassword: newPwd
+            })
+          });
+          const json = await res.json().catch(() => ({}));
+          if (!res.ok || !json?.success) {
+            throw new Error(json?.message || 'Şifre güncellenemedi.');
+          }
+
+          setCurrentPwd('');
+          setNewPwd('');
+          setNewPwd2('');
+          setDirtySecurity(false);
+          toast.success('Şifreniz güncellendi.');
+        } catch (error: any) {
+          toast.error(error?.message || 'Şifre güncellenemedi.');
+          return;
+        } finally {
+          setIsCustomerPasswordSaving(false);
+        }
+      }
+
+      if (!dirtyAccount && !dirtySecurity) {
+        toast.info('Kaydedilecek değişiklik bulunamadı.');
+      }
+      return;
+    }
 
     if (dirtySecurity) {
       if ((newPwd || newPwd2) && newPwd !== newPwd2) {
@@ -619,33 +768,69 @@ export default function Profile() {
   const onPhotoSelected: React.ChangeEventHandler<HTMLInputElement> = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result as string;
-      setPhoto(result);
-      setDirtyPhoto(true);
-    };
-    reader.readAsDataURL(file);
+
+    if (photoPreviewUrlRef.current) {
+      URL.revokeObjectURL(photoPreviewUrlRef.current);
+      photoPreviewUrlRef.current = null;
+    }
+
+    const previewUrl = URL.createObjectURL(file);
+    photoPreviewUrlRef.current = previewUrl;
+    setPhoto(previewUrl);
+    setPhotoFile(file);
+    setDirtyPhoto(true);
   };
+
+  useEffect(() => {
+    return () => {
+      if (photoPreviewUrlRef.current) {
+        URL.revokeObjectURL(photoPreviewUrlRef.current);
+      }
+    };
+  }, []);
+
   const savePhoto = async () => {
-    if (!user || !photo) return;
+    if (!user || !photoFile) return;
     setIsSavingPhoto(true);
     try {
-      const res = await apiClient(`${API_BASE_URL}/carriers/${user.id}/profile-picture`, {
+      const formData = new FormData();
+      formData.append('picture', photoFile);
+
+      const token = localStorage.getItem('authToken');
+      const res = await fetch('/api/v1/carriers/me/profile-picture', {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pictureUrl: photo })
+        headers: token
+          ? {
+              Authorization: `Bearer ${token}`
+            }
+          : undefined,
+        body: formData
       });
-      const json = await res.json();
+
+      let json: any = null;
+      try {
+        json = await res.json();
+      } catch {
+        json = null;
+      }
+
       if (!res.ok || !json?.success) {
         throw new Error(json?.message || 'Profil fotoğrafı kaydedilemedi.');
       }
-      const savedUrl = json.pictureUrl ?? photo;
+
+      const savedUrl = json?.data?.pictureUrl ?? json?.pictureUrl ?? photo;
       const updatedUser = { ...user, pictureUrl: savedUrl };
       setUser(updatedUser);
       setSessionUser(updatedUser);
       setPhoto(savedUrl);
+      setPhotoFile(null);
       setDirtyPhoto(false);
+
+      if (photoPreviewUrlRef.current) {
+        URL.revokeObjectURL(photoPreviewUrlRef.current);
+        photoPreviewUrlRef.current = null;
+      }
+
       try { localStorage.setItem(`profile_photo_${user.id}`, savedUrl); } catch {}
       toast.success('Profil fotoğrafı kaydedildi.');
     } catch (error: any) {
@@ -901,10 +1086,7 @@ export default function Profile() {
                 ) : (
                   <>
                     <Item id="account" label="Hesap Bilgileri" icon={User} />
-                    <Item id="addresses" label="Adreslerim" icon={Home} />
-                    <Item id="payments" label="Ödeme Yöntemleri" icon={CreditCard} />
                     <Item id="security" label="Güvenlik" icon={Lock} />
-                    <Item id="notifications" label="Bildirimler" icon={Bell} />
                   </>
                 )}
               </div>
@@ -1128,16 +1310,29 @@ export default function Profile() {
                   <Card className="rounded-2xl">
                     <CardHeader>
                       <CardTitle>Hesap Bilgileri</CardTitle>
-                      <CardDescription>Temel iletişim bilgilerinizi güncelleyin.</CardDescription>
+                      <CardDescription>
+                        {isCarrier ? 'Temel iletişim bilgilerinizi güncelleyin.' : 'Profil ve adres bilgilerinizi güncelleyin.'}
+                      </CardDescription>
                     </CardHeader>
                     <CardContent>
+                      {isCustomerProfileLoading && !isCarrier && (
+                        <div className="mb-4 text-sm text-slate-500">Profil bilgileri yükleniyor...</div>
+                      )}
                       <div className="grid md:grid-cols-2 gap-6">
                         <div><Label>Ad</Label><Input value={form.name} onChange={(e)=>setForm(v=>({...v, name:e.target.value}))} className="mt-1 border border-slate-200 rounded-lg bg-slate-50 focus-visible:ring-2 focus-visible:ring-blue-500 placeholder:text-slate-400" placeholder="Adınız"/></div>
                         <div><Label>Soyad</Label><Input value={form.surname} onChange={(e)=>setForm(v=>({...v, surname:e.target.value}))} className="mt-1 border border-slate-200 rounded-lg bg-slate-50 focus-visible:ring-2 focus-visible:ring-blue-500 placeholder:text-slate-400" placeholder="Soyadınız"/></div>
                         <div><Label>E-posta</Label><Input type="email" value={form.email} onChange={(e)=>setForm(v=>({...v, email:e.target.value}))} className="mt-1 border border-slate-200 rounded-lg bg-slate-50 focus-visible:ring-2 focus-visible:ring-blue-500 placeholder:text-slate-400" placeholder="mail@ornek.com"/></div>
                         <div><Label>Telefon</Label><Input value={form.phone} onChange={(e)=>setForm(v=>({...v, phone:e.target.value}))} className="mt-1 border border-slate-200 rounded-lg bg-slate-50 focus-visible:ring-2 focus-visible:ring-blue-500 placeholder:text-slate-400" placeholder="+905xx..."/></div>
+                        {!isCarrier && (
+                          <>
+                            <div><Label>Şehir</Label><Input value={customerProfileForm.city} onChange={(e)=>setCustomerProfileForm(v=>({...v, city:e.target.value}))} className="mt-1 border border-slate-200 rounded-lg bg-slate-50 focus-visible:ring-2 focus-visible:ring-blue-500 placeholder:text-slate-400" placeholder="Şehir"/></div>
+                            <div><Label>İlçe</Label><Input value={customerProfileForm.district} onChange={(e)=>setCustomerProfileForm(v=>({...v, district:e.target.value}))} className="mt-1 border border-slate-200 rounded-lg bg-slate-50 focus-visible:ring-2 focus-visible:ring-blue-500 placeholder:text-slate-400" placeholder="İlçe"/></div>
+                            <div className="md:col-span-2"><Label>Adres Satırı 1</Label><Input value={customerProfileForm.addressLine1} onChange={(e)=>setCustomerProfileForm(v=>({...v, addressLine1:e.target.value}))} className="mt-1 border border-slate-200 rounded-lg bg-slate-50 focus-visible:ring-2 focus-visible:ring-blue-500 placeholder:text-slate-400" placeholder="Mahalle, Cadde/Sokak"/></div>
+                            <div className="md:col-span-2"><Label>Adres Satırı 2 (Opsiyonel)</Label><Input value={customerProfileForm.addressLine2} onChange={(e)=>setCustomerProfileForm(v=>({...v, addressLine2:e.target.value}))} className="mt-1 border border-slate-200 rounded-lg bg-slate-50 focus-visible:ring-2 focus-visible:ring-blue-500 placeholder:text-slate-400" placeholder="Daire, kat, kapı no"/></div>
+                          </>
+                        )}
                       </div>
-                      <div className="sticky bottom-0 pt-6"><Button onClick={saveAll} disabled={!dirtyAccount} className="bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-md hover:shadow-lg disabled:opacity-60"><Save className="h-4 w-4 mr-2"/> Değişiklikleri Kaydet</Button></div>
+                      <div className="sticky bottom-0 pt-6"><Button onClick={saveAll} disabled={!dirtyAccount || isCustomerProfileSaving} className="bg-gradient-to-r from-blue-500 to-indigo-500 text-white shadow-md hover:shadow-lg disabled:opacity-60"><Save className="h-4 w-4 mr-2"/> {isCustomerProfileSaving ? 'Kaydediliyor...' : 'Değişiklikleri Kaydet'}</Button></div>
                     </CardContent>
                   </Card>
                 </Section>
@@ -1262,7 +1457,7 @@ export default function Profile() {
                           <Switch checked={suspiciousAlerts} onCheckedChange={(v)=>setSuspiciousAlerts(Boolean(v))}/>
                         </div>
                       </div>
-                      <div className="sticky bottom-0 pt-6"><Button onClick={saveAll} disabled={!dirtySecurity} className="bg-gradient-to-r from-blue-500 to-indigo-500 text-white disabled:opacity-60"><Save className="h-4 w-4 mr-2"/> Güncelle</Button></div>
+                      <div className="sticky bottom-0 pt-6"><Button onClick={saveAll} disabled={!dirtySecurity || isCustomerPasswordSaving} className="bg-gradient-to-r from-blue-500 to-indigo-500 text-white disabled:opacity-60"><Save className="h-4 w-4 mr-2"/> {isCustomerPasswordSaving ? 'Güncelleniyor...' : 'Güncelle'}</Button></div>
                     </CardContent>
                   </Card>
                 </Section>
