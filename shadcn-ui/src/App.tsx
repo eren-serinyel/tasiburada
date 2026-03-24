@@ -3,6 +3,7 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import ScrollToTop from '@/components/ScrollToTop';
+import ProtectedRoute from '@/components/ProtectedRoute';
 // Payment routes
 import Payment from './pages/Payment';
 import Payments from './pages/Payments';
@@ -67,7 +68,14 @@ const App = () => (
             <Route path="/profil-tamamla" element={<ProfileComplete />} />
             <Route path="/panel" element={<Dashboard />} />
             {/** Talep oluşturma akışı devre dışı (müşteri sadece nakliyeci arıyor) */}
-            <Route path="/teklif-talebi" element={<OfferRequest />} />
+            <Route
+              path="/teklif-talebi"
+              element={
+                <ProtectedRoute requiredRole="customer">
+                  <OfferRequest />
+                </ProtectedRoute>
+              }
+            />
             <Route path="/ilanlar" element={<ShipmentList />} />
             <Route path="/ilanlarim" element={<ShipmentList />} />
             <Route path="/ilan/:id" element={<ShipmentDetail />} />
@@ -76,7 +84,14 @@ const App = () => (
             <Route path="/support" element={<Support />} />
             <Route path="/loyalty" element={<Loyalty />} />
             {/* Turkish slugs and info pages */}
-            <Route path="/talep-olustur" element={<OfferRequest />} />
+            <Route
+              path="/talep-olustur"
+              element={
+                <ProtectedRoute requiredRole="customer">
+                  <OfferRequest />
+                </ProtectedRoute>
+              }
+            />
             <Route path="/fiyatlandirma" element={<Pricing />} />
             <Route path="/gizlilik-politikasi" element={<PrivacyPolicy />} />
             <Route path="/kullanim-sartlari" element={<Terms />} />
@@ -86,12 +101,33 @@ const App = () => (
             <Route path="/teklifler/:shipmentId" element={<OfferComparison />} />
             {/** send-offer rotası kaldırıldı */}
             {/* Yeni akış rotaları */}
-            <Route path="/nakliyeci/yanit/:requestId" element={<CarrierRespond />} />
+            <Route
+              path="/nakliyeci/yanit/:requestId"
+              element={
+                <ProtectedRoute requiredRole="carrier">
+                  <CarrierRespond />
+                </ProtectedRoute>
+              }
+            />
             <Route path="/tekliflerim" element={<MyOffers />} />
             <Route path="/odeme/:shipmentId" element={<Payment />} />
             <Route path="/odemeler" element={<Payments />} />
-            <Route path="/nakliyeci/teklifler" element={<CarrierOffers />} />
-            <Route path="/nakliyeci/kazanc" element={<Earnings />} />
+            <Route
+              path="/nakliyeci/teklifler"
+              element={
+                <ProtectedRoute requiredRole="carrier">
+                  <CarrierOffers />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/nakliyeci/kazanc"
+              element={
+                <ProtectedRoute requiredRole="carrier">
+                  <Earnings />
+                </ProtectedRoute>
+              }
+            />
             <Route path="/bildirimler" element={<Notifications />} />
             <Route path="/nakliyeciler" element={<CarrierList />} />
             <Route path="/nakliyeciler/tumu" element={<CarrierDirectory />} />
@@ -99,7 +135,14 @@ const App = () => (
             <Route path="/mesajlar" element={<Messages />} />
             <Route path="/nakliyeci/:carrierId" element={<CarrierProfile />} />
             <Route path="/nakliyeci/yorumlar" element={<CarrierReviews />} />
-            <Route path="/takvim" element={<CarrierCalendar />} />
+            <Route
+              path="/takvim"
+              element={
+                <ProtectedRoute requiredRole="carrier">
+                  <CarrierCalendar />
+                </ProtectedRoute>
+              }
+            />
             <Route path="/profilim" element={<Profile />} />
             {import.meta.env.DEV && (
               <Route path="/hata-ayiklama" element={<Debug />} />

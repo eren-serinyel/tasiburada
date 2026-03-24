@@ -7,9 +7,14 @@ import { Link, useLocation } from 'react-router-dom';
 import { toast } from '@/components/ui/sonner';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { useEffect } from 'react';
+import { getSessionUser } from '@/lib/storage';
+import { getUserType } from '@/lib/auth';
 
 export default function Index() {
   const location = useLocation();
+  const currentUser = getSessionUser() || (localStorage.getItem('currentUser') ? JSON.parse(localStorage.getItem('currentUser') as string) : null);
+  const userType = currentUser?.type ?? getUserType();
+  const showCarrierCta = !userType;
 
   useEffect(() => {
     const state = location.state as any;
@@ -278,7 +283,7 @@ export default function Index() {
           </p>
 
           {/* CTA Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-8 max-w-4xl mx-auto">
+          <div className={`grid grid-cols-1 ${showCarrierCta ? 'md:grid-cols-2 max-w-4xl' : 'max-w-2xl'} gap-6 sm:gap-8 mx-auto`}>
             {/* Customer CTA */}
             <div className="group bg-white/10 backdrop-blur-lg rounded-3xl p-6 sm:p-8 border border-white/20 hover:bg-white/20 transition-all duration-300 transform hover:scale-105 hover:shadow-2xl">
               <div className="text-center">
@@ -297,21 +302,23 @@ export default function Index() {
             </div>
 
             {/* Carrier CTA */}
-            <div className="group bg-white/10 backdrop-blur-lg rounded-3xl p-6 sm:p-8 border border-white/20 hover:bg-white/20 transition-all duration-300 transform hover:scale-105 hover:shadow-2xl">
-              <div className="text-center">
-                <div className="w-16 h-16 sm:w-20 sm:h-20 mx-auto mb-4 sm:mb-6 bg-gradient-to-r from-sky-400 to-cyan-400 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform shadow-lg">
-                  <Truck className="h-8 w-8 sm:h-10 sm:w-10 text-white" />
+            {showCarrierCta && (
+              <div className="group bg-white/10 backdrop-blur-lg rounded-3xl p-6 sm:p-8 border border-white/20 hover:bg-white/20 transition-all duration-300 transform hover:scale-105 hover:shadow-2xl">
+                <div className="text-center">
+                  <div className="w-16 h-16 sm:w-20 sm:h-20 mx-auto mb-4 sm:mb-6 bg-gradient-to-r from-sky-400 to-cyan-400 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform shadow-lg">
+                    <Truck className="h-8 w-8 sm:h-10 sm:w-10 text-white" />
+                  </div>
+                  <h3 className="text-xl sm:text-2xl font-bold text-white mb-3 sm:mb-4">Nakliyeci</h3>
+                  <p className="text-blue-100 mb-4 sm:mb-6 text-sm sm:text-base">İş bulun, para kazanın, işletmenizi büyütün</p>
+                  <Link to="/nakliyeci-kayit" className="block">
+                    <Button className="w-full bg-gradient-to-r from-sky-500 to-cyan-500 hover:from-sky-600 hover:to-cyan-600 text-white font-semibold py-3 rounded-full transition-all duration-300 shadow-lg hover:shadow-xl">
+                      Nakliyeci Olarak Katıl
+                      <ArrowRight className="ml-2 h-4 w-4" />
+                    </Button>
+                  </Link>
                 </div>
-                <h3 className="text-xl sm:text-2xl font-bold text-white mb-3 sm:mb-4">Nakliyeci</h3>
-                <p className="text-blue-100 mb-4 sm:mb-6 text-sm sm:text-base">İş bulun, para kazanın, işletmenizi büyütün</p>
-                <Link to="/nakliyeci-kayit" className="block">
-                  <Button className="w-full bg-gradient-to-r from-sky-500 to-cyan-500 hover:from-sky-600 hover:to-cyan-600 text-white font-semibold py-3 rounded-full transition-all duration-300 shadow-lg hover:shadow-xl">
-                    Nakliyeci Olarak Katıl
-                    <ArrowRight className="ml-2 h-4 w-4" />
-                  </Button>
-                </Link>
               </div>
-            </div>
+            )}
           </div>
 
           {/* Bottom Stats */}

@@ -4,8 +4,8 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Truck, User, LogOut, Menu, X, ChevronDown, Home, Users, HelpCircle } from 'lucide-react';
 import { User as UserType } from '@/lib/types';
 import { getSessionUser, clearSessionUser } from '@/lib/storage';
+import { clearAuth, getUserType } from '@/lib/auth';
 import NotificationBell from './NotificationBell';
-import { getDashboardTitleForRole } from '@/lib/utils';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,12 +15,14 @@ import {
 
 export default function Navbar() {
   const [user, setUser] = useState<UserType | null>(null);
+  const [userRole, setUserRole] = useState<'customer' | 'carrier' | null>(null);
   const [companyName, setCompanyName] = useState<string>('');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
     const sessionUser = getSessionUser();
+    setUserRole(sessionUser?.type ?? getUserType());
     if (sessionUser) setUser(sessionUser);
     if (sessionUser && sessionUser.type === 'carrier') {
       try {
@@ -35,6 +37,7 @@ export default function Navbar() {
     const handleStorageChange = () => {
       const u = getSessionUser();
       setUser(u);
+      setUserRole(u?.type ?? getUserType());
       if (u && u.type === 'carrier') {
         try {
           const c = localStorage.getItem(`carrier_company_${u.id}`);
@@ -57,8 +60,10 @@ export default function Navbar() {
   }, []);
 
   const handleLogout = () => {
+    clearAuth();
     clearSessionUser();
     setUser(null);
+    setUserRole(null);
     navigate('/');
   };
 
@@ -107,66 +112,64 @@ export default function Navbar() {
 
           {/* Desktop Navigation - Hide on smaller screens */}
           <div className="hidden lg:flex items-center space-x-6">
+            <nav className="flex items-center space-x-1">
+              <Link to={user ? '/home' : '/'} className="flex items-center space-x-2 px-4 py-2 rounded-lg hover:bg-blue-50 transition-colors group">
+                <Home className="h-4 w-4 text-gray-600 group-hover:text-blue-600" />
+                <span className="text-sm font-medium text-gray-700 group-hover:text-blue-600">Ana Sayfa</span>
+              </Link>
+
+              <Link to="/nakliyeciler" className="flex items-center space-x-2 px-4 py-2 rounded-lg hover:bg-blue-50 transition-colors group">
+                <Users className="h-4 w-4 text-gray-600 group-hover:text-blue-600" />
+                <span className="text-sm font-medium text-gray-700 group-hover:text-blue-600">Nakliyeciler</span>
+              </Link>
+
+              {userRole === 'customer' && (
+                <Link to="/teklif-talebi" className="flex items-center space-x-2 px-4 py-2 rounded-lg hover:bg-green-50 transition-colors group">
+                  <Truck className="h-4 w-4 text-green-600 group-hover:text-green-700" />
+                  <span className="text-sm font-medium text-gray-700 group-hover:text-green-700">Teklif Talebi</span>
+                </Link>
+              )}
+
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className="flex items-center space-x-2 px-4 py-2 rounded-lg hover:bg-blue-50 transition-colors group">
+                    <HelpCircle className="h-4 w-4 text-gray-600 group-hover:text-blue-600" />
+                    <span className="text-sm font-medium text-gray-700 group-hover:text-blue-600">Nasıl Çalışır</span>
+                    <ChevronDown className="h-3 w-3 text-gray-500 group-hover:text-blue-600" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-64 p-2 bg-white/95 backdrop-blur-lg border border-gray-200 rounded-xl shadow-xl">
+                  <DropdownMenuItem asChild className="p-0">
+                    <Link to="/nasil-calisir-musteri" className="w-full cursor-pointer group">
+                      <div className="flex items-center p-3 rounded-lg hover:bg-blue-50 transition-all">
+                        <User className="h-4 w-4 text-blue-600 mr-3" />
+                        <div>
+                          <div className="font-medium text-gray-900">Müşteri İçin</div>
+                          <div className="text-xs text-gray-500">Nasıl taşıma talebi oluştururum?</div>
+                        </div>
+                      </div>
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild className="p-0">
+                    <Link to="/nasil-calisir-nakliyeci" className="w-full cursor-pointer group">
+                      <div className="flex items-center p-3 rounded-lg hover:bg-blue-50 transition-all">
+                        <Truck className="h-4 w-4 text-sky-600 mr-3" />
+                        <div>
+                          <div className="font-medium text-gray-900">Nakliyeci İçin</div>
+                          <div className="text-xs text-gray-500">Nasıl teklif veririm?</div>
+                        </div>
+                      </div>
+                    </Link>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </nav>
+
+            <div className="h-6 w-px bg-gray-200"></div>
+
             {user ? (
               <>
-                {/* Navigation Menu */}
-                <nav className="flex items-center space-x-1">
-                  <Link to={user ? '/home' : '/'} className="flex items-center space-x-2 px-4 py-2 rounded-lg hover:bg-blue-50 transition-colors group">
-                    <Home className="h-4 w-4 text-gray-600 group-hover:text-blue-600" />
-                    <span className="text-sm font-medium text-gray-700 group-hover:text-blue-600">Ana Sayfa</span>
-                  </Link>
-                  
-                  <Link to="/nakliyeciler" className="flex items-center space-x-2 px-4 py-2 rounded-lg hover:bg-blue-50 transition-colors group">
-                    <Users className="h-4 w-4 text-gray-600 group-hover:text-blue-600" />
-                    <span className="text-sm font-medium text-gray-700 group-hover:text-blue-600">Nakliyeciler</span>
-                  </Link>
-                  {user?.type === 'customer' && (
-                    <Link to="/teklif-talebi" className="flex items-center space-x-2 px-4 py-2 rounded-lg hover:bg-green-50 transition-colors group">
-                      <Truck className="h-4 w-4 text-green-600 group-hover:text-green-700" />
-                      <span className="text-sm font-medium text-gray-700 group-hover:text-green-700">Teklif Talebi</span>
-                    </Link>
-                  )}
-                  
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <button className="flex items-center space-x-2 px-4 py-2 rounded-lg hover:bg-blue-50 transition-colors group">
-                        <HelpCircle className="h-4 w-4 text-gray-600 group-hover:text-blue-600" />
-                        <span className="text-sm font-medium text-gray-700 group-hover:text-blue-600">Nasıl Çalışır</span>
-                        <ChevronDown className="h-3 w-3 text-gray-500 group-hover:text-blue-600" />
-                      </button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="start" className="w-64 p-2 bg-white/95 backdrop-blur-lg border border-gray-200 rounded-xl shadow-xl">
-                      <DropdownMenuItem asChild className="p-0">
-                        <Link to="/nasil-calisir-musteri" className="w-full cursor-pointer group">
-                          <div className="flex items-center p-3 rounded-lg hover:bg-blue-50 transition-all">
-                            <User className="h-4 w-4 text-blue-600 mr-3" />
-                            <div>
-                              <div className="font-medium text-gray-900">Müşteri İçin</div>
-                              <div className="text-xs text-gray-500">Nasıl taşıma talebi oluştururum?</div>
-                            </div>
-                          </div>
-                        </Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem asChild className="p-0">
-                        <Link to="/nasil-calisir-nakliyeci" className="w-full cursor-pointer group">
-                          <div className="flex items-center p-3 rounded-lg hover:bg-blue-50 transition-all">
-                            <Truck className="h-4 w-4 text-sky-600 mr-3" />
-                            <div>
-                              <div className="font-medium text-gray-900">Nakliyeci İçin</div>
-                              <div className="text-xs text-gray-500">Nasıl teklif veririm?</div>
-                            </div>
-                          </div>
-                        </Link>
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </nav>
-
-                <div className="h-6 w-px bg-gray-200"></div>
-
                 <NotificationBell />
-                
-                {/* Compact User Profile */}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <div className="flex items-center space-x-2 bg-gradient-to-r from-blue-50 to-sky-50 px-3 py-2 rounded-full cursor-pointer hover:from-blue-100 hover:to-sky-100 transition-all">
@@ -175,111 +178,39 @@ export default function Navbar() {
                       <ChevronDown className="h-3 w-3 text-gray-500" />
                     </div>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-64 p-2 bg-white/95 backdrop-blur-lg border border-gray-200 rounded-2xl shadow-2xl">
-                    <DropdownMenuItem asChild className="p-0">
-                      <Link to="/panel" className="w-full cursor-pointer group">
-                        <div className="flex items-center space-x-3 p-3 rounded-xl hover:bg-gradient-to-r hover:from-blue-50 hover:to-sky-50 transition-all duration-300">
-                          <div className="p-2 bg-gradient-to-r from-blue-100 to-sky-100 rounded-lg group-hover:from-blue-200 group-hover:to-sky-200">
-                            <Home className="h-4 w-4 text-blue-600" />
-                          </div>
-                          <div>
-                            <div className="font-medium text-gray-900">{getDashboardTitleForRole(user.type)}</div>
-                            <div className="text-sm text-gray-500">{user.type === 'customer' ? 'Taşıma talepleriniz' : 'İş fırsatlarınız'}</div>
-                          </div>
-                        </div>
-                      </Link>
+                  <DropdownMenuContent align="end" className="w-56 p-2 bg-white/95 backdrop-blur-lg border border-gray-200 rounded-2xl shadow-2xl">
+                    <DropdownMenuItem asChild>
+                      <Link to="/profilim" className="w-full">Profilim</Link>
                     </DropdownMenuItem>
-                    {user.type === 'customer' && (
+                    {userRole === 'customer' && (
+                      <DropdownMenuItem asChild>
+                        <Link to="/ilanlarim" className="w-full">İlanlarım</Link>
+                      </DropdownMenuItem>
+                    )}
+                    {userRole === 'carrier' && (
                       <>
-                        <DropdownMenuItem asChild className="p-0">
-                          <Link to="/gecmis" className="w-full cursor-pointer group">
-                            <div className="flex items-center space-x-3 p-3 rounded-xl hover:bg-blue-50 transition-all duration-300">
-                              <div className="p-2 bg-blue-100 rounded-lg">
-                                <Home className="h-4 w-4 text-blue-600" />
-                              </div>
-                              <div>
-                                <div className="font-medium text-gray-900">Talep Geçmişi</div>
-                                <div className="text-sm text-gray-500">Aktif / tamamlanan / iptal</div>
-                              </div>
-                            </div>
-                          </Link>
+                        <DropdownMenuItem asChild>
+                          <Link to="/tekliflerim" className="w-full">Tekliflerim</Link>
                         </DropdownMenuItem>
-                        <DropdownMenuItem asChild className="p-0">
-                          <Link to="/campaigns" className="w-full cursor-pointer group">
-                            <div className="flex items-center space-x-3 p-3 rounded-xl hover:bg-blue-50 transition-all duration-300">
-                              <div className="p-2 bg-blue-100 rounded-lg">
-                                <Home className="h-4 w-4 text-blue-600" />
-                              </div>
-                              <div>
-                                <div className="font-medium text-gray-900">Kampanyalar</div>
-                                <div className="text-sm text-gray-500">İndirim kodları ve promosyonlar</div>
-                              </div>
-                            </div>
-                          </Link>
+                        <DropdownMenuItem asChild>
+                          <Link to="/nakliyeci/kazanc" className="w-full">Kazançlarım</Link>
                         </DropdownMenuItem>
-                        <DropdownMenuItem asChild className="p-0">
-                          <Link to="/loyalty" className="w-full cursor-pointer group">
-                            <div className="flex items-center space-x-3 p-3 rounded-xl hover:bg-blue-50 transition-all duration-300">
-                              <div className="p-2 bg-blue-100 rounded-lg">
-                                <Home className="h-4 w-4 text-blue-600" />
-                              </div>
-                              <div>
-                                <div className="font-medium text-gray-900">Sadakat & Premium</div>
-                                <div className="text-sm text-gray-500">Avantajlar</div>
-                              </div>
-                            </div>
-                          </Link>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem asChild className="p-0">
-                          <Link to="/support" className="w-full cursor-pointer group">
-                            <div className="flex items-center space-x-3 p-3 rounded-xl hover:bg-blue-50 transition-all duration-300">
-                              <div className="p-2 bg-blue-100 rounded-lg">
-                                <Home className="h-4 w-4 text-blue-600" />
-                              </div>
-                              <div>
-                                <div className="font-medium text-gray-900">Destek Merkezi</div>
-                                <div className="text-sm text-gray-500">SSS ve canlı chat</div>
-                              </div>
-                            </div>
-                          </Link>
+                        <DropdownMenuItem asChild>
+                          <Link to="/takvim" className="w-full">Takvim</Link>
                         </DropdownMenuItem>
                       </>
                     )}
-                    <DropdownMenuItem asChild className="p-0">
-                      <Link to="/profilim" className="w-full cursor-pointer group">
-                        <div className="flex items-center space-x-3 p-3 rounded-xl hover:bg-gradient-to-r hover:from-blue-50 hover:to-sky-50 transition-all duration-300">
-                          <div className="p-2 bg-gradient-to-r from-blue-100 to-sky-100 rounded-lg group-hover:from-blue-200 group-hover:to-sky-200">
-                            <User className="h-4 w-4 text-blue-600" />
-                          </div>
-                          <div>
-                            <div className="font-medium text-gray-900">Profil Bilgileri</div>
-                            <div className="text-sm text-gray-500">Hesap ayarlarınızı yönetin</div>
-                          </div>
-                        </div>
-                      </Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem asChild className="p-0">
-                      <div className="w-full cursor-pointer group" onClick={handleLogout}>
-                        <div className="flex items-center space-x-3 p-3 rounded-xl hover:bg-gradient-to-r hover:from-red-50 hover:to-red-50 transition-all duration-300">
-                          <div className="p-2 bg-gradient-to-r from-red-100 to-red-100 rounded-lg group-hover:from-red-200 group-hover:to-red-200">
-                            <LogOut className="h-4 w-4 text-red-600" />
-                          </div>
-                          <div>
-                            <div className="font-medium text-gray-900">Çıkış Yap</div>
-                            <div className="text-sm text-gray-500">Hesabınızdan çıkış yapın</div>
-                          </div>
-                        </div>
-                      </div>
+                    <DropdownMenuItem onClick={handleLogout} className="text-red-600 focus:text-red-600">
+                      Çıkış
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
               </>
             ) : (
               <div className="flex items-center space-x-2">
-                {/* Compact Auth Buttons */}
                 <Link to="/giris">
-                  <Button 
-                    variant="ghost" 
+                  <Button
+                    variant="ghost"
                     size="sm"
                     className="text-gray-700 hover:text-blue-600 hover:bg-blue-50 transition-all duration-300 font-medium px-3 py-2 rounded-full text-sm"
                   >
@@ -289,7 +220,7 @@ export default function Navbar() {
 
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button 
+                    <Button
                       size="sm"
                       className="bg-gradient-to-r from-blue-600 to-sky-600 hover:from-blue-700 hover:to-sky-700 text-white font-medium px-3 py-2 rounded-full shadow-lg hover:shadow-xl transition-all duration-300 flex items-center space-x-1 text-sm"
                     >
@@ -382,26 +313,17 @@ export default function Navbar() {
                     <Users className="h-4 w-4" />
                     <span>Nakliyeciler</span>
                   </Link>
-                  
-                  <Link 
-                    to="/panel" 
+
+                  <Link
+                    to={userRole === 'carrier' ? '/nasil-calisir-nakliyeci' : '/nasil-calisir-musteri'}
                     className="flex items-center space-x-3 text-gray-700 hover:text-blue-600 transition-colors py-2 px-3 rounded-lg hover:bg-blue-50"
                     onClick={() => setIsMenuOpen(false)}
                   >
-                    <User className="h-4 w-4" />
-                    <span>{getDashboardTitleForRole(user.type)}</span>
+                    <HelpCircle className="h-4 w-4" />
+                    <span>Nasıl Çalışır</span>
                   </Link>
                   
-                  <Link 
-                    to="/hata-ayiklama" 
-                    className="flex items-center space-x-3 text-gray-700 hover:text-red-600 transition-colors py-2 px-3 rounded-lg hover:bg-red-50"
-                    onClick={() => setIsMenuOpen(false)}
-                  >
-                    <span className="text-xs">🐛</span>
-                    <span>Debug</span>
-                  </Link>
-                  
-                  {user.type === 'customer' ? (
+                  {userRole === 'customer' ? (
                     <>
                       <Link 
                         to="/teklif-talebi" 
@@ -412,23 +334,31 @@ export default function Navbar() {
                         <span>Teklif Talebi</span>
                       </Link>
                       <Link 
-                        to="/ilanlar" 
+                        to="/ilanlarim" 
                         className="flex items-center space-x-3 text-gray-700 hover:text-blue-600 transition-colors py-2 px-3 rounded-lg hover:bg-blue-50"
                         onClick={() => setIsMenuOpen(false)}
                       >
                         <Truck className="h-4 w-4" />
-                        <span>Taleplerim</span>
+                        <span>İlanlarım</span>
                       </Link>
                     </>
                   ) : (
                     <>
                       <Link 
-                        to="/ilanlar" 
+                        to="/tekliflerim" 
                         className="flex items-center space-x-3 text-gray-700 hover:text-orange-600 transition-colors py-2 px-3 rounded-lg hover:bg-orange-50"
                         onClick={() => setIsMenuOpen(false)}
                       >
                         <Truck className="h-4 w-4" />
-                        <span>Mevcut İşler</span>
+                        <span>Tekliflerim</span>
+                      </Link>
+                      <Link
+                        to="/nakliyeci/kazanc"
+                        className="flex items-center space-x-3 text-gray-700 hover:text-orange-600 transition-colors py-2 px-3 rounded-lg hover:bg-orange-50"
+                        onClick={() => setIsMenuOpen(false)}
+                      >
+                        <Truck className="h-4 w-4" />
+                        <span>Kazançlarım</span>
                       </Link>
                       <Link 
                         to="/takvim" 
@@ -440,15 +370,6 @@ export default function Navbar() {
                       </Link>
                     </>
                   )}
-                  
-                  <Link 
-                    to="/nakliyeciler" 
-                    className="flex items-center space-x-3 text-gray-700 hover:text-blue-600 transition-colors py-2 px-3 rounded-lg hover:bg-blue-50"
-                    onClick={() => setIsMenuOpen(false)}
-                  >
-                    <Truck className="h-4 w-4" />
-                    <span>Nakliyeciler</span>
-                  </Link>
 
                   <Link 
                     to="/profilim" 
@@ -456,7 +377,7 @@ export default function Navbar() {
                     onClick={() => setIsMenuOpen(false)}
                   >
                     <User className="h-4 w-4" />
-                    <span>Profile</span>
+                    <span>Profilim</span>
                   </Link>
                   
                   <div className="pt-3 border-t border-gray-200">
@@ -479,6 +400,31 @@ export default function Navbar() {
                 </>
               ) : (
                 <>
+                  <Link
+                    to="/"
+                    className="flex items-center space-x-3 text-gray-700 hover:text-blue-600 transition-colors py-2 px-3 rounded-lg hover:bg-blue-50"
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    <Home className="h-4 w-4" />
+                    <span>Ana Sayfa</span>
+                  </Link>
+                  <Link
+                    to="/nakliyeciler"
+                    className="flex items-center space-x-3 text-gray-700 hover:text-blue-600 transition-colors py-2 px-3 rounded-lg hover:bg-blue-50"
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    <Users className="h-4 w-4" />
+                    <span>Nakliyeciler</span>
+                  </Link>
+                  <Link
+                    to="/nasil-calisir-musteri"
+                    className="flex items-center space-x-3 text-gray-700 hover:text-blue-600 transition-colors py-2 px-3 rounded-lg hover:bg-blue-50"
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    <HelpCircle className="h-4 w-4" />
+                    <span>Nasıl Çalışır</span>
+                  </Link>
+
                   {/* Auth Section */}
                   <div className="space-y-3">
                     <Link to="/giris" onClick={() => setIsMenuOpen(false)}>

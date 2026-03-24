@@ -1,16 +1,24 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Truck, Mail, Phone, MapPin, Facebook, Twitter, Instagram, Linkedin, ArrowRight, ShieldCheck, IdCard, Rocket, Brain } from 'lucide-react';
 import { getSessionUser } from '@/lib/storage';
+import { getUserType } from '@/lib/auth';
 
 export default function Footer() {
   const navigate = useNavigate();
   const location = useLocation();
   const user = getSessionUser() || (localStorage.getItem('currentUser') ? JSON.parse(localStorage.getItem('currentUser') as string) : null);
+  const userType = user?.type ?? getUserType();
+  const showCarrierCta = !userType;
+  const isCarrier = userType === 'carrier';
 
   const handleCreateClick = (e: React.MouseEvent) => {
     e.preventDefault();
-    const u = getSessionUser() || (localStorage.getItem('currentUser') ? JSON.parse(localStorage.getItem('currentUser') as string) : null);
-    if (u) {
+    const currentType = (getSessionUser()?.type ?? getUserType());
+    if (currentType === 'carrier') {
+      navigate('/panel');
+      return;
+    }
+    if (currentType === 'customer') {
       navigate('/teklif-talebi');
       return;
     }
@@ -173,15 +181,17 @@ export default function Footer() {
               <li>
                 <a href="#" onClick={handleCreateClick} className="text-gray-300 hover:text-blue-400 flex items-center group transition-all duration-300">
                   <ArrowRight className="h-4 w-4 mr-2 transform group-hover:translate-x-1 transition-transform" />
-                  Taşıma Talebi Oluştur
+                  {isCarrier ? 'Panel' : 'Taşıma Talebi Oluştur'}
                 </a>
               </li>
-              <li>
-                <a href="#" onClick={handleCarrierInfoClick} className="text-gray-300 hover:text-blue-400 flex items-center group transition-all duration-300">
-                  <ArrowRight className="h-4 w-4 mr-2 transform group-hover:translate-x-1 transition-transform" />
-                  Nakliyeci Ol
-                </a>
-              </li>
+              {showCarrierCta && (
+                <li>
+                  <a href="#" onClick={handleCarrierInfoClick} className="text-gray-300 hover:text-blue-400 flex items-center group transition-all duration-300">
+                    <ArrowRight className="h-4 w-4 mr-2 transform group-hover:translate-x-1 transition-transform" />
+                    Nakliyeci Ol
+                  </a>
+                </li>
+              )}
               <li>
                 <Link to="/nakliyeciler" className="text-gray-300 hover:text-blue-400 flex items-center group transition-all duration-300">
                   <ArrowRight className="h-4 w-4 mr-2 transform group-hover:translate-x-1 transition-transform" />
