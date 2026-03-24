@@ -2,6 +2,7 @@ import { ShipmentRepository } from '../../infrastructure/repositories/ShipmentRe
 import { Shipment, ShipmentStatus } from '../../domain/entities/Shipment';
 import { CarrierRepository } from '../../infrastructure/repositories/CarrierRepository';
 import { CarrierStatsRepository } from '../../infrastructure/repositories/CarrierStatsRepository';
+import { ForbiddenError, NotFoundError, ValidationError } from '../../domain/errors/AppError';
 
 interface CreateShipmentPayload {
   origin: string;
@@ -47,7 +48,7 @@ export class ShipmentService {
 
   async createShipment(customerId: string, payload: CreateShipmentPayload): Promise<Shipment> {
     if (!payload.origin || !payload.destination || !payload.loadDetails || !payload.shipmentDate) {
-      throw new Error('origin, destination, loadDetails ve shipmentDate alanları zorunludur.');
+      throw new ValidationError('origin, destination, loadDetails ve shipmentDate alanları zorunludur.');
     }
 
     return await this.shipmentRepository.createShipmentRecord({
@@ -80,11 +81,11 @@ export class ShipmentService {
   async updateShipment(customerId: string, shipmentId: string, payload: UpdateShipmentPayload): Promise<Shipment> {
     const shipment = await this.shipmentRepository.findByIdAndCustomerId(shipmentId, customerId);
     if (!shipment) {
-      throw new Error('Taşıma talebi bulunamadı.');
+      throw new NotFoundError('Taşıma talebi bulunamadı.');
     }
 
     if (shipment.status !== ShipmentStatus.PENDING) {
-      throw new Error('Sadece bekleyen taşıma talepleri güncellenebilir.');
+      throw new ValidationError('Sadece bekleyen taşıma talepleri güncellenebilir.');
     }
 
     const updatedShipment = await this.shipmentRepository.update(shipmentId, {
@@ -104,7 +105,7 @@ export class ShipmentService {
     });
 
     if (!updatedShipment) {
-      throw new Error('Taşıma talebi güncellenemedi.');
+      throw new ValidationError('Taşıma talebi güncellenemedi.');
     }
 
     return updatedShipment;
@@ -113,11 +114,11 @@ export class ShipmentService {
   async cancelShipment(customerId: string, shipmentId: string): Promise<Shipment> {
     const shipment = await this.shipmentRepository.findByIdAndCustomerId(shipmentId, customerId);
     if (!shipment) {
-      throw new Error('Taşıma talebi bulunamadı.');
+      throw new NotFoundError('Taşıma talebi bulunamadı.');
     }
 
     if (shipment.status === ShipmentStatus.COMPLETED || shipment.status === ShipmentStatus.CANCELLED) {
-      throw new Error('Bu taşıma talebi iptal edilemez.');
+      throw new ValidationError('Bu taşıma talebi iptal edilemez.');
     }
 
     const cancelledShipment = await this.shipmentRepository.update(shipmentId, {
@@ -125,7 +126,7 @@ export class ShipmentService {
     });
 
     if (!cancelledShipment) {
-      throw new Error('Taşıma talebi iptal edilemedi.');
+      throw new ValidationError('Taşıma talebi iptal edilemedi.');
     }
 
     if (shipment.carrierId) {
@@ -139,15 +140,15 @@ export class ShipmentService {
   async startShipmentByCarrier(carrierId: string, shipmentId: string): Promise<Shipment> {
     const shipment = await this.shipmentRepository.findById(shipmentId);
     if (!shipment) {
-      throw new Error('Taşıma talebi bulunamadı.');
+      throw new NotFoundError('Taşıma talebi bulunamadı.');
     }
 
     if (shipment.carrierId !== carrierId) {
-      throw new Error('Bu taşıma talebini başlatma yetkiniz yok.');
+      throw new ForbiddenError('Bu taşıma talebini başlatma yetkiniz yok.');
     }
 
     if (shipment.status !== ShipmentStatus.MATCHED) {
-      throw new Error('Sadece eşleşen taşıma talepleri başlatılabilir.');
+      throw new ValidationError('Sadece eşleşen taşıma talepleri başlatılabilir.');
     }
 
     const transitioned = await this.shipmentRepository.transitionStatusIfCurrent(
@@ -157,14 +158,14 @@ export class ShipmentService {
     );
 
     if (!transitioned) {
-      throw new Error('Taşıma durumu değiştirilemedi. Lütfen tekrar deneyin.');
+      throw new ValidationError('Taşıma durumu değiştirilemedi. Lütfen tekrar deneyin.');
     }
 
     await this.carrierStatsRepository.incrementActiveJobs(carrierId, 1);
 
     const updatedShipment = await this.shipmentRepository.findById(shipmentId);
     if (!updatedShipment) {
-      throw new Error('Taşıma başlatıldı ancak kayıt getirilemedi.');
+      throw new NotFoundError('Taşıma başlatıldı ancak kayıt getirilemedi.');
     }
 
     return updatedShipment;
@@ -173,15 +174,15 @@ export class ShipmentService {
   async completeShipmentByCarrier(carrierId: string, shipmentId: string): Promise<Shipment> {
     const shipment = await this.shipmentRepository.findById(shipmentId);
     if (!shipment) {
-      throw new Error('Taşıma talebi bulunamadı.');
+      throw new NotFoundError('Taşıma talebi bulunamadı.');
     }
 
     if (shipment.carrierId !== carrierId) {
-      throw new Error('Bu taşıma talebini tamamlama yetkiniz yok.');
+      throw new ForbiddenError('Bu taşıma talebini tamamlama yetkiniz yok.');
     }
 
     if (shipment.status !== ShipmentStatus.IN_TRANSIT) {
-      throw new Error('Sadece yolda olan taşıma talepleri tamamlanabilir.');
+      throw new ValidationError('Sadece yolda olan taşıma talepleri tamamlanabilir.');
     }
 
     const transitioned = await this.shipmentRepository.transitionStatusIfCurrent(
@@ -191,7 +192,7 @@ export class ShipmentService {
     );
 
     if (!transitioned) {
-      throw new Error('Taşıma durumu değiştirilemedi. Lütfen tekrar deneyin.');
+      throw new ValidationError('Taşıma durumu değiştirilemedi. Lütfen tekrar deneyin.');
     }
 
     await this.carrierRepository.incrementCompletedShipments(carrierId);
@@ -201,7 +202,7 @@ export class ShipmentService {
 
     const updatedShipment = await this.shipmentRepository.findById(shipmentId);
     if (!updatedShipment) {
-      throw new Error('Taşıma tamamlandı ancak kayıt getirilemedi.');
+      throw new NotFoundError('Taşıma tamamlandı ancak kayıt getirilemedi.');
     }
 
     return updatedShipment;

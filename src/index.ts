@@ -10,6 +10,7 @@ import { config } from 'dotenv';
 
 import { initializeDatabase, closeDatabase } from './infrastructure/database/data-source';
 import routes from './presentation/routes';
+import { AppError } from './domain/errors/AppError';
 
 // .env dosyasını yükle
 config();
@@ -59,14 +60,22 @@ const findAvailablePort = async (preferredPort: number, attempts = 5): Promise<{
 
 // Middleware'ler
 app.use(helmet()); // Security headers
-// CORS configuration - very permissive for development
+
+const allowedOrigins = process.env.NODE_ENV === 'production'
+  ? (process.env.CORS_ORIGIN || '').split(',').map(o => o.trim()).filter(Boolean)
+  : ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175', 'http://localhost:5176'];
+
 app.use(cors({
-  origin: true, // Allow all origins in development
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    callback(new Error(`CORS: ${origin} izin verilmiyor.`));
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
-  preflightContinue: false,
-  optionsSuccessStatus: 200
 }));
 app.use(morgan('combined')); // HTTP request logger
 app.use(express.json({ limit: '10mb' }));
@@ -115,12 +124,19 @@ app.use('/api/v1', apiLimiter, routes);
 
 // Global error handler
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  console.error('Global Error Handler:', err);
-  
-  res.status(err.status || 500).json({
+  if (err instanceof AppError) {
+    return res.status(err.statusCode).json({
+      success: false,
+      message: err.message,
+      code: err.code
+    });
+  }
+
+  console.error('Unhandled error:', err);
+  res.status(500).json({
     success: false,
-    message: err.message || 'Sunucu hatası oluştu.',
-    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
+    message: 'Sunucu hatası oluştu.',
+    code: 'INTERNAL_ERROR'
   });
 });
 

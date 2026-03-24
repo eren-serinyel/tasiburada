@@ -9,9 +9,9 @@ import { Truck, User, Eye, EyeOff, ArrowRight, ShieldCheck, IdCard, Rocket, Brai
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 // import { mockCarriers, mockCustomers } from '@/lib/mockData';
 import { setSessionUser, getLastEmail, setLastEmail } from '@/lib/storage';
+import { APP_CONFIG } from '@/lib/config';
 
-// API Base URL - using Vite proxy
-const API_BASE_URL = '/api/v1';
+const API_BASE_URL = APP_CONFIG.apiBaseUrl;
 
 export default function Login() {
   const [searchParams] = useSearchParams();

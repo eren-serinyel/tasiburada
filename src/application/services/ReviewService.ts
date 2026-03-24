@@ -3,6 +3,7 @@ import { ShipmentStatus } from '../../domain/entities/Shipment';
 import { CarrierRepository } from '../../infrastructure/repositories/CarrierRepository';
 import { ReviewRepository } from '../../infrastructure/repositories/ReviewRepository';
 import { ShipmentRepository } from '../../infrastructure/repositories/ShipmentRepository';
+import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from '../../domain/errors/AppError';
 
 interface CreateReviewPayload {
   shipmentId: string;
@@ -38,7 +39,7 @@ export class ReviewService {
 
   private ensureValidRating(value: number): number {
     if (!Number.isInteger(value) || value < 1 || value > 5) {
-      throw new Error('rating 1-5 arasinda integer olmalidir.');
+      throw new ValidationError('rating 1-5 arasinda integer olmalidir.');
     }
 
     return value;
@@ -46,31 +47,31 @@ export class ReviewService {
 
   async createReview(customerId: string, payload: CreateReviewPayload): Promise<Review> {
     if (!payload.shipmentId) {
-      throw new Error('shipmentId zorunludur.');
+      throw new ValidationError('shipmentId zorunludur.');
     }
 
     const rating = this.ensureValidRating(Number(payload.rating));
 
     const shipment = await this.shipmentRepository.findById(payload.shipmentId);
     if (!shipment) {
-      throw new Error('Tasima talebi bulunamadi.');
+      throw new NotFoundError('Tasima talebi bulunamadi.');
     }
 
     if (shipment.customerId !== customerId) {
-      throw new Error('Bu tasimaya yorum yapma yetkiniz yok.');
+      throw new ForbiddenError('Bu tasimaya yorum yapma yetkiniz yok.');
     }
 
     if (shipment.status !== ShipmentStatus.COMPLETED) {
-      throw new Error('Sadece tamamlanan tasimalara yorum yapilabilir.');
+      throw new ValidationError('Sadece tamamlanan tasimalara yorum yapilabilir.');
     }
 
     if (!shipment.carrierId) {
-      throw new Error('Bu tasima icin atanan nakliyeci bulunamadi.');
+      throw new NotFoundError('Bu tasima icin atanan nakliyeci bulunamadi.');
     }
 
     const alreadyReviewed = await this.reviewRepository.existsByShipmentAndCustomer(payload.shipmentId, customerId);
     if (alreadyReviewed) {
-      throw new Error('Ayni tasimaya iki kez yorum yapamazsiniz.');
+      throw new ConflictError('Ayni tasimaya iki kez yorum yapamazsiniz.');
     }
 
     const review = await this.reviewRepository.create({
@@ -86,7 +87,7 @@ export class ReviewService {
 
     const saved = await this.reviewRepository.findById(review.id);
     if (!saved) {
-      throw new Error('Yorum kaydedildi ancak getirilemedi.');
+      throw new NotFoundError('Yorum kaydedildi ancak getirilemedi.');
     }
 
     return saved;

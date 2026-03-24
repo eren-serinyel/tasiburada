@@ -3,6 +3,7 @@ import { ShipmentStatus } from '../../domain/entities/Shipment';
 import { CarrierRepository } from '../../infrastructure/repositories/CarrierRepository';
 import { OfferRepository } from '../../infrastructure/repositories/OfferRepository';
 import { ShipmentRepository } from '../../infrastructure/repositories/ShipmentRepository';
+import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from '../../domain/errors/AppError';
 
 interface CreateOfferPayload {
   shipmentId: string;
@@ -36,21 +37,21 @@ export class OfferService {
 
   async createOffer(carrierId: string, payload: CreateOfferPayload): Promise<Offer> {
     if (!payload.shipmentId || typeof payload.price !== 'number') {
-      throw new Error('shipmentId ve price alanları zorunludur.');
+      throw new ValidationError('shipmentId ve price alanları zorunludur.');
     }
 
     const shipment = await this.shipmentRepository.findById(payload.shipmentId);
     if (!shipment) {
-      throw new Error('Taşıma talebi bulunamadı.');
+      throw new NotFoundError('Taşıma talebi bulunamadı.');
     }
 
     if (shipment.status !== ShipmentStatus.PENDING && shipment.status !== ShipmentStatus.OFFER_RECEIVED) {
-      throw new Error('Sadece teklif almaya açık taşıma taleplerine teklif verilebilir.');
+      throw new ValidationError('Sadece teklif almaya açık taşıma taleplerine teklif verilebilir.');
     }
 
     const duplicateOffer = await this.offerRepository.existsByShipmentAndCarrier(payload.shipmentId, carrierId);
     if (duplicateOffer) {
-      throw new Error('Bu taşıma talebi için zaten teklif verdiniz.');
+      throw new ConflictError('Bu taşıma talebi için zaten teklif verdiniz.');
     }
 
     const offer = await this.offerRepository.create({
@@ -70,7 +71,7 @@ export class OfferService {
 
     const createdOffer = await this.offerRepository.findByIdWithShipmentAndCarrier(offer.id);
     if (!createdOffer) {
-      throw new Error('Teklif oluşturuldu ancak getirilemedi.');
+      throw new NotFoundError('Teklif oluşturuldu ancak getirilemedi.');
     }
 
     return this.sanitizeOffer(createdOffer);
@@ -79,14 +80,14 @@ export class OfferService {
   async getOfferById(offerId: string, user: RequestUser): Promise<Offer> {
     const offer = await this.offerRepository.findByIdWithShipmentAndCarrier(offerId);
     if (!offer) {
-      throw new Error('Teklif bulunamadı.');
+      throw new NotFoundError('Teklif bulunamadı.');
     }
 
     const isCustomerOwner = user.type === 'customer' && user.customerId === offer.shipment?.customerId;
     const isCarrierOwner = user.type === 'carrier' && user.carrierId === offer.carrierId;
 
     if (!isCustomerOwner && !isCarrierOwner) {
-      throw new Error('Bu teklife erişim yetkiniz yok.');
+      throw new ForbiddenError('Bu teklife erişim yetkiniz yok.');
     }
 
     return this.sanitizeOffer(offer);
@@ -95,15 +96,15 @@ export class OfferService {
   async acceptOffer(customerId: string, offerId: string): Promise<Offer> {
     const offer = await this.offerRepository.findByIdWithShipmentAndCarrier(offerId);
     if (!offer) {
-      throw new Error('Teklif bulunamadı.');
+      throw new NotFoundError('Teklif bulunamadı.');
     }
 
     if (offer.shipment?.customerId !== customerId) {
-      throw new Error('Bu teklifi kabul etme yetkiniz yok.');
+      throw new ForbiddenError('Bu teklifi kabul etme yetkiniz yok.');
     }
 
     if (offer.status !== OfferStatus.PENDING) {
-      throw new Error('Sadece bekleyen teklifler kabul edilebilir.');
+      throw new ValidationError('Sadece bekleyen teklifler kabul edilebilir.');
     }
 
     await this.offerRepository.update(offer.id, { status: OfferStatus.ACCEPTED });
@@ -117,7 +118,7 @@ export class OfferService {
 
     const updatedOffer = await this.offerRepository.findByIdWithShipmentAndCarrier(offer.id);
     if (!updatedOffer) {
-      throw new Error('Teklif kabul edildi ancak getirilemedi.');
+      throw new NotFoundError('Teklif kabul edildi ancak getirilemedi.');
     }
 
     return this.sanitizeOffer(updatedOffer);
@@ -126,20 +127,20 @@ export class OfferService {
   async rejectOffer(customerId: string, offerId: string): Promise<Offer> {
     const offer = await this.offerRepository.findByIdWithShipmentAndCarrier(offerId);
     if (!offer) {
-      throw new Error('Teklif bulunamadı.');
+      throw new NotFoundError('Teklif bulunamadı.');
     }
 
     if (offer.shipment?.customerId !== customerId) {
-      throw new Error('Bu teklifi reddetme yetkiniz yok.');
+      throw new ForbiddenError('Bu teklifi reddetme yetkiniz yok.');
     }
 
     if (offer.status !== OfferStatus.PENDING) {
-      throw new Error('Sadece bekleyen teklifler reddedilebilir.');
+      throw new ValidationError('Sadece bekleyen teklifler reddedilebilir.');
     }
 
     const rejectedOffer = await this.offerRepository.update(offer.id, { status: OfferStatus.REJECTED });
     if (!rejectedOffer) {
-      throw new Error('Teklif reddedilemedi.');
+      throw new ValidationError('Teklif reddedilemedi.');
     }
 
     return this.sanitizeOffer(rejectedOffer);
