@@ -159,7 +159,7 @@ export class ShipmentService {
     const transitioned = await this.shipmentRepository.transitionStatusIfCurrent(
       shipmentId,
       ShipmentStatus.IN_TRANSIT,
-      ShipmentStatus.DELIVERED
+      ShipmentStatus.COMPLETED
     );
 
     if (!transitioned) {
@@ -179,31 +179,4 @@ export class ShipmentService {
     return updatedShipment;
   }
 
-  async startTransitByCustomer(customerId: string, shipmentId: string): Promise<Shipment> {
-    const shipment = await this.shipmentRepository.findByIdAndCustomerId(shipmentId, customerId);
-    if (!shipment) {
-      throw new Error('Taşıma talebi bulunamadı.');
-    }
-
-    if (shipment.status !== ShipmentStatus.MATCHED) {
-      throw new Error('Sadece eşleşen taşıma talepleri yola çıktı olarak onaylanabilir.');
-    }
-
-    const transitioned = await this.shipmentRepository.transitionStatusIfCurrent(
-      shipmentId,
-      ShipmentStatus.MATCHED,
-      ShipmentStatus.IN_TRANSIT
-    );
-
-    if (!transitioned) {
-      throw new Error('Taşıma durumu değiştirilemedi. Lütfen tekrar deneyin.');
-    }
-
-    const updatedShipment = await this.shipmentRepository.findById(shipmentId);
-    if (!updatedShipment) {
-      throw new Error('Taşıma güncellendi ancak kayıt getirilemedi.');
-    }
-
-    return updatedShipment;
-  }
 }

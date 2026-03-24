@@ -30,6 +30,9 @@ export class Offer {
     @Column({ type: "decimal", precision: 10, scale: 2 })
     price: number;
 
+    @Column({ type: 'text', nullable: true })
+    message?: string;
+
     @Column({
         type: "enum",
         enum: OfferStatus,

@@ -13,6 +13,5 @@ router.put('/:id', authenticateCustomer, shipmentController.update);
 router.put('/:id/cancel', authenticateCustomer, shipmentController.cancel);
 router.put('/:id/start', authenticateCarrier, shipmentController.start);
 router.put('/:id/complete', authenticateCarrier, shipmentController.complete);
-router.put('/:id/start-transit', authenticateCustomer, shipmentController.startTransit);
 
 export default router;

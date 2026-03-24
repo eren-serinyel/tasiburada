@@ -8,7 +8,6 @@ export enum ShipmentStatus {
     MATCHED = "matched",
     IN_TRANSIT = "in_transit",
     COMPLETED = "completed",
-    DELIVERED = "completed",
     CANCELLED = "cancelled"
 }
 
@@ -25,7 +24,7 @@ export class Shipment {
     customer: Customer;
 
     @Column({ type: 'char', length: 36, charset: 'utf8mb4', collation: 'utf8mb4_unicode_ci', nullable: true })
-    carrierId: string;
+    carrierId: string | null;
 
     @ManyToOne(() => Carrier, { nullable: true, onDelete: 'SET NULL' })
     @JoinColumn({ name: "carrierId" })

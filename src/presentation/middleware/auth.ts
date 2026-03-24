@@ -36,7 +36,23 @@ export const authenticateToken = (req: Request, res: Response, next: NextFunctio
       req.carrierId = decoded.carrierId;
     }
     next();
-  } catch (error) {
+  } catch (error: unknown) {
+    if (error instanceof jwt.TokenExpiredError) {
+      res.status(401).json({
+        success: false,
+        message: 'Oturumunuz sona erdi.'
+      });
+      return;
+    }
+
+    if (error instanceof jwt.JsonWebTokenError) {
+      res.status(403).json({
+        success: false,
+        message: 'Geçersiz token.'
+      });
+      return;
+    }
+
     res.status(403).json({
       success: false,
       message: 'Geçersiz token.'

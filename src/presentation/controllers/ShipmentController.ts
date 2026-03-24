@@ -222,36 +222,4 @@ export class ShipmentController {
     }
   };
 
-  startTransit = async (req: Request, res: Response): Promise<void> => {
-    try {
-      const customerId = req.user?.customerId;
-      if (!customerId) {
-        res.status(401).json({
-          success: false,
-          message: 'Yetkisiz erişim.'
-        });
-        return;
-      }
-
-      const { id } = req.params;
-      const updatedShipment = await this.shipmentService.startTransitByCustomer(customerId, id);
-      res.status(200).json({
-        success: true,
-        message: 'Taşımanın yola çıktığı onaylandı.',
-        data: updatedShipment
-      });
-    } catch (error: any) {
-      let statusCode = 400;
-      if (error.message?.includes('bulunamadı')) {
-        statusCode = 404;
-      } else if (error.message?.includes('yetkiniz yok')) {
-        statusCode = 403;
-      }
-
-      res.status(statusCode).json({
-        success: false,
-        message: error.message || 'Taşıma durumu güncellenirken hata oluştu.'
-      });
-    }
-  };
 }

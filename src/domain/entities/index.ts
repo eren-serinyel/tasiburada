@@ -14,6 +14,7 @@ export {
 } from './CarrierProfileStatus';
 export { CarrierActivity } from './CarrierActivity';
 export { CarrierSecuritySettings } from './CarrierSecuritySettings';
+export { CarrierNotificationPreference } from './CarrierNotificationPreference';
 export { ServiceType } from './ServiceType';
 export { ScopeOfWork } from './ScopeOfWork';
 export { CarrierScopeOfWork } from './CarrierScopeOfWork';

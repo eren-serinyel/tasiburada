@@ -1,6 +1,11 @@
 import 'reflect-metadata';
 import { AppDataSource, initializeDatabase, closeDatabase } from '../infrastructure/database/data-source';
 
+if (process.env.NODE_ENV === 'production') {
+  console.error('Seed production ortamında çalıştırılamaz!');
+  process.exit(1);
+}
+
 /**
  * Veritabanına temel (lookup) verileri yükler.
  * Migration'lar çalıştıktan sonra bir kez çalıştırılmalıdır.
