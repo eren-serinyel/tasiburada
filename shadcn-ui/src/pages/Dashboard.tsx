@@ -7,7 +7,6 @@ import { Truck, Package, Star, Clock, MapPin, User, Calendar, MessageCircle, Tre
 import { Link, useNavigate } from 'react-router-dom';
 import { User as UserType, Carrier, Shipment } from '@/lib/types';
 import { getCarrierProfileTasks } from '@/lib/utils';
-import { reviewsApi, type ReviewRecord } from '@/utils/mockDb';
 import { apiClient } from '@/lib/apiClient';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
@@ -29,6 +28,7 @@ type BackendShipment = {
   origin?: string;
   destination?: string;
   loadDetails?: string;
+  transportType?: string;
   weight?: number | string;
   price?: number | string;
   shipmentDate?: string;
@@ -47,7 +47,7 @@ export default function Dashboard() {
     completedJobs: 0,
     rating: 0
   });
-  const [myReviews, setMyReviews] = useState<ReviewRecord[]>([]);
+  const [myReviews, setMyReviews] = useState<Array<{ id: string; rating: number; comment: string; createdAt: string; customer?: { firstName: string; lastName: string } }>>([]);
   const [reportForId, setReportForId] = useState<string | null>(null);
   const [reportState, setReportState] = useState<{ reason: string; details: string }>({ reason: '', details: '' });
   const { toast } = useToast();
@@ -89,7 +89,7 @@ export default function Dashboard() {
         lat: 0,
         lng: 0
       },
-      loadType: 'ev-esyasi',
+      loadType: (item.transportType as Shipment['loadType']) || 'ev-esyasi',
       weight: Number(item.weight || 0),
       date: item.shipmentDate ? new Date(item.shipmentDate) : new Date(),
       description: item.loadDetails || '',
@@ -125,9 +125,10 @@ export default function Dashboard() {
             setOfferReceivedCount(0);
           }
         } else {
-          const [pendingResponse, statsResponse] = await Promise.all([
+          const [pendingResponse, statsResponse, reviewsResponse] = await Promise.all([
             apiClient(`${API_BASE_URL}/shipments/pending`),
-            apiClient(`${API_BASE_URL}/carriers/me/stats`)
+            apiClient(`${API_BASE_URL}/carriers/me/stats`),
+            apiClient(`${API_BASE_URL}/carriers/me/reviews`)
           ]);
 
           const pendingJson = await pendingResponse.json();
@@ -148,8 +149,10 @@ export default function Dashboard() {
             });
           }
 
-          const list = reviewsApi.getByCarrier(u.id).filter(r => (r.status ?? 'aktif') === 'aktif');
-          setMyReviews(list.sort((a,b) => (a.tarih < b.tarih ? 1 : -1)));
+          const reviewsJson = await reviewsResponse.json();
+          if (reviewsResponse.ok && reviewsJson?.success && Array.isArray(reviewsJson.data)) {
+            setMyReviews(reviewsJson.data.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+          }
         }
       } catch {
         setShipments([]);
@@ -392,19 +395,16 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             {myReviews.slice(0,3).map(y => {
-              const name = y.kullanici;
+              const name = y.customer ? `${y.customer.firstName} ${y.customer.lastName}` : 'Anonim';
               return (
                 <div key={y.id} className="border-b pb-3 mb-3 last:border-0">
                   <div className="flex justify-between">
                     <span className="font-medium text-gray-800">{name.split(' ')[0]} {name.split(' ')[1]?.[0]}***</span>
-                    <span className="text-xs text-gray-500">{new Date(y.tarih).toLocaleDateString('tr-TR')}</span>
+                    <span className="text-xs text-gray-500">{new Date(y.createdAt).toLocaleDateString('tr-TR')}</span>
                   </div>
-                  <p className="text-gray-700 mt-1">{y.yorum}</p>
+                  <p className="text-gray-700 mt-1">{y.comment}</p>
                   <div className="flex gap-2 text-xs text-gray-600 mt-1">
-                    <span>Dakiklik: {y.puanlar.dakiklik}/5</span>
-                    <span>İletişim: {y.puanlar.iletisim}/5</span>
-                    <span>Özen: {y.puanlar.ozen}/5</span>
-                    <span>Profesyonellik: {y.puanlar.profesyonellik}/5</span>
+                    <span>Puan: {y.rating}/5</span>
                   </div>
                 </div>
               );
@@ -513,8 +513,8 @@ export default function Dashboard() {
               <Button variant="outline" onClick={() => setReportForId(null)}>İptal</Button>
               <Button onClick={() => {
                 if (!reportState.reason) { toast({ title: 'Gerekçe seçin' }); return; }
-                reviewsApi.report(reportForId, { reason: reportState.reason, details: reportState.details });
-                setMyReviews(prev => prev.map(r => r.id === reportForId ? { ...r, status: 'askida' } : r));
+                // TODO: Backend endpoint for reporting reviews will be added in a future sprint
+                setMyReviews(prev => prev.filter(r => r.id !== reportForId));
                 setReportForId(null);
                 setReportState({ reason: '', details: '' });
                 toast({ title: 'Şikayet alındı', description: 'Yorum incelemeye alındı.' });

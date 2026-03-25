@@ -4,6 +4,17 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import ScrollToTop from '@/components/ScrollToTop';
 import ProtectedRoute from '@/components/ProtectedRoute';
+import AdminProtectedRoute from '@/components/AdminProtectedRoute';
+import AdminLogin from '@/pages/admin/AdminLogin';
+import AdminLayout from '@/pages/admin/AdminLayout';
+import AdminDashboard from '@/pages/admin/AdminDashboard';
+import AdminCarriers from '@/pages/admin/AdminCarriers';
+import AdminCarrierDetail from '@/pages/admin/AdminCarrierDetail';
+import AdminCustomers from '@/pages/admin/AdminCustomers';
+import AdminShipments from '@/pages/admin/AdminShipments';
+import AdminReviews from '@/pages/admin/AdminReviews';
+import AdminApprovalQueue from '@/pages/admin/AdminApprovalQueue';
+import AdminAuditLog from '@/pages/admin/AdminAuditLog';
 // Payment routes
 import Payment from './pages/Payment';
 import Payments from './pages/Payments';
@@ -55,9 +66,35 @@ const App = () => (
     <TooltipProvider>
       <Toaster />
       <BrowserRouter>
-        <Layout>
-          <ScrollToTop />
-          <Routes>
+        <ScrollToTop />
+        <Routes>
+          {/* ─── Admin Routes (no Layout) ─────────────────────────── */}
+          <Route path="/admin/giris" element={<AdminLogin />} />
+          <Route
+            path="/admin"
+            element={
+              <AdminProtectedRoute>
+                <AdminLayout />
+              </AdminProtectedRoute>
+            }
+          >
+            <Route index element={<Navigate to="/admin/panel" replace />} />
+            <Route path="panel" element={<AdminDashboard />} />
+            <Route path="nakliyeciler" element={<AdminCarriers />} />
+            <Route path="nakliyeciler/:carrierId" element={<AdminCarrierDetail />} />
+            <Route path="musteriler" element={<AdminCustomers />} />
+            <Route path="ilanlar" element={<AdminShipments />} />
+            <Route path="yorumlar" element={<AdminReviews />} />
+            <Route path="onay-kuyrugu" element={<AdminApprovalQueue />} />
+            <Route path="audit-log" element={<AdminAuditLog />} />
+          </Route>
+
+          {/* ─── Regular Routes (inside Layout) ──────────────────── */}
+          <Route
+            path="/*"
+            element={
+              <Layout>
+                <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/home" element={<RoleHome />} />
             {/* Auth */}
@@ -79,7 +116,11 @@ const App = () => (
             <Route path="/ilanlar" element={<ShipmentList />} />
             <Route path="/ilanlarim" element={<ShipmentList />} />
             <Route path="/ilan/:id" element={<ShipmentDetail />} />
-            <Route path="/gecmis" element={<History />} />
+            <Route path="/gecmis" element={
+              <ProtectedRoute requiredRole="customer">
+                <History />
+              </ProtectedRoute>
+            } />
             <Route path="/campaigns" element={<Campaigns />} />
             <Route path="/support" element={<Support />} />
             <Route path="/loyalty" element={<Loyalty />} />
@@ -109,9 +150,21 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
-            <Route path="/tekliflerim" element={<MyOffers />} />
-            <Route path="/odeme/:shipmentId" element={<Payment />} />
-            <Route path="/odemeler" element={<Payments />} />
+            <Route path="/tekliflerim" element={
+              <ProtectedRoute requiredRole="customer">
+                <MyOffers />
+              </ProtectedRoute>
+            } />
+            <Route path="/odeme/:shipmentId" element={
+              <ProtectedRoute requiredRole="customer">
+                <Payment />
+              </ProtectedRoute>
+            } />
+            <Route path="/odemeler" element={
+              <ProtectedRoute requiredRole="customer">
+                <Payments />
+              </ProtectedRoute>
+            } />
             <Route
               path="/nakliyeci/teklifler"
               element={
@@ -128,11 +181,19 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
-            <Route path="/bildirimler" element={<Notifications />} />
+            <Route path="/bildirimler" element={
+              <ProtectedRoute>
+                <Notifications />
+              </ProtectedRoute>
+            } />
             <Route path="/nakliyeciler" element={<CarrierList />} />
             <Route path="/nakliyeciler/tumu" element={<CarrierDirectory />} />
             <Route path="/nakliyeciler/:carrierId/:slug?" element={<CarrierDetailPage />} />
-            <Route path="/mesajlar" element={<Messages />} />
+            <Route path="/mesajlar" element={
+              <ProtectedRoute>
+                <Messages />
+              </ProtectedRoute>
+            } />
             <Route path="/nakliyeci/:carrierId" element={<CarrierProfile />} />
             <Route path="/nakliyeci/yorumlar" element={<CarrierReviews />} />
             <Route
@@ -143,7 +204,11 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
-            <Route path="/profilim" element={<Profile />} />
+            <Route path="/profilim" element={
+              <ProtectedRoute>
+                <Profile />
+              </ProtectedRoute>
+            } />
             {import.meta.env.DEV && (
               <Route path="/hata-ayiklama" element={<Debug />} />
             )}
@@ -176,8 +241,11 @@ const App = () => (
             <Route path="/cookies" element={<Navigate to="/cerez-politikasi" replace />} />
             <Route path="/help" element={<Navigate to="/yardim" replace />} />
             <Route path="*" element={<NotFound />} />
-          </Routes>
-        </Layout>
+                </Routes>
+              </Layout>
+            }
+          />
+        </Routes>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>

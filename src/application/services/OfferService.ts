@@ -13,7 +13,7 @@ interface CreateOfferPayload {
 interface RequestUser {
   customerId?: string;
   carrierId?: string;
-  type?: 'customer' | 'carrier';
+  type?: 'customer' | 'carrier' | 'admin';
 }
 
 export class OfferService {

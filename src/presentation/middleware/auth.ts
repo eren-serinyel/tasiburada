@@ -4,8 +4,10 @@ import * as jwt from 'jsonwebtoken';
 interface JwtPayload {
   customerId?: string;
   carrierId?: string;
+  adminId?: string;
   email: string;
-  type: 'customer' | 'carrier';
+  type: 'customer' | 'carrier' | 'admin';
+  role?: string;
 }
 
 declare global {
@@ -87,3 +89,31 @@ export const authenticateCarrier = (req: Request, res: Response, next: NextFunct
 };
 
 export const authCarrier = authenticateCarrier;
+
+export const authenticateAdmin = (req: Request, res: Response, next: NextFunction): void => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    res.status(401).json({ success: false, message: 'Admin token gereklidir.' });
+    return;
+  }
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as JwtPayload;
+
+    if (decoded.type !== 'admin') {
+      res.status(403).json({ success: false, message: 'Bu alana erişim yetkiniz yok.' });
+      return;
+    }
+
+    req.user = decoded;
+    next();
+  } catch (error: unknown) {
+    if (error instanceof jwt.TokenExpiredError) {
+      res.status(401).json({ success: false, message: 'Admin oturumunuz sona erdi.' });
+      return;
+    }
+    res.status(403).json({ success: false, message: 'Geçersiz admin token.' });
+  }
+};

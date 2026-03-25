@@ -20,6 +20,7 @@ type BackendShipment = {
   origin?: string;
   destination?: string;
   loadDetails?: string;
+  transportType?: string;
   weight?: number | string | null;
   shipmentDate?: string;
   createdAt?: string;
@@ -64,7 +65,7 @@ const toUiShipment = (shipment: BackendShipment): Shipment => {
       lat: 0,
       lng: 0
     },
-    loadType: 'ev-esyasi',
+    loadType: (shipment.transportType as Shipment['loadType']) || 'ev-esyasi',
     weight: Number(shipment.weight || 0),
     date: shipment.shipmentDate ? new Date(shipment.shipmentDate) : new Date(),
     requestedDate: shipment.shipmentDate ? new Date(shipment.shipmentDate) : new Date(),
@@ -405,7 +406,7 @@ export default function ShipmentList() {
                               Profilini tamamla
                             </Button>
                           ) : (
-                            <Button size="sm" variant="outline" disabled>
+                            <Button size="sm" variant="outline" onClick={() => navigate(`/ilan/${shipment.id}`)}>
                               <Send className="h-4 w-4 mr-2" />
                               Teklif Ver
                             </Button>
