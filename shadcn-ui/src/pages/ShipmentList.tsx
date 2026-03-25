@@ -406,7 +406,7 @@ export default function ShipmentList() {
                               Profilini tamamla
                             </Button>
                           ) : (
-                            <Button size="sm" variant="outline" onClick={() => navigate(`/ilan/${shipment.id}`)}>
+                            <Button size="sm" variant="outline" onClick={() => navigate(`/nakliyeci/yanit/${shipment.id}`)}>
                               <Send className="h-4 w-4 mr-2" />
                               Teklif Ver
                             </Button>

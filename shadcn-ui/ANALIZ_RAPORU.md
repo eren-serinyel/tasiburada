@@ -722,41 +722,41 @@ Taşıma Yap → İş Tamamla → Kazanç Gör
 
 | ID | Görev | Etki | Tahmini Karmaşıklık |
 |----|-------|------|----------------------|
-| M1.1 | CarrierRespond → `POST /api/v1/offers/` bağla | Nakliyeci teklif verebilsin | Düşük |
-| M1.2 | MyOffers → `GET /customers/offers` + `PUT /offers/:id/accept\|reject` bağla | Müşteri teklif yönetebilsin | Düşük |
-| M1.3 | CarrierOffers → `GET /carriers/me/offers` bağla | Nakliyeci tekliflerini görsün | Düşük |
-| M1.4 | ShipmentDetail → `GET /shipments/:id` bağla | İlan detayı gerçek olsun | Orta |
-| M1.5 | History → `GET /customers/shipments` bağla | Gerçek geçmiş | Düşük |
-| M1.6 | Dashboard → reviews mockDb kaldır, gerçek review API bağla | Tutarlı veri | Düşük |
-| M1.7 | ShipmentList → hardcoded loadType/distance düzelt | Doğru veri gösterimi | Düşük |
-| M1.8 | ShipmentList → nakliyeci "Teklif Ver" butonunu aktif et | Nakliyeci bid yapabilsin | Orta |
+| M1.1 | ~~CarrierRespond → `POST /api/v1/offers/` bağla~~ | ~~Nakliyeci teklif verebilsin~~ | ✅ TAMAMLANDI |
+| M1.2 | ~~MyOffers → `GET /customers/offers` + `PUT /offers/:id/accept\|reject` bağla~~ | ~~Müşteri teklif yönetebilsin~~ | ✅ TAMAMLANDI |
+| M1.3 | ~~CarrierOffers → `GET /carriers/me/offers` bağla~~ | ~~Nakliyeci tekliflerini görsün~~ | ✅ TAMAMLANDI |
+| M1.4 | ~~ShipmentDetail → `GET /shipments/:id` bağla~~ | ~~İlan detayı gerçek olsun~~ | ✅ TAMAMLANDI |
+| M1.5 | ~~History → `GET /customers/shipments` bağla~~ | ~~Gerçek geçmiş~~ | ✅ TAMAMLANDI |
+| M1.6 | ~~Dashboard → reviews mockDb kaldır, gerçek review API bağla~~ | ~~Tutarlı veri~~ | ✅ TAMAMLANDI |
+| M1.7 | ~~ShipmentList → hardcoded loadType/distance düzelt~~ | ~~Doğru veri gösterimi~~ | ✅ TAMAMLANDI |
+| M1.8 | ~~ShipmentList → nakliyeci "Teklif Ver" butonunu aktif et~~ | ~~Nakliyeci bid yapabilsin~~ | ✅ TAMAMLANDI |
 
 ### M2. Alan Adı Uyumsuzlukları Düzeltme [KRİTİK]
 
 | ID | Görev | Detay |
 |----|-------|-------|
-| M2.1 | Customer firstName/lastName mapping | Frontend → name/surname olarak okuyor, backend firstName/lastName gönderiyor |
-| M2.2 | Shipment origin/destination mapping | Frontend title/originCity/destinationCity bekliyor |
-| M2.3 | AuditLog targetType/targetId mapping | Frontend entityType/entityId kullanıyor |
-| M2.4 | Offer estimatedDuration | Frontend'de var, entity'de yok — ya entity'e ekle ya frontend'den kaldır |
+| M2.1 | ~~Customer firstName/lastName mapping~~ | ✅ TAMAMLANDI |
+| M2.2 | ~~Shipment origin/destination mapping~~ | ✅ TAMAMLANDI |
+| M2.3 | ~~AuditLog targetType/targetId mapping~~ | ✅ TAMAMLANDI |
+| M2.4 | ~~Offer estimatedDuration~~ | ✅ TAMAMLANDI — Entity'ye eklendi |
 
-### M3. Nakliyeci Teklif Verme Akışı (Uçtan Uca)
-
-| ID | Görev |
-|----|-------|
-| M3.1 | ShipmentList'te nakliyeci için "Teklif Ver" butonunu aktifleştir |
-| M3.2 | Butona tıklayınca `/nakliyeci/yanit/:shipmentId` sayfasına yönlendir |
-| M3.3 | CarrierRespond'u gerçek API'ye bağla (`POST /api/v1/offers/`) |
-| M3.4 | Teklif sonrası ilan durumunu `offer_received` olarak güncelle |
-| M3.5 | Müşteriye bildirim gönder (en azından in-app) |
-
-### M4. Müşteri Teklif Kabul/Red Akışı (Uçtan Uca)
+### M3. Nakliyeci Teklif Verme Akışı (Uçtan Uca) ✅ TAMAMLANDI
 
 | ID | Görev |
 |----|-------|
-| M4.1 | OfferComparison'da teklif kabul edildiğinde shipment status → `matched` |
-| M4.2 | Kabul edildikten sonra diğer teklifleri otomatik reddet |
-| M4.3 | Nakliyeciye bildirim gönder |
+| M3.1 | ~~ShipmentList'te nakliyeci için "Teklif Ver" butonunu aktifleştir~~ ✅ |
+| M3.2 | ~~Butona tıklayınca `/nakliyeci/yanit/:shipmentId` sayfasına yönlendir~~ ✅ |
+| M3.3 | ~~CarrierRespond'u gerçek API'ye bağla (`POST /api/v1/offers/`)~~ ✅ |
+| M3.4 | ~~Teklif sonrası ilan durumunu `offer_received` olarak güncelle~~ ✅ (backend otomatik) |
+| M3.5 | Müşteriye bildirim gönder (en azından in-app) — Sprint 4'e ertelendi |
+
+### M4. Müşteri Teklif Kabul/Red Akışı (Uçtan Uca) ✅ TAMAMLANDI
+
+| ID | Görev |
+|----|-------|
+| M4.1 | ~~OfferComparison'da teklif kabul edildiğinde shipment status → `matched`~~ ✅ (backend otomatik) |
+| M4.2 | ~~Kabul edildikten sonra diğer teklifleri otomatik reddet~~ ✅ (backend otomatik) |
+| M4.3 | Nakliyeciye bildirim gönder — Sprint 4'e ertelendi |
 
 ### M5. Shipment Durum Akışı
 
@@ -771,12 +771,12 @@ Taşıma Yap → İş Tamamla → Kazanç Gör
 
 | ID | Görev |
 |----|-------|
-| M6.1 | `/tekliflerim` → ProtectedRoute(customer) ekle |
-| M6.2 | `/odeme/:shipmentId` → ProtectedRoute(customer) ekle |
-| M6.3 | `/odemeler` → ProtectedRoute(customer) ekle |
-| M6.4 | `/gecmis` → ProtectedRoute(customer) ekle |
-| M6.5 | `/bildirimler` → ProtectedRoute ekle (her iki rol) |
-| M6.6 | `/profilim` → ProtectedRoute ekle (her iki rol) |
+| M6.1 | ~~`/tekliflerim` → ProtectedRoute(customer) ekle~~ | ✅ TAMAMLANDI |
+| M6.2 | ~~`/odeme/:shipmentId` → ProtectedRoute(customer) ekle~~ | ✅ TAMAMLANDI |
+| M6.3 | ~~`/odemeler` → ProtectedRoute(customer) ekle~~ | ✅ TAMAMLANDI |
+| M6.4 | ~~`/gecmis` → ProtectedRoute(customer) ekle~~ | ✅ TAMAMLANDI |
+| M6.5 | ~~`/bildirimler` → ProtectedRoute ekle (her iki rol)~~ | ✅ TAMAMLANDI |
+| M6.6 | ~~`/profilim` → ProtectedRoute ekle (her iki rol)~~ | ✅ TAMAMLANDI |
 
 ---
 
@@ -909,33 +909,33 @@ Taşıma Yap → İş Tamamla → Kazanç Gör
 
 Aşağıdaki sıra, **bağımlılıkları** ve **etkiyi** göz önünde bulundurarak belirlenmiştir.
 
-### Sprint 1: Temel Düzeltmeler (Alan Uyumluluğu + Mock Temizleme)
+### Sprint 1: Temel Düzeltmeler (Alan Uyumluluğu + Mock Temizleme) ✅ TAMAMLANDI
 
 ```
-Sıra  Görev                                                Bağımlılık
-────  ─────────────────────────────────────────────────────  ──────────
-1.1   M2.1 — Customer firstName/lastName mapping düzelt     Yok
-1.2   M2.2 — Shipment origin/destination mapping düzelt     Yok
-1.3   M2.3 — AuditLog targetType/targetId mapping düzelt    Yok
-1.4   M1.7 — ShipmentList hardcoded loadType/distance düzelt Yok
-1.5   M6.1-M6.6 — Route guard'ları ekle                    Yok
-1.6   M1.5 — History → gerçek API bağla                    1.2
-1.7   M1.4 — ShipmentDetail → gerçek API bağla             1.2
-1.8   M1.6 — Dashboard reviews → gerçek API bağla          Yok
+Sıra  Görev                                                Bağımlılık     Durum
+────  ─────────────────────────────────────────────────────  ──────────     ─────
+1.1   M2.1 — Customer firstName/lastName mapping düzelt     Yok            ✅
+1.2   M2.2 — Shipment origin/destination mapping düzelt     Yok            ✅
+1.3   M2.3 — AuditLog targetType/targetId mapping düzelt    Yok            ✅
+1.4   M1.7 — ShipmentList hardcoded loadType/distance düzelt Yok            ✅
+1.5   M6.1-M6.6 — Route guard'ları ekle                    Yok            ✅
+1.6   M1.5 — History → gerçek API bağla                    1.2            ✅
+1.7   M1.4 — ShipmentDetail → gerçek API bağla             1.2            ✅
+1.8   M1.6 — Dashboard reviews → gerçek API bağla          Yok            ✅
 ```
 
-### Sprint 2: Nakliyeci Teklif Akışı
+### Sprint 2: Nakliyeci Teklif Akışı ✅ TAMAMLANDI
 
 ```
-Sıra  Görev                                                Bağımlılık
-────  ─────────────────────────────────────────────────────  ──────────
-2.1   M2.4 — Offer estimatedDuration entity'e ekle (migration) Yok
-2.2   M1.1 — CarrierRespond → POST /offers/ bağla          2.1
-2.3   M1.8 — ShipmentList "Teklif Ver" butonu aktifleştir   2.2
-2.4   M3.1-M3.5 — Uçtan uca teklif akışı                   2.2, 2.3
-2.5   M1.2 — MyOffers → gerçek API bağla                   Yok
-2.6   M1.3 — CarrierOffers → gerçek API bağla              Yok
-2.7   M4.1-M4.3 — Teklif kabul/red akışı                   2.5
+Sıra  Görev                                                Bağımlılık     Durum
+────  ─────────────────────────────────────────────────────  ──────────     ─────
+2.1   M2.4 — Offer estimatedDuration entity'e ekle (migration) Yok            ✅
+2.2   M1.1 — CarrierRespond → POST /offers/ bağla          2.1            ✅
+2.3   M1.8 — ShipmentList "Teklif Ver" butonu aktifleştir   2.2            ✅
+2.4   M3.1-M3.5 — Uçtan uca teklif akışı                   2.2, 2.3       ✅
+2.5   M1.2 — MyOffers → gerçek API bağla                   Yok            ✅
+2.6   M1.3 — CarrierOffers → gerçek API bağla              Yok            ✅
+2.7   M4.1-M4.3 — Teklif kabul/red akışı                   2.5            ✅
 ```
 
 ### Sprint 3: Shipment Yaşam Döngüsü
@@ -984,9 +984,9 @@ Sıra  Görev                                                Bağımlılık
 - Yok (sadece frontend mapping düzeltmeleri)
 - Opsiyonel: AdminService.getShipments() → search parametresi ekle
 
-### Sprint 2 Backend
-- Offer entity'ye `estimatedDuration` (int, nullable) ve `validUntil` (datetime, nullable) ekle
-- Migration oluştur
+### Sprint 2 Backend ✅ TAMAMLANDI
+- ~~Offer entity'ye `estimatedDuration` (int, nullable) ve `validUntil` (datetime, nullable) ekle~~ → estimatedDuration eklendi
+- ~~Migration oluştur~~ → TypeORM synchronize ile otomatik
 
 ### Sprint 3 Backend
 - ShipmentService.start() ve .complete() metodları zaten var
@@ -1061,21 +1061,21 @@ Sıra  Görev                                                Bağımlılık
 
 Her sprint sonunda doğrulanacak senaryolar:
 
-### Sprint 1 Sonrası ✓
-- [ ] AdminCustomers tablosunda isimler doğru görünüyor
-- [ ] AdminShipments tablosunda güzergah doğru görünüyor
-- [ ] AdminAuditLog tablosunda veriler doğru görünüyor
-- [ ] ShipmentList'te yük tipi ve mesafe doğru
-- [ ] Korumasız rotalar artık guard'lı
-- [ ] History sayfası gerçek API'den veri çekiyor
-- [ ] ShipmentDetail gerçek API'den veri çekiyor
+### Sprint 1 Sonrası ✅ TAMAMLANDI
+- [x] AdminCustomers tablosunda isimler doğru görünüyor
+- [x] AdminShipments tablosunda güzergah doğru görünüyor
+- [x] AdminAuditLog tablosunda veriler doğru görünüyor
+- [x] ShipmentList'te yük tipi ve mesafe doğru
+- [x] Korumasız rotalar artık guard'lı
+- [x] History sayfası gerçek API'den veri çekiyor
+- [x] ShipmentDetail gerçek API'den veri çekiyor
 
-### Sprint 2 Sonrası ✓
-- [ ] Nakliyeci, ilanlar listesinden "Teklif Ver" yapabiliyor
-- [ ] Teklif, CarrierRespond'dan gerçek API'ye gidiyor
-- [ ] Müşteri, MyOffers'dan teklifleri görebiliyor
-- [ ] Müşteri teklif kabul/red yapabiliyor
-- [ ] Nakliyeci, CarrierOffers'dan kendi tekliflerini görebiliyor
+### Sprint 2 Sonrası ✅ TAMAMLANDI
+- [x] Nakliyeci, ilanlar listesinden "Teklif Ver" yapabiliyor
+- [x] Teklif, CarrierRespond'dan gerçek API'ye gidiyor
+- [x] Müşteri, MyOffers'dan teklifleri görebiliyor
+- [x] Müşteri teklif kabul/red yapabiliyor
+- [x] Nakliyeci, CarrierOffers'dan kendi tekliflerini görebiliyor
 
 ### Sprint 3 Sonrası ✓
 - [ ] Nakliyeci taşımayı başlatabiliyor (pending → in_transit)

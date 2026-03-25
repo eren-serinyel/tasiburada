@@ -1,12 +1,13 @@
 import { useEffect, useState, useCallback } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { MapPin, Truck, CheckCircle2, CreditCard, Clock } from 'lucide-react';
+import { MapPin, Truck, CheckCircle2, CreditCard, Clock, Send } from 'lucide-react';
 import { apiClient } from '@/lib/apiClient';
 import { toast } from '@/components/ui/sonner';
+import { APP_CONFIG } from '@/lib/config';
 
 const API_BASE_URL = '/api/v1';
 
@@ -47,6 +48,8 @@ const statusColor = (st: string) => ({
 
 export default function ShipmentDetail() {
   const { id } = useParams();
+  const navigate = useNavigate();
+  const userType = typeof window !== 'undefined' ? localStorage.getItem(APP_CONFIG.userTypeKey) : null;
   const [shipment, setShipment] = useState<BackendShipment | null>(null);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
@@ -223,6 +226,11 @@ export default function ShipmentDetail() {
           <div className="flex flex-wrap gap-2">
             {shipment.status === 'in_transit' && (
               <Button disabled={updating} onClick={handleComplete}>Teslim Edildi</Button>
+            )}
+            {(shipment.status === 'pending' || shipment.status === 'offer_received') && userType === 'carrier' && (
+              <Button onClick={() => navigate(`/nakliyeci/yanit/${shipment.id}`)}>
+                <Send className="h-4 w-4 mr-2" />Teklif Ver
+              </Button>
             )}
             {(shipment.status === 'pending' || shipment.status === 'offer_received') && (
               <Button variant="destructive" disabled={updating} onClick={handleCancel}>İptal Et</Button>

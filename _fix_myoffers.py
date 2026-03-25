@@ -1,4 +1,6 @@
-import { useEffect, useState } from 'react';
+import pathlib
+
+content = """import { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -51,7 +53,7 @@ export default function CarrierOffers() {
         setOffers(json.data || []);
       }
     } catch {
-      toast.error('Teklifler yüklenirken hata oluştu.');
+      toast.error('Teklifler y\u00fcklenirken hata olu\u015ftu.');
     } finally {
       setLoading(false);
     }
@@ -61,32 +63,32 @@ export default function CarrierOffers() {
 
   const handleUpdate = async () => {
     if (!edit) return;
-    toast.info('Teklif güncelleme şu an desteklenmiyor.');
+    toast.info('Teklif g\u00fcncelleme \u015fu an desteklenmiyor.');
     setEdit(null);
   };
 
   const handleCancel = async () => {
     if (!confirm) return;
-    toast.info('Teklif iptal etme şu an desteklenmiyor.');
+    toast.info('Teklif iptal etme \u015fu an desteklenmiyor.');
     setConfirm(null);
   };
 
   if (loading) return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <Card><CardContent className="py-10 text-center text-gray-600">Yükleniyor...</CardContent></Card>
+      <Card><CardContent className="py-10 text-center text-gray-600">Y\u00fckleniyor...</CardContent></Card>
     </div>
   );
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="mb-6">
-        <h1 className="text-2xl font-semibold">Teklif Yönetimi</h1>
-        <p className="text-gray-600">Verdiğiniz teklifleri görüntüleyin.</p>
+        <h1 className="text-2xl font-semibold">Teklif Y\u00f6netimi</h1>
+        <p className="text-gray-600">Verdi\u011finiz teklifleri g\u00f6r\u00fcnt\u00fcleyin.</p>
       </div>
 
       {offers.length === 0 ? (
         <Card>
-          <CardContent className="py-10 text-center text-gray-600">Henüz teklif vermediniz.</CardContent>
+          <CardContent className="py-10 text-center text-gray-600">Hen\u00fcz teklif vermediniz.</CardContent>
         </Card>
       ) : (
         <div className="space-y-4">
@@ -97,29 +99,29 @@ export default function CarrierOffers() {
                 <CardHeader>
                   <CardTitle className="flex items-center justify-between">
                     <div className="flex items-center gap-2 text-sm text-gray-600">
-                      <MapPin className="h-4 w-4" /> {s ? `${s.origin} → ${s.destination}` : o.shipmentId}
+                      <MapPin className="h-4 w-4" /> {s ? `${s.origin} \u2192 ${s.destination}` : o.shipmentId}
                     </div>
                     <div className="flex items-center gap-2">
                       <Badge className={statusColor[o.status] || 'bg-gray-100 text-gray-800'}>{statusLabel[o.status] || o.status}</Badge>
-                      <div className="text-xl font-bold text-green-600">{o.price}₺</div>
+                      <div className="text-xl font-bold text-green-600">{o.price}\u20ba</div>
                     </div>
                   </CardTitle>
-                  <CardDescription>Oluşturma: {new Date(o.offeredAt).toLocaleString('tr-TR')}</CardDescription>
+                  <CardDescription>Olu\u015fturma: {new Date(o.offeredAt).toLocaleString('tr-TR')}</CardDescription>
                 </CardHeader>
                 <CardContent className="flex items-center justify-between">
                   <div className="text-sm space-y-0.5">
-                    {o.estimatedDuration && <div><strong>Tahmini Süre:</strong> {o.estimatedDuration} saat</div>}
+                    {o.estimatedDuration && <div><strong>Tahmini S\u00fcre:</strong> {o.estimatedDuration} saat</div>}
                     {o.message && <div className="text-gray-600">{o.message}</div>}
                   </div>
                   <div className="flex gap-2">
                     {o.status === 'pending' && (
                       <>
-                        <Button size="sm" variant="outline" onClick={() => setEdit({ id: o.id, price: String(o.price) })}><Pencil className="h-4 w-4 mr-1" /> Güncelle</Button>
-                        <Button size="sm" variant="outline" onClick={() => setConfirm({ id: o.id })}><Trash2 className="h-4 w-4 mr-1" /> İptal Et</Button>
+                        <Button size="sm" variant="outline" onClick={() => setEdit({ id: o.id, price: String(o.price) })}><Pencil className="h-4 w-4 mr-1" /> G\u00fcncelle</Button>
+                        <Button size="sm" variant="outline" onClick={() => setConfirm({ id: o.id })}><Trash2 className="h-4 w-4 mr-1" /> \u0130ptal Et</Button>
                       </>
                     )}
                     {o.status === 'accepted' && s && (
-                      <Button size="sm" onClick={() => navigate(`/ilan/${s.id}`)}><CheckCircle2 className="h-4 w-4 mr-1" /> İşi Aç</Button>
+                      <Button size="sm" onClick={() => navigate(`/ilan/${s.id}`)}><CheckCircle2 className="h-4 w-4 mr-1" /> \u0130\u015fi A\u00e7</Button>
                     )}
                   </div>
                 </CardContent>
@@ -133,13 +135,13 @@ export default function CarrierOffers() {
       <Dialog open={!!edit} onOpenChange={(open) => !open && setEdit(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Teklif Güncelle</DialogTitle>
+            <DialogTitle>Teklif G\u00fcncelle</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
             <Label>Yeni Fiyat</Label>
             <Input value={edit?.price || ''} onChange={(e) => setEdit(prev => prev ? { ...prev, price: e.target.value } : prev)} type="number" />
             <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setEdit(null)}><XCircle className="h-4 w-4 mr-1" /> Vazgeç</Button>
+              <Button variant="outline" onClick={() => setEdit(null)}><XCircle className="h-4 w-4 mr-1" /> Vazge\u00e7</Button>
               <Button onClick={handleUpdate}><CheckCircle2 className="h-4 w-4 mr-1" /> Kaydet</Button>
             </div>
           </div>
@@ -150,13 +152,13 @@ export default function CarrierOffers() {
       <Dialog open={!!confirm} onOpenChange={(open) => !open && setConfirm(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Teklifi İptal Et</DialogTitle>
+            <DialogTitle>Teklifi \u0130ptal Et</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
-            <p className="text-sm text-gray-600">Bu teklifi iptal etmek istediğinize emin misiniz?</p>
+            <p className="text-sm text-gray-600">Bu teklifi iptal etmek istedi\u011finize emin misiniz?</p>
             <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setConfirm(null)}><XCircle className="h-4 w-4 mr-1" /> Vazgeç</Button>
-              <Button onClick={handleCancel}><Trash2 className="h-4 w-4 mr-1" /> İptal Et</Button>
+              <Button variant="outline" onClick={() => setConfirm(null)}><XCircle className="h-4 w-4 mr-1" /> Vazge\u00e7</Button>
+              <Button onClick={handleCancel}><Trash2 className="h-4 w-4 mr-1" /> \u0130ptal Et</Button>
             </div>
           </div>
         </DialogContent>
@@ -164,3 +166,7 @@ export default function CarrierOffers() {
     </div>
   );
 }
+"""
+
+pathlib.Path(r'c:\\Users\\pc\\Desktop\\tasiburada\\shadcn-ui\\src\\pages\\CarrierOffers.tsx').write_text(content, encoding='utf-8')
+print('OK')

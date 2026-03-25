@@ -8,6 +8,8 @@ import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from '.
 interface CreateOfferPayload {
   shipmentId: string;
   price: number;
+  message?: string;
+  estimatedDuration?: number;
 }
 
 interface RequestUser {
@@ -58,6 +60,8 @@ export class OfferService {
       shipmentId: payload.shipmentId,
       carrierId,
       price: payload.price,
+      message: payload.message || undefined,
+      estimatedDuration: payload.estimatedDuration || undefined,
       status: OfferStatus.PENDING
     });
 

@@ -33,8 +33,10 @@ export class Offer {
     @Column({ type: 'text', nullable: true })
     message?: string;
 
+    @Column({ type: 'int', nullable: true })
+    estimatedDuration?: number;
+
     @Column({
-        type: "enum",
         enum: OfferStatus,
         default: OfferStatus.PENDING
     })
