@@ -75,4 +75,36 @@ export class ReviewController {
       });
     }
   };
+
+  createByCarrierId = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const customerId = req.user?.customerId;
+      if (!customerId) {
+        res.status(401).json({ success: false, message: 'Yetkisiz erisim.' });
+        return;
+      }
+      const { carrierId, rating, comment } = req.body;
+      if (!carrierId) {
+        res.status(400).json({ success: false, message: 'carrierId zorunludur.' });
+        return;
+      }
+      const review = await this.reviewService.createReviewByCarrierId(customerId, carrierId, rating, comment);
+      res.status(201).json({ success: true, message: 'Yorum olusturuldu.', data: review });
+    } catch (error: any) {
+      let statusCode = 400;
+      if (error.message?.includes('bulunamadi') || error.message?.includes('bulunamad')) statusCode = 404;
+      else if (error.message?.includes('yetkiniz yok')) statusCode = 403;
+      res.status(statusCode).json({ success: false, message: error.message || 'Yorum olusturulurken hata olustu.' });
+    }
+  };
+
+  getCarrierReviews = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { carrierId } = req.params;
+      const reviews = await this.reviewService.getCarrierReviews(carrierId);
+      res.status(200).json({ success: true, data: reviews });
+    } catch (error: any) {
+      res.status(500).json({ success: false, message: error.message || 'Yorumlar alinirken hata olustu.' });
+    }
+  };
 }

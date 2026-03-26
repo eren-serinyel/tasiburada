@@ -5,6 +5,17 @@ import { ReviewRepository } from '../../infrastructure/repositories/ReviewReposi
 import { ShipmentRepository } from '../../infrastructure/repositories/ShipmentRepository';
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from '../../domain/errors/AppError';
 
+export interface CarrierReviewResponse {
+  id: string;
+  carrierId: string;
+  customerId: string;
+  customerFirstName: string;
+  customerLastName: string;
+  rating: number;
+  comment: string;
+  createdAt: Date;
+}
+
 interface CreateReviewPayload {
   shipmentId: string;
   rating: number;
@@ -116,6 +127,55 @@ export class ReviewService {
       id: review.id,
       shipmentId: review.shipmentId,
       carrierId: review.carrierId,
+      rating: review.rating,
+      comment: review.comment,
+      createdAt: review.createdAt
+    }));
+  }
+
+  async createReviewByCarrierId(
+    customerId: string,
+    carrierId: string,
+    ratingInput: number,
+    comment: string
+  ): Promise<Review> {
+    const rating = this.ensureValidRating(Number(ratingInput));
+
+    const shipment = await this.shipmentRepository.findCompletedByCustomerAndCarrier(customerId, carrierId);
+    if (!shipment) {
+      throw new ValidationError('Bu nakliyeciyle tamamlanmış bir taşımanız bulunamadı. Yorum yapabilmek için bir taşımanın tamamlanmış olması gerekir.');
+    }
+
+    const alreadyReviewed = await this.reviewRepository.existsByShipmentAndCustomer(shipment.id, customerId);
+    if (alreadyReviewed) {
+      throw new ConflictError('Bu nakliyeciye zaten yorum yaptınız.');
+    }
+
+    const review = await this.reviewRepository.create({
+      shipmentId: shipment.id,
+      carrierId,
+      customerId,
+      rating,
+      comment: comment?.trim() || undefined
+    });
+
+    const averageRating = await this.reviewRepository.getCarrierAverageRating(carrierId);
+    await this.carrierRepository.updateRating(carrierId, Number(averageRating.toFixed(2)));
+
+    const saved = await this.reviewRepository.findById(review.id);
+    if (!saved) throw new NotFoundError('Yorum kaydedildi ancak getirilemedi.');
+
+    return saved;
+  }
+
+  async getCarrierReviews(carrierId: string): Promise<CarrierReviewResponse[]> {
+    const reviews = await this.reviewRepository.findByCarrierWithCustomer(carrierId);
+    return reviews.map(review => ({
+      id: review.id,
+      carrierId: review.carrierId,
+      customerId: review.customerId,
+      customerFirstName: (review.customer as any)?.firstName || '',
+      customerLastName: (review.customer as any)?.lastName || '',
       rating: review.rating,
       comment: review.comment,
       createdAt: review.createdAt

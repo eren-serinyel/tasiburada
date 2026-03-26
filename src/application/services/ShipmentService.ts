@@ -3,6 +3,7 @@ import { Shipment, ShipmentStatus } from '../../domain/entities/Shipment';
 import { CarrierRepository } from '../../infrastructure/repositories/CarrierRepository';
 import { CarrierStatsRepository } from '../../infrastructure/repositories/CarrierStatsRepository';
 import { ForbiddenError, NotFoundError, ValidationError } from '../../domain/errors/AppError';
+import { NotificationService } from './NotificationService';
 
 interface CreateShipmentPayload {
   origin: string;
@@ -40,6 +41,7 @@ export class ShipmentService {
   private shipmentRepository = new ShipmentRepository();
   private carrierRepository = new CarrierRepository();
   private carrierStatsRepository = new CarrierStatsRepository();
+  private notificationService = new NotificationService();
 
   async getPendingShipmentsForCarrier(_carrierId: string): Promise<Shipment[]> {
     // TODO: Filter by carrier activity/service areas.
@@ -132,6 +134,16 @@ export class ShipmentService {
     if (shipment.carrierId) {
       await this.carrierRepository.incrementCancelledShipments(shipment.carrierId);
       await this.carrierRepository.recalculateSuccessRate(shipment.carrierId);
+      try {
+        await this.notificationService.createNotification(
+          shipment.carrierId,
+          'carrier',
+          'SHIPMENT_CANCELLED',
+          'Taşıma İptal Edildi',
+          'Müşteri taşıma talebini iptal etti.',
+          shipmentId
+        );
+      } catch { /* bildirim hatası taşımayı etkilemesin */ }
     }
 
     return cancelledShipment;
@@ -167,6 +179,17 @@ export class ShipmentService {
     if (!updatedShipment) {
       throw new NotFoundError('Taşıma başlatıldı ancak kayıt getirilemedi.');
     }
+
+    try {
+      await this.notificationService.createNotification(
+        updatedShipment.customerId,
+        'customer',
+        'SHIPMENT_STARTED',
+        'Taşımanız Başladı',
+        'Nakliyeci taşımanızı başlattı. Teslimatı takip edebilirsiniz.',
+        shipmentId
+      );
+    } catch { /* bildirim hatası taşımayı etkilemesin */ }
 
     return updatedShipment;
   }
@@ -204,6 +227,17 @@ export class ShipmentService {
     if (!updatedShipment) {
       throw new NotFoundError('Taşıma tamamlandı ancak kayıt getirilemedi.');
     }
+
+    try {
+      await this.notificationService.createNotification(
+        updatedShipment.customerId,
+        'customer',
+        'SHIPMENT_COMPLETED',
+        'Taşımanız Tamamlandı',
+        'Eşyalarınız teslim edildi. Lütfen nakliyeciyi değerlendirin.',
+        shipmentId
+      );
+    } catch { /* bildirim hatası taşımayı etkilemesin */ }
 
     return updatedShipment;
   }

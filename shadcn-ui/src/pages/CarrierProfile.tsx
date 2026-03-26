@@ -7,37 +7,38 @@ import { Separator } from '@/components/ui/separator';
 import { Star, Truck, MapPin, Package, MessageCircle, Phone, Mail, Calendar, Award } from 'lucide-react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Carrier } from '@/lib/types';
-import { getCarrierExperienceYears, maskName, computeAverageFromCategories } from '@/lib/utils';
-import { reviewsApi, type ReviewRecord } from '@/utils/mockDb';
+import { getCarrierExperienceYears, maskName } from '@/lib/utils';
+import { apiClient } from '@/lib/apiClient';
 import { getSessionUser } from '@/lib/storage';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
 
+interface ApiReview {
+  id: string;
+  carrierId: string;
+  customerId: string;
+  customerFirstName: string;
+  customerLastName: string;
+  rating: number;
+  comment: string;
+  createdAt: string;
+}
+
 export default function CarrierProfile() {
+  const { carrierId } = useParams<{ carrierId: string }>();
+  const navigate = useNavigate();
   const [carrier, setCarrier] = useState<Carrier | null>(null);
-  const [reviews, setReviews] = useState<ReviewRecord[]>([]);
+  const [reviews, setReviews] = useState<ApiReview[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const { toast } = useToast();
   const sessionUser = useMemo(() => getSessionUser(), []);
   const isCustomer = sessionUser && sessionUser.type === 'customer';
-  const userFullName = sessionUser ? `${sessionUser.name} ${sessionUser.surname}` : '';
   const userId = sessionUser?.id;
-  // Inline edit controls (tek yorum düzenleme aynı anda)
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editState, setEditState] = useState<Record<string, { yorum: string; dakiklik: number; iletisim: number; ozen: number; profesyonellik: number }>>({});
 
   // Form state for review
-  const [form, setForm] = useState({
-    dakiklik: 5,
-    iletisim: 5,
-    ozen: 5,
-    profesyonellik: 5,
-    yorum: '',
-  });
-  const { carrierId } = useParams();
-  const navigate = useNavigate();
+  const [form, setForm] = useState({ rating: 5, comment: '' });
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -79,8 +80,11 @@ export default function CarrierProfile() {
           return;
         }
 
-        const stored: ReviewRecord[] = reviewsApi.getByCarrier(String(carrierId));
-        setReviews(stored.sort((a,b) => (a.tarih < b.tarih ? 1 : -1)));
+        const reviewRes = await fetch(`/api/v1/reviews/carrier/${carrierId}`);
+        const reviewJson = await reviewRes.json();
+        if (reviewRes.ok && reviewJson?.success && Array.isArray(reviewJson.data)) {
+          setReviews(reviewJson.data);
+        }
       } catch {
         navigate('/nakliyeciler');
       } finally {
@@ -91,26 +95,19 @@ export default function CarrierProfile() {
     fetchProfile();
   }, [carrierId, navigate]);
 
-  // Hooks must be declared before any early return
+  // Computed averages from API reviews
   const overallStats = useMemo(() => {
     const baseAvg = carrier?.rating ?? 0;
-    const active = reviews.filter(r => (r.status ?? 'aktif') === 'aktif');
-    if (active.length === 0) return { avg: baseAvg, count: 0 };
-    const avgs = active.map(r => computeAverageFromCategories({
-      dakiklik: r.puanlar.dakiklik,
-      iletisim: r.puanlar.iletisim,
-      ozen: r.puanlar.ozen,
-      profesyonellik: r.puanlar.profesyonellik,
-    } as any));
-    const avg = avgs.reduce((a,b)=>a+b,0) / avgs.length;
-    return { avg: Number(avg.toFixed(1)), count: active.length };
+    if (reviews.length === 0) return { avg: baseAvg, count: 0 };
+    const avg = reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length;
+    return { avg: Number(avg.toFixed(1)), count: reviews.length };
   }, [reviews, carrier?.rating]);
 
-  // hasUserReviewed: state tabanlı ve userId öncelikli
+  // hasUserReviewed: check if current customer already reviewed
   const hasUserReviewed = useMemo(() => {
-    if (!isCustomer || !carrier) return false;
-    return reviews.some(r => (userId ? r.userId === userId : r.kullanici === userFullName));
-  }, [carrier, isCustomer, userFullName, userId, reviews]);
+    if (!isCustomer || !userId) return false;
+    return reviews.some(r => r.customerId === userId);
+  }, [reviews, isCustomer, userId]);
 
   if (loading || !carrier) {
     return <div>Yükleniyor...</div>;
@@ -131,46 +128,37 @@ export default function CarrierProfile() {
     ));
   };
 
-  const getCategoryAverage = (category: keyof ReviewRecord['puanlar']) => {
-    if (reviews.length === 0) return 0;
-    const sum = reviews.reduce((acc, review) => acc + (review.puanlar?.[category] || 0), 0);
-    return sum / reviews.length;
-  };
-
-  const handleStarClick = (field: keyof typeof form, value: number) => {
-    setForm(prev => ({ ...prev, [field]: value }));
-  };
-
   const handleSubmitReview = async () => {
     if (!carrier || !isCustomer) return;
     if (hasUserReviewed) return;
-    if (!form.yorum.trim()) {
+    if (!form.comment.trim()) {
       toast({ title: 'Yorum gerekli', description: 'Lütfen kısa bir yorum yazın.' });
       return;
     }
     setSubmitting(true);
     try {
-      const today = new Date();
-      const rec: ReviewRecord = {
-        id: 'rv_' + Date.now().toString(36),
-        nakliyeciId: String(carrier.id),
-        kullanici: userFullName,
-        userId,
-        puanlar: {
-          dakiklik: form.dakiklik,
-          iletisim: form.iletisim,
-          ozen: form.ozen,
-          profesyonellik: form.profesyonellik,
-        },
-        yorum: form.yorum.trim(),
-        tarih: today.toISOString().slice(0,10),
-      };
-      reviewsApi.add(rec);
-      // Refresh list
-      const next = [rec, ...reviews];
-      setReviews(next.sort((a,b)=> (a.tarih < b.tarih ? 1 : -1)));
-      setForm({ dakiklik: 5, iletisim: 5, ozen: 5, profesyonellik: 5, yorum: '' });
-      toast({ title: 'Teşekkürler', description: 'Yorumun kaydedildi.' });
+      const res = await apiClient('/api/v1/reviews/by-carrier', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          carrierId: String(carrier.id),
+          rating: form.rating,
+          comment: form.comment.trim(),
+        }),
+      });
+      const json = await res.json();
+      if (res.ok && json?.success) {
+        toast({ title: 'Teşekkürler', description: 'Yorumunuz kaydedildi.' });
+        setForm({ rating: 5, comment: '' });
+        // Refresh reviews
+        const reviewRes = await fetch(`/api/v1/reviews/carrier/${carrierId}`);
+        const reviewJson = await reviewRes.json();
+        if (reviewRes.ok && Array.isArray(reviewJson.data)) setReviews(reviewJson.data);
+      } else {
+        toast({ title: 'Hata', description: json?.message || 'Yorum gönderilemedi.', variant: 'destructive' });
+      }
+    } catch {
+      toast({ title: 'Hata', description: 'Bağlantı hatası.', variant: 'destructive' });
     } finally {
       setSubmitting(false);
     }
@@ -344,236 +332,67 @@ export default function CarrierProfile() {
               {isCustomer && !hasUserReviewed && (
                 <div className="mb-6 p-4 border rounded-md bg-gray-50">
                   <div className="font-medium mb-3">Değerlendir</div>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-3">
-                    {([
-                      ['dakiklik', 'Dakiklik'] as const,
-                      ['iletisim', 'İletişim'] as const,
-                      ['ozen', 'Özen'] as const,
-                      ['profesyonellik', 'Profesyonellik'] as const,
-                    ]).map(([key,label]) => (
-                      <div key={key}>
-                        <Label className="text-xs text-gray-600">{label}</Label>
-                        <div className="flex items-center gap-1 mt-1">
-                          {Array.from({ length: 5 }, (_, i) => i + 1).map((v) => (
-                            <button
-                              key={v}
-                              type="button"
-                              onClick={() => handleStarClick(key as any, v)}
-                              className="focus:outline-none"
-                            >
-                              <Star className={`h-4 w-4 ${v <= (form as any)[key] ? 'fill-yellow-400 text-yellow-400' : 'text-gray-300'}`} />
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
+                  <div className="mb-3">
+                    <Label className="text-xs text-gray-600">Puan</Label>
+                    <div className="flex items-center gap-1 mt-1">
+                      {Array.from({ length: 5 }, (_, i) => i + 1).map((v) => (
+                        <button
+                          key={v}
+                          type="button"
+                          onClick={() => setForm(f => ({ ...f, rating: v }))}
+                          className="focus:outline-none"
+                        >
+                          <Star className={`h-6 w-6 ${v <= form.rating ? 'fill-yellow-400 text-yellow-400' : 'text-gray-300'}`} />
+                        </button>
+                      ))}
+                      <span className="ml-2 text-sm text-gray-600">{form.rating}/5</span>
+                    </div>
                   </div>
                   <div className="mb-3">
                     <Label className="text-xs text-gray-600">Yorum</Label>
                     <Textarea
                       placeholder="Deneyimini kısaca anlat..."
-                      value={form.yorum}
-                      onChange={(e) => setForm(f => ({ ...f, yorum: e.target.value }))}
+                      value={form.comment}
+                      onChange={(e) => setForm(f => ({ ...f, comment: e.target.value }))}
                       rows={3}
                     />
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Button onClick={handleSubmitReview} disabled={submitting}>
-                      {submitting ? 'Kaydediliyor...' : 'Gönder'}
-                    </Button>
-                    {/* toast kullanılmakta */}
-                  </div>
+                  <Button onClick={handleSubmitReview} disabled={submitting}>
+                    {submitting ? 'Kaydediliyor...' : 'Gönder'}
+                  </Button>
+                </div>
+              )}
+              {isCustomer && hasUserReviewed && (
+                <div className="mb-4 p-3 border rounded bg-green-50 text-green-700 text-sm">
+                  Bu nakliyeciye zaten yorum yaptınız.
                 </div>
               )}
 
               {reviews.length === 0 ? (
                 <p className="text-gray-500 text-center py-8">Henüz değerlendirme bulunmuyor.</p>
               ) : (
-                <div className="space-y-6">
-                  {reviews.slice(0, 8).map((review) => {
-                    const isOwn = isCustomer && ((userId ? review.userId === userId : review.kullanici === userFullName));
-                    const isEditing = editingId === review.id;
-                    const avg = computeAverageFromCategories({
-                      dakiklik: review.puanlar.dakiklik,
-                      iletisim: review.puanlar.iletisim,
-                      ozen: review.puanlar.ozen,
-                      profesyonellik: (review.puanlar as any).profesyonellik,
-                    });
-                    return (
-                      <div key={review.id} className="border-b pb-4 last:border-b-0">
-                        <div className="flex items-start justify-between mb-1">
-                          <div>
-                            <div className="font-medium text-sm">{maskName(review.kullanici)}</div>
-                            <div className="flex items-center space-x-1">
-                              {renderStars(avg)}
-                              <span className="text-xs text-gray-600 ml-1">{avg.toFixed(1)}/5</span>
-                            </div>
+                <div className="space-y-4">
+                  {reviews.slice(0, 8).map((review) => (
+                    <div key={review.id} className="border-b pb-4 last:border-b-0">
+                      <div className="flex items-start justify-between mb-1">
+                        <div>
+                          <div className="font-medium text-sm">
+                            {maskName(`${review.customerFirstName} ${review.customerLastName}`)}
                           </div>
-                          <div className="flex items-center gap-3">
-                            <span className="text-sm text-gray-500">
-                              {new Date(review.tarih).toLocaleDateString('tr-TR')}
-                            </span>
-                            {isOwn && !isEditing && (
-                              <>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => {
-                                    setEditingId(review.id);
-                                    setEditState(s => ({
-                                      ...s,
-                                      [review.id]: {
-                                        yorum: review.yorum,
-                                        dakiklik: review.puanlar.dakiklik,
-                                        iletisim: review.puanlar.iletisim,
-                                        ozen: review.puanlar.ozen,
-                                        profesyonellik: (review.puanlar as any).profesyonellik,
-                                      }
-                                    }));
-                                  }}
-                                >Düzenle</Button>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="text-red-600"
-                                  onClick={() => {
-                                    if (confirm('Yorumu silmek istediğine emin misin?')) {
-                                      reviewsApi.remove(review.id);
-                                      setReviews(prev => prev.filter(r => r.id !== review.id));
-                                      toast({ title: 'Silindi', description: 'Yorumun kaldırıldı.' });
-                                    }
-                                  }}
-                                >Sil</Button>
-                              </>
-                            )}
+                          <div className="flex items-center gap-1 mt-0.5">
+                            {renderStars(review.rating)}
+                            <span className="text-xs text-gray-600 ml-1">{review.rating}/5</span>
                           </div>
                         </div>
-                        {!isEditing ? (
-                          <p className="text-gray-700 mb-3">"{review.yorum}"</p>
-                        ) : (
-                          <div className="mb-3 p-3 border rounded">
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-3">
-                              {([
-                                ['dakiklik', 'Dakiklik'] as const,
-                                ['iletisim', 'İletişim'] as const,
-                                ['ozen', 'Özen'] as const,
-                                ['profesyonellik', 'Profesyonellik'] as const,
-                              ]).map(([key,label]) => (
-                                <div key={key}>
-                                  <Label className="text-xs text-gray-600">{label}</Label>
-                                  <div className="flex items-center gap-1 mt-1">
-                                    {Array.from({ length: 5 }, (_, i) => i + 1).map((v) => (
-                                      <button
-                                        key={v}
-                                        type="button"
-                                        onClick={() => setEditState(s => {
-                                          const cur = s[review.id] || {
-                                            yorum: review.yorum,
-                                            dakiklik: review.puanlar.dakiklik,
-                                            iletisim: review.puanlar.iletisim,
-                                            ozen: review.puanlar.ozen,
-                                            profesyonellik: (review.puanlar as any).profesyonellik,
-                                          };
-                                          return { ...s, [review.id]: { ...cur, [key]: v } };
-                                        })}
-                                        className="focus:outline-none"
-                                      >
-                                        <Star className={`h-4 w-4 ${v <= ((editState[review.id] as any)?.[key] ?? 0) ? 'fill-yellow-400 text-yellow-400' : 'text-gray-300'}`} />
-                                      </button>
-                                    ))}
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                            <Textarea
-                              value={editState[review.id]?.yorum ?? review.yorum}
-                              onChange={(e) => setEditState(s => {
-                                const cur = s[review.id] || {
-                                  yorum: review.yorum,
-                                  dakiklik: review.puanlar.dakiklik,
-                                  iletisim: review.puanlar.iletisim,
-                                  ozen: review.puanlar.ozen,
-                                  profesyonellik: (review.puanlar as any).profesyonellik,
-                                };
-                                return { ...s, [review.id]: { ...cur, yorum: e.target.value } };
-                              })}
-                              rows={3}
-                            />
-                            <div className="flex gap-2 mt-2">
-                              <Button
-                                size="sm"
-                                onClick={() => {
-                                  const payload = editState[review.id] || { yorum: review.yorum, dakiklik: review.puanlar.dakiklik, iletisim: review.puanlar.iletisim, ozen: review.puanlar.ozen, profesyonellik: (review.puanlar as any).profesyonellik };
-                                  const updated = reviewsApi.update(review.id, {
-                                    yorum: payload.yorum,
-                                    puanlar: {
-                                      dakiklik: payload.dakiklik,
-                                      iletisim: payload.iletisim,
-                                      ozen: payload.ozen,
-                                      profesyonellik: payload.profesyonellik,
-                                    },
-                                  });
-                                  if (updated) {
-                                    setReviews(prev => prev.map(r => r.id === review.id ? { ...r, ...updated } : r));
-                                    setEditingId(null);
-                                    toast({ title: 'Güncellendi', description: 'Yorumun güncellendi.' });
-                                  }
-                                }}
-                              >Kaydet</Button>
-                              <Button variant="outline" size="sm" onClick={() => setEditingId(null)}>İptal</Button>
-                            </div>
-                          </div>
-                        )}
-                        {(review.status ?? 'aktif') === 'askida' && (
-                          <div className="text-xs text-red-600 mb-2">⛔ Bu yorum inceleniyor.</div>
-                        )}
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
-                          <div className="text-center">
-                            <div className="font-medium">Dakiklik</div>
-                            <div className="text-gray-600">{review.puanlar.dakiklik}/5</div>
-                          </div>
-                          <div className="text-center">
-                            <div className="font-medium">İletişim</div>
-                            <div className="text-gray-600">{review.puanlar.iletisim}/5</div>
-                          </div>
-                          <div className="text-center">
-                            <div className="font-medium">Özen</div>
-                            <div className="text-gray-600">{review.puanlar.ozen}/5</div>
-                          </div>
-                          <div className="text-center">
-                            <div className="font-medium">Profesyonellik</div>
-                            <div className="text-gray-600">{(review.puanlar as any).profesyonellik}/5</div>
-                          </div>
-                        </div>
-                        {/* Helpful (Faydalı) oylaması */}
-                        <div className="flex items-center gap-3 mt-2">
-                          {!isOwn && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                const voteKey = `review_helpful_${review.id}_${userId || userFullName}`;
-                                if (localStorage.getItem(voteKey)) {
-                                  toast({ title: 'Zaten oy verdin', description: 'Bu yorumu daha önce faydalı buldun.' });
-                                  return;
-                                }
-                                const nextVal = (review.helpful || 0) + 1;
-                                const updated = reviewsApi.update(review.id, { helpful: nextVal });
-                                if (updated) {
-                                  setReviews(prev => prev.map(r => r.id === review.id ? { ...r, helpful: nextVal } : r));
-                                  localStorage.setItem(voteKey, '1');
-                                  toast({ title: 'Teşekkürler', description: 'Geri bildirimin alındı.' });
-                                }
-                              }}
-                            >Faydalı</Button>
-                          )}
-                          {typeof review.helpful === 'number' && review.helpful > 0 && (
-                            <span className="text-xs text-gray-500">{review.helpful} kişi bu yorumu faydalı buldu</span>
-                          )}
-                        </div>
+                        <span className="text-sm text-gray-500">
+                          {new Date(review.createdAt).toLocaleDateString('tr-TR')}
+                        </span>
                       </div>
-                    );
-                  })}
+                      {review.comment && (
+                        <p className="text-gray-700 text-sm mt-2">"{review.comment}"</p>
+                      )}
+                    </div>
+                  ))}
                 </div>
               )}
             </CardContent>
@@ -601,26 +420,7 @@ export default function CarrierProfile() {
                 
                 <Separator />
                 
-                {reviews.length > 0 && (
-                  <div className="space-y-3">
-                    <div className="flex justify-between text-sm">
-                      <span>Dakiklik</span>
-                      <span className="font-medium">{getCategoryAverage('dakiklik').toFixed(1)}/5</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span>İletişim</span>
-                      <span className="font-medium">{getCategoryAverage('iletisim').toFixed(1)}/5</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span>Özenli Taşıma</span>
-                      <span className="font-medium">{getCategoryAverage('ozen').toFixed(1)}/5</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span>Profesyonellik</span>
-                      <span className="font-medium">{getCategoryAverage('profesyonellik').toFixed(1)}/5</span>
-                    </div>
-                  </div>
-                )}
+
               </div>
             </CardContent>
           </Card>

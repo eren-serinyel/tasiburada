@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Link, useNavigate } from 'react-router-dom';
-import { Truck, User, LogOut, Menu, X, ChevronDown, Home, Users, HelpCircle } from 'lucide-react';
+import { Truck, User, LogOut, Menu, X, ChevronDown, Home, Users, HelpCircle, Package, History, CreditCard, Calendar, TrendingUp } from 'lucide-react';
 import { User as UserType } from '@/lib/types';
 import { getSessionUser, clearSessionUser } from '@/lib/storage';
 import { clearAuth, getUserType } from '@/lib/auth';
@@ -10,6 +10,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
@@ -178,30 +179,83 @@ export default function Navbar() {
                       <ChevronDown className="h-3 w-3 text-gray-500" />
                     </div>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-56 p-2 bg-white/95 backdrop-blur-lg border border-gray-200 rounded-2xl shadow-2xl">
-                    <DropdownMenuItem asChild>
-                      <Link to="/profilim" className="w-full">Profilim</Link>
-                    </DropdownMenuItem>
+                  <DropdownMenuContent align="end" className="w-[220px] p-2 bg-white border border-gray-200 rounded-xl shadow-2xl">
+                    {/* Kullanıcı Bilgisi */}
+                    <div className="flex items-center gap-3 px-3 py-3 mb-1">
+                      <div className="flex-shrink-0">
+                        {user.pictureUrl && user.type === 'carrier' ? (
+                          <img src={user.pictureUrl} alt="" className="w-10 h-10 rounded-full object-cover border border-blue-100" />
+                        ) : (
+                          <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm ${user.type === 'customer' ? 'bg-gradient-to-br from-blue-500 to-sky-500' : 'bg-gradient-to-br from-sky-500 to-cyan-500'}`}>
+                            {(userDisplayName || 'U').charAt(0).toUpperCase()}
+                          </div>
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-semibold text-sm text-gray-900 truncate">{userDisplayName}</p>
+                        <p className="text-xs text-gray-500 truncate">{user.email || (user.type === 'customer' ? 'Müşteri' : 'Nakliyeci')}</p>
+                      </div>
+                    </div>
+                    <DropdownMenuSeparator className="my-1" />
+
+                    {/* Müşteri menüsü */}
                     {userRole === 'customer' && (
-                      <DropdownMenuItem asChild>
-                        <Link to="/ilanlarim" className="w-full">İlanlarım</Link>
-                      </DropdownMenuItem>
-                    )}
-                    {userRole === 'carrier' && (
                       <>
                         <DropdownMenuItem asChild>
-                          <Link to="/tekliflerim" className="w-full">Tekliflerim</Link>
+                          <Link to="/profilim" className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-blue-50 cursor-pointer w-full text-sm text-gray-700">
+                            <User className="h-4 w-4 text-gray-500" /> Profilim
+                          </Link>
                         </DropdownMenuItem>
                         <DropdownMenuItem asChild>
-                          <Link to="/nakliyeci/kazanc" className="w-full">Kazançlarım</Link>
+                          <Link to="/ilanlarim" className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-blue-50 cursor-pointer w-full text-sm text-gray-700">
+                            <Package className="h-4 w-4 text-gray-500" /> İlanlarım
+                          </Link>
                         </DropdownMenuItem>
                         <DropdownMenuItem asChild>
-                          <Link to="/takvim" className="w-full">Takvim</Link>
+                          <Link to="/tekliflerim" className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-blue-50 cursor-pointer w-full text-sm text-gray-700">
+                            <TrendingUp className="h-4 w-4 text-gray-500" /> Tekliflerim
+                          </Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem asChild>
+                          <Link to="/gecmis" className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-blue-50 cursor-pointer w-full text-sm text-gray-700">
+                            <History className="h-4 w-4 text-gray-500" /> Geçmişim
+                          </Link>
                         </DropdownMenuItem>
                       </>
                     )}
-                    <DropdownMenuItem onClick={handleLogout} className="text-red-600 focus:text-red-600">
-                      Çıkış
+
+                    {/* Nakliyeci menüsü */}
+                    {userRole === 'carrier' && (
+                      <>
+                        <DropdownMenuItem asChild>
+                          <Link to="/profilim" className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-blue-50 cursor-pointer w-full text-sm text-gray-700">
+                            <User className="h-4 w-4 text-gray-500" /> Profilim
+                          </Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem asChild>
+                          <Link to="/tekliflerim" className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-blue-50 cursor-pointer w-full text-sm text-gray-700">
+                            <TrendingUp className="h-4 w-4 text-gray-500" /> Tekliflerim
+                          </Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem asChild>
+                          <Link to="/nakliyeci/kazanc" className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-blue-50 cursor-pointer w-full text-sm text-gray-700">
+                            <CreditCard className="h-4 w-4 text-gray-500" /> Kazançlarım
+                          </Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem asChild>
+                          <Link to="/takvim" className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-blue-50 cursor-pointer w-full text-sm text-gray-700">
+                            <Calendar className="h-4 w-4 text-gray-500" /> Takvim
+                          </Link>
+                        </DropdownMenuItem>
+                      </>
+                    )}
+
+                    <DropdownMenuSeparator className="my-1" />
+                    <DropdownMenuItem
+                      onClick={handleLogout}
+                      className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-red-50 cursor-pointer text-sm text-red-600 focus:text-red-600 focus:bg-red-50"
+                    >
+                      <LogOut className="h-4 w-4" /> Çıkış Yap
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>

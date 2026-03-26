@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { MapPin, Truck, CheckCircle2, CreditCard, Clock, Send } from 'lucide-react';
+import { MapPin, Truck, CheckCircle2, CreditCard, Clock, Send, Play, XCircle } from 'lucide-react';
 import { apiClient } from '@/lib/apiClient';
 import { toast } from '@/components/ui/sonner';
 import { APP_CONFIG } from '@/lib/config';
@@ -74,6 +74,25 @@ export default function ShipmentDetail() {
 
   useEffect(() => { fetchShipment(); }, [fetchShipment]);
 
+  const handleStart = async () => {
+    if (!shipment) return;
+    setUpdating(true);
+    try {
+      const res = await apiClient(`${API_BASE_URL}/shipments/${shipment.id}/start`, { method: 'PUT' });
+      const json = await res.json();
+      if (res.ok && json?.success) {
+        toast.success('Taşıma başlatıldı!');
+        await fetchShipment();
+      } else {
+        toast.error(json?.message || 'İşlem başarısız.');
+      }
+    } catch {
+      toast.error('İşlem başarısız.');
+    } finally {
+      setUpdating(false);
+    }
+  };
+
   const handleComplete = async () => {
     if (!shipment) return;
     setUpdating(true);
@@ -81,8 +100,8 @@ export default function ShipmentDetail() {
       const res = await apiClient(`${API_BASE_URL}/shipments/${shipment.id}/complete`, { method: 'PUT' });
       const json = await res.json();
       if (res.ok && json?.success) {
-        toast.success('Taşıma tamamlandı olarak işaretlendi.');
-        setShipment(prev => prev ? { ...prev, status: 'completed' } : prev);
+        toast.success('Taşıma tamamlandı!');
+        await fetchShipment();
       } else {
         toast.error(json?.message || 'İşlem başarısız.');
       }
@@ -95,13 +114,15 @@ export default function ShipmentDetail() {
 
   const handleCancel = async () => {
     if (!shipment) return;
+    const confirmed = window.confirm('İlanı iptal etmek istediğinizden emin misiniz? Bu işlem geri alınamaz.');
+    if (!confirmed) return;
     setUpdating(true);
     try {
       const res = await apiClient(`${API_BASE_URL}/shipments/${shipment.id}/cancel`, { method: 'PUT' });
       const json = await res.json();
       if (res.ok && json?.success) {
         toast.success('Taşıma iptal edildi.');
-        setShipment(prev => prev ? { ...prev, status: 'cancelled' } : prev);
+        navigate('/ilanlarim');
       } else {
         toast.error(json?.message || 'İşlem başarısız.');
       }
@@ -168,7 +189,7 @@ export default function ShipmentDetail() {
           <CardDescription>Süreç ilerlemesi</CardDescription>
         </CardHeader>
         <CardContent>
-          <Timeline status={shipment.status} />
+          <Timeline status={shipment.status} createdAt={shipment.createdAt} />
         </CardContent>
       </Card>
 
@@ -224,16 +245,27 @@ export default function ShipmentDetail() {
           )}
           <Separator />
           <div className="flex flex-wrap gap-2">
-            {shipment.status === 'in_transit' && (
-              <Button disabled={updating} onClick={handleComplete}>Teslim Edildi</Button>
+            {/* Nakliyeci butonları */}
+            {userType === 'carrier' && shipment.status === 'matched' && (
+              <Button disabled={updating} onClick={handleStart} className="bg-blue-600 hover:bg-blue-700">
+                <Play className="h-4 w-4 mr-2" />Taşımayı Başlat
+              </Button>
+            )}
+            {userType === 'carrier' && shipment.status === 'in_transit' && (
+              <Button disabled={updating} onClick={handleComplete} className="bg-green-600 hover:bg-green-700">
+                <CheckCircle2 className="h-4 w-4 mr-2" />Teslim Edildi
+              </Button>
             )}
             {(shipment.status === 'pending' || shipment.status === 'offer_received') && userType === 'carrier' && (
               <Button onClick={() => navigate(`/nakliyeci/yanit/${shipment.id}`)}>
                 <Send className="h-4 w-4 mr-2" />Teklif Ver
               </Button>
             )}
-            {(shipment.status === 'pending' || shipment.status === 'offer_received') && (
-              <Button variant="destructive" disabled={updating} onClick={handleCancel}>İptal Et</Button>
+            {/* Müşteri butonları */}
+            {userType === 'customer' && (shipment.status === 'pending' || shipment.status === 'matched') && (
+              <Button variant="destructive" disabled={updating} onClick={handleCancel}>
+                <XCircle className="h-4 w-4 mr-2" />İptal Et
+              </Button>
             )}
           </div>
         </CardContent>
@@ -242,25 +274,101 @@ export default function ShipmentDetail() {
   );
 }
 
-function Timeline({ status }: { status: string }) {
+function Timeline({ status, createdAt }: { status: string; createdAt: string }) {
+  const isCancelled = status === 'cancelled';
+
   const steps = [
-    { key: 'pending', label: 'Talep Oluşturuldu' },
-    { key: 'offer_received', label: 'Teklif Geldi' },
-    { key: 'matched', label: 'Eşleşti' },
-    { key: 'in_transit', label: 'Yolda' },
-    { key: 'completed', label: 'Teslim Edildi' },
+    {
+      key: 'pending',
+      label: 'İlan Oluşturuldu',
+      date: createdAt,
+      done: true,
+    },
+    {
+      key: 'offer_received',
+      label: 'Teklif Alındı',
+      date: null,
+      done: !isCancelled && ['offer_received', 'matched', 'in_transit', 'completed'].includes(status),
+    },
+    {
+      key: 'matched',
+      label: 'Nakliyeci Seçildi',
+      date: null,
+      done: !isCancelled && ['matched', 'in_transit', 'completed'].includes(status),
+    },
+    {
+      key: 'in_transit',
+      label: 'Taşıma Başladı',
+      date: null,
+      done: !isCancelled && ['in_transit', 'completed'].includes(status),
+    },
+    {
+      key: 'completed',
+      label: 'Teslim Edildi',
+      date: null,
+      done: !isCancelled && status === 'completed',
+    },
   ];
 
-  const statusOrder = ['pending', 'offer_received', 'matched', 'in_transit', 'completed'];
-  const activeIndex = statusOrder.indexOf(status);
+  // Index of the last done step (= current active step)
+  const activeIndex = steps.reduce((last, s, i) => (s.done ? i : last), -1);
 
   return (
-    <div className="grid grid-cols-5 gap-2">
-      {steps.map((s, idx) => (
-        <div key={s.key} className={`p-3 rounded border text-center ${idx <= activeIndex ? 'bg-green-50 border-green-300' : ''}`}>
-          <div className="text-sm font-medium">{s.label}</div>
-        </div>
-      ))}
+    <div className="relative pl-8">
+      {/* Vertical connector line */}
+      <div className="absolute left-[11px] top-3 bottom-3 w-0.5 bg-gray-200" />
+
+      <div className="space-y-6">
+        {steps.map((step, idx) => {
+          const isCurrent = idx === activeIndex && !isCancelled;
+          const isDone = step.done;
+
+          return (
+            <div key={step.key} className="relative flex items-start gap-4">
+              {/* Circle indicator */}
+              <div
+                className={`relative z-10 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 ${
+                  isCancelled && idx === 0
+                    ? 'border-red-500 bg-red-100'
+                    : isDone
+                    ? 'border-green-500 bg-green-500'
+                    : isCurrent
+                    ? 'border-blue-500 bg-blue-500 animate-pulse'
+                    : 'border-gray-300 bg-white'
+                }`}
+              >
+                {isDone && !isCancelled && <CheckCircle2 className="h-3.5 w-3.5 text-white" />}
+                {isCancelled && idx === 0 && <XCircle className="h-3.5 w-3.5 text-red-500" />}
+              </div>
+
+              {/* Step label + date */}
+              <div
+                className={`flex-1 pt-0.5 ${
+                  isCurrent
+                    ? 'font-semibold text-blue-700'
+                    : isDone
+                    ? 'text-gray-800'
+                    : 'text-gray-400'
+                }`}
+              >
+                <div className="text-sm">{step.label}</div>
+                {step.date && (
+                  <div className="text-xs text-gray-400 mt-0.5">
+                    {new Date(step.date).toLocaleDateString('tr-TR', {
+                      day: 'numeric',
+                      month: 'long',
+                      year: 'numeric',
+                    })}
+                  </div>
+                )}
+                {isCancelled && idx === 0 && (
+                  <div className="text-xs text-red-500 mt-0.5">Taşıma iptal edildi</div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

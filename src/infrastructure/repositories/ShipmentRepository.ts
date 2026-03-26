@@ -65,6 +65,13 @@ export class ShipmentRepository extends BaseRepository<Shipment> {
     });
   }
 
+  async findCompletedByCustomerAndCarrier(customerId: string, carrierId: string): Promise<Shipment | null> {
+    return await this.repository.findOne({
+      where: { customerId, carrierId, status: ShipmentStatus.COMPLETED },
+      order: { createdAt: 'DESC' }
+    });
+  }
+
   async updateShipmentStatus(shipmentId: string, status: ShipmentStatus): Promise<void> {
     await this.repository.update(shipmentId, { status });
   }

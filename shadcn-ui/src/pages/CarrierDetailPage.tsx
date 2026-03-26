@@ -1,6 +1,6 @@
 import { type ReactNode, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams, Navigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -12,6 +12,8 @@ import AuthModal from '@/components/AuthModal';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { ChevronLeft, MapPin, ShieldCheck, CheckCircle2, AlertTriangle, Star, Truck, MessageSquareText, ClipboardList } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
+import { useToast } from '@/hooks/use-toast';
 import { cn, formatPrice, formatDate } from '@/lib/utils';
 import type { CarrierDetail, CarrierDetailDocument } from '@/lib/types';
 import { getSessionUser } from '@/lib/storage';
@@ -75,6 +77,39 @@ const CarrierDetailPage = () => {
     description: 'Devam etmek için giriş yapın veya hesap oluşturun.'
   });
   const [startingConversation, setStartingConversation] = useState(false);
+  const [reviewForm, setReviewForm] = useState({ rating: 5, comment: '' });
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
+  const [reviewSubmitted, setReviewSubmitted] = useState(false);
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  const handleSubmitReview = async () => {
+    if (!carrierId || !isCustomer) return;
+    if (!reviewForm.comment.trim()) {
+      toast({ title: 'Yorum gerekli', description: 'Lütfen bir yorum yazın.' });
+      return;
+    }
+    setReviewSubmitting(true);
+    try {
+      const res = await apiClient('/api/v1/reviews/by-carrier', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ carrierId, rating: reviewForm.rating, comment: reviewForm.comment.trim() }),
+      });
+      const json = await res.json();
+      if (res.ok && json?.success) {
+        toast({ title: 'Teşekkürler!', description: 'Yorumunuz kaydedildi.' });
+        setReviewSubmitted(true);
+        queryClient.invalidateQueries({ queryKey: ['carrier-detail', carrierId] });
+      } else {
+        toast({ title: 'Hata', description: json?.message || 'Yorum gönderilemedi.', variant: 'destructive' });
+      }
+    } catch {
+      toast({ title: 'Hata', description: 'Bağlantı hatası.', variant: 'destructive' });
+    } finally {
+      setReviewSubmitting(false);
+    }
+  };
 
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ['carrier-detail', carrierId],
@@ -453,6 +488,39 @@ const CarrierDetailPage = () => {
                       Profil durumu: <span className="font-medium">%{profilePercent}</span>
                     </div>
                   </div>
+
+                  {isCustomer && !reviewSubmitted && (
+                    <div className="rounded-xl border bg-card p-4 space-y-3">
+                      <p className="text-sm font-medium text-foreground">Değerlendirme Yap</p>
+                      <div className="flex items-center gap-1">
+                        {Array.from({ length: 5 }).map((_, idx) => (
+                          <button
+                            key={idx}
+                            type="button"
+                            onClick={() => setReviewForm(f => ({ ...f, rating: idx + 1 }))}
+                            className="focus:outline-none"
+                          >
+                            <Star
+                              className={cn(
+                                'h-6 w-6 cursor-pointer transition-colors',
+                                idx < reviewForm.rating ? 'text-yellow-400 fill-yellow-400' : 'text-muted-foreground/40'
+                              )}
+                            />
+                          </button>
+                        ))}
+                        <span className="text-sm text-muted-foreground ml-2">{reviewForm.rating}/5</span>
+                      </div>
+                      <Textarea
+                        placeholder="Deneyiminizi kısaca anlatın..."
+                        value={reviewForm.comment}
+                        onChange={e => setReviewForm(f => ({ ...f, comment: e.target.value }))}
+                        rows={3}
+                      />
+                      <Button onClick={handleSubmitReview} disabled={reviewSubmitting} size="sm">
+                        {reviewSubmitting ? 'Kaydediliyor...' : 'Gönder'}
+                      </Button>
+                    </div>
+                  )}
 
                   {data.recentReviews.length === 0 ? (
                     <div className="rounded-xl border bg-card p-6">
