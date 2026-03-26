@@ -465,7 +465,7 @@ export default function Dashboard() {
                         (() => {
                           const { isComplete } = getCarrierProfileTasks(user as Carrier);
                           return isComplete ? (
-                            <Button size="sm" variant="outline" disabled>
+                            <Button size="sm" variant="outline" onClick={() => navigate('/nakliyeci/yanit/' + shipment.id)}>
                               Teklif Ver
                             </Button>
                           ) : (

@@ -5,79 +5,103 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Bell, Package, TrendingUp, CheckCircle, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { Notification } from '@/lib/types';
-import { getSessionUser } from '@/lib/storage';
+import { apiClient } from '@/lib/apiClient';
+
+interface ApiNotification {
+  id: string;
+  type: string;
+  title: string;
+  message: string;
+  isRead: boolean;
+  createdAt: string;
+  relatedId?: string | null;
+}
 
 export default function NotificationBell() {
-  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [notifications, setNotifications] = useState<ApiNotification[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const user = getSessionUser() || (localStorage.getItem('currentUser') ? JSON.parse(localStorage.getItem('currentUser') as string) : {});
-    if (!user.id) {
-      setNotifications([]);
-      setLoading(false);
-      return;
+  const fetchUnreadCount = async () => {
+    try {
+      const res = await apiClient('/notifications/unread-count');
+      const json = await res.json();
+      if (res.ok && json?.success) {
+        setUnreadCount(Number(json?.data?.unreadCount || 0));
+      }
+    } catch {
+      // bell sessiz çalışmalı
     }
-
-    // Load notifications for current user
-    const storedNotifications = JSON.parse(localStorage.getItem('notifications') || '[]');
-    const userNotifications = storedNotifications
-      .filter(n => n.userId === user.id)
-      // Normalize actionUrl for rating notifications to reviews page
-      .map((n) => {
-        if (n.type === 'rating_received') {
-          const highlight = (n as any).relatedId ? `?highlight=${encodeURIComponent((n as any).relatedId)}` : '';
-          return { ...n, actionUrl: `/nakliyeci/yorumlar${highlight}` };
-        }
-        return n;
-      })
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-      .slice(0, 10); // Show last 10 notifications
-
-    setNotifications(userNotifications);
-    setLoading(false);
-  }, []);
-
-  const unreadCount = notifications.filter(n => !n.isRead).length;
-
-  const markAsRead = (notificationId: string) => {
-    const updatedNotifications = notifications.map(n => 
-      n.id === notificationId ? { ...n, isRead: true } : n
-    );
-    setNotifications(updatedNotifications);
-
-    // Update localStorage
-    const allNotifications = JSON.parse(localStorage.getItem('notifications') || '[]');
-    const updatedAllNotifications = allNotifications.map((n: Notification) => 
-      n.id === notificationId ? { ...n, isRead: true } : n
-    );
-    localStorage.setItem('notifications', JSON.stringify(updatedAllNotifications));
   };
 
-  const markAllAsRead = () => {
-    const updatedNotifications = notifications.map(n => ({ ...n, isRead: true }));
-    setNotifications(updatedNotifications);
+  const fetchNotifications = async () => {
+    setLoading(true);
+    try {
+      const res = await apiClient('/notifications');
+      const json = await res.json();
+      if (res.ok && json?.success) {
+        setNotifications(Array.isArray(json.data) ? json.data : []);
+      } else {
+        setNotifications([]);
+      }
+    } catch {
+      setNotifications([]);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    // Update localStorage
-    const allNotifications = JSON.parse(localStorage.getItem('notifications') || '[]');
-    const user = JSON.parse(localStorage.getItem('currentUser') || '{}');
-    const updatedAllNotifications = allNotifications.map((n: Notification) => 
-      n.userId === user.id ? { ...n, isRead: true } : n
-    );
-    localStorage.setItem('notifications', JSON.stringify(updatedAllNotifications));
+  useEffect(() => {
+    fetchUnreadCount();
+    const interval = window.setInterval(fetchUnreadCount, 30000);
+    return () => window.clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    if (isOpen) {
+      fetchNotifications();
+    }
+  }, [isOpen]);
+
+  const markAsRead = async (notificationId: string) => {
+    try {
+      const res = await apiClient(`/notifications/${notificationId}/read`, { method: 'PUT' });
+      if (res.ok) {
+        setNotifications(prev => prev.map(n => (n.id === notificationId ? { ...n, isRead: true } : n)));
+        fetchUnreadCount();
+      }
+    } catch {
+      // silent
+    }
+  };
+
+  const markAllAsRead = async () => {
+    try {
+      const res = await apiClient('/notifications/read-all', { method: 'PUT' });
+      if (res.ok) {
+        setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
+        setUnreadCount(0);
+      }
+    } catch {
+      // silent
+    }
   };
 
   const getNotificationIcon = (type: string) => {
     switch (type) {
       case 'offer_received':
+      case 'NEW_OFFER':
         return <TrendingUp className="h-4 w-4 text-blue-500" />;
       case 'offer_accepted':
+      case 'OFFER_ACCEPTED':
         return <CheckCircle className="h-4 w-4 text-green-500" />;
       case 'offer_rejected':
+      case 'OFFER_REJECTED':
         return <X className="h-4 w-4 text-red-500" />;
       case 'shipment_update':
+      case 'SHIPMENT_STARTED':
+      case 'SHIPMENT_COMPLETED':
         return <Package className="h-4 w-4 text-purple-500" />;
       case 'rating_received':
         return <Bell className="h-4 w-4 text-amber-500" />;
@@ -171,10 +195,10 @@ export default function NotificationBell() {
                       </div>
                     </div>
                     
-                    {notification.actionUrl && (
+                    {notification.relatedId && (
                       <div className="mt-2 ml-7">
-                        <Link 
-                          to={notification.type === 'rating_received' ? (notification.actionUrl || '/nakliyeci/yorumlar') : notification.actionUrl}
+                        <Link
+                          to="/bildirimler"
                           onClick={(e) => e.stopPropagation()}
                         >
                           <Button size="sm" variant="outline" className="text-xs">

@@ -16,3 +16,4 @@ export { CarrierVehicleTypeRepository } from './CarrierVehicleTypeRepository';
 export { CarrierServiceTypeRepository } from './CarrierServiceTypeRepository';
 export { CarrierNotificationPreferenceRepository } from './CarrierNotificationPreferenceRepository';
 export { ServiceTypeRepository } from './ServiceTypeRepository';
+export { NotificationRepository } from './NotificationRepository';

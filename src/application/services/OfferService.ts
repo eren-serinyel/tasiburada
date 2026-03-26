@@ -3,6 +3,7 @@ import { ShipmentStatus } from '../../domain/entities/Shipment';
 import { CarrierRepository } from '../../infrastructure/repositories/CarrierRepository';
 import { OfferRepository } from '../../infrastructure/repositories/OfferRepository';
 import { ShipmentRepository } from '../../infrastructure/repositories/ShipmentRepository';
+import { NotificationService } from './NotificationService';
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from '../../domain/errors/AppError';
 
 interface CreateOfferPayload {
@@ -22,6 +23,7 @@ export class OfferService {
   private offerRepository = new OfferRepository();
   private shipmentRepository = new ShipmentRepository();
   private carrierRepository = new CarrierRepository();
+  private notificationService = new NotificationService();
 
   private sanitizeOffer(offer: Offer): Offer {
     if (!offer?.carrier) {
@@ -78,6 +80,15 @@ export class OfferService {
       throw new NotFoundError('Teklif oluşturuldu ancak getirilemedi.');
     }
 
+    await this.notificationService.createNotification(
+      shipment.customerId,
+      'customer',
+      'NEW_OFFER',
+      'Yeni Teklif Aldınız',
+      `${createdOffer.carrier?.companyName || 'Nakliyeci'} taşımanız için teklif verdi.`,
+      shipment.id
+    );
+
     return this.sanitizeOffer(createdOffer);
   }
 
@@ -125,6 +136,15 @@ export class OfferService {
       throw new NotFoundError('Teklif kabul edildi ancak getirilemedi.');
     }
 
+    await this.notificationService.createNotification(
+      offer.carrierId,
+      'carrier',
+      'OFFER_ACCEPTED',
+      'Teklifiniz Kabul Edildi',
+      'Müşteri teklifinizi kabul etti. Taşımaya hazırlanın.',
+      offer.shipmentId
+    );
+
     return this.sanitizeOffer(updatedOffer);
   }
 
@@ -146,6 +166,15 @@ export class OfferService {
     if (!rejectedOffer) {
       throw new ValidationError('Teklif reddedilemedi.');
     }
+
+    await this.notificationService.createNotification(
+      offer.carrierId,
+      'carrier',
+      'OFFER_REJECTED',
+      'Teklifiniz Reddedildi',
+      'Müşteri teklifinizi reddetti.',
+      offer.shipmentId
+    );
 
     return this.sanitizeOffer(rejectedOffer);
   }

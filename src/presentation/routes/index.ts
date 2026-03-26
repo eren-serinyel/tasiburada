@@ -7,6 +7,7 @@ import shipmentRoutes from './shipmentRoutes';
 import offerRoutes from './offerRoutes';
 import reviewRoutes from './reviewRoutes';
 import adminRoutes from './adminRoutes';
+import notificationRoutes from './notificationRoutes';
 
 const router = Router();
 router.use('/', commonRoutes);
@@ -27,6 +28,7 @@ router.use('/carriers', carrierRoutes);
 router.use('/vehicle-types', vehicleTypeRoutes);
 router.use('/shipments', shipmentRoutes);
 router.use('/offers', offerRoutes);
+router.use('/notifications', notificationRoutes);
 router.use('/', reviewRoutes);
 router.use('/admin', adminRoutes);
 

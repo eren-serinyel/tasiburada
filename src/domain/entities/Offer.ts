@@ -37,6 +37,7 @@ export class Offer {
     estimatedDuration?: number;
 
     @Column({
+        type: 'enum',
         enum: OfferStatus,
         default: OfferStatus.PENDING
     })

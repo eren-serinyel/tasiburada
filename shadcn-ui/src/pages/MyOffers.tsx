@@ -37,7 +37,9 @@ export default function MyOffers() {
       const res = await apiClient(`${API_BASE_URL}/customers/offers`);
       const json = await res.json();
       if (res.ok && json?.success) {
-        setOffers(json.data || []);
+        setOffers(Array.isArray(json.data) ? json.data : []);
+      } else {
+        toast.error(json?.message || 'Teklifler alınamadı.');
       }
     } catch {
       toast.error('Teklifler yüklenirken hata oluştu.');

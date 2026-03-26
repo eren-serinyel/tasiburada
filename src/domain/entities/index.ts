@@ -24,5 +24,6 @@ export { CarrierEarningsLog } from './CarrierEarningsLog';
 export { Shipment, ShipmentStatus } from './Shipment';
 export { Offer, OfferStatus } from './Offer';
 export { Review } from './Review';
+export { Notification } from './Notification';
 export { Admin } from './Admin';
 export { AuditLog } from './AuditLog';

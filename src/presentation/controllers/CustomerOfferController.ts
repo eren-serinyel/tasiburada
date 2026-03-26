@@ -15,7 +15,7 @@ export class CustomerOfferController {
         return;
       }
 
-      const offers = await this.customerOfferService.getOffersByCustomerId(customerId);
+      const offers = await this.customerOfferService.getMyOffers(customerId);
       res.status(200).json({
         success: true,
         data: offers
