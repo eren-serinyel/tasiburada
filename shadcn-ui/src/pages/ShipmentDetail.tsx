@@ -7,7 +7,7 @@ import { Separator } from '@/components/ui/separator';
 import { MapPin, Truck, CheckCircle2, CreditCard, Clock, Send, Play, XCircle } from 'lucide-react';
 import { apiClient } from '@/lib/apiClient';
 import { toast } from '@/components/ui/sonner';
-import { APP_CONFIG } from '@/lib/config';
+import { getUserType } from '@/lib/auth';
 
 const API_BASE_URL = '/api/v1';
 
@@ -24,6 +24,7 @@ interface BackendShipment {
   createdAt: string;
   customerId: string;
   carrierId?: string | null;
+  carrier?: { id: string; companyName?: string | null };
   customer?: { firstName: string; lastName: string; phone?: string; email?: string };
   extraServices?: string[];
 }
@@ -49,7 +50,7 @@ const statusColor = (st: string) => ({
 export default function ShipmentDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const userType = typeof window !== 'undefined' ? localStorage.getItem(APP_CONFIG.userTypeKey) : null;
+  const userType = getUserType();
   const [shipment, setShipment] = useState<BackendShipment | null>(null);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
@@ -91,6 +92,15 @@ export default function ShipmentDetail() {
     } finally {
       setUpdating(false);
     }
+  };
+
+  const handleReview = () => {
+    if (!shipment?.carrierId) {
+      toast.error('Bu taşıma için değerlendirilecek bir nakliyeci bulunamadı.');
+      return;
+    }
+
+    navigate(`/nakliyeci/${shipment.carrierId}`);
   };
 
   const handleComplete = async () => {
@@ -209,7 +219,7 @@ export default function ShipmentDetail() {
                 <Clock className="h-5 w-5" /> Ödeme bekleniyor · {shipment.price}₺
               </div>
             )}
-            {shipment.status === 'matched' && (
+            {userType === 'customer' && (shipment.status === 'matched' || shipment.status === 'in_transit') && (
               <Button asChild>
                 <Link to={`/odeme/${shipment.id}`}><CreditCard className="h-4 w-4 mr-1" /> Ödeme Yap</Link>
               </Button>
@@ -265,6 +275,11 @@ export default function ShipmentDetail() {
             {userType === 'customer' && (shipment.status === 'pending' || shipment.status === 'matched') && (
               <Button variant="destructive" disabled={updating} onClick={handleCancel}>
                 <XCircle className="h-4 w-4 mr-2" />İptal Et
+              </Button>
+            )}
+            {userType === 'customer' && shipment.status === 'completed' && shipment.carrierId && (
+              <Button disabled={updating} onClick={handleReview} variant="outline">
+                <CheckCircle2 className="h-4 w-4 mr-2" />Nakliyeciyi Değerlendir
               </Button>
             )}
           </div>

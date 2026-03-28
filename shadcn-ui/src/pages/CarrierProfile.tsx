@@ -62,6 +62,7 @@ export default function CarrierProfile() {
             type: 'carrier',
             createdAt: c.createdAt ? new Date(c.createdAt) : new Date(),
             vehicle: {
+              id: '',
               type: 'kamyonet',
               capacity: 0,
               licensePlate: ''
@@ -72,8 +73,9 @@ export default function CarrierProfile() {
             rating: Number(c.rating || 0),
             reviewCount: 0,
             isApproved: Boolean(c.isActive),
-            verificationStatus: 'pending'
-          } as Carrier;
+            verificationStatus: 'pending',
+            documents: { license: '', src: '', kBelgesi: '' },
+          } as unknown as Carrier;
           setCarrier(mapped);
         } else {
           navigate('/nakliyeciler');

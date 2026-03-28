@@ -4,7 +4,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Truck, User, LogOut, Menu, X, ChevronDown, Home, Users, HelpCircle, Package, History, CreditCard, Calendar, TrendingUp } from 'lucide-react';
 import { User as UserType } from '@/lib/types';
 import { getSessionUser, clearSessionUser } from '@/lib/storage';
-import { clearAuth, getUserType } from '@/lib/auth';
+import { clearAuth, getUserEmail, getUserId, getUserName, getUserType } from '@/lib/auth';
 import NotificationBell from './NotificationBell';
 import {
   DropdownMenu,
@@ -17,36 +17,56 @@ import {
 export default function Navbar() {
   const [user, setUser] = useState<UserType | null>(null);
   const [userRole, setUserRole] = useState<'customer' | 'carrier' | null>(null);
-  const [companyName, setCompanyName] = useState<string>('');
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
-    const sessionUser = getSessionUser();
-    setUserRole(sessionUser?.type ?? getUserType());
-    if (sessionUser) setUser(sessionUser);
-    if (sessionUser && sessionUser.type === 'carrier') {
-      try {
-        const c = localStorage.getItem(`carrier_company_${sessionUser.id}`);
-        if (c) setCompanyName(JSON.parse(c).name || '');
-      } catch {}
-    } else {
-      setCompanyName('');
-    }
+    const syncUserState = () => {
+      const sessionUser = getSessionUser();
+      const tokenType = getUserType();
+      const tokenUserId = getUserId();
+      const tokenUserName = getUserName();
+      const tokenUserEmail = getUserEmail();
+
+      setUserRole(sessionUser?.type ?? tokenType);
+
+      if (sessionUser) {
+        const displayName = tokenUserName || `${sessionUser.name} ${sessionUser.surname}`.trim();
+        const [firstName = sessionUser.name, ...rest] = displayName.split(' ');
+
+        setUser({
+          ...sessionUser,
+          name: firstName,
+          surname: rest.join(' '),
+          email: tokenUserEmail || sessionUser.email,
+        });
+        return;
+      }
+
+      if (tokenType && tokenUserId) {
+        const [firstName = tokenUserName || 'Kullanici', ...rest] = (tokenUserName || 'Kullanici').split(' ');
+        setUser({
+          id: tokenUserId,
+          name: firstName,
+          surname: rest.join(' '),
+          email: tokenUserEmail,
+          phone: '',
+          city: '',
+          type: tokenType,
+          createdAt: new Date(),
+          pictureUrl: null,
+        });
+        return;
+      }
+
+      setUser(null);
+    };
+
+    syncUserState();
 
     // localStorage değişikliklerini dinle
     const handleStorageChange = () => {
-      const u = getSessionUser();
-      setUser(u);
-      setUserRole(u?.type ?? getUserType());
-      if (u && u.type === 'carrier') {
-        try {
-          const c = localStorage.getItem(`carrier_company_${u.id}`);
-          if (c) setCompanyName(JSON.parse(c).name || '');
-        } catch {}
-      } else {
-        setCompanyName('');
-      }
+      syncUserState();
     };
 
     window.addEventListener('storage', handleStorageChange);
@@ -68,7 +88,8 @@ export default function Navbar() {
     navigate('/');
   };
 
-  const userDisplayName = user?.type === 'carrier' && companyName ? companyName : user?.name;
+  const userDisplayName = getUserName() || [user?.name, user?.surname].filter(Boolean).join(' ').trim() || 'Kullanici';
+  const userDisplayEmail = getUserEmail() || user?.email || (user?.type === 'customer' ? 'Müşteri' : 'Nakliyeci');
 
   const renderAvatar = (variant: 'desktop' | 'mobile' = 'desktop') => {
     if (!user) return null;
@@ -193,7 +214,7 @@ export default function Navbar() {
                       </div>
                       <div className="min-w-0">
                         <p className="font-semibold text-sm text-gray-900 truncate">{userDisplayName}</p>
-                        <p className="text-xs text-gray-500 truncate">{user.email || (user.type === 'customer' ? 'Müşteri' : 'Nakliyeci')}</p>
+                        <p className="text-xs text-gray-500 truncate">{userDisplayEmail}</p>
                       </div>
                     </div>
                     <DropdownMenuSeparator className="my-1" />
@@ -344,8 +365,8 @@ export default function Navbar() {
                       {renderAvatar('mobile')}
                     </div>
                     <div>
-                        <div className="font-medium text-gray-900">{userDisplayName}</div>
-                      <div className="text-sm text-gray-500">{user.type === 'customer' ? 'Müşteri' : 'Nakliyeci'}</div>
+                      <div className="font-medium text-gray-900">{userDisplayName}</div>
+                      <div className="text-sm text-gray-500">{userDisplayEmail}</div>
                     </div>
                   </div>
 

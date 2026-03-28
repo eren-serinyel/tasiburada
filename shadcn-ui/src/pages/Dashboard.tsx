@@ -40,7 +40,7 @@ type BackendShipment = {
 
 type ActiveOffer = {
   id: string;
-  shipmentId: string;
+  shipmentId?: string;
   price: number;
   status: string;
   offeredAt: string;
@@ -134,7 +134,7 @@ export default function Dashboard() {
           }
         } else {
           // Nakliyeci: aktif teklifler + uygun ilanlar + stats + yorumlar + bildirimler
-          const [activeOffersRes, pendingRes, statsRes, reviewsRes, notifsRes] = await Promise.all([
+          const [activeOffersResult, pendingResult, statsResult, reviewsResult, notifsResult] = await Promise.allSettled([
             apiClient(`${API_BASE_URL}/carriers/me/offers`),
             apiClient(`${API_BASE_URL}/shipments/pending`),
             apiClient(`${API_BASE_URL}/carriers/me/stats`),
@@ -142,35 +142,56 @@ export default function Dashboard() {
             apiClient(`${API_BASE_URL}/notifications`)
           ]);
 
-          const activeOffersJson = await activeOffersRes.json();
-          if (activeOffersRes.ok && activeOffersJson?.success && Array.isArray(activeOffersJson.data)) {
-            const accepted = (activeOffersJson.data as ActiveOffer[]).filter(o => o.status === 'accepted');
+          if (activeOffersResult.status === 'fulfilled') {
+            const activeOffersRes = activeOffersResult.value;
+            const activeOffersJson = await activeOffersRes.json();
+            const offerList = Array.isArray(activeOffersJson?.data)
+              ? activeOffersJson.data
+              : Array.isArray(activeOffersJson?.data?.data)
+                ? activeOffersJson.data.data
+                : [];
+
+            const accepted = (offerList as ActiveOffer[]).filter(offer => offer.status === 'accepted');
             setActiveOffers(accepted);
+          } else {
+            setActiveOffers([]);
           }
 
-          const pendingJson = await pendingRes.json();
-          if (pendingRes.ok && pendingJson?.success && Array.isArray(pendingJson.data)) {
-            setPendingShipments(pendingJson.data as BackendShipment[]);
+          if (pendingResult.status === 'fulfilled') {
+            const pendingRes = pendingResult.value;
+            const pendingJson = await pendingRes.json();
+            if (pendingRes.ok && pendingJson?.success && Array.isArray(pendingJson.data)) {
+              setPendingShipments(pendingJson.data as BackendShipment[]);
+            }
           }
 
-          const statsJson = await statsRes.json();
-          if (statsRes.ok && statsJson?.success && statsJson?.data) {
-            setCarrierStats({
-              totalEarnings: Number(statsJson.data.totalEarnings || 0),
-              activeJobs: Number(statsJson.data.activeJobs || 0),
-              completedJobs: Number(statsJson.data.completedJobs || 0),
-              rating: Number(statsJson.data.rating || 0)
-            });
+          if (statsResult.status === 'fulfilled') {
+            const statsRes = statsResult.value;
+            const statsJson = await statsRes.json();
+            if (statsRes.ok && statsJson?.success && statsJson?.data) {
+              setCarrierStats({
+                totalEarnings: Number(statsJson.data.totalEarnings || 0),
+                activeJobs: Number(statsJson.data.activeJobs || 0),
+                completedJobs: Number(statsJson.data.completedJobs || 0),
+                rating: Number(statsJson.data.rating || 0)
+              });
+            }
           }
 
-          const reviewsJson = await reviewsRes.json();
-          if (reviewsRes.ok && reviewsJson?.success && Array.isArray(reviewsJson.data)) {
-            setMyReviews(reviewsJson.data.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+          if (reviewsResult.status === 'fulfilled') {
+            const reviewsRes = reviewsResult.value;
+            const reviewsJson = await reviewsRes.json();
+            if (reviewsRes.ok && reviewsJson?.success && Array.isArray(reviewsJson.data)) {
+              setMyReviews(reviewsJson.data.sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()));
+            }
           }
 
-          const notifsJson = await notifsRes.json();
-          if (notifsRes.ok && notifsJson?.success && Array.isArray(notifsJson.data)) {
-            setRecentNotifications(notifsJson.data.slice(0, 4));
+          if (notifsResult.status === 'fulfilled') {
+            const notifsRes = notifsResult.value;
+            const notifsJson = await notifsRes.json();
+            if (notifsRes.ok && notifsJson?.success && Array.isArray(notifsJson.data)) {
+              setRecentNotifications(notifsJson.data.slice(0, 4));
+            }
           }
         }
       } catch {
@@ -326,7 +347,11 @@ export default function Dashboard() {
                 </Card>
               ) : (
                 activeOffers.map(offer => (
-                  <Card key={offer.id} className="rounded-xl shadow-sm hover:shadow-md transition-shadow cursor-pointer" onClick={() => navigate(`/ilan/${offer.shipmentId}`)}>
+                  <Card
+                    key={offer.id}
+                    className="rounded-xl shadow-sm hover:shadow-md transition-shadow cursor-pointer"
+                    onClick={() => offer.shipment?.id && navigate(`/ilan/${offer.shipment.id}`)}
+                  >
                     <CardContent className="p-4">
                       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                         <div className="flex-1 space-y-1">
@@ -338,15 +363,14 @@ export default function Dashboard() {
                           </div>
                           <div className="flex items-center gap-4 text-sm text-gray-500 flex-wrap">
                             {offer.shipment?.loadDetails && <span>{offer.shipment.loadDetails}</span>}
-                            {offer.shipment?.weight && <span>{Number(offer.shipment.weight)} kg</span>}
                             {offer.shipment?.shipmentDate && (
                               <span>{new Date(offer.shipment.shipmentDate).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
                             )}
                           </div>
                         </div>
                         <div className="flex items-center gap-3">
-                          <span className="text-lg font-bold text-blue-700">₺{Number(offer.price).toLocaleString('tr-TR')}</span>
-                          <Link to={`/ilan/${offer.shipmentId}`} onClick={e => e.stopPropagation()}>
+                          <span className="text-lg font-bold text-blue-700">{Number(offer.price).toLocaleString('tr-TR')} ₺</span>
+                          <Link to={`/ilan/${offer.shipment?.id || offer.shipmentId || ''}`} onClick={e => e.stopPropagation()}>
                             <Button size="sm" variant="outline" className="gap-1 text-blue-600 border-blue-200 hover:bg-blue-50">
                               Detayı Gör <ChevronRight className="h-4 w-4" />
                             </Button>

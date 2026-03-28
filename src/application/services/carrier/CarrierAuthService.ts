@@ -71,7 +71,12 @@ export class CarrierAuthService {
       throw new Error('JWT_SECRET tanımlanmadı.');
     }
     return jwt.sign(
-      { carrierId: carrier.id, email: carrier.email, type: 'carrier' },
+      {
+        carrierId: carrier.id,
+        email: carrier.email,
+        companyName: carrier.companyName,
+        type: 'carrier'
+      },
       secret,
       { expiresIn: '24h' }
     );
