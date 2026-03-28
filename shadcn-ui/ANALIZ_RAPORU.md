@@ -961,7 +961,7 @@ Sıra  Görev                                                Bağımlılık     
 4.5   S4.1-S4.3 — Kazanç sistemi                           Sprint 3       ✅
 ```
 
-### Sprint 5: Admin Panel Güçlendirme
+### Sprint 5: Admin Panel Güçlendirme ✅ TAMAMLANDI
 
 ```
 Sıra  Görev                                                Bağımlılık
@@ -1091,13 +1091,13 @@ Her sprint sonunda doğrulanacak senaryolar:
 - [x] Nakliyeci kazanç geçmişini görebiliyor
 
 ### Sprint 5 Sonrası ✓
-- [ ] Admin dashboard gerçek trend verisi gösteriyor
-- [ ] Admin nakliyeci detayında işler ve yorumlar dolmuş
-- [ ] Admin teklifler sayfası çalışıyor
-- [ ] Admin belgeler sayfası ile doğrulama yapılabiliyor
-- [ ] Admin raporlar sayfasında grafikler görünüyor
-- [ ] Admin ayarlar sayfası çalışıyor (superadmin)
-- [ ] Admin yönetimi sayfası çalışıyor (superadmin)
+- [x] Admin dashboard gerçek trend verisi gösteriyor
+- [x] Admin nakliyeci detayında işler ve yorumlar dolmuş
+- [x] Admin teklifler sayfası çalışıyor
+- [x] Admin belgeler sayfası ile doğrulama yapılabiliyor
+- [x] Admin raporlar sayfasında grafikler görünüyor
+- [x] Admin ayarlar sayfası çalışıyor (superadmin)
+- [x] Admin yönetimi sayfası çalışıyor (superadmin)
 
 ---
 

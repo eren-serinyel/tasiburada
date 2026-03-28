@@ -50,20 +50,6 @@ interface RecentReview {
 
 // ─── Chart helpers ──────────────────────────────────────────────────────────
 
-function generateTrendData(total: number) {
-  const data = [];
-  const now = new Date();
-  for (let i = 29; i >= 0; i--) {
-    const d = new Date(now);
-    d.setDate(d.getDate() - i);
-    data.push({
-      date: format(d, 'dd MMM', { locale: tr }),
-      value: Math.max(0, Math.round(total / 30 + (Math.random() - 0.4) * (total / 15))),
-    });
-  }
-  return data;
-}
-
 const PIE_COLORS = ['#f59e0b', '#3b82f6', '#10b981', '#f43f5e'];
 
 // ─── Component ──────────────────────────────────────────────────────────────
@@ -73,19 +59,24 @@ export default function AdminDashboard() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [pendingCarriers, setPendingCarriers] = useState<PendingCarrier[]>([]);
   const [recentReviews, setRecentReviews] = useState<RecentReview[]>([]);
+  const [trendData, setTrendData] = useState<{ date: string; value: number }[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const load = async () => {
       try {
-        const [statsRes, carriersRes, reviewsRes] = await Promise.all([
+        const [statsRes, carriersRes, reviewsRes, trendsRes] = await Promise.all([
           adminApiClient('/admin/stats').then((r) => r.json()),
           adminApiClient('/admin/carriers?status=pending&limit=5').then((r) => r.json()),
           adminApiClient('/admin/reviews?limit=5').then((r) => r.json()),
+          adminApiClient('/admin/stats/trends?period=30').then((r) => r.json()),
         ]);
         if (statsRes.success) setStats(statsRes.data);
         if (carriersRes.success) setPendingCarriers(carriersRes.data?.carriers ?? []);
         if (reviewsRes.success) setRecentReviews(reviewsRes.data?.reviews ?? []);
+        if (trendsRes.success && Array.isArray(trendsRes.data)) {
+          setTrendData(trendsRes.data.map((d: { date: string; value: number }) => ({ date: format(new Date(d.date), 'dd MMM', { locale: tr }), value: d.value })));
+        }
       } catch {
         toast.error('Dashboard verileri yüklenemedi.');
       } finally {
@@ -120,7 +111,7 @@ export default function AdminDashboard() {
     );
   }
 
-  const shipmentTrend = generateTrendData(stats.totalShipments);
+  const shipmentTrend = trendData.length > 0 ? trendData : [];
   const shipmentPieData = [
     { name: 'Bekliyor', value: Math.max(0, stats.totalShipments - stats.activeShipments - stats.completedShipments) },
     { name: 'Taşınıyor', value: stats.activeShipments },

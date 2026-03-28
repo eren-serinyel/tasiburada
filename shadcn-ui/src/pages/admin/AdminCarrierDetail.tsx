@@ -89,12 +89,16 @@ export default function AdminCarrierDetail() {
     Promise.all([
       adminApiClient(`/admin/carriers/${carrierId}`).then((r) => r.json()),
       adminApiClient(`/admin/carriers/${carrierId}/documents`).then((r) => r.json()),
+      adminApiClient(`/admin/carriers/${carrierId}/shipments`).then((r) => r.json()),
+      adminApiClient(`/admin/carriers/${carrierId}/reviews`).then((r) => r.json()),
     ])
-      .then(([carrierRes, docsRes]) => {
+      .then(([carrierRes, docsRes, shipmentsRes, reviewsRes]) => {
         if (carrierRes.success) {
           setCarrier({
             ...carrierRes.data,
             documents: docsRes.success ? docsRes.data : [],
+            shipments: shipmentsRes.success ? shipmentsRes.data : [],
+            reviews: reviewsRes.success ? reviewsRes.data : [],
           });
         } else {
           toast.error(carrierRes.message);

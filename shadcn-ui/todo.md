@@ -59,6 +59,13 @@
 - [x] Nakliyeci onay kuyruğu, belge doğrulama
 - [x] Nakliyeci / Müşteri / Taşıma / Yorum listesi ve yönetimi
 - [x] Admin dashboard istatistikleri, denetim logu
+- [x] Dashboard trend endpoint + gerçek veri
+- [x] CarrierDetail İşler/Yorumlar API bağlantısı
+- [x] Teklifler sayfası (iptal işlemi)
+- [x] Belgeler sayfası (onay/red + bildirim)
+- [x] Raporlar sayfası (KPI, trend grafikleri, top nakliyeciler)
+- [x] Ayarlar sayfası (genel, komisyon, bildirim, güvenlik)
+- [x] Admin yönetimi sayfası (CRUD)
 
 ---
 
@@ -116,14 +123,22 @@
    - ~~Backend: `PUT /offers/:id/withdraw` (WITHDRAWN status + bildirim)~~ ✅
    - ~~Frontend: CarrierOffers.tsx güncelle/iptal butonları aktif~~ ✅
 
-3. **[CURRENT]** Mesajlaşma (Messages) backend
+3. ~~Admin Panel Güçlendirme (Sprint 5)~~ ✅ TAMAMLANDI
+   - ~~Dashboard trend gerçek API verisi~~ ✅
+   - ~~CarrierDetail İşler + Yorumlar sekmeleri~~ ✅
+   - ~~Shipments search + Reviews rating backend~~ ✅
+   - ~~Admin Teklifler sayfası~~ ✅
+   - ~~Admin Belgeler sayfası (belge doğrulama)~~ ✅
+   - ~~Admin Raporlar sayfası (grafikler, tablolar)~~ ✅
+   - ~~Admin Ayarlar sayfası~~ ✅
+   - ~~Admin Yönetimi sayfası (CRUD)~~ ✅
+
+4. **[CURRENT]** Mesajlaşma (Messages) backend
    - Entitiy: Conversation, Message
    - Routes: `GET /messages/:conversationId`, `POST /messages`
 
-4. Kariyer takvimi (CarrierCalendar.tsx) — gerçek shipment verisiyle
+5. Kariyer takvimi (CarrierCalendar.tsx) — gerçek shipment verisiyle
 
-5. E-posta bildirimleri (kayıt, teklif geldi, taşıma tamamlandı)
-
-6. Admin: Nakliyeci belge onay / red ile otomatik bildirim
+6. E-posta bildirimleri (kayıt, teklif geldi, taşıma tamamlandı)
 
 7. Harita entegrasyonu (Leaflet veya Google Maps) rota görselleştirme

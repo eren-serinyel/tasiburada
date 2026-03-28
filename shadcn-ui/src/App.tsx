@@ -15,6 +15,11 @@ import AdminShipments from '@/pages/admin/AdminShipments';
 import AdminReviews from '@/pages/admin/AdminReviews';
 import AdminApprovalQueue from '@/pages/admin/AdminApprovalQueue';
 import AdminAuditLog from '@/pages/admin/AdminAuditLog';
+import AdminOffers from '@/pages/admin/AdminOffers';
+import AdminDocuments from '@/pages/admin/AdminDocuments';
+import AdminReports from '@/pages/admin/AdminReports';
+import AdminSettings from '@/pages/admin/AdminSettings';
+import AdminManagement from '@/pages/admin/AdminManagement';
 // Payment routes
 import Payment from './pages/Payment';
 import Payments from './pages/Payments';
@@ -87,6 +92,11 @@ const App = () => (
             <Route path="yorumlar" element={<AdminReviews />} />
             <Route path="onay-kuyrugu" element={<AdminApprovalQueue />} />
             <Route path="audit-log" element={<AdminAuditLog />} />
+            <Route path="teklifler" element={<AdminOffers />} />
+            <Route path="belgeler" element={<AdminDocuments />} />
+            <Route path="raporlar" element={<AdminReports />} />
+            <Route path="ayarlar" element={<AdminSettings />} />
+            <Route path="yonetim" element={<AdminManagement />} />
           </Route>
 
           {/* ─── Regular Routes (inside Layout) ──────────────────── */}
