@@ -41,4 +41,17 @@ export class CarrierStatsRepository extends BaseRepository<CarrierStats> {
       .where('carrierId = :carrierId', { carrierId })
       .execute();
   }
+
+  async incrementTotalEarnings(carrierId: string, amount: number): Promise<void> {
+    await this.ensureStatsRow(carrierId);
+
+    await this.repository
+      .createQueryBuilder()
+      .update(CarrierStats)
+      .set({
+        totalEarnings: () => `totalEarnings + (${amount})`
+      })
+      .where('carrierId = :carrierId', { carrierId })
+      .execute();
+  }
 }

@@ -110,4 +110,37 @@ export class CarrierDashboardService {
 
         return await this.statsRepo.save(stats);
     }
+
+    async getEarningsHistory(carrierId: string, limit: number = 50) {
+        const logs = await this.earningsRepo.find({
+            where: { carrierId },
+            order: { earnedAt: 'DESC' },
+            take: limit,
+        });
+
+        if (logs.length > 0) {
+            return logs.map(log => ({
+                id: log.id,
+                shipmentId: log.shipmentId,
+                amount: Number(log.amount),
+                earnedAt: log.earnedAt,
+            }));
+        }
+
+        // Fallback: derive from completed shipments when no log entries exist yet
+        const completedShipments = await this.shipmentRepo.find({
+            where: { carrierId, status: ShipmentStatus.COMPLETED },
+            order: { updatedAt: 'DESC' } as any,
+            take: limit,
+        });
+
+        return completedShipments
+            .filter(s => s.price && Number(s.price) > 0)
+            .map(s => ({
+                id: s.id,
+                shipmentId: s.id,
+                amount: Number(s.price),
+                earnedAt: (s as any).updatedAt ?? (s as any).createdAt,
+            }));
+    }
 }

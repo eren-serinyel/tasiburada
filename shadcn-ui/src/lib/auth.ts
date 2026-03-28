@@ -20,7 +20,13 @@ function decodeAuthPayload(): AuthPayload | null {
     const base64 = token.split('.')[1];
     const normalized = base64.replace(/-/g, '+').replace(/_/g, '/');
     const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=');
-    const payload = JSON.parse(atob(padded)) as AuthPayload;
+    const jsonPayload = decodeURIComponent(
+      atob(padded)
+        .split('')
+        .map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join('')
+    );
+    const payload = JSON.parse(jsonPayload) as AuthPayload;
 
     if (payload?.exp && payload.exp * 1000 < Date.now()) {
       clearAuth();

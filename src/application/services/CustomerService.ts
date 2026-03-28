@@ -150,7 +150,9 @@ export class CustomerService {
       origin: shipment.origin,
       destination: shipment.destination,
       price: shipment.price,
-      shipmentDate: shipment.shipmentDate
+      shipmentDate: shipment.shipmentDate,
+      loadDetails: shipment.loadDetails,
+      createdAt: (shipment as any).createdAt,
     }));
   }
 

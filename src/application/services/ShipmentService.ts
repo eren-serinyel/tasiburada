@@ -4,6 +4,8 @@ import { CarrierRepository } from '../../infrastructure/repositories/CarrierRepo
 import { CarrierStatsRepository } from '../../infrastructure/repositories/CarrierStatsRepository';
 import { ForbiddenError, NotFoundError, ValidationError } from '../../domain/errors/AppError';
 import { NotificationService } from './NotificationService';
+import { AppDataSource } from '../../infrastructure/database/data-source';
+import { CarrierEarningsLog } from '../../domain/entities/CarrierEarningsLog';
 
 interface CreateShipmentPayload {
   origin: string;
@@ -42,6 +44,7 @@ export class ShipmentService {
   private carrierRepository = new CarrierRepository();
   private carrierStatsRepository = new CarrierStatsRepository();
   private notificationService = new NotificationService();
+  private earningsLogRepo = AppDataSource.getRepository(CarrierEarningsLog);
 
   async getPendingShipmentsForCarrier(_carrierId: string): Promise<Shipment[]> {
     // TODO: Filter by carrier activity/service areas.
@@ -224,6 +227,18 @@ export class ShipmentService {
     await this.carrierStatsRepository.incrementActiveJobs(carrierId, -1);
 
     const updatedShipment = await this.shipmentRepository.findById(shipmentId);
+    if (updatedShipment?.price && Number(updatedShipment.price) > 0) {
+      try {
+        const log = this.earningsLogRepo.create({
+          carrierId,
+          shipmentId,
+          amount: Number(updatedShipment.price),
+        });
+        await this.earningsLogRepo.save(log);
+
+        await this.carrierStatsRepository.incrementTotalEarnings(carrierId, Number(updatedShipment.price));
+      } catch { /* kazanç logu hatası taşımayı etkilemesin */ }
+    }
     if (!updatedShipment) {
       throw new NotFoundError('Taşıma tamamlandı ancak kayıt getirilemedi.');
     }

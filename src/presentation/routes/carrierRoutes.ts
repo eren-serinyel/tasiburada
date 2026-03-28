@@ -30,6 +30,7 @@ router.get('/:carrierId/detail', detailController.getDetail);
 // Authenticated carrier routes
 router.get('/me', authCarrier, authController.me);
 router.get('/me/stats', authCarrier, dashboardController.getStats);
+router.get('/me/earnings-history', authCarrier, dashboardController.getEarningsHistory);
 router.get('/:carrierId/stats', authCarrier, dashboardController.getStats); // Alias for ID access
 
 router.get('/me/profile-status', authCarrier, profileController.getProfileStatus);
