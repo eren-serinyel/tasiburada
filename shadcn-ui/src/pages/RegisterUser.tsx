@@ -9,10 +9,9 @@ import { CheckCircle, ArrowRight, ArrowLeft, Shield, Clock, Star } from 'lucide-
 import { Link, useNavigate } from 'react-router-dom';
 // import { addNewCustomer } from '@/lib/mockData';
 import { setSessionUser } from '@/lib/storage';
+import { API_BASE_URL } from '@/lib/config';
 import { CITIES_TR, getDistrictsForCity } from '@/lib/locations';
-
-// API Base URL - direct backend connection
-const API_BASE_URL = 'http://localhost:3001/api/v1';
+import { toast } from '@/components/ui/sonner';
 
 // Validasyon fonksiyonları
 const validateEmail = (email: string): string => {
@@ -171,19 +170,19 @@ export default function RegisterUser() {
       
       if (response.ok && result && result.success) {
         // Başarılı kayıt
-        alert('Kayıt başarıyla tamamlandı! Giriş yapabilirsiniz.');
+        toast.success('Kayıt başarıyla tamamlandı. Giriş yapabilirsiniz.');
         navigate('/giris');
       } else {
         // Hata durumu
         const errorMessage = result?.message || `HTTP ${response.status}: ${response.statusText}`;
-        alert(`❌ Hata: ${errorMessage}`);
+        toast.error(errorMessage);
       }
     } catch (error) {
       // Daha detaylı hata mesajı
       if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
-        alert('🔴 Backend sunucusuna erişim sorunu! Sunucu çalışıyor mu kontrol edin.\n\nHata: Failed to fetch - CORS veya network sorunu olabilir.');
+        toast.error('Backend sunucusuna erişilemiyor. CORS veya ağ sorununu kontrol edin.');
       } else {
-        alert(`🔴 Bağlantı hatası: ${error.message}\n\nLütfen backend sunucusunun (port 3001) çalıştığından emin olun.`);
+        toast.error(error instanceof Error ? error.message : 'Bağlantı hatası oluştu.');
       }
     } finally {
       setIsLoading(false);

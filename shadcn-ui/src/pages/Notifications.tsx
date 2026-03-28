@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
 import { Bell, Check } from 'lucide-react';
 import { apiClient } from '@/lib/apiClient';
+import { toast } from '@/components/ui/sonner';
 
 interface ApiNotification {
   id: string;
@@ -30,9 +31,11 @@ export default function Notifications() {
         setNotifs(Array.isArray(json.data) ? json.data : []);
       } else {
         setNotifs([]);
+        toast.error(json?.message || 'Bildirimler alınamadı.');
       }
     } catch {
       setNotifs([]);
+      toast.error('Bildirimler yüklenirken bir hata oluştu.');
     } finally {
       setLoading(false);
     }
@@ -47,9 +50,11 @@ export default function Notifications() {
       const res = await apiClient(`/notifications/${id}/read`, { method: 'PUT' });
       if (res.ok) {
         setNotifs(prev => prev.map(n => (n.id === id ? { ...n, isRead: true } : n)));
+      } else {
+        toast.error('Bildirim güncellenemedi.');
       }
     } catch {
-      // sayfada sessiz hata
+      toast.error('Bildirim güncellenirken bir hata oluştu.');
     }
   };
 

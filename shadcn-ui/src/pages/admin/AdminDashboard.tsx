@@ -212,7 +212,7 @@ export default function AdminDashboard() {
                 </div>
               </>
             ) : (
-              <p className="text-sm text-slate-400 py-10">Henüz veri yok</p>
+              <EmptyState icon={Package} title="Henüz veri yok" description="İlan dağılımı için yeterli kayıt oluşmadı." className="py-8" />
             )}
           </CardContent>
         </Card>

@@ -9,7 +9,7 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
-import { PageHeader, ErrorState } from '@/components/admin/shared';
+import { PageHeader, ErrorState, EmptyState } from '@/components/admin/shared';
 import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip as RechartsTooltip, ResponsiveContainer,
@@ -225,7 +225,11 @@ export default function AdminReports() {
                       </TableRow>
                     ))}
                     {data.topCarriers.length === 0 && (
-                      <TableRow><TableCell colSpan={4} className="text-center text-sm text-slate-400 py-6">Veri yok</TableCell></TableRow>
+                      <TableRow>
+                        <TableCell colSpan={4}>
+                          <EmptyState icon={Users} title="Veri yok" description="Bu dönem için nakliyeci sıralaması oluşmadı." className="py-8" />
+                        </TableCell>
+                      </TableRow>
                     )}
                   </TableBody>
                 </Table>
@@ -263,7 +267,11 @@ export default function AdminReports() {
                       </TableRow>
                     ))}
                     {data.topRoutes.length === 0 && (
-                      <TableRow><TableCell colSpan={4} className="text-center text-sm text-slate-400 py-6">Veri yok</TableCell></TableRow>
+                      <TableRow>
+                        <TableCell colSpan={4}>
+                          <EmptyState icon={ArrowRight} title="Veri yok" description="Bu dönem için güzergah trendi oluşmadı." className="py-8" />
+                        </TableCell>
+                      </TableRow>
                     )}
                   </TableBody>
                 </Table>

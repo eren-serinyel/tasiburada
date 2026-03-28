@@ -8,6 +8,7 @@ import { Star, MessageCircle, Truck, CheckCircle, Clock } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { getSessionUser } from '@/lib/storage';
 import { apiClient } from '@/lib/apiClient';
+import { toast } from '@/components/ui/sonner';
 
 type OfferApi = {
   id: string;
@@ -37,6 +38,7 @@ export default function OfferComparison() {
   const [shipment, setShipment] = useState<ShipmentApi | null>(null);
   const [selectedOffer, setSelectedOffer] = useState<OfferApi | null>(null);
   const [isAcceptDialogOpen, setIsAcceptDialogOpen] = useState(false);
+  const [isAccepting, setIsAccepting] = useState(false);
   const [loading, setLoading] = useState(true);
   const { shipmentId } = useParams();
   const navigate = useNavigate();
@@ -92,6 +94,7 @@ export default function OfferComparison() {
   const confirmAcceptOffer = async () => {
     if (!selectedOffer) return;
 
+    setIsAccepting(true);
     try {
       const res = await apiClient(`/api/v1/offers/${selectedOffer.id}/accept`, {
         method: 'PUT',
@@ -99,14 +102,17 @@ export default function OfferComparison() {
       const json = await res.json();
 
       if (!res.ok || !json?.success) {
-        alert(json?.message || 'Teklif kabul edilemedi.');
+        toast.error(json?.message || 'Teklif kabul edilemedi.');
         return;
       }
 
-      alert('Teklif kabul edildi! Ödeme adımına yönlendiriliyorsunuz.');
+      toast.success('Teklif kabul edildi. Ödeme adımına yönlendiriliyorsunuz.');
+      setIsAcceptDialogOpen(false);
       navigate(`/odeme/${selectedOffer.shipmentId}`);
     } catch {
-      alert('Teklif kabul edilirken bir hata oluştu.');
+      toast.error('Teklif kabul edilirken bir hata oluştu.');
+    } finally {
+      setIsAccepting(false);
     }
   };
 
@@ -264,11 +270,11 @@ export default function OfferComparison() {
           </DialogHeader>
 
           <div className="flex space-x-2">
-            <Button variant="outline" onClick={() => setIsAcceptDialogOpen(false)} className="flex-1">
+            <Button variant="outline" onClick={() => setIsAcceptDialogOpen(false)} className="flex-1" disabled={isAccepting}>
               İptal
             </Button>
-            <Button onClick={confirmAcceptOffer} className="flex-1">
-              Evet, Kabul Et
+            <Button onClick={confirmAcceptOffer} className="flex-1" disabled={isAccepting}>
+              {isAccepting ? 'İşleniyor...' : 'Evet, Kabul Et'}
             </Button>
           </div>
         </DialogContent>
