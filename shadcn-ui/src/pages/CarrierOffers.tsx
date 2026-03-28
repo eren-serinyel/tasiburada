@@ -20,7 +20,7 @@ interface BackendOffer {
   price: number;
   message?: string;
   estimatedDuration?: number;
-  status: 'pending' | 'accepted' | 'rejected';
+  status: 'pending' | 'accepted' | 'rejected' | 'withdrawn';
   offeredAt: string;
 }
 
@@ -28,18 +28,20 @@ const statusLabel: Record<string, string> = {
   pending: 'Bekliyor',
   accepted: 'Kabul Edildi',
   rejected: 'Reddedildi',
+  withdrawn: 'Geri Çekildi',
 };
 
 const statusColor: Record<string, string> = {
   pending: 'bg-yellow-100 text-yellow-800',
   accepted: 'bg-green-100 text-green-800',
   rejected: 'bg-red-100 text-red-800',
+  withdrawn: 'bg-gray-100 text-gray-800',
 };
 
 export default function CarrierOffers() {
   const [offers, setOffers] = useState<BackendOffer[]>([]);
   const [loading, setLoading] = useState(true);
-  const [edit, setEdit] = useState<{ id: string; price: string } | null>(null);
+  const [edit, setEdit] = useState<{ id: string; price: string; message: string; estimatedDuration: string } | null>(null);
   const [confirm, setConfirm] = useState<{ id: string } | null>(null);
   const navigate = useNavigate();
 
@@ -61,14 +63,44 @@ export default function CarrierOffers() {
 
   const handleUpdate = async () => {
     if (!edit) return;
-    toast.info('Teklif güncelleme şu an desteklenmiyor.');
-    setEdit(null);
+    try {
+      const body: Record<string, unknown> = {};
+      const price = parseFloat(edit.price);
+      if (!isNaN(price) && price > 0) body.price = price;
+      if (edit.message !== undefined) body.message = edit.message;
+      const dur = parseInt(edit.estimatedDuration);
+      if (!isNaN(dur) && dur > 0) body.estimatedDuration = dur;
+      const res = await apiClient(`${API_BASE_URL}/offers/${edit.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const json = await res.json();
+      if (res.ok && json?.success) {
+        toast.success('Teklif güncellendi.');
+        fetchOffers();
+      } else {
+        toast.error(json?.message || 'Güncelleme başarısız.');
+      }
+    } catch {
+      toast.error('Teklif güncellenirken hata oluştu.');
+    } finally {
+      setEdit(null);
+    }
   };
 
   const handleCancel = async () => {
     if (!confirm) return;
-    toast.info('Teklif iptal etme şu an desteklenmiyor.');
-    setConfirm(null);
+    try {
+      const res = await apiClient(`${API_BASE_URL}/offers/${confirm.id}/withdraw`, { method: 'PUT' });
+      const json = await res.json();
+      if (res.ok && json?.success) {
+        toast.success('Teklif geri çekildi.');
+        fetchOffers();
+      } else {
+        toast.error(json?.message || 'İptal başarısız.');
+      }
+    } catch {
+      toast.error('Teklif iptal edilirken hata oluştu.');
+    } finally {
+      setConfirm(null);
+    }
   };
 
   if (loading) return (
@@ -114,7 +146,7 @@ export default function CarrierOffers() {
                   <div className="flex gap-2">
                     {o.status === 'pending' && (
                       <>
-                        <Button size="sm" variant="outline" onClick={() => setEdit({ id: o.id, price: String(o.price) })}><Pencil className="h-4 w-4 mr-1" /> Güncelle</Button>
+                        <Button size="sm" variant="outline" onClick={() => setEdit({ id: o.id, price: String(o.price), message: o.message || '', estimatedDuration: o.estimatedDuration ? String(o.estimatedDuration) : '' })}><Pencil className="h-4 w-4 mr-1" /> Güncelle</Button>
                         <Button size="sm" variant="outline" onClick={() => setConfirm({ id: o.id })}><Trash2 className="h-4 w-4 mr-1" /> İptal Et</Button>
                       </>
                     )}
@@ -136,8 +168,18 @@ export default function CarrierOffers() {
             <DialogTitle>Teklif Güncelle</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
-            <Label>Yeni Fiyat</Label>
-            <Input value={edit?.price || ''} onChange={(e) => setEdit(prev => prev ? { ...prev, price: e.target.value } : prev)} type="number" />
+            <div>
+              <Label>Yeni Fiyat (₺)</Label>
+              <Input value={edit?.price || ''} onChange={(e) => setEdit(prev => prev ? { ...prev, price: e.target.value } : prev)} type="number" />
+            </div>
+            <div>
+              <Label>Mesaj</Label>
+              <Input value={edit?.message || ''} onChange={(e) => setEdit(prev => prev ? { ...prev, message: e.target.value } : prev)} />
+            </div>
+            <div>
+              <Label>Tahmini Süre (saat)</Label>
+              <Input value={edit?.estimatedDuration || ''} onChange={(e) => setEdit(prev => prev ? { ...prev, estimatedDuration: e.target.value } : prev)} type="number" />
+            </div>
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => setEdit(null)}><XCircle className="h-4 w-4 mr-1" /> Vazgeç</Button>
               <Button onClick={handleUpdate}><CheckCircle2 className="h-4 w-4 mr-1" /> Kaydet</Button>

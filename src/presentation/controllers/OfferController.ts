@@ -150,4 +150,58 @@ export class OfferController {
       });
     }
   };
+
+  update = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const carrierId = req.user?.carrierId;
+      if (!carrierId) {
+        res.status(401).json({ success: false, message: 'Yetkisiz erişim.' });
+        return;
+      }
+
+      const { id } = req.params;
+      const offer = await this.offerService.updateOffer(carrierId, id, req.body);
+      res.status(200).json({
+        success: true,
+        message: 'Teklif güncellendi.',
+        data: offer
+      });
+    } catch (error: any) {
+      let statusCode = 400;
+      if (error.message?.includes('bulunamadı')) statusCode = 404;
+      else if (error.message?.includes('yetkiniz yok')) statusCode = 403;
+
+      res.status(statusCode).json({
+        success: false,
+        message: error.message || 'Teklif güncellenirken hata oluştu.'
+      });
+    }
+  };
+
+  withdraw = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const carrierId = req.user?.carrierId;
+      if (!carrierId) {
+        res.status(401).json({ success: false, message: 'Yetkisiz erişim.' });
+        return;
+      }
+
+      const { id } = req.params;
+      const offer = await this.offerService.withdrawOffer(carrierId, id);
+      res.status(200).json({
+        success: true,
+        message: 'Teklif geri çekildi.',
+        data: offer
+      });
+    } catch (error: any) {
+      let statusCode = 400;
+      if (error.message?.includes('bulunamadı')) statusCode = 404;
+      else if (error.message?.includes('yetkiniz yok')) statusCode = 403;
+
+      res.status(statusCode).json({
+        success: false,
+        message: error.message || 'Teklif geri çekilirken hata oluştu.'
+      });
+    }
+  };
 }

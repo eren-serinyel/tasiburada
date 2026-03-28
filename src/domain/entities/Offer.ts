@@ -5,7 +5,8 @@ import { Carrier } from "./Carrier";
 export enum OfferStatus {
     PENDING = "pending",
     ACCEPTED = "accepted",
-    REJECTED = "rejected"
+    REJECTED = "rejected",
+    WITHDRAWN = "withdrawn"
 }
 
 @Entity("offers")

@@ -9,5 +9,7 @@ router.post('/', authenticateCarrier, offerController.create);
 router.get('/:id', authenticateToken, offerController.getById);
 router.put('/:id/accept', authenticateCustomer, offerController.accept);
 router.put('/:id/reject', authenticateCustomer, offerController.reject);
+router.put('/:id/withdraw', authenticateCarrier, offerController.withdraw);
+router.put('/:id', authenticateCarrier, offerController.update);
 
 export default router;

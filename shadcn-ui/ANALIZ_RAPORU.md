@@ -758,14 +758,14 @@ Taşıma Yap → İş Tamamla → Kazanç Gör
 | M4.2 | ~~Kabul edildikten sonra diğer teklifleri otomatik reddet~~ ✅ (backend otomatik) |
 | M4.3 | Nakliyeciye bildirim gönder — Sprint 4'e ertelendi |
 
-### M5. Shipment Durum Akışı
+### M5. Shipment Durum Akışı ✅ TAMAMLANDI
 
 | ID | Görev |
 |----|-------|
-| M5.1 | Nakliyeci: "Taşımayı Başlat" butonu → `PUT /shipments/:id/start` | 
-| M5.2 | Nakliyeci: "Teslim Edildi" butonu → `PUT /shipments/:id/complete` |
-| M5.3 | ShipmentDetail'da gerçek timeline (API'den status) |
-| M5.4 | Durum değiştiğinde iki tarafa da bildirim |
+| M5.1 | ~~Nakliyeci: "Taşımayı Başlat" butonu → `PUT /shipments/:id/start`~~ ✅ TAMAMLANDI |
+| M5.2 | ~~Nakliyeci: "Teslim Edildi" butonu → `PUT /shipments/:id/complete`~~ ✅ TAMAMLANDI |
+| M5.3 | ~~ShipmentDetail'da gerçek timeline (API'den status)~~ ✅ TAMAMLANDI |
+| M5.4 | ~~Durum değiştiğinde iki tarafa da bildirim~~ ✅ TAMAMLANDI |
 
 ### M6. Temel Koruma Eksiklikleri
 
@@ -782,15 +782,15 @@ Taşıma Yap → İş Tamamla → Kazanç Gör
 
 ## 3.3 SHOULD — Olmalı (Kullanıcı Deneyimi)
 
-### S1. Bildirim Sistemi
+### S1. Bildirim Sistemi ✅ TAMAMLANDI
 
 | ID | Görev |
 |----|-------|
-| S1.1 | Backend: Notification entity + service + controller + routes |
-| S1.2 | Backend: Teklif geldiğinde, durum değiştiğinde otomatik bildirim oluştur |
-| S1.3 | Frontend: Notifications.tsx → gerçek API bağla |
-| S1.4 | Frontend: NotificationBell → gerçek bildirim sayısı getir |
-| S1.5 | Polling ile periyodik güncelleme (her 30 saniye) |
+| S1.1 | ~~Backend: Notification entity + service + controller + routes~~ ✅ |
+| S1.2 | ~~Backend: Teklif geldiğinde, durum değiştiğinde otomatik bildirim oluştur~~ ✅ |
+| S1.3 | ~~Frontend: Notifications.tsx → gerçek API bağla~~ ✅ |
+| S1.4 | ~~Frontend: NotificationBell → gerçek bildirim sayısı getir~~ ✅ |
+| S1.5 | ~~Polling ile periyodik güncelleme (her 30 saniye)~~ ✅ |
 
 ### S2. Admin Panel Düzeltmeleri
 
@@ -804,30 +804,30 @@ Taşıma Yap → İş Tamamla → Kazanç Gör
 | S2.6 | Admin Teklifler sayfası oluştur |
 | S2.7 | Admin Belgeler sayfası oluştur (belge doğrulama iş akışı) |
 
-### S3. Ödeme Sistemi (Basit MVP)
+### S3. Ödeme Sistemi (Basit MVP) ✅ TAMAMLANDI
 
 | ID | Görev |
 |----|-------|
-| S3.1 | Payment entity oluştur (shipmentId, customerId, amount, method, status) |
-| S3.2 | Payment Service + Controller + Routes |
-| S3.3 | Payment.tsx → gerçek API'ye bağla (henüz 3rd party entegrasyon olmadan, kayıt tut) |
-| S3.4 | Payments.tsx → gerçek ödeme geçmişi |
+| S3.1 | ~~Payment entity oluştur (shipmentId, customerId, amount, method, status)~~ ✅ |
+| S3.2 | ~~Payment Service + Controller + Routes~~ ✅ |
+| S3.3 | ~~Payment.tsx → gerçek API'ye bağla (henüz 3rd party entegrasyon olmadan, kayıt tut)~~ ✅ |
+| S3.4 | ~~Payments.tsx → gerçek ödeme geçmişi~~ ✅ |
 
-### S4. Kazanç Sistemi
-
-| ID | Görev |
-|----|-------|
-| S4.1 | CarrierEarningsLog endpoint'leri oluştur (GET /carriers/me/earnings-log) |
-| S4.2 | İş tamamlandığında otomatik kazanç kaydı oluştur |
-| S4.3 | Earnings.tsx → gerçek API bağla |
-
-### S5. Yorum Sistemi Düzeltmesi
+### S4. Kazanç Sistemi ✅ TAMAMLANDI
 
 | ID | Görev |
 |----|-------|
-| S5.1 | CarrierProfile → review yazmayı gerçek API'ye bağla (`POST /api/v1/reviews`) |
-| S5.2 | CarrierDetailPage → reviews gerçek API'den gelsin |
-| S5.3 | Dashboard (carrier) → reviews gerçek API'den gelsin |
+| S4.1 | ~~CarrierEarningsLog endpoint'leri oluştur (GET /carriers/me/earnings-log)~~ ✅ |
+| S4.2 | ~~İş tamamlandığında otomatik kazanç kaydı oluştur~~ ✅ |
+| S4.3 | ~~Earnings.tsx → gerçek API bağla~~ ✅ |
+
+### S5. Yorum Sistemi Düzeltmesi ✅ TAMAMLANDI
+
+| ID | Görev |
+|----|-------|
+| S5.1 | ~~CarrierProfile → review yazmayı gerçek API'ye bağla (`POST /api/v1/reviews`)~~ ✅ |
+| S5.2 | ~~CarrierDetailPage → reviews gerçek API'den gelsin~~ ✅ |
+| S5.3 | ~~Dashboard (carrier) → reviews gerçek API'den gelsin~~ ✅ |
 
 ---
 
@@ -938,27 +938,27 @@ Sıra  Görev                                                Bağımlılık     
 2.7   M4.1-M4.3 — Teklif kabul/red akışı                   2.5            ✅
 ```
 
-### Sprint 3: Shipment Yaşam Döngüsü
+### Sprint 3: Shipment Yaşam Döngüsü ✅ TAMAMLANDI
 
 ```
-Sıra  Görev                                                Bağımlılık
-────  ─────────────────────────────────────────────────────  ──────────
-3.1   M5.1 — Nakliyeci "Taşımayı Başlat" butonu            Sprint 2
-3.2   M5.2 — Nakliyeci "Teslim Edildi" butonu               3.1
-3.3   M5.3 — ShipmentDetail gerçek timeline                 3.1, 3.2
-3.4   S5.1-S5.3 — Yorum sistemi gerçek API                 Sprint 2
+Sıra  Görev                                                Bağımlılık     Durum
+────  ─────────────────────────────────────────────────────  ──────────     ─────
+3.1   M5.1 — Nakliyeci "Taşımayı Başlat" butonu            Sprint 2       ✅
+3.2   M5.2 — Nakliyeci "Teslim Edildi" butonu               3.1            ✅
+3.3   M5.3 — ShipmentDetail gerçek timeline                 3.1, 3.2       ✅
+3.4   S5.1-S5.3 — Yorum sistemi gerçek API                 Sprint 2       ✅
 ```
 
-### Sprint 4: Bildirim + Ödeme + Kazanç
+### Sprint 4: Bildirim + Ödeme + Kazanç ✅ TAMAMLANDI
 
 ```
-Sıra  Görev                                                Bağımlılık
-────  ─────────────────────────────────────────────────────  ──────────
-4.1   S1.1 — Notification backend (entity/service/controller) Yok
-4.2   S1.2 — Otomatik bildirim tetikleyicileri              4.1
-4.3   S1.3-S1.5 — Frontend bildirim entegrasyonu            4.1
-4.4   S3.1-S3.4 — Ödeme sistemi (basit kayıt)              Sprint 3
-4.5   S4.1-S4.3 — Kazanç sistemi                           Sprint 3
+Sıra  Görev                                                Bağımlılık     Durum
+────  ─────────────────────────────────────────────────────  ──────────     ─────
+4.1   S1.1 — Notification backend (entity/service/controller) Yok          ✅
+4.2   S1.2 — Otomatik bildirim tetikleyicileri              4.1            ✅
+4.3   S1.3-S1.5 — Frontend bildirim entegrasyonu            4.1            ✅
+4.4   S3.1-S3.4 — Ödeme sistemi (basit kayıt)              Sprint 3       ✅
+4.5   S4.1-S4.3 — Kazanç sistemi                           Sprint 3       ✅
 ```
 
 ### Sprint 5: Admin Panel Güçlendirme
@@ -988,18 +988,18 @@ Sıra  Görev                                                Bağımlılık
 - ~~Offer entity'ye `estimatedDuration` (int, nullable) ve `validUntil` (datetime, nullable) ekle~~ → estimatedDuration eklendi
 - ~~Migration oluştur~~ → TypeORM synchronize ile otomatik
 
-### Sprint 3 Backend
-- ShipmentService.start() ve .complete() metodları zaten var
-- İş tamamlandığında → CarrierEarningsLog kaydı oluştur
-- İş tamamlandığında → Carrier.completedShipments++ güncelle
+### Sprint 3 Backend ✅ TAMAMLANDI
+- ~~ShipmentService.start() ve .complete() metodları zaten var~~ ✅
+- ~~İş tamamlandığında → CarrierEarningsLog kaydı oluştur~~ ✅
+- ~~İş tamamlandığında → Carrier.completedShipments++ güncelle~~ ✅
 
-### Sprint 4 Backend
-- **YENİ Entity:** Notification (id, userId, userType, type, title, message, isRead, relatedId, actionUrl, createdAt)
-- **YENİ Service:** NotificationService (create, getByUser, markRead, markAllRead, getUnreadCount)
-- **YENİ Controller + Routes:** 5 endpoint
-- **YENİ Entity:** Payment (id, shipmentId, customerId, amount, method, status, createdAt)
-- **YENİ Service:** PaymentService (create, getByCustomer, getByShipment)
-- **YENİ Endpoint:** GET /carriers/me/earnings-log
+### Sprint 4 Backend ✅ TAMAMLANDI
+- ~~**YENİ Entity:** Notification (id, userId, userType, type, title, message, isRead, relatedId, actionUrl, createdAt)~~ ✅
+- ~~**YENİ Service:** NotificationService (create, getByUser, markRead, markAllRead, getUnreadCount)~~ ✅
+- ~~**YENİ Controller + Routes:** 5 endpoint~~ ✅
+- ~~**YENİ Entity:** Payment (id, shipmentId, customerId, amount, method, status, createdAt)~~ ✅
+- ~~**YENİ Service:** PaymentService (create, getByCustomer, getByShipment)~~ ✅
+- ~~**YENİ Endpoint:** GET /carriers/me/earnings-log~~ ✅
 
 ### Sprint 5 Backend
 - **YENİ Endpoint:** GET /admin/stats/trends?period=30d (zaman serisi)
@@ -1077,18 +1077,18 @@ Her sprint sonunda doğrulanacak senaryolar:
 - [x] Müşteri teklif kabul/red yapabiliyor
 - [x] Nakliyeci, CarrierOffers'dan kendi tekliflerini görebiliyor
 
-### Sprint 3 Sonrası ✓
-- [ ] Nakliyeci taşımayı başlatabiliyor (pending → in_transit)
-- [ ] Nakliyeci teslimi tamamlayabiliyor (in_transit → completed)
-- [ ] ShipmentDetail'da gerçek timeline çalışıyor
-- [ ] Müşteri tamamlanan iş için yorum yazabiliyor
+### Sprint 3 Sonrası ✅ TAMAMLANDI
+- [x] Nakliyeci taşımayı başlatabiliyor (pending → in_transit)
+- [x] Nakliyeci teslimi tamamlayabiliyor (in_transit → completed)
+- [x] ShipmentDetail'da gerçek timeline çalışıyor
+- [x] Müşteri tamamlanan iş için yorum yazabiliyor
 
-### Sprint 4 Sonrası ✓
-- [ ] Bildirimler gerçek API'den geliyor
-- [ ] Teklif geldiğinde bildirim oluşuyor
-- [ ] Durum değiştiğinde bildirim oluşuyor
-- [ ] Ödeme kaydı oluşturabiliyor
-- [ ] Nakliyeci kazanç geçmişini görebiliyor
+### Sprint 4 Sonrası ✅ TAMAMLANDI
+- [x] Bildirimler gerçek API'den geliyor
+- [x] Teklif geldiğinde bildirim oluşuyor
+- [x] Durum değiştiğinde bildirim oluşuyor
+- [x] Ödeme kaydı oluşturabiliyor
+- [x] Nakliyeci kazanç geçmişini görebiliyor
 
 ### Sprint 5 Sonrası ✓
 - [ ] Admin dashboard gerçek trend verisi gösteriyor

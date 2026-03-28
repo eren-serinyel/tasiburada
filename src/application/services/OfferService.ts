@@ -183,4 +183,84 @@ export class OfferService {
     const offers = await this.offerRepository.findByCarrierId(carrierId);
     return offers.map(offer => this.sanitizeOffer(offer));
   }
+
+  async updateOffer(carrierId: string, offerId: string, updates: { price?: number; message?: string; estimatedDuration?: number }): Promise<Offer> {
+    const offer = await this.offerRepository.findByIdWithShipmentAndCarrier(offerId);
+    if (!offer) {
+      throw new NotFoundError('Teklif bulunamadı.');
+    }
+
+    if (offer.carrierId !== carrierId) {
+      throw new ForbiddenError('Bu teklifi güncelleme yetkiniz yok.');
+    }
+
+    if (offer.status !== OfferStatus.PENDING) {
+      throw new ValidationError('Sadece bekleyen teklifler güncellenebilir.');
+    }
+
+    const updateData: Partial<Offer> = {};
+    if (updates.price !== undefined) {
+      if (typeof updates.price !== 'number' || updates.price <= 0) {
+        throw new ValidationError('Geçerli bir fiyat giriniz.');
+      }
+      updateData.price = updates.price;
+    }
+    if (updates.message !== undefined) updateData.message = updates.message;
+    if (updates.estimatedDuration !== undefined) updateData.estimatedDuration = updates.estimatedDuration;
+
+    await this.offerRepository.update(offerId, updateData);
+
+    const updatedOffer = await this.offerRepository.findByIdWithShipmentAndCarrier(offerId);
+    if (!updatedOffer) {
+      throw new NotFoundError('Teklif güncellendi ancak getirilemedi.');
+    }
+
+    if (offer.shipment?.customerId) {
+      await this.notificationService.createNotification(
+        offer.shipment.customerId,
+        'customer',
+        'OFFER_UPDATED',
+        'Teklif Güncellendi',
+        `${updatedOffer.carrier?.companyName || 'Nakliyeci'} teklifini güncelledi.`,
+        offer.shipmentId
+      );
+    }
+
+    return this.sanitizeOffer(updatedOffer);
+  }
+
+  async withdrawOffer(carrierId: string, offerId: string): Promise<Offer> {
+    const offer = await this.offerRepository.findByIdWithShipmentAndCarrier(offerId);
+    if (!offer) {
+      throw new NotFoundError('Teklif bulunamadı.');
+    }
+
+    if (offer.carrierId !== carrierId) {
+      throw new ForbiddenError('Bu teklifi geri çekme yetkiniz yok.');
+    }
+
+    if (offer.status !== OfferStatus.PENDING) {
+      throw new ValidationError('Sadece bekleyen teklifler geri çekilebilir.');
+    }
+
+    await this.offerRepository.update(offerId, { status: OfferStatus.WITHDRAWN });
+
+    const updatedOffer = await this.offerRepository.findByIdWithShipmentAndCarrier(offerId);
+    if (!updatedOffer) {
+      throw new NotFoundError('Teklif geri çekildi ancak getirilemedi.');
+    }
+
+    if (offer.shipment?.customerId) {
+      await this.notificationService.createNotification(
+        offer.shipment.customerId,
+        'customer',
+        'OFFER_WITHDRAWN',
+        'Teklif Geri Çekildi',
+        `${updatedOffer.carrier?.companyName || 'Nakliyeci'} teklifini geri çekti.`,
+        offer.shipmentId
+      );
+    }
+
+    return this.sanitizeOffer(updatedOffer);
+  }
 }

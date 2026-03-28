@@ -23,8 +23,8 @@
 - [x] Müşteri kabul / reddeder (`PUT /offers/:id/accept`, `/reject`)
 - [x] Nakliyecinin tekliflerini listele (`GET /carriers/me/offers`)
 - [x] Müşterinin gelen tekliflerini listele (`GET /customers/offers`)
-- [ ] Nakliyeci teklif güncelle (fiyat, mesaj)
-- [ ] Nakliyeci teklif geri çek / iptal et
+- [x] Nakliyeci teklif güncelle (fiyat, mesaj) — `PUT /offers/:id`
+- [x] Nakliyeci teklif geri çek / iptal et — `PUT /offers/:id/withdraw` (WITHDRAWN status)
 
 ### Nakliyeci Profil
 - [x] Şirket bilgisi, faaliyet bilgisi, araçlar, hizmet türleri
@@ -39,8 +39,8 @@
 - [x] `cancelledShipments` artırma + `successRate` hesaplama — iptal edildiğinde
 - [x] `rating` güncelleme — yorum yapıldığında
 - [x] `GET /carriers/me/stats` — dashboard istatistikleri
-- [ ] `GET /carriers/me/earnings-history` — işlem bazlı kazanç geçmişi
-- [ ] Taşıma tamamlandığında `CarrierEarningsLog`'a kayıt ekleme
+- [x] `GET /carriers/me/earnings-history` — işlem bazlı kazanç geçmişi
+- [x] Taşıma tamamlandığında `CarrierEarningsLog`'a kayıt ekleme
 
 ### Review (Değerlendirme)
 - [x] Müşteri taşımaya yorum yazar
@@ -98,24 +98,25 @@
 - [x] Mesajlar (Messages.tsx) — UI hazır, backend yok
 
 ### Eksik / localStorage hâlâ kullanılan
-- [ ] **Payments.tsx** — localStorage'dan API'ye geçiş (tamamlanan taşımalar üzerinden)
-- [ ] **Earnings.tsx** — localStorage'dan API'ye geçiş (`/carriers/me/stats` + earnings-history)
+- [x] **Payments.tsx** — localStorage'dan API'ye geçiş (tamamlanan taşımalar üzerinden) ✅
+- [x] **Earnings.tsx** — localStorage'dan API'ye geçiş (`/carriers/me/stats` + earnings-history) ✅
 
 ---
 
 ## 🔜 Sıradaki Geliştirmeler (Öncelik Sırasıyla)
 
-1. **[CURRENT]** Earnings & Payments API entegrasyonu
-   - Backend: `ShipmentService.completeShipmentByCarrier()` içinde `CarrierEarningsLog` kaydı
-   - Backend: `GET /carriers/me/earnings-history` endpoint
-   - Frontend: `Earnings.tsx` → stats + earnings history API
-   - Frontend: `Payments.tsx` → tamamlanan taşımalar API
+1. ~~Earnings & Payments API entegrasyonu~~ ✅ TAMAMLANDI
+   - ~~Backend: `ShipmentService.completeShipmentByCarrier()` içinde `CarrierEarningsLog` kaydı~~ ✅
+   - ~~Backend: `GET /carriers/me/earnings-history` endpoint~~ ✅
+   - ~~Frontend: `Earnings.tsx` → stats + earnings history API~~ ✅
+   - ~~Frontend: `Payments.tsx` → tamamlanan taşımalar API~~ ✅
 
-2. Nakliyeci teklif güncelle / geri çek
-   - Backend: `PUT /offers/:id` (fiyat, mesaj), `DELETE /offers/:id`
-   - Frontend: CarrierOffers.tsx butonlarını aktif et
+2. ~~Nakliyeci teklif güncelle / geri çek~~ ✅ TAMAMLANDI
+   - ~~Backend: `PUT /offers/:id` (fiyat, mesaj, tahmini süre)~~ ✅
+   - ~~Backend: `PUT /offers/:id/withdraw` (WITHDRAWN status + bildirim)~~ ✅
+   - ~~Frontend: CarrierOffers.tsx güncelle/iptal butonları aktif~~ ✅
 
-3. Mesajlaşma (Messages) backend
+3. **[CURRENT]** Mesajlaşma (Messages) backend
    - Entitiy: Conversation, Message
    - Routes: `GET /messages/:conversationId`, `POST /messages`
 
