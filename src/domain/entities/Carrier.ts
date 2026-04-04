@@ -35,6 +35,18 @@ export class Carrier {
   @Column({ type: 'varchar', length: 255, nullable: false })
   passwordHash: string;
 
+  @Column({ type: 'varchar', length: 500, nullable: true })
+  addressLine1?: string;
+
+  @Column({ type: 'varchar', length: 500, nullable: true })
+  addressLine2?: string;
+
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  district?: string;
+
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  activityCity?: string;
+
   @Column({ type: 'boolean', default: true })
   isActive: boolean;
 
@@ -71,6 +83,21 @@ export class Carrier {
   @Column({ type: 'float', default: 0 })
   successRate: number;
 
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  vehicleBrand?: string;
+
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  vehicleModel?: string;
+
+  @Column({ type: 'int', nullable: true })
+  vehicleYear?: number;
+
+  @Column({ type: 'float', nullable: true })
+  vehicleCapacityM3?: number;
+
+  @Column({ type: 'text', nullable: true })
+  availableDates?: string;
+
   @CreateDateColumn()
   createdAt: Date;
 
@@ -79,6 +106,15 @@ export class Carrier {
 
   @Column({ type: 'datetime', nullable: true })
   lastLogin?: Date;
+
+  @Column({ type: 'varchar', length: 10, nullable: true })
+  resetToken?: string | null;
+
+  @Column({ type: 'datetime', nullable: true })
+  resetTokenExpiry?: Date | null;
+
+  @Column({ type: 'varchar', length: 10, nullable: true })
+  verificationToken?: string | null;
 
   // İlişkiler
   @OneToMany(() => Vehicle, vehicle => vehicle.carrier)

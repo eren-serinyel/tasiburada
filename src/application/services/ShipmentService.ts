@@ -56,10 +56,20 @@ export class ShipmentService {
       throw new ValidationError('origin, destination, loadDetails ve shipmentDate alanları zorunludur.');
     }
 
+    const origin = payload.origin.trim();
+    const destination = payload.destination.trim();
+
+    if (origin.length < 3) {
+      throw new ValidationError('Çıkış noktası en az 3 karakter olmalıdır.');
+    }
+    if (destination.length < 3) {
+      throw new ValidationError('Varış noktası en az 3 karakter olmalıdır.');
+    }
+
     return await this.shipmentRepository.createShipmentRecord({
       customerId,
-      origin: payload.origin,
-      destination: payload.destination,
+      origin,
+      destination,
       loadDetails: payload.loadDetails,
       transportType: payload.transportType,
       placeType: payload.placeType,
@@ -255,6 +265,47 @@ export class ShipmentService {
     } catch { /* bildirim hatası taşımayı etkilemesin */ }
 
     return updatedShipment;
+  }
+
+  async searchShipments(params: {
+    origin?: string;
+    destination?: string;
+    status?: string;
+    loadType?: string;
+    page?: number;
+    limit?: number;
+  }): Promise<{ shipments: Shipment[], total: number }> {
+    const { origin, destination, status, loadType, page = 1, limit = 10 } = params;
+
+    const qb = AppDataSource.getRepository(Shipment)
+      .createQueryBuilder('shipment')
+      .leftJoinAndSelect('shipment.customer', 'customer')
+      .leftJoinAndSelect('shipment.carrier', 'carrier');
+
+    if (origin) qb.andWhere('shipment.origin LIKE :origin', { origin: `%${origin}%` });
+    if (destination) qb.andWhere('shipment.destination LIKE :destination', { destination: `%${destination}%` });
+    if (status) qb.andWhere('shipment.status = :status', { status });
+    if (loadType) qb.andWhere('shipment.loadDetails LIKE :loadType', { loadType: `%${loadType}%` });
+
+    qb.orderBy('shipment.createdAt', 'DESC')
+      .skip((page - 1) * limit)
+      .take(limit);
+
+    const [shipments, total] = await qb.getManyAndCount();
+    return { shipments, total };
+  }
+
+  async assignCarrier(shipmentId: string, carrierId: string): Promise<Shipment> {
+    const shipment = await this.shipmentRepository.findById(shipmentId);
+    if (!shipment) throw new NotFoundError('Taşıma bulunamadı');
+
+    const updated = await this.shipmentRepository.update(shipmentId, {
+      carrierId,
+      status: ShipmentStatus.MATCHED
+    });
+
+    if (!updated) throw new Error('Taşıma güncellenemedi');
+    return updated;
   }
 
 }

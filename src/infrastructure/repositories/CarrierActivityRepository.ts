@@ -6,6 +6,7 @@ type ActivityPayload = {
   district?: string;
   address?: string;
   serviceAreas?: string[];
+  availableDates?: string[];
 };
 
 export class CarrierActivityRepository extends BaseRepository<CarrierActivity> {
@@ -24,7 +25,8 @@ export class CarrierActivityRepository extends BaseRepository<CarrierActivity> {
       city: payload.city,
       district: payload.district,
       address: payload.address,
-      serviceAreasJson: payload.serviceAreas ?? null
+      serviceAreasJson: payload.serviceAreas ?? null,
+      availableDates: payload.availableDates ? JSON.stringify(payload.availableDates) : undefined,
     };
 
     if (existing) {

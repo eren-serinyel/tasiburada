@@ -117,3 +117,11 @@ export const authenticateAdmin = (req: Request, res: Response, next: NextFunctio
     res.status(403).json({ success: false, message: 'Geçersiz admin token.' });
   }
 };
+
+export const requireSuperadmin = (req: Request, res: Response, next: NextFunction): void => {
+  if (req.user?.role !== 'superadmin') {
+    res.status(403).json({ success: false, message: 'Bu işlem için süper admin yetkisi gereklidir.' });
+    return;
+  }
+  next();
+};

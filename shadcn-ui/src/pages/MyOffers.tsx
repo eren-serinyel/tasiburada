@@ -1,35 +1,103 @@
-import { useEffect, useState } from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { useEffect, useState, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
-import { useNavigate } from 'react-router-dom';
+import { Separator } from '@/components/ui/separator';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { Star, PackageOpen } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
 import { apiClient } from '@/lib/apiClient';
 import { toast } from '@/components/ui/sonner';
 
 const API_BASE_URL = '/api/v1';
 
+interface OfferCarrier {
+  id: string;
+  companyName?: string | null;
+  contactName?: string | null;
+  rating?: number;
+  completedShipments?: number;
+  pictureUrl?: string | null;
+}
+
+interface OfferShipment {
+  id: string;
+  origin?: string;
+  destination?: string;
+  loadDetails?: string;
+  weight?: number;
+  shipmentDate?: string;
+  status?: string;
+}
+
 interface BackendOffer {
   id: string;
   shipmentId: string;
   carrierId: string;
-  carrier?: { companyName?: string; contactName?: string; rating?: number };
-  shipment?: { origin?: string; destination?: string; loadDetails?: string };
+  carrier?: OfferCarrier;
+  shipment?: OfferShipment;
   price: number;
   message?: string;
   estimatedDuration?: number;
-  status: 'pending' | 'accepted' | 'rejected';
+  status: 'pending' | 'accepted' | 'rejected' | 'withdrawn';
   offeredAt: string;
 }
 
-const statusLabel: Record<string, string> = {
-  pending: 'Bekliyor',
-  accepted: 'Kabul Edildi',
-  rejected: 'Reddedildi',
+/* ── Helpers ── */
+const shipmentStatusConfig: Record<string, { label: string; bg: string; text: string }> = {
+  pending:        { label: 'Teklif Bekleniyor', bg: 'bg-amber-50',  text: 'text-amber-700' },
+  offer_received: { label: 'Teklif Geldi',      bg: 'bg-amber-50',  text: 'text-amber-700' },
+  matched:        { label: 'Eşleşti',            bg: 'bg-blue-50',   text: 'text-blue-700' },
+  in_transit:     { label: 'Taşınıyor',          bg: 'bg-orange-50', text: 'text-orange-700' },
+  completed:      { label: 'Tamamlandı',         bg: 'bg-green-50',  text: 'text-green-700' },
+  cancelled:      { label: 'İptal',              bg: 'bg-gray-100',  text: 'text-gray-500' },
 };
+
+const fmtPrice = (n: number) =>
+  new Intl.NumberFormat('tr-TR', { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(n);
+
+const fmtDate = (d: string) =>
+  new Date(d).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' });
+
+function timeAgo(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'Az önce';
+  if (mins < 60) return `${mins} dk önce`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours} saat önce`;
+  const days = Math.floor(hours / 24);
+  return `${days} gün önce`;
+}
+
+function getInitials(name?: string | null): string {
+  if (!name) return 'N';
+  return name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+}
+
+const gradients = [
+  'from-blue-500 to-blue-600',
+  'from-purple-500 to-purple-600',
+  'from-emerald-500 to-emerald-600',
+  'from-orange-500 to-orange-600',
+  'from-pink-500 to-pink-600',
+  'from-cyan-500 to-cyan-600',
+];
+
+function pickGradient(id: string): string {
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) hash = ((hash << 5) - hash + id.charCodeAt(i)) | 0;
+  return gradients[Math.abs(hash) % gradients.length];
+}
 
 export default function MyOffers() {
   const [offers, setOffers] = useState<BackendOffer[]>([]);
   const [loading, setLoading] = useState(true);
   const [decidingId, setDecidingId] = useState<string | null>(null);
+  const [filterShipmentId, setFilterShipmentId] = useState<string>('all');
+  const [confirmOffer, setConfirmOffer] = useState<BackendOffer | null>(null);
   const navigate = useNavigate();
 
   const fetchOffers = async () => {
@@ -58,6 +126,7 @@ export default function MyOffers() {
       const json = await res.json();
       if (res.ok && json?.success) {
         toast.success(accept ? 'Teklif kabul edildi!' : 'Teklif reddedildi.');
+        setConfirmOffer(null);
         await fetchOffers();
       } else {
         toast.error(json?.message || 'İşlem başarısız.');
@@ -69,58 +138,267 @@ export default function MyOffers() {
     }
   };
 
-  if (loading) return (
-    <div className="max-w-4xl mx-auto p-6">
-      <Card><CardContent className="py-10 text-center text-gray-600">Yükleniyor...</CardContent></Card>
-    </div>
-  );
+  /* ── Group offers by shipmentId ── */
+  const grouped = useMemo(() => {
+    const filtered = filterShipmentId === 'all'
+      ? offers
+      : offers.filter(o => o.shipmentId === filterShipmentId);
+
+    const map = new Map<string, { shipment: OfferShipment | undefined; offers: BackendOffer[] }>();
+    for (const o of filtered) {
+      const key = o.shipmentId;
+      if (!map.has(key)) {
+        map.set(key, { shipment: o.shipment, offers: [] });
+      }
+      map.get(key)!.offers.push(o);
+    }
+    // Sort offers within each group by price ascending
+    for (const group of map.values()) {
+      group.offers.sort((a, b) => Number(a.price) - Number(b.price));
+    }
+    return [...map.entries()];
+  }, [offers, filterShipmentId]);
+
+  /* ── Unique shipment options for filter ── */
+  const shipmentOptions = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const o of offers) {
+      if (!seen.has(o.shipmentId)) {
+        const s = o.shipment;
+        seen.set(o.shipmentId, s ? `${s.origin || '?'} → ${s.destination || '?'}` : o.shipmentId.slice(0, 8));
+      }
+    }
+    return [...seen.entries()];
+  }, [offers]);
+
+  /* ── Loading ── */
+  if (loading) {
+    return (
+      <div className="flex min-h-[40vh] items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-gray-300 border-t-gray-800" />
+      </div>
+    );
+  }
 
   return (
-    <div className="max-w-4xl mx-auto p-6 space-y-4">
-      <h1 className="text-2xl font-semibold">Gelen Tekliflerim</h1>
+    <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+      {/* ── Header ── */}
+      <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Tekliflerim</h1>
+          <p className="text-[15px] text-gray-500 mt-1">
+            Nakliyecilerden gelen teklifleri karşılaştırın ve en uygununu seçin.
+          </p>
+        </div>
+        {shipmentOptions.length > 1 && (
+          <Select value={filterShipmentId} onValueChange={setFilterShipmentId}>
+            <SelectTrigger className="w-[220px] text-sm">
+              <SelectValue placeholder="Tüm İlanlar" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Tüm İlanlar</SelectItem>
+              {shipmentOptions.map(([id, label]) => (
+                <SelectItem key={id} value={id}>{label}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+      </div>
+
+      {/* ── Empty ── */}
       {offers.length === 0 ? (
-        <Card><CardContent className="py-10 text-center text-gray-600">Henüz teklif yok.</CardContent></Card>
+        <div className="flex flex-col items-center justify-center py-20 text-center">
+          <PackageOpen className="h-12 w-12 text-gray-300 mb-4" />
+          <p className="text-[15px] text-gray-500 mb-1">Henüz teklif almadınız.</p>
+          <p className="text-sm text-gray-400">
+            <Link to="/tasima-olustur" className="text-blue-600 hover:text-blue-700 font-medium">
+              İlan oluşturun
+            </Link>
+            {' '}ve nakliyecilerden teklif alın.
+          </p>
+        </div>
+      ) : grouped.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-20 text-center">
+          <PackageOpen className="h-12 w-12 text-gray-300 mb-4" />
+          <p className="text-[15px] text-gray-500">Bu ilan için teklif bulunamadı.</p>
+        </div>
       ) : (
-        <div className="grid gap-3">
-          {offers.map(o => (
-            <Card key={o.id}>
-              <CardHeader>
-                <CardTitle className="text-base">
-                  {o.carrier?.companyName || o.carrier?.contactName || 'Nakliyeci'}
-                  {o.carrier?.rating ? ` ⭐ ${o.carrier.rating}` : ''}
-                </CardTitle>
-                <CardDescription>
-                  {o.shipment ? `${o.shipment.origin} → ${o.shipment.destination}` : ''}
-                  {' · '}
-                  {new Date(o.offeredAt).toLocaleString('tr-TR')}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="flex items-center justify-between">
-                <div className="text-sm space-y-0.5">
-                  <div><strong>Fiyat:</strong> {o.price} TL</div>
-                  {o.estimatedDuration && <div><strong>Tahmini Süre:</strong> {o.estimatedDuration} saat</div>}
-                  {o.message && <div className="text-gray-600">{o.message}</div>}
-                  <div><strong>Durum:</strong> {statusLabel[o.status] || o.status}</div>
+        <div className="space-y-8">
+          {grouped.map(([shipmentId, group]) => {
+            const s = group.shipment;
+            const stCfg = shipmentStatusConfig[s?.status || ''] || { label: s?.status || '', bg: 'bg-gray-100', text: 'text-gray-600' };
+            const lowestPrice = group.offers.length > 0 ? Number(group.offers[0].price) : null;
+
+            return (
+              <section key={shipmentId}>
+                {/* ── Group header ── */}
+                <div className="flex items-center justify-between flex-wrap gap-2 pb-3 mb-4 border-b border-gray-100">
+                  <Link
+                    to={`/ilan/${shipmentId}`}
+                    className="text-base font-semibold text-gray-900 hover:text-blue-600 transition-colors"
+                  >
+                    {s?.origin || '?'} → {s?.destination || '?'}
+                  </Link>
+                  <div className="flex items-center gap-2">
+                    {s?.shipmentDate && (
+                      <span className="inline-flex items-center bg-gray-100 text-gray-600 text-xs font-medium px-2.5 py-1 rounded">
+                        📅 {fmtDate(s.shipmentDate)}
+                      </span>
+                    )}
+                    <span className={`inline-flex items-center px-2.5 py-1 rounded text-[11px] font-semibold ${stCfg.bg} ${stCfg.text}`}>
+                      {stCfg.label}
+                    </span>
+                  </div>
                 </div>
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    onClick={() => decide(o.id, false)}
-                    disabled={o.status !== 'pending' || decidingId === o.id}
-                  >Reddet</Button>
-                  <Button
-                    onClick={() => decide(o.id, true)}
-                    disabled={o.status !== 'pending' || decidingId === o.id}
-                  >Kabul Et</Button>
+
+                {/* ── Offer cards grid ── */}
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                  {group.offers.map((offer) => {
+                    const isCheapest = lowestPrice !== null && Number(offer.price) === lowestPrice && offer.status === 'pending';
+                    const carrierName = offer.carrier?.companyName || offer.carrier?.contactName || 'Nakliyeci';
+
+                    return (
+                      <div
+                        key={offer.id}
+                        className="relative bg-white border border-gray-200 rounded-xl p-5 transition-all duration-200 hover:shadow-md hover:-translate-y-0.5"
+                      >
+                        {/* Cheapest ribbon */}
+                        {isCheapest && (
+                          <div className="absolute top-0 right-0 bg-blue-600 text-white text-[10px] font-bold tracking-[0.08em] px-2.5 py-1 rounded-bl-lg rounded-tr-xl">
+                            EN UYGUN
+                          </div>
+                        )}
+
+                        {/* Carrier info */}
+                        <div className="flex items-center gap-3 mb-4">
+                          {offer.carrier?.pictureUrl ? (
+                            <img
+                              src={offer.carrier.pictureUrl}
+                              className="h-11 w-11 rounded-full object-cover"
+                              alt=""
+                            />
+                          ) : (
+                            <div className={`h-11 w-11 rounded-full bg-gradient-to-br ${pickGradient(offer.carrierId)} flex items-center justify-center text-white text-sm font-semibold`}>
+                              {getInitials(carrierName)}
+                            </div>
+                          )}
+                          <div className="min-w-0">
+                            <div className="text-[15px] font-semibold text-gray-900 truncate">{carrierName}</div>
+                            <div className="flex items-center gap-2 text-[13px] text-gray-500">
+                              {offer.carrier?.rating != null && Number(offer.carrier.rating) > 0 && (
+                                <span className="flex items-center gap-0.5">
+                                  <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
+                                  {Number(offer.carrier.rating).toFixed(1)}
+                                  {offer.carrier.completedShipments != null && Number(offer.carrier.completedShipments) > 0 && (
+                                    <span className="text-gray-400 ml-0.5">({offer.carrier.completedShipments})</span>
+                                  )}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Price */}
+                        <div className="mb-3">
+                          <div className="text-gray-900 tracking-[-0.02em]">
+                            <span className="text-base font-bold align-top">₺</span>
+                            <span className="text-[2rem] font-extrabold leading-none">{fmtPrice(Number(offer.price))}</span>
+                          </div>
+                          {offer.estimatedDuration != null && Number(offer.estimatedDuration) > 0 && (
+                            <div className="text-[13px] text-gray-500 mt-0.5">
+                              Tahmini {offer.estimatedDuration} saat
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Message */}
+                        {offer.message && (
+                          <div className="border-l-[3px] border-gray-200 pl-3 mb-3">
+                            <p className="text-[13px] text-gray-600 leading-relaxed line-clamp-2">
+                              {offer.message}
+                            </p>
+                          </div>
+                        )}
+
+                        {/* Time */}
+                        <div className="text-xs text-gray-400 mb-4">
+                          {timeAgo(offer.offeredAt)}
+                        </div>
+
+                        {/* Actions */}
+                        {offer.status === 'pending' && (
+                          <div className="flex gap-2">
+                            <Button
+                              className="flex-1 bg-blue-600 hover:bg-blue-700 text-white text-sm"
+                              disabled={decidingId === offer.id}
+                              onClick={() => setConfirmOffer(offer)}
+                            >
+                              Kabul Et
+                            </Button>
+                            <Button
+                              variant="outline"
+                              className="flex-1 border-red-300 text-red-600 hover:bg-red-50 text-sm"
+                              disabled={decidingId === offer.id}
+                              onClick={() => decide(offer.id, false)}
+                            >
+                              Reddet
+                            </Button>
+                          </div>
+                        )}
+                        {offer.status === 'accepted' && (
+                          <div className="bg-green-50 text-green-700 font-semibold text-center py-2.5 rounded text-sm">
+                            ✓ Kabul Edildi
+                          </div>
+                        )}
+                        {offer.status === 'rejected' && (
+                          <div className="bg-gray-100 text-gray-500 font-semibold text-center py-2.5 rounded text-sm">
+                            ✗ Reddedildi
+                          </div>
+                        )}
+                        {offer.status === 'withdrawn' && (
+                          <div className="bg-gray-100 text-gray-400 font-semibold text-center py-2.5 rounded text-sm">
+                            Geri Çekildi
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
-              </CardContent>
-            </Card>
-          ))}
+              </section>
+            );
+          })}
         </div>
       )}
-      <div className="pt-2">
-        <Button variant="outline" onClick={() => navigate('/gecmis')}>Taşımalarıma Dön</Button>
-      </div>
+
+      {/* ── Confirm Accept Dialog ── */}
+      <AlertDialog open={!!confirmOffer} onOpenChange={(open) => { if (!open) setConfirmOffer(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Teklifi kabul et</AlertDialogTitle>
+            <AlertDialogDescription>
+              {confirmOffer && (
+                <>
+                  <strong>{confirmOffer.carrier?.companyName || confirmOffer.carrier?.contactName || 'Nakliyeci'}</strong>
+                  {' '}firmasının{' '}
+                  <strong>₺{fmtPrice(Number(confirmOffer.price))}</strong>
+                  {' '}tutarındaki teklifini kabul etmek istediğinizden emin misiniz?
+                  Diğer teklifler otomatik reddedilecektir.
+                </>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={decidingId === confirmOffer?.id}>Vazgeç</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={decidingId === confirmOffer?.id}
+              className="bg-blue-600 hover:bg-blue-700 text-white"
+              onClick={() => confirmOffer && decide(confirmOffer.id, true)}
+            >
+              Kabul Et
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

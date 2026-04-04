@@ -76,6 +76,15 @@ export class Shipment {
     @Column({ type: "date" })
     shipmentDate: Date;
 
+    @Column({ type: 'json', nullable: true })
+    photoUrls: string[];
+
+    @Column({ type: 'varchar', length: 1000, nullable: true })
+    note: string;
+
+    @Column({ type: 'varchar', length: 100, nullable: true })
+    vehiclePreference: string;
+
     @CreateDateColumn()
     createdAt: Date;
 

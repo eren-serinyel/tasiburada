@@ -190,8 +190,8 @@ export class AdminController {
 
   getStatsTrends = async (req: Request, res: Response): Promise<void> => {
     try {
-      const period = req.query.period ? Number(req.query.period) : 30;
-      const data = await this.adminService.getStatsTrends(period);
+      const days = req.query.days ? Number(req.query.days) : (req.query.period ? Number(req.query.period) : 30);
+      const data = await this.adminService.getStatsTrends(days);
       res.status(200).json({ success: true, data });
     } catch (error: any) {
       res.status(500).json({ success: false, message: error.message || 'Trend verileri alınamadı.' });
@@ -203,7 +203,11 @@ export class AdminController {
   getCarrierShipments = async (req: Request, res: Response): Promise<void> => {
     try {
       const { carrierId } = req.params;
-      const data = await this.adminService.getCarrierShipments(carrierId);
+      const { page, limit } = req.query;
+      const data = await this.adminService.getCarrierShipments(carrierId, {
+        page: page ? Number(page) : 1,
+        limit: limit ? Number(limit) : 10,
+      });
       res.status(200).json({ success: true, data });
     } catch (error: any) {
       res.status(500).json({ success: false, message: error.message });
@@ -213,7 +217,11 @@ export class AdminController {
   getCarrierReviews = async (req: Request, res: Response): Promise<void> => {
     try {
       const { carrierId } = req.params;
-      const data = await this.adminService.getCarrierReviews(carrierId);
+      const { page, limit } = req.query;
+      const data = await this.adminService.getCarrierReviews(carrierId, {
+        page: page ? Number(page) : 1,
+        limit: limit ? Number(limit) : 10,
+      });
       res.status(200).json({ success: true, data });
     } catch (error: any) {
       res.status(500).json({ success: false, message: error.message });
@@ -346,6 +354,132 @@ export class AdminController {
       res.status(200).json({ success: true, message: 'Admin silindi.' });
     } catch (error: any) {
       res.status(400).json({ success: false, message: error.message || 'Admin silinemedi.' });
+    }
+  };
+
+  resetAdminPassword = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const adminId = req.user?.adminId;
+      if (!adminId) { res.status(401).json({ success: false, message: 'Yetkisiz erişim.' }); return; }
+      const { adminId: targetId } = req.params;
+      const { newPassword } = req.body;
+      if (!newPassword || newPassword.length < 6) {
+        res.status(400).json({ success: false, message: 'Yeni şifre en az 6 karakter olmalıdır.' }); return;
+      }
+      await this.adminService.resetAdminPassword(adminId, targetId, newPassword);
+      res.status(200).json({ success: true, message: 'Admin şifresi sıfırlandı.' });
+    } catch (error: any) {
+      res.status(400).json({ success: false, message: error.message || 'Şifre sıfırlanamadı.' });
+    }
+  };
+
+  // ─── Platform Settings ─────────────────────────────────────────────────────
+
+  getSettings = async (_req: Request, res: Response): Promise<void> => {
+    try {
+      const data = await this.adminService.getSettings();
+      res.status(200).json({ success: true, data });
+    } catch (error: any) {
+      res.status(500).json({ success: false, message: error.message || 'Ayarlar alınamadı.' });
+    }
+  };
+
+  updateSettings = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const adminId = req.user?.adminId;
+      if (!adminId) { res.status(401).json({ success: false, message: 'Yetkisiz erişim.' }); return; }
+      const updates = req.body;
+      if (!updates || typeof updates !== 'object' || Object.keys(updates).length === 0) {
+        res.status(400).json({ success: false, message: 'Güncellenecek ayar verisi gereklidir.' }); return;
+      }
+      const data = await this.adminService.updateSettings(adminId, updates);
+      res.status(200).json({ success: true, message: 'Ayarlar güncellendi.', data });
+    } catch (error: any) {
+      res.status(400).json({ success: false, message: error.message || 'Ayarlar güncellenemedi.' });
+    }
+  };
+
+  // ─── Separate Report Endpoints ─────────────────────────────────────────────
+
+  getTopCarriers = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const limit = req.query.limit ? Number(req.query.limit) : 10;
+      const data = await this.adminService.getTopCarriers(limit);
+      res.status(200).json({ success: true, data });
+    } catch (error: any) {
+      res.status(500).json({ success: false, message: error.message || 'Veriler alınamadı.' });
+    }
+  };
+
+  getPopularRoutes = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const limit = req.query.limit ? Number(req.query.limit) : 10;
+      const data = await this.adminService.getPopularRoutes(limit);
+      res.status(200).json({ success: true, data });
+    } catch (error: any) {
+      res.status(500).json({ success: false, message: error.message || 'Veriler alınamadı.' });
+    }
+  };
+
+  deleteOffer = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const adminId = req.user?.adminId;
+      if (!adminId) { res.status(401).json({ success: false, message: 'Yetkisiz erişim.' }); return; }
+      const { offerId } = req.params;
+      await this.adminService.deleteOffer(adminId, offerId);
+      res.status(200).json({ success: true, message: 'Teklif silindi.' });
+    } catch (error: any) {
+      res.status(400).json({ success: false, message: error.message || 'Teklif silinemedi.' });
+    }
+  };
+
+  // ─── Carrier Direct Update ─────────────────────────────────────────────────
+
+  updateCarrier = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const adminId = req.user?.adminId;
+      if (!adminId) { res.status(401).json({ success: false, message: 'Yetkisiz erişim.' }); return; }
+      const { carrierId } = req.params;
+      const { verifiedByAdmin } = req.body;
+
+      if (typeof verifiedByAdmin === 'boolean') {
+        await this.adminService.verifyCarrier(adminId, carrierId, verifiedByAdmin);
+        res.status(200).json({
+          success: true,
+          message: verifiedByAdmin ? 'Nakliyeci onaylandı.' : 'Nakliyeci onayı kaldırıldı.',
+        });
+        return;
+      }
+
+      res.status(400).json({ success: false, message: 'Güncellenecek alan belirtilmedi.' });
+    } catch (error: any) {
+      res.status(400).json({ success: false, message: error.message || 'Güncelleme başarısız.' });
+    }
+  };
+
+  // ─── Audit Log Write ───────────────────────────────────────────────────────
+
+  createAuditLog = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const adminId = req.user?.adminId;
+      if (!adminId) { res.status(401).json({ success: false, message: 'Yetkisiz erişim.' }); return; }
+      const { action, details, targetId, targetType } = req.body;
+
+      if (!action) {
+        res.status(400).json({ success: false, message: '"action" alanı zorunludur.' }); return;
+      }
+
+      await this.adminService.writeAuditLog({
+        adminId,
+        action: String(action),
+        targetType: String(targetType || 'platform'),
+        targetId: String(targetId || 'platform'),
+        details: typeof details === 'string' ? { message: details } : (details ?? {}),
+      });
+
+      res.status(201).json({ success: true, message: 'Log kaydedildi.' });
+    } catch (error: any) {
+      res.status(500).json({ success: false, message: error.message || 'Log kaydedilemedi.' });
     }
   };
 }

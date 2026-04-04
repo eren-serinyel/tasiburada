@@ -20,7 +20,7 @@ export class CustomerService {
     this.shipmentRepository = new ShipmentRepository();
   }
 
-  async createCustomer(createDto: CreateCustomerDto): Promise<CustomerResponseDto> {
+  async createCustomer(createDto: CreateCustomerDto): Promise<{ customer: CustomerResponseDto; token: string; userType: string }> {
     // Email zaten kayıtlı mı kontrol et
     const existingCustomer = await this.customerRepository.findByEmail(createDto.email);
     if (existingCustomer) {
@@ -51,7 +51,19 @@ export class CustomerService {
       isVerified: false
     });
 
-    return this.mapToResponseDto(customer);
+    const token = jwt.sign(
+      {
+        customerId: customer.id,
+        email: customer.email,
+        firstName: customer.firstName,
+        lastName: customer.lastName,
+        type: 'customer'
+      },
+      process.env.JWT_SECRET!,
+      { expiresIn: '24h' }
+    );
+
+    return { customer: this.mapToResponseDto(customer), token, userType: 'customer' };
   }
 
   async login(loginDto: LoginDto): Promise<{ customer: CustomerResponseDto; token: string }> {
@@ -179,6 +191,21 @@ export class CustomerService {
     return customers.map(customer => this.mapToResponseDto(customer));
   }
 
+  async updatePicture(customerId: string, pictureUrl: string | null): Promise<CustomerResponseDto> {
+    const customer = await this.customerRepository.findById(customerId);
+    if (!customer) {
+      throw new Error('Müşteri bulunamadı.');
+    }
+
+    const normalized = pictureUrl?.trim() ? pictureUrl : null;
+    await this.customerRepository.update(customerId, { pictureUrl: normalized } as any);
+    const updated = await this.customerRepository.findById(customerId);
+    if (!updated) {
+      throw new Error('Müşteri güncellenirken hata oluştu.');
+    }
+    return this.mapToResponseDto(updated);
+  }
+
   private mapToResponseDto(customer: Customer): CustomerResponseDto {
     return {
       id: customer.id,
@@ -190,6 +217,7 @@ export class CustomerService {
       addressLine2: customer.addressLine2,
       city: customer.city,
       district: customer.district,
+      pictureUrl: customer.pictureUrl,
       isActive: customer.isActive,
       isVerified: customer.isVerified,
       fullName: customer.fullName,

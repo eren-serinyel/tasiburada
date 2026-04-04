@@ -52,6 +52,13 @@ export default function AdminCarriers() {
   const [error, setError] = useState(false);
   const limit = 20;
 
+  // Date filter
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+
+  // Bulk select
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+
   const fetchCarriers = useCallback(async () => {
     setLoading(true);
     setError(false);
@@ -83,6 +90,62 @@ export default function AdminCarriers() {
   useEffect(() => { fetchCarriers(); }, [fetchCarriers]);
 
   const totalPages = Math.ceil(total / limit);
+
+  // Client-side date filter applied on top of server-side paged results
+  const filteredCarriers = carriers.filter((c) => {
+    if (dateFrom) {
+      if (new Date(c.createdAt) < new Date(dateFrom)) return false;
+    }
+    if (dateTo) {
+      const toDate = new Date(dateTo);
+      toDate.setHours(23, 59, 59, 999);
+      if (new Date(c.createdAt) > toDate) return false;
+    }
+    return true;
+  });
+
+  const exportToCSV = () => {
+    const headers = ['ID', 'Firma Adı', 'E-posta', 'Telefon', 'Şehir', 'Durum', 'Tamamlanan Sefer', 'Puan', 'Kayıt Tarihi'];
+    const rows = filteredCarriers.map((c) => [
+      c.id,
+      `"${c.companyName || ''}"`,
+      c.email || '',
+      c.phone || '',
+      c.city || '',
+      c.verifiedByAdmin ? 'Onaylı' : 'Beklemede',
+      c.completedShipments || 0,
+      c.rating ? Number(c.rating).toFixed(1) : '',
+      c.createdAt ? new Date(c.createdAt).toLocaleDateString('tr-TR') : '',
+    ]);
+    const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `nakliyeciler_${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleBulkApprove = async () => {
+    if (selectedIds.length === 0) return;
+    try {
+      await Promise.all(
+        selectedIds.map((id) =>
+          adminApiClient(`/admin/carriers/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ verifiedByAdmin: true }),
+          })
+        )
+      );
+      toast.success(`${selectedIds.length} nakliyeci onaylandı.`);
+      setSelectedIds([]);
+      fetchCarriers();
+    } catch {
+      toast.error('Bazı onaylar başarısız oldu.');
+    }
+  };
   const cancelRate = (c: Carrier) => {
     const t = (c.completedShipments ?? 0) + (c.cancelledShipments ?? 0);
     return t > 0 ? Math.round(((c.cancelledShipments ?? 0) / t) * 100) : 0;
@@ -96,25 +159,65 @@ export default function AdminCarriers() {
       />
 
       {/* Filters */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
-        <Tabs value={status} onValueChange={(v) => setStatus(v as CarrierStatus)}>
-          <TabsList className="bg-slate-100">
-            {statusTabs.map((t) => (
-              <TabsTrigger key={t.value} value={t.value} className="text-xs">
-                {t.label}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
-        <div className="relative flex-1 max-w-xs">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-          <Input
-            placeholder="Şirket adı, e-posta..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9 h-9 text-sm"
-          />
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+          <Tabs value={status} onValueChange={(v) => setStatus(v as CarrierStatus)}>
+            <TabsList className="bg-slate-100">
+              {statusTabs.map((t) => (
+                <TabsTrigger key={t.value} value={t.value} className="text-xs">
+                  {t.label}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
+          <div className="relative flex-1 max-w-xs">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+            <Input
+              placeholder="Şirket adı, e-posta..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-9 h-9 text-sm"
+            />
+          </div>
+          {/* Date filter */}
+          <div className="flex items-center gap-2">
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              className="h-9 border border-slate-200 rounded-lg px-3 text-xs text-slate-600 focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white"
+            />
+            <span className="text-slate-400 text-xs">—</span>
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              className="h-9 border border-slate-200 rounded-lg px-3 text-xs text-slate-600 focus:outline-none focus:ring-1 focus:ring-blue-400 bg-white"
+            />
+          </div>
+          {/* CSV export */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={exportToCSV}
+            className="gap-1.5 text-green-700 border-green-300 hover:bg-green-50 h-9"
+          >
+            <Download className="h-3.5 w-3.5" /> CSV İndir
+          </Button>
         </div>
+
+        {/* Bulk approve bar */}
+        {selectedIds.length > 0 && (
+          <div className="flex items-center gap-3 px-4 py-2 bg-blue-50 border border-blue-200 rounded-lg text-sm">
+            <span className="text-blue-700 font-medium">{selectedIds.length} nakliyeci seçildi</span>
+            <Button size="sm" onClick={handleBulkApprove} className="h-7 bg-blue-600 hover:bg-blue-700 text-white text-xs">
+              Tümünü Onayla
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => setSelectedIds([])} className="h-7 text-xs">
+              Seçimi Temizle
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* Table */}
@@ -125,6 +228,14 @@ export default function AdminCarriers() {
           <Table>
             <TableHeader>
               <TableRow className="bg-slate-50/50">
+                <TableHead className="w-10 px-3">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 accent-blue-600"
+                    checked={selectedIds.length === filteredCarriers.length && filteredCarriers.length > 0}
+                    onChange={(e) => setSelectedIds(e.target.checked ? filteredCarriers.map((c) => c.id) : [])}
+                  />
+                </TableHead>
                 <TableHead className="font-semibold text-slate-600">Şirket Adı</TableHead>
                 <TableHead className="font-semibold text-slate-600">Şehir</TableHead>
                 <TableHead className="font-semibold text-slate-600">Durum</TableHead>
@@ -145,12 +256,12 @@ export default function AdminCarriers() {
                 ))
               ) : carriers.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7}>
+                  <TableCell colSpan={8}>
                     <EmptyState title="Nakliyeci bulunamadı" description="Filtre kriterlerinize uygun kayıt yok." className="py-10" />
                   </TableCell>
                 </TableRow>
               ) : (
-                carriers.map((carrier) => {
+                filteredCarriers.map((carrier) => {
                   const st = resolveCarrierStatus(carrier);
                   const cr = cancelRate(carrier);
                   return (
@@ -159,6 +270,16 @@ export default function AdminCarriers() {
                       className="cursor-pointer hover:bg-slate-50/60 transition-colors"
                       onClick={() => navigate(`/admin/nakliyeciler/${carrier.id}`)}
                     >
+                      <TableCell className="px-3" onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 accent-blue-600"
+                          checked={selectedIds.includes(carrier.id)}
+                          onChange={(e) => setSelectedIds(prev =>
+                            e.target.checked ? [...prev, carrier.id] : prev.filter((id) => id !== carrier.id)
+                          )}
+                        />
+                      </TableCell>
                       <TableCell>
                         <div>
                           <p className="text-sm font-medium text-slate-800">{carrier.companyName}</p>

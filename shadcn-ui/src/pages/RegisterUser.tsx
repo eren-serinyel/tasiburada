@@ -9,9 +9,11 @@ import { CheckCircle, ArrowRight, ArrowLeft, Shield, Clock, Star } from 'lucide-
 import { Link, useNavigate } from 'react-router-dom';
 // import { addNewCustomer } from '@/lib/mockData';
 import { setSessionUser } from '@/lib/storage';
-import { API_BASE_URL } from '@/lib/config';
 import { CITIES_TR, getDistrictsForCity } from '@/lib/locations';
-import { toast } from '@/components/ui/sonner';
+import { useToast } from '@/hooks/use-toast';
+
+// API Base URL - using Vite proxy
+const API_BASE_URL = '/api/v1';
 
 // Validasyon fonksiyonları
 const validateEmail = (email: string): string => {
@@ -32,9 +34,9 @@ const validatePhone = (phone: string): string => {
 
 const validatePassword = (password: string): string => {
   if (!password) return 'Şifre gerekli';
-  if (password.length < 6) return 'Şifre en az 6 karakter olmalı';
+  if (password.length < 8) return 'Şifre en az 8 karakter olmalı';
   if (password.length > 50) return 'Şifre en fazla 50 karakter olabilir';
-  if (!/(?=.*[a-zA-Z])/.test(password)) return 'Şifre en az bir harf içermeli';
+  if (!/(?=.*[A-Z])/.test(password)) return 'Şifre en az bir büyük harf içermeli';
   if (!/(?=.*[0-9])/.test(password)) return 'Şifre en az bir rakam içermeli';
   return '';
 };
@@ -68,6 +70,7 @@ export default function RegisterUser() {
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const navigate = useNavigate();
+  const { toast } = useToast();
   const totalSteps = 3;
   const progress = (currentStep / totalSteps) * 100;
 
@@ -170,19 +173,19 @@ export default function RegisterUser() {
       
       if (response.ok && result && result.success) {
         // Başarılı kayıt
-        toast.success('Kayıt başarıyla tamamlandı. Giriş yapabilirsiniz.');
-        navigate('/giris');
+        toast({ title: 'Başarılı', description: 'Kayıt başarıyla tamamlandı! E-posta adresinizi doğrulayın.' });
+        navigate(`/eposta-dogrula?email=${encodeURIComponent(formData.email)}&userType=customer`);
       } else {
         // Hata durumu
         const errorMessage = result?.message || `HTTP ${response.status}: ${response.statusText}`;
-        toast.error(errorMessage);
+        toast({ title: 'Hata', description: errorMessage, variant: 'destructive' });
       }
     } catch (error) {
       // Daha detaylı hata mesajı
       if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
-        toast.error('Backend sunucusuna erişilemiyor. CORS veya ağ sorununu kontrol edin.');
+        toast({ title: 'Bağlantı Hatası', description: 'Backend sunucusuna erişim sorunu! Sunucu çalışıyor mu kontrol edin.', variant: 'destructive' });
       } else {
-        toast.error(error instanceof Error ? error.message : 'Bağlantı hatası oluştu.');
+        toast({ title: 'Bağlantı Hatası', description: (error as Error).message || 'Bilinmeyen hata oluştu.', variant: 'destructive' });
       }
     } finally {
       setIsLoading(false);

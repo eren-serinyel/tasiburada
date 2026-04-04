@@ -222,4 +222,37 @@ export class ShipmentController {
     }
   };
 
+  searchShipments = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { origin, destination, status, loadType, page, limit } = req.query;
+      const result = await this.shipmentService.searchShipments({
+        origin: origin as string,
+        destination: destination as string,
+        status: status as string,
+        loadType: loadType as string,
+        page: page ? Number(page) : 1,
+        limit: limit ? Number(limit) : 10,
+      });
+      res.status(200).json({ success: true, data: result });
+    } catch (error: any) {
+      res.status(500).json({ success: false, message: error.message || 'Arama sırasında hata oluştu.' });
+    }
+  };
+
+  assignCarrier = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const { carrierId } = req.body;
+      if (!carrierId) {
+        res.status(400).json({ success: false, message: 'carrierId zorunlu' });
+        return;
+      }
+      const shipment = await this.shipmentService.assignCarrier(id, carrierId);
+      res.status(200).json({ success: true, data: shipment });
+    } catch (error: any) {
+      const statusCode = error.message?.includes('bulunamadı') ? 404 : 400;
+      res.status(statusCode).json({ success: false, message: error.message || 'Nakliyeci atanamadı.' });
+    }
+  };
+
 }

@@ -1,15 +1,31 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { MapPin, Truck, CheckCircle2, CreditCard, Clock, Send, Play, XCircle } from 'lucide-react';
+import { Check, Star, Phone, ChevronRight, User } from 'lucide-react';
 import { apiClient } from '@/lib/apiClient';
 import { toast } from '@/components/ui/sonner';
-import { getUserType } from '@/lib/auth';
+import { getUserType, getUserId } from '@/lib/auth';
 
 const API_BASE_URL = '/api/v1';
+
+interface BackendOffer {
+  id: string;
+  shipmentId: string;
+  carrierId: string;
+  carrier?: {
+    id: string;
+    companyName?: string | null;
+    rating?: number;
+    pictureUrl?: string | null;
+    phone?: string;
+  };
+  price: number;
+  message?: string;
+  estimatedDuration?: number;
+  status: string;
+  offeredAt: string;
+}
 
 interface BackendShipment {
   id: string;
@@ -17,6 +33,11 @@ interface BackendShipment {
   destination: string;
   loadDetails: string;
   transportType?: string;
+  placeType?: string;
+  hasElevator?: boolean;
+  floor?: number;
+  insuranceType?: string;
+  timePreference?: string;
   weight?: number;
   status: string;
   price?: number;
@@ -24,33 +45,47 @@ interface BackendShipment {
   createdAt: string;
   customerId: string;
   carrierId?: string | null;
-  carrier?: { id: string; companyName?: string | null };
+  carrier?: {
+    id: string;
+    companyName?: string | null;
+    rating?: number;
+    pictureUrl?: string | null;
+    phone?: string;
+  };
   customer?: { firstName: string; lastName: string; phone?: string; email?: string };
   extraServices?: string[];
+  offers?: BackendOffer[];
 }
 
-const statusLabel = (st: string) => ({
-  pending: 'Bekliyor',
-  offer_received: 'Teklif Geldi',
-  matched: 'Eşleşti',
-  in_transit: 'Yolda',
-  completed: 'Tamamlandı',
-  cancelled: 'İptal',
-} as Record<string,string>)[st] || st;
+/* ── Status helpers ── */
+const statusConfig: Record<string, { label: string; bg: string; text: string }> = {
+  pending:        { label: 'Teklif Bekleniyor', bg: 'bg-amber-50',  text: 'text-amber-700' },
+  offer_received: { label: 'Teklif Geldi',      bg: 'bg-amber-50',  text: 'text-amber-700' },
+  matched:        { label: 'Nakliyeci Seçildi',  bg: 'bg-blue-50',   text: 'text-blue-700' },
+  in_transit:     { label: 'Taşınıyor',          bg: 'bg-orange-50', text: 'text-orange-700' },
+  completed:      { label: 'Tamamlandı',         bg: 'bg-green-50',  text: 'text-green-700' },
+  cancelled:      { label: 'İptal Edildi',        bg: 'bg-gray-100',  text: 'text-gray-500' },
+};
 
-const statusColor = (st: string) => ({
-  pending: 'bg-yellow-100 text-yellow-800',
-  offer_received: 'bg-orange-100 text-orange-800',
-  matched: 'bg-blue-100 text-blue-800',
-  in_transit: 'bg-purple-100 text-purple-800',
-  completed: 'bg-green-100 text-green-800',
-  cancelled: 'bg-red-100 text-red-800',
-} as Record<string,string>)[st] || 'bg-gray-100 text-gray-800';
+const getStatus = (st: string) => statusConfig[st] || { label: st, bg: 'bg-gray-100', text: 'text-gray-600' };
+
+const insuranceLabel: Record<string, string> = {
+  none: 'Sigortasız',
+  basic: 'Temel Sigorta',
+  full: 'Tam Sigorta',
+};
+
+const fmtDate = (d: string) =>
+  new Date(d).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' });
+
+const fmtPrice = (n: number) =>
+  new Intl.NumberFormat('tr-TR', { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(n);
 
 export default function ShipmentDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const userType = getUserType();
+  const userId = getUserId();
   const [shipment, setShipment] = useState<BackendShipment | null>(null);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
@@ -94,15 +129,6 @@ export default function ShipmentDetail() {
     }
   };
 
-  const handleReview = () => {
-    if (!shipment?.carrierId) {
-      toast.error('Bu taşıma için değerlendirilecek bir nakliyeci bulunamadı.');
-      return;
-    }
-
-    navigate(`/nakliyeci/${shipment.carrierId}`);
-  };
-
   const handleComplete = async () => {
     if (!shipment) return;
     setUpdating(true);
@@ -143,246 +169,390 @@ export default function ShipmentDetail() {
     }
   };
 
+  const handleAcceptOffer = async (offerId: string) => {
+    setUpdating(true);
+    try {
+      const res = await apiClient(`${API_BASE_URL}/offers/${offerId}/accept`, { method: 'PUT' });
+      const json = await res.json();
+      if (res.ok && json?.success) {
+        toast.success('Teklif kabul edildi!');
+        await fetchShipment();
+      } else {
+        toast.error(json?.message || 'İşlem başarısız.');
+      }
+    } catch {
+      toast.error('İşlem başarısız.');
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const handleRejectOffer = async (offerId: string) => {
+    setUpdating(true);
+    try {
+      const res = await apiClient(`${API_BASE_URL}/offers/${offerId}/reject`, { method: 'PUT' });
+      const json = await res.json();
+      if (res.ok && json?.success) {
+        toast.success('Teklif reddedildi.');
+        await fetchShipment();
+      } else {
+        toast.error(json?.message || 'İşlem başarısız.');
+      }
+    } catch {
+      toast.error('İşlem başarısız.');
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  /* ── Status badge config ── */
+  const STATUS_MAP: Record<string, { label: string; bg: string; color: string; border: string; dot?: boolean }> = {
+    pending:        { label: 'Teklif Bekleniyor', bg: '#FFF7ED', color: '#C2410C', border: '#FED7AA', dot: true },
+    offer_received: { label: 'Teklif Geldi',      bg: '#EFF6FF', color: '#1D4ED8', border: '#BFDBFE', dot: true },
+    matched:        { label: 'Nakliyeci Seçildi',  bg: '#F0FDF4', color: '#15803D', border: '#BBF7D0', dot: true },
+    in_transit:     { label: 'Taşınıyor',          bg: '#FFF7ED', color: '#C2410C', border: '#FED7AA' },
+    completed:      { label: 'Tamamlandı',         bg: '#F0FDF4', color: '#15803D', border: 'transparent' },
+    cancelled:      { label: 'İptal Edildi',        bg: '#F8FAFC', color: '#64748B', border: '#E2E8F0' },
+  };
+
+  const StatusBadge = ({ status, size = 'normal' }: { status: string; size?: 'normal' | 'small' }) => {
+    const cfg = STATUS_MAP[status] || STATUS_MAP.cancelled;
+    const pad = size === 'small' ? '2px 8px' : '4px 12px';
+    return (
+      <span style={{ background: cfg.bg, color: cfg.color, border: `0.5px solid ${cfg.border}`, borderRadius: '9999px', padding: pad, fontSize: '11px', fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: '5px', whiteSpace: 'nowrap' }}>
+        {cfg.dot && <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: cfg.color, animation: 'pulse 2s infinite' }} />}
+        {cfg.label}
+      </span>
+    );
+  };
+
+  /* ── Loading state ── */
   if (loading) {
     return (
-      <div className="flex min-h-[40vh] items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-gray-300 border-t-gray-800" />
+      <div style={{ background: '#F8FAFC', minHeight: '100vh' }}>
+        <div style={{ maxWidth: '1020px', margin: '0 auto', padding: '20px 24px' }}>
+          <div className="animate-pulse" style={{ height: '14px', width: '140px', background: '#E2E8F0', borderRadius: '4px', marginBottom: '14px' }} />
+          <div className="animate-pulse" style={{ height: '22px', width: '320px', background: '#E2E8F0', borderRadius: '6px', marginBottom: '20px' }} />
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '14px', marginBottom: '14px' }}>
+            {[1,2,3].map(i => (
+              <div key={i} style={{ background: 'white', border: '0.5px solid #E2E8F0', borderRadius: '12px', padding: '18px' }}>
+                <div className="animate-pulse" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  <div style={{ height: '14px', width: '40%', background: '#E2E8F0', borderRadius: '4px' }} />
+                  <div style={{ height: '12px', width: '100%', background: '#F1F5F9', borderRadius: '4px' }} />
+                  <div style={{ height: '12px', width: '80%', background: '#F1F5F9', borderRadius: '4px' }} />
+                  <div style={{ height: '12px', width: '100%', background: '#F1F5F9', borderRadius: '4px' }} />
+                  <div style={{ height: '12px', width: '60%', background: '#F1F5F9', borderRadius: '4px' }} />
+                  <div style={{ height: '12px', width: '90%', background: '#F1F5F9', borderRadius: '4px' }} />
+                </div>
+              </div>
+            ))}
+          </div>
+          <div style={{ background: 'white', border: '0.5px solid #E2E8F0', borderRadius: '12px', padding: '18px' }}>
+            <div className="animate-pulse" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
+              {[1,2,3].map(i => (
+                <div key={i} style={{ border: '0.5px solid #E2E8F0', borderRadius: '10px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                    <div style={{ width: '42px', height: '42px', borderRadius: '10px', background: '#F1F5F9', flexShrink: 0 }} />
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      <div style={{ height: '12px', width: '70%', background: '#F1F5F9', borderRadius: '4px' }} />
+                      <div style={{ height: '10px', width: '40%', background: '#F1F5F9', borderRadius: '4px' }} />
+                    </div>
+                  </div>
+                  <div style={{ height: '28px', width: '50%', background: '#F1F5F9', borderRadius: '4px' }} />
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
     );
   }
 
   if (!shipment) {
     return (
-      <div className="max-w-4xl mx-auto px-4 py-8 text-center text-gray-600">
-        İlan bulunamadı.
+      <div style={{ background: '#F8FAFC', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ textAlign: 'center', padding: '80px 0' }}>
+          <div style={{ fontSize: '16px', fontWeight: 600, color: '#0F172A', marginBottom: '12px' }}>İlan bulunamadı</div>
+          <Link to="/" style={{ color: '#2563EB', fontSize: '14px', fontWeight: 500, textDecoration: 'none' }}>Ana Sayfaya Dön</Link>
+        </div>
       </div>
     );
   }
 
-  return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Taşıma Detayı</h1>
-        <Badge className={statusColor(shipment.status)}>{statusLabel(shipment.status)}</Badge>
-      </div>
+  /* ── Computed ── */
+  const shortId = shipment.id.slice(0, 8).toUpperCase();
+  const offers = shipment.offers || [];
+  const pendingOffers = offers.filter(o => o.status === 'pending');
+  const lowestPrice = offers.length > 0 ? Math.min(...offers.map(o => Number(o.price))) : null;
+  const isCarrierOwner = userType === 'carrier' && shipment.carrierId === userId;
+  const offerPrices = offers.map(o => Number(o.price)).filter(p => p > 0);
+  const minOfferPrice = offerPrices.length > 0 ? Math.min(...offerPrices) : null;
+  const maxOfferPrice = offerPrices.length > 0 ? Math.max(...offerPrices) : null;
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Rota</CardTitle>
-          <CardDescription>Başlangıç ve varış bilgileri</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="flex items-start gap-3">
-            <MapPin className="h-5 w-5 text-green-600 mt-1" />
-            <div>
-              <div className="text-sm text-gray-600">Çıkış</div>
-              <div className="font-medium">{shipment.origin}</div>
-            </div>
-          </div>
-          <div className="flex items-start gap-3">
-            <MapPin className="h-5 w-5 text-red-600 mt-1" />
-            <div>
-              <div className="text-sm text-gray-600">Varış</div>
-              <div className="font-medium">{shipment.destination}</div>
-            </div>
-          </div>
-          <Separator />
-          <div className="flex items-center gap-2 text-sm text-gray-600">
-            <Truck className="h-4 w-4" /> {shipment.loadDetails} {shipment.weight ? `· ${shipment.weight} kg` : ''}
-          </div>
-        </CardContent>
-      </Card>
+  /* ── Timeline steps ── */
+  const isCancelled = shipment.status === 'cancelled';
+  const timelineSteps = [
+    { label: 'İlan Oluşturuldu', desc: '', date: shipment.createdAt, done: true },
+    { label: 'Teklifler Alındı', desc: offers.length > 0 ? `${offers.length} teklif geldi` : 'Nakliyeciler teklif veriyor', date: offers[0]?.offeredAt || null, done: !isCancelled && ['offer_received','matched','in_transit','completed'].includes(shipment.status) },
+    { label: 'Nakliyeci Seçildi', desc: shipment.carrier?.companyName || '', date: null as string|null, done: !isCancelled && ['matched','in_transit','completed'].includes(shipment.status) },
+    { label: 'Taşıma Başladı', desc: '', date: null as string|null, done: !isCancelled && ['in_transit','completed'].includes(shipment.status) },
+    { label: 'Teslim Edildi', desc: '', date: null as string|null, done: !isCancelled && shipment.status === 'completed' },
+  ];
+  const lastDoneIdx = timelineSteps.reduce((last, s, i) => (s.done ? i : last), -1);
+  const activeIdx = isCancelled ? -1 : (lastDoneIdx + 1 < timelineSteps.length ? lastDoneIdx + 1 : -1);
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Durum Zaman Çizelgesi</CardTitle>
-          <CardDescription>Süreç ilerlemesi</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Timeline status={shipment.status} createdAt={shipment.createdAt} />
-        </CardContent>
-      </Card>
-
-      {shipment.price != null && shipment.price > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Ödeme</CardTitle>
-            <CardDescription>Durum ve işlemler</CardDescription>
-          </CardHeader>
-          <CardContent className="flex items-center justify-between">
-            {shipment.status === 'completed' ? (
-              <div className="flex items-center gap-2 text-green-700">
-                <CheckCircle2 className="h-5 w-5" /> Tamamlandı · {shipment.price}₺
-              </div>
-            ) : (
-              <div className="flex items-center gap-2 text-gray-600">
-                <Clock className="h-5 w-5" /> Ödeme bekleniyor · {shipment.price}₺
-              </div>
-            )}
-            {userType === 'customer' && (shipment.status === 'matched' || shipment.status === 'in_transit') && (
-              <Button asChild>
-                <Link to={`/odeme/${shipment.id}`}><CreditCard className="h-4 w-4 mr-1" /> Ödeme Yap</Link>
-              </Button>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Customer / Management */}
-      <Card>
-        <CardHeader>
-          <CardTitle>İş Yönetimi</CardTitle>
-          <CardDescription>Detay bilgiler ve durum güncelleme</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {shipment.customer ? (
-            <div className="grid md:grid-cols-2 gap-4 text-sm">
-              <div>
-                <div className="text-gray-600">Müşteri</div>
-                <div className="font-medium">{shipment.customer.firstName} {shipment.customer.lastName}</div>
-                {shipment.customer.phone && <div className="text-gray-600">{shipment.customer.phone}</div>}
-                {shipment.customer.email && <div className="text-gray-600">{shipment.customer.email}</div>}
-              </div>
-              <div>
-                <div className="text-gray-600">Tarih</div>
-                <div className="font-medium">{new Date(shipment.shipmentDate).toLocaleDateString('tr-TR')}</div>
-              </div>
-            </div>
-          ) : (
-            <div className="text-sm text-gray-600">
-              <span className="font-medium">Tarih:</span> {new Date(shipment.shipmentDate).toLocaleDateString('tr-TR')}
-            </div>
-          )}
-          <Separator />
-          <div className="flex flex-wrap gap-2">
-            {/* Nakliyeci butonları */}
-            {userType === 'carrier' && shipment.status === 'matched' && (
-              <Button disabled={updating} onClick={handleStart} className="bg-blue-600 hover:bg-blue-700">
-                <Play className="h-4 w-4 mr-2" />Taşımayı Başlat
-              </Button>
-            )}
-            {userType === 'carrier' && shipment.status === 'in_transit' && (
-              <Button disabled={updating} onClick={handleComplete} className="bg-green-600 hover:bg-green-700">
-                <CheckCircle2 className="h-4 w-4 mr-2" />Teslim Edildi
-              </Button>
-            )}
-            {(shipment.status === 'pending' || shipment.status === 'offer_received') && userType === 'carrier' && (
-              <Button onClick={() => navigate(`/nakliyeci/yanit/${shipment.id}`)}>
-                <Send className="h-4 w-4 mr-2" />Teklif Ver
-              </Button>
-            )}
-            {/* Müşteri butonları */}
-            {userType === 'customer' && (shipment.status === 'pending' || shipment.status === 'matched') && (
-              <Button variant="destructive" disabled={updating} onClick={handleCancel}>
-                <XCircle className="h-4 w-4 mr-2" />İptal Et
-              </Button>
-            )}
-            {userType === 'customer' && shipment.status === 'completed' && shipment.carrierId && (
-              <Button disabled={updating} onClick={handleReview} variant="outline">
-                <CheckCircle2 className="h-4 w-4 mr-2" />Nakliyeciyi Değerlendir
-              </Button>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
-
-function Timeline({ status, createdAt }: { status: string; createdAt: string }) {
-  const isCancelled = status === 'cancelled';
-
-  const steps = [
-    {
-      key: 'pending',
-      label: 'İlan Oluşturuldu',
-      date: createdAt,
-      done: true,
+  /* ── Detail rows ── */
+  const detailRows: { label: string; value: React.ReactNode }[] = [
+    { label: 'ÇIKIŞ', value: shipment.origin },
+    { label: 'VARIŞ', value: shipment.destination },
+    { label: 'TARİH', value: fmtDate(shipment.shipmentDate) },
+    { label: 'YÜK', value: shipment.loadDetails },
+    { label: 'AĞIRLIK', value: shipment.weight ? `${shipment.weight} kg` : '—' },
+    { label: 'YER', value: `${shipment.placeType || '—'}${shipment.floor ? ` — ${shipment.floor}. Kat` : ''}` },
+    { label: 'ASANSÖR', value: shipment.hasElevator
+      ? <span style={{ background: '#F0FDF4', color: '#15803D', borderRadius: '5px', padding: '1px 8px', fontSize: '11px', fontWeight: 500 }}>Var ✓</span>
+      : <span style={{ background: '#FEF2F2', color: '#B91C1C', borderRadius: '5px', padding: '1px 8px', fontSize: '11px', fontWeight: 500 }}>Yok</span>
     },
-    {
-      key: 'offer_received',
-      label: 'Teklif Alındı',
-      date: null,
-      done: !isCancelled && ['offer_received', 'matched', 'in_transit', 'completed'].includes(status),
-    },
-    {
-      key: 'matched',
-      label: 'Nakliyeci Seçildi',
-      date: null,
-      done: !isCancelled && ['matched', 'in_transit', 'completed'].includes(status),
-    },
-    {
-      key: 'in_transit',
-      label: 'Taşıma Başladı',
-      date: null,
-      done: !isCancelled && ['in_transit', 'completed'].includes(status),
-    },
-    {
-      key: 'completed',
-      label: 'Teslim Edildi',
-      date: null,
-      done: !isCancelled && status === 'completed',
+    { label: 'SİGORTA', value: insuranceLabel[shipment.insuranceType || 'none'] || shipment.insuranceType || '—' },
+    { label: 'EKLER', value: shipment.extraServices && shipment.extraServices.length > 0
+      ? <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', justifyContent: 'flex-end' }}>{shipment.extraServices.map((s, i) => <span key={i} style={{ background: '#F1F5F9', borderRadius: '5px', padding: '2px 8px', fontSize: '11px' }}>{s}</span>)}</div>
+      : '—'
     },
   ];
 
-  // Index of the last done step (= current active step)
-  const activeIndex = steps.reduce((last, s, i) => (s.done ? i : last), -1);
+  /* ── Summary rows ── */
+  const priceDisplay = minOfferPrice != null && maxOfferPrice != null && minOfferPrice !== maxOfferPrice
+    ? `₺${fmtPrice(minOfferPrice)} – ₺${fmtPrice(maxOfferPrice)}`
+    : minOfferPrice != null ? `₺${fmtPrice(minOfferPrice)}`
+    : shipment.price ? `₺${fmtPrice(Number(shipment.price))}`
+    : '—';
+
+  const summaryRows: { label: string; value: React.ReactNode }[] = [
+    { label: 'Fiyat Aralığı', value: priceDisplay },
+    { label: 'Tarih', value: fmtDate(shipment.shipmentDate) },
+    { label: 'Durum', value: <StatusBadge status={shipment.status} size="small" /> },
+    { label: 'Teklif Sayısı', value: <span style={{ color: offers.length > 0 ? '#1D4ED8' : '#94A3B8', fontWeight: 500 }}>{offers.length} teklif</span> },
+    { label: 'Oluşturulma', value: fmtDate(shipment.createdAt) },
+  ];
 
   return (
-    <div className="relative pl-8">
-      {/* Vertical connector line */}
-      <div className="absolute left-[11px] top-3 bottom-3 w-0.5 bg-gray-200" />
+    <div style={{ background: '#F8FAFC', minHeight: '100vh' }}>
+      <div style={{ maxWidth: '1020px', margin: '0 auto', padding: '20px 24px' }}>
 
-      <div className="space-y-6">
-        {steps.map((step, idx) => {
-          const isCurrent = idx === activeIndex && !isCancelled;
-          const isDone = step.done;
+        {/* ═══ BREADCRUMB ═══ */}
+        <div style={{ fontSize: '12px', marginBottom: '14px' }}>
+          <Link to="/ilanlarim" style={{ color: '#94A3B8', textDecoration: 'none' }}>İlanlarım</Link>
+          <span style={{ color: '#CBD5E1', margin: '0 5px' }}>/</span>
+          <span style={{ color: '#64748B' }}>İlan Detayı</span>
+        </div>
 
-          return (
-            <div key={step.key} className="relative flex items-start gap-4">
-              {/* Circle indicator */}
-              <div
-                className={`relative z-10 flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 ${
-                  isCancelled && idx === 0
-                    ? 'border-red-500 bg-red-100'
-                    : isDone
-                    ? 'border-green-500 bg-green-500'
-                    : isCurrent
-                    ? 'border-blue-500 bg-blue-500 animate-pulse'
-                    : 'border-gray-300 bg-white'
-                }`}
-              >
-                {isDone && !isCancelled && <CheckCircle2 className="h-3.5 w-3.5 text-white" />}
-                {isCancelled && idx === 0 && <XCircle className="h-3.5 w-3.5 text-red-500" />}
-              </div>
+        {/* ═══ PAGE HEADER ═══ */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '20px' }}>
+          <h1 style={{ fontSize: '18px', fontWeight: 600, color: '#0F172A', display: 'flex', alignItems: 'center', gap: '7px', margin: 0 }}>
+            {shipment.origin} <span style={{ color: '#94A3B8', fontSize: '14px' }}>→</span> {shipment.destination}
+          </h1>
+          <StatusBadge status={shipment.status} />
+        </div>
 
-              {/* Step label + date */}
-              <div
-                className={`flex-1 pt-0.5 ${
-                  isCurrent
-                    ? 'font-semibold text-blue-700'
-                    : isDone
-                    ? 'text-gray-800'
-                    : 'text-gray-400'
-                }`}
-              >
-                <div className="text-sm">{step.label}</div>
-                {step.date && (
-                  <div className="text-xs text-gray-400 mt-0.5">
-                    {new Date(step.date).toLocaleDateString('tr-TR', {
-                      day: 'numeric',
-                      month: 'long',
-                      year: 'numeric',
-                    })}
-                  </div>
-                )}
-                {isCancelled && idx === 0 && (
-                  <div className="text-xs text-red-500 mt-0.5">Taşıma iptal edildi</div>
-                )}
-              </div>
+        {/* ═══ TOP ROW — 3 COLUMN GRID ═══ */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '14px', marginBottom: '14px' }}>
+
+          {/* ── COL 1: İLAN DETAYLARI ── */}
+          <div style={{ background: 'white', border: '0.5px solid #E2E8F0', borderRadius: '12px', padding: '18px', alignSelf: 'stretch' }}>
+            {/* Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+              <span style={{ fontSize: '13px', fontWeight: 500, color: '#0F172A' }}>İlan Detayları</span>
+              <span style={{ background: '#F1F5F9', borderRadius: '5px', padding: '2px 7px', fontFamily: 'monospace', fontSize: '11px', color: '#64748B' }}>#{shortId}</span>
             </div>
-          );
-        })}
+            {/* Detail rows */}
+            {detailRows.map((row, i) => (
+              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '7px 0', borderBottom: i < detailRows.length - 1 ? '0.5px solid #F1F5F9' : 'none', gap: '8px', ...(i === 0 ? { paddingTop: 0 } : {}) }}>
+                <span style={{ fontSize: '11px', fontWeight: 500, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.06em', flexShrink: 0, paddingTop: '1px' }}>{row.label}</span>
+                <span style={{ fontSize: '13px', fontWeight: 500, color: '#0F172A', textAlign: 'right' }}>{row.value}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* ── COL 2: TAŞIMA SÜRECİ (TIMELINE) ── */}
+          <div style={{ background: 'white', border: '0.5px solid #E2E8F0', borderRadius: '12px', padding: '18px', alignSelf: 'stretch' }}>
+            <div style={{ fontSize: '13px', fontWeight: 500, color: '#0F172A', marginBottom: '12px' }}>Taşıma Süreci</div>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              {timelineSteps.map((ts, idx) => {
+                const isDone = ts.done;
+                const isActive = idx === activeIdx;
+                const isPending = !isDone && !isActive;
+                const isLast = idx === timelineSteps.length - 1;
+                return (
+                  <div key={idx} style={{ display: 'flex', gap: '12px' }}>
+                    {/* Left: circle + line */}
+                    <div style={{ width: '24px', flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                      {isDone ? (
+                        <div style={{ width: '24px', height: '24px', borderRadius: '50%', background: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <Check style={{ width: '11px', height: '11px', color: 'white' }} />
+                        </div>
+                      ) : isActive ? (
+                        <div style={{ width: '24px', height: '24px', borderRadius: '50%', background: 'white', border: '2px solid #2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#2563EB' }} />
+                        </div>
+                      ) : (
+                        <div style={{ width: '24px', height: '24px', borderRadius: '50%', background: '#F1F5F9', border: '0.5px solid #E2E8F0' }} />
+                      )}
+                      {!isLast && (
+                        <div style={{ width: '2px', flex: 1, minHeight: '16px', margin: '2px 0', background: isDone ? '#2563EB' : '#E2E8F0' }} />
+                      )}
+                    </div>
+                    {/* Right: content */}
+                    <div style={{ flex: 1, paddingBottom: isLast ? 0 : '14px' }}>
+                      <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '1px', color: isDone ? '#0F172A' : isActive ? '#1D4ED8' : '#94A3B8' }}>{ts.label}</div>
+                      {ts.desc && <div style={{ fontSize: '11px', color: '#64748B', lineHeight: 1.4 }}>{ts.desc}</div>}
+                      {ts.date && <div style={{ fontSize: '11px', color: '#94A3B8', marginTop: '1px' }}>{fmtDate(ts.date)}</div>}
+                      {isCancelled && idx === 0 && <div style={{ fontSize: '11px', color: '#DC2626', marginTop: '1px' }}>Taşıma iptal edildi</div>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* ── COL 3: ÖZET + AKSİYONLAR ── */}
+          <div style={{ background: 'white', border: '0.5px solid #E2E8F0', borderRadius: '12px', padding: '18px', alignSelf: 'stretch' }}>
+            <div style={{ fontSize: '13px', fontWeight: 500, color: '#0F172A', marginBottom: '12px' }}>Özet</div>
+            {/* Summary rows */}
+            {summaryRows.map((row, i) => (
+              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 0', borderBottom: i < summaryRows.length - 1 ? '0.5px solid #F1F5F9' : 'none', ...(i === 0 ? { paddingTop: 0 } : {}), ...(i === summaryRows.length - 1 ? { paddingBottom: 0 } : {}) }}>
+                <span style={{ fontSize: '13px', color: '#64748B' }}>{row.label}</span>
+                <span style={{ fontSize: '13px', fontWeight: 500, color: '#0F172A', textAlign: 'right' }}>{row.value}</span>
+              </div>
+            ))}
+
+            {/* Action buttons */}
+            <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '0.5px solid #F1F5F9', display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              {/* CUSTOMER — pending / offer_received */}
+              {userType === 'customer' && ['pending', 'offer_received'].includes(shipment.status) && (
+                <>
+                  {pendingOffers.length > 0 && (
+                    <button onClick={() => navigate(`/teklifler/${shipment.id}`)} style={{ width: '100%', height: '36px', background: '#2563EB', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 500, cursor: 'pointer' }}>
+                      Teklif Karşılaştır
+                    </button>
+                  )}
+                  <button onClick={() => navigate(`/ilan-duzenle/${shipment.id}`)} style={{ width: '100%', height: '36px', background: 'white', color: '#374151', border: '0.5px solid #E2E8F0', borderRadius: '8px', fontSize: '13px', fontWeight: 500, cursor: 'pointer' }}>
+                    İlanı Düzenle
+                  </button>
+                  <button disabled={updating} onClick={handleCancel} style={{ width: '100%', height: '36px', background: 'white', color: '#DC2626', border: '0.5px solid #FECACA', borderRadius: '8px', fontSize: '13px', fontWeight: 500, cursor: 'pointer' }}>
+                    İptal Et
+                  </button>
+                </>
+              )}
+
+              {/* CUSTOMER — matched / in_transit */}
+              {userType === 'customer' && ['matched', 'in_transit'].includes(shipment.status) && shipment.carrierId && (
+                <button onClick={() => navigate(`/nakliyeci/${shipment.carrierId}`)} style={{ width: '100%', height: '36px', background: '#2563EB', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 500, cursor: 'pointer' }}>
+                  Nakliyeci Detayı
+                </button>
+              )}
+
+              {/* CUSTOMER — completed */}
+              {userType === 'customer' && shipment.status === 'completed' && (
+                <>
+                  {shipment.carrierId && (
+                    <button onClick={() => navigate(`/nakliyeci/${shipment.carrierId}`)} style={{ width: '100%', height: '36px', background: '#2563EB', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 500, cursor: 'pointer' }}>
+                      Yorum Yaz
+                    </button>
+                  )}
+                  <button onClick={() => navigate('/teklif-talebi')} style={{ width: '100%', height: '36px', background: 'white', color: '#374151', border: '0.5px solid #E2E8F0', borderRadius: '8px', fontSize: '13px', fontWeight: 500, cursor: 'pointer' }}>
+                    Yeniden İlan Ver
+                  </button>
+                </>
+              )}
+
+              {/* CARRIER — matched */}
+              {isCarrierOwner && shipment.status === 'matched' && (
+                <button disabled={updating} onClick={handleStart} style={{ width: '100%', height: '40px', background: 'linear-gradient(135deg, #0F172A 0%, #1E3A5F 100%)', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>
+                  Taşımayı Başlat
+                </button>
+              )}
+
+              {/* CARRIER — in_transit */}
+              {isCarrierOwner && shipment.status === 'in_transit' && (
+                <button disabled={updating} onClick={handleComplete} style={{ width: '100%', height: '40px', background: 'linear-gradient(135deg, #14532D 0%, #15803D 100%)', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>
+                  Teslim Edildi
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* ═══ BOTTOM ROW — OFFERS (FULL WIDTH) ═══ */}
+        {userType === 'customer' && ['pending', 'offer_received'].includes(shipment.status) && offers.length > 0 && (
+          <div style={{ background: 'white', border: '0.5px solid #E2E8F0', borderRadius: '12px', padding: '18px', width: '100%' }}>
+            {/* Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+              <span style={{ fontSize: '13px', fontWeight: 500, color: '#0F172A' }}>Gelen Teklifler</span>
+              <span style={{ background: '#EFF6FF', color: '#1D4ED8', borderRadius: '9999px', padding: '2px 9px', fontSize: '11px', fontWeight: 500 }}>{offers.length} teklif</span>
+            </div>
+
+            {/* Offer cards grid */}
+            <div style={{ display: 'grid', gridTemplateColumns: offers.length <= 3 ? 'repeat(3, 1fr)' : 'repeat(3, 1fr)', gap: '12px' }}>
+              {offers.map(offer => {
+                const isCheapest = Number(offer.price) === lowestPrice && offer.status === 'pending';
+                const initials = (offer.carrier?.companyName || 'N').slice(0, 2).toUpperCase();
+                return (
+                  <div key={offer.id} style={{ border: isCheapest ? '1.5px solid #2563EB' : '0.5px solid #E2E8F0', borderRadius: '10px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px', position: 'relative', overflow: 'hidden', cursor: 'pointer', transition: 'border-color 150ms' }}>
+                    {/* Cheapest bar + tag */}
+                    {isCheapest && (
+                      <>
+                        <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '3px', background: '#2563EB' }} />
+                        <div style={{ position: 'absolute', top: 0, right: 0, background: '#2563EB', color: 'white', fontSize: '9px', fontWeight: 700, padding: '3px 10px', borderRadius: '0 9px 0 7px', letterSpacing: '0.07em' }}>EN UYGUN</div>
+                      </>
+                    )}
+
+                    {/* Top: avatar + info */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <div style={{ width: '42px', height: '42px', borderRadius: '10px', background: '#1E3A5F', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', fontWeight: 500, flexShrink: 0 }}>
+                        {initials}
+                      </div>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: '14px', fontWeight: 500, color: '#0F172A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{offer.carrier?.companyName || 'Nakliyeci'}</div>
+                        {offer.carrier?.rating != null && Number(offer.carrier.rating) > 0 && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '3px', marginTop: '2px' }}>
+                            <span style={{ color: '#F59E0B', fontSize: '11px' }}>★</span>
+                            <span style={{ fontSize: '11px', fontWeight: 500 }}>{Number(offer.carrier.rating).toFixed(1)}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Price section */}
+                    <div style={{ padding: '10px 0', borderTop: '0.5px solid #F1F5F9', borderBottom: '0.5px solid #F1F5F9' }}>
+                      <div style={{ fontSize: '22px', fontWeight: 600, color: '#0F172A', lineHeight: 1 }}>₺{fmtPrice(Number(offer.price))}</div>
+                      <div style={{ fontSize: '11px', color: '#94A3B8', marginTop: '3px' }}>teklif fiyatı</div>
+                      {offer.message && (
+                        <div style={{ fontSize: '12px', color: '#64748B', marginTop: '6px', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{offer.message}</div>
+                      )}
+                    </div>
+
+                    {/* Buttons / Status */}
+                    {offer.status === 'accepted' ? (
+                      <div style={{ background: '#F0FDF4', color: '#15803D', fontSize: '12px', fontWeight: 600, textAlign: 'center', borderRadius: '7px', padding: '10px' }}>✓ Kabul Edildi</div>
+                    ) : offer.status === 'rejected' ? (
+                      <div style={{ background: '#F8FAFC', color: '#94A3B8', fontSize: '12px', textAlign: 'center', borderRadius: '7px', padding: '10px' }}>✗ Reddedildi</div>
+                    ) : (
+                      <div style={{ display: 'flex', gap: '6px' }}>
+                        <button disabled={updating} onClick={() => handleAcceptOffer(offer.id)} style={{ flex: 1, background: '#2563EB', color: 'white', border: 'none', borderRadius: '7px', padding: '8px 0', fontSize: '12px', fontWeight: 500, cursor: 'pointer' }}>
+                          Kabul Et
+                        </button>
+                        <button disabled={updating} onClick={() => handleRejectOffer(offer.id)} style={{ flex: 1, background: 'transparent', color: '#DC2626', border: '0.5px solid #FECACA', borderRadius: '7px', padding: '8px 0', fontSize: '12px', cursor: 'pointer' }}>
+                          Reddet
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
       </div>
     </div>
   );

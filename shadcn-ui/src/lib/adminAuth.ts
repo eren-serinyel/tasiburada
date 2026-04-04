@@ -29,6 +29,10 @@ export function getAdminRole(): string | null {
   return typeof window !== 'undefined' ? localStorage.getItem(ADMIN_ROLE_KEY) : null;
 }
 
+export function getAdminId(): string | null {
+  return typeof window !== 'undefined' ? localStorage.getItem(ADMIN_ID_KEY) : null;
+}
+
 let adminRedirectInProgress = false;
 
 export async function adminApiClient(input: string, init: RequestInit = {}): Promise<Response> {

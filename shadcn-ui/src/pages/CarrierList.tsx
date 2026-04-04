@@ -1,13 +1,7 @@
 import { useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import CarrierFilters from '@/components/carriers/CarrierFilters';
-import CarrierCard from '@/components/carriers/CarrierCard';
-import CarrierCardSkeleton from '@/components/carriers/CarrierCardSkeleton';
 import {
 	CarrierSearchFilters,
 	filtersFromParams,
@@ -15,9 +9,20 @@ import {
 	fetchCarrierSearch,
 	type CarrierSearchResponse
 } from '@/lib/carrierSearch';
-import { ChevronRight, Search, Users, Shield, Award } from 'lucide-react';
+import { CarrierSearchItem } from '@/lib/types';
+import { formatPrice } from '@/lib/utils';
+import { SearchX, Star, Truck } from 'lucide-react';
 
 const HIGHLIGHT_LIMIT = 12;
+
+/* ── helpers ── */
+const slugify = (value: string): string =>
+	value.toLowerCase()
+		.replace(/ç/g, 'c').replace(/ğ/g, 'g').replace(/ı/g, 'i')
+		.replace(/ö/g, 'o').replace(/ş/g, 's').replace(/ü/g, 'u')
+		.replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'nakliyeci';
+
+const num = (v: unknown, fb = 0) => { const n = Number(v); return Number.isFinite(n) ? n : fb; };
 
 export default function CarrierList() {
 	const [searchParams, setSearchParams] = useSearchParams();
@@ -45,121 +50,220 @@ export default function CarrierList() {
 	const hasResults = carriers.length > 0;
 
 	return (
-		<div className="min-h-screen bg-slate-50/50">
-			{/* Hero Section */}
-			<div className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 border-b border-white/10 text-white">
-				<div className="container mx-auto py-12 md:py-16">
-					<div className="max-w-3xl space-y-4">
-						<div className="flex items-center gap-2 text-blue-300 mb-2">
-							<Shield className="h-5 w-5" />
-							<span className="text-sm font-medium tracking-wide uppercase">Güvenilir Nakliyat Ağı</span>
-						</div>
-						<h1 className="text-4xl md:text-5xl font-extrabold tracking-tight text-white leading-[1.1]">
-							Yükünüz İçin En Doğru <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-emerald-400">Nakliyeciyi Bulun</span>
-						</h1>
-						<p className="text-lg text-slate-300 max-w-2xl leading-relaxed">
-							Yüzlerce onaylı nakliyeci arasından puan, yorum ve fiyat karşılaştırması yaparak size en uygun olanı hemen seçin.
-						</p>
-						<div className="flex flex-wrap gap-4 pt-4">
-							<div className="flex items-center gap-2 bg-white/10 px-4 py-2 rounded-full backdrop-blur-sm border border-white/10">
-								<Award className="h-4 w-4 text-yellow-400" />
-								<span className="text-sm font-medium">Onaylı Profiller</span>
-							</div>
-							<div className="flex items-center gap-2 bg-white/10 px-4 py-2 rounded-full backdrop-blur-sm border border-white/10">
-								<Users className="h-4 w-4 text-blue-400" />
-								<span className="text-sm font-medium">Gerçek Müşteri Yorumları</span>
-							</div>
-						</div>
+		<div style={{ background: '#F8FAFC', minHeight: '100vh' }}>
+
+			{/* ═══ HERO HEADER ═══ */}
+			<div style={{ background: 'linear-gradient(180deg, #EFF6FF 0%, #F8FAFC 100%)', borderBottom: '1px solid #E2E8F0', padding: '32px 40px' }}>
+				<div style={{ maxWidth: '1320px', margin: '0 auto' }}>
+					{/* Badge */}
+					<div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: '9999px', padding: '5px 14px', marginBottom: '12px' }}>
+						<span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#2563EB', animation: 'pulse 2s infinite' }} />
+						<span style={{ fontSize: '12px', fontWeight: 600, color: '#2563EB' }}>GÜVENİLİR NAKLİYAT AĞI</span>
+					</div>
+
+					<h1 style={{ fontSize: 'clamp(1.5rem, 3vw, 2.25rem)', fontWeight: 800, color: '#0F172A', letterSpacing: '-0.02em', lineHeight: 1.2, margin: 0 }}>
+						Yükünüz İçin En Doğru<br />
+						<span style={{ color: '#2563EB' }}>Nakliyeciyi Bulun</span>
+					</h1>
+
+					<p style={{ fontSize: '15px', color: '#64748B', maxWidth: '520px', marginTop: '10px', lineHeight: 1.6 }}>
+						Yüzlerce onaylı nakliyeci arasından puan, yorum ve fiyat karşılaştırması yaparak size en uygun olanı hemen seçin.
+					</p>
+
+					<div style={{ marginTop: '16px', display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+						<span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', border: '1px solid #E2E8F0', borderRadius: '9999px', padding: '8px 18px', background: 'white', fontSize: '13px', fontWeight: 500, color: '#374151' }}>
+							✓ Onaylı Profiller
+						</span>
+						<span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', border: '1px solid #E2E8F0', borderRadius: '9999px', padding: '8px 18px', background: 'white', fontSize: '13px', fontWeight: 500, color: '#374151' }}>
+							★ Gerçek Müşteri Yorumları
+						</span>
 					</div>
 				</div>
 			</div>
 
-			<div className="container mx-auto py-8 lg:py-12">
-				<section className="grid gap-8 lg:grid-cols-[300px,1fr] xl:grid-cols-[320px,1fr]">
+			{/* ═══ MAIN CONTENT GRID ═══ */}
+			<div style={{ display: 'grid', gridTemplateColumns: '280px 1fr', gap: '24px', padding: '32px 40px', maxWidth: '1320px', margin: '0 auto' }}>
 
-					{/* Sidebar Filters */}
-					<aside className="space-y-6">
-						<Card className="shadow-sm border-slate-200 sticky top-24">
-							<CardHeader className="bg-slate-50/50 border-b border-slate-100 pb-4">
-								<CardTitle className="text-lg font-bold text-slate-800 flex items-center gap-2">
-									<Search className="h-4 w-4 text-blue-600" />
-									Filtreleme
-								</CardTitle>
-								<CardDescription>Aramayı detaylandırın</CardDescription>
-							</CardHeader>
-							<CardContent className="pt-6">
-								<CarrierFilters filters={filters} onChange={handleFilterChange} hideHeader />
-							</CardContent>
-						</Card>
+				{/* ── LEFT: FILTER PANEL ── */}
+				<aside>
+					<div style={{ background: 'white', border: '1px solid #E2E8F0', borderRadius: '14px', padding: '20px', position: 'sticky', top: '88px', maxHeight: 'calc(100vh - 110px)', overflowY: 'auto' }}>
+						<CarrierFilters filters={filters} onChange={handleFilterChange} hideHeader />
+					</div>
+				</aside>
 
+				{/* ── RIGHT: RESULTS ── */}
+				<main>
+					{/* Results header */}
+					<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+						<div>
+							<div style={{ fontSize: '12px', color: '#94A3B8' }}>Bulunan Sonuçlar</div>
+							<div style={{ fontSize: '16px', fontWeight: 600, color: '#0F172A' }}>
+								{isFetching ? '...' : total} nakliyeci listeleniyor
+							</div>
+						</div>
+						{total > HIGHLIGHT_LIMIT && (
+							<button onClick={handleViewAll} style={{ height: '36px', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '0 16px', fontSize: '13px', fontWeight: 500, color: '#374151', background: 'white', cursor: 'pointer' }}>
+								Tümünü Gör →
+							</button>
+						)}
+					</div>
 
-					</aside>
+					{/* Error */}
+					{isError && (
+						<div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: '10px', padding: '14px 18px', marginBottom: '16px', fontSize: '13px', color: '#B91C1C' }}>
+							Liste alınamadı — {(error as Error)?.message || 'Beklenmeyen bir hata oluştu.'}
+						</div>
+					)}
 
-					{/* Results Area */}
-					<main className="space-y-6">
-						<div className="bg-white rounded-xl border border-slate-200 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-sm">
-							<div>
-								<p className="text-sm text-slate-500 font-medium">Bulunan Sonuçlar</p>
-								<div className="flex items-baseline gap-2">
-									<p className="text-2xl font-bold text-slate-900">
-										{isFetching ? '...' : total}
-									</p>
-									<span className="text-slate-600 font-medium">nakliyeci listeleniyor</span>
+					{/* Card grid */}
+					{isLoading ? (
+						<div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '14px' }}>
+							{Array.from({ length: 6 }).map((_, i) => (
+								<div key={i} className="animate-pulse" style={{ background: 'white', border: '1px solid #E2E8F0', borderRadius: '14px', padding: '20px' }}>
+									<div style={{ display: 'flex', gap: '12px', marginBottom: '12px' }}>
+										<div style={{ width: '52px', height: '52px', borderRadius: '12px', background: '#E2E8F0', flexShrink: 0 }} />
+										<div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+											<div style={{ height: '14px', width: '60%', background: '#F1F5F9', borderRadius: '4px' }} />
+											<div style={{ height: '10px', width: '40%', background: '#F1F5F9', borderRadius: '4px' }} />
+											<div style={{ height: '10px', width: '30%', background: '#F1F5F9', borderRadius: '4px' }} />
+										</div>
+									</div>
+									<div style={{ background: '#F8FAFC', borderRadius: '8px', height: '36px', marginBottom: '10px' }} />
+									<div style={{ display: 'flex', gap: '4px', marginBottom: '14px' }}>
+										{[1,2,3].map(j => <div key={j} style={{ height: '22px', width: '60px', background: '#F1F5F9', borderRadius: '6px' }} />)}
+									</div>
+									<div style={{ borderTop: '1px solid #F1F5F9', paddingTop: '14px', display: 'flex', justifyContent: 'space-between' }}>
+										<div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+											<div style={{ height: '10px', width: '40px', background: '#F1F5F9', borderRadius: '4px' }} />
+											<div style={{ height: '18px', width: '64px', background: '#E2E8F0', borderRadius: '4px' }} />
+										</div>
+										<div style={{ height: '36px', width: '120px', background: '#E2E8F0', borderRadius: '8px' }} />
+									</div>
 								</div>
-							</div>
-							{total > HIGHLIGHT_LIMIT && (
-								<Button variant="outline" className="gap-2 border-slate-300 hover:bg-slate-50 text-slate-700" onClick={handleViewAll}>
-									Tüm Sonuçları Gör
-									<ChevronRight className="h-4 w-4" />
-								</Button>
-							)}
+							))}
 						</div>
-
-						{isError && (
-							<Alert variant="destructive">
-								<AlertTitle>Liste alınamadı</AlertTitle>
-								<AlertDescription>{(error as Error)?.message || 'Beklenmeyen bir hata oluştu.'}</AlertDescription>
-							</Alert>
-						)}
-
-						<div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-							{isLoading
-								? Array.from({ length: 6 }).map((_, idx) => <CarrierCardSkeleton key={idx} />)
-								: hasResults
-									? carriers.map(carrier => (
-										<CarrierCard key={carrier.id} carrier={carrier} />
-									))
-									: (
-										<Card className="col-span-full border-dashed border-2 bg-slate-50/50">
-											<CardContent className="py-16 text-center space-y-4">
-												<div className="mx-auto h-16 w-16 bg-slate-100 rounded-full flex items-center justify-center">
-													<Search className="h-8 w-8 text-slate-400" />
-												</div>
-												<div className="space-y-1">
-													<h3 className="text-lg font-semibold text-slate-900">Sonuç Bulunamadı</h3>
-													<p className="text-slate-500 max-w-sm mx-auto">
-														Seçtiğiniz kriterlere uygun nakliyeci bulunamadı. Filtreleri temizleyerek tekrar deneyebilirsiniz.
-													</p>
-												</div>
-												<Button variant="outline" onClick={() => handleFilterChange({ serviceAreas: [], vehicleTypeIds: [] })}>
-													Filtreleri Temizle
-												</Button>
-											</CardContent>
-										</Card>
-									)
-							}
+					) : hasResults ? (
+						<div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '14px' }}>
+							{carriers.map(c => <InlineCarrierCard key={c.id} carrier={c} navigate={navigate} />)}
 						</div>
+					) : (
+						/* Empty state */
+						<div style={{ textAlign: 'center', padding: '60px 20px' }}>
+							<SearchX style={{ width: '48px', height: '48px', color: '#CBD5E1', margin: '0 auto 16px' }} />
+							<div style={{ fontSize: '18px', fontWeight: 600, color: '#0F172A', marginBottom: '8px' }}>Nakliyeci bulunamadı</div>
+							<div style={{ fontSize: '14px', color: '#64748B', marginBottom: '20px' }}>Filtreleri değiştirerek tekrar deneyin</div>
+							<button
+								onClick={() => handleFilterChange({ serviceAreas: [], vehicleTypeIds: [] })}
+								style={{ border: '1px solid #2563EB', borderRadius: '8px', padding: '10px 24px', fontSize: '14px', fontWeight: 500, color: '#2563EB', background: 'white', cursor: 'pointer' }}
+							>
+								Filtreleri Temizle
+							</button>
+						</div>
+					)}
 
-						{hasResults && total > HIGHLIGHT_LIMIT && (
-							<div className="pt-8 flex justify-center">
-								<Button size="lg" className="px-8 bg-slate-900 text-white hover:bg-slate-800 shadow-lg hover:shadow-xl transition-all" onClick={handleViewAll}>
-									Tüm Nakliyecileri Keşfet
-									<ChevronRight className="h-4 w-4 ml-2" />
-								</Button>
-							</div>
-						)}
-					</main>
-				</section>
+					{/* View All */}
+					{hasResults && total > HIGHLIGHT_LIMIT && (
+						<div style={{ display: 'flex', justifyContent: 'center', marginTop: '32px', paddingTop: '24px', borderTop: '1px solid #E2E8F0' }}>
+							<button onClick={handleViewAll} style={{ background: '#2563EB', color: 'white', border: 'none', borderRadius: '8px', padding: '12px 32px', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}>
+								Tüm Nakliyecileri Keşfet →
+							</button>
+						</div>
+					)}
+				</main>
+			</div>
+		</div>
+	);
+}
+
+/* ═══ INLINE CARRIER CARD ═══ */
+function InlineCarrierCard({ carrier, navigate }: { carrier: CarrierSearchItem; navigate: ReturnType<typeof useNavigate> }) {
+	const initials = carrier.companyName.split(' ').filter(Boolean).map(w => w[0]).slice(0, 2).join('').toUpperCase();
+	const slug = slugify(carrier.companyName);
+	const detailPath = `/nakliyeciler/${carrier.id}/${slug}`;
+	const ratingValue = num(carrier.rating);
+	const priceLabel = typeof carrier.startingPrice === 'number' ? `₺${formatPrice(carrier.startingPrice)}` : null;
+	const isVerified = (carrier.profileCompletion || 0) > 70;
+	const expYears = num(carrier.experienceYears, NaN);
+	const experienceText = Number.isFinite(expYears) ? `${expYears} Yıl Deneyim` : null;
+	const serviceAreas = carrier.serviceAreas || [];
+
+	return (
+		<div
+			onClick={() => navigate(detailPath)}
+			style={{ background: 'white', border: '1px solid #E2E8F0', borderRadius: '14px', padding: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.04)', cursor: 'pointer', transition: 'all 200ms', display: 'flex', flexDirection: 'column' }}
+			onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.08)'; e.currentTarget.style.transform = 'translateY(-3px)'; e.currentTarget.style.borderColor = '#CBD5E1'; }}
+			onMouseLeave={e => { e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.04)'; e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.borderColor = '#E2E8F0'; }}
+		>
+			{/* TOP: Avatar + Info + Verified */}
+			<div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
+				<div style={{ width: '52px', height: '52px', borderRadius: '12px', background: 'linear-gradient(135deg, #1E3A5F 0%, #2563EB 100%)', color: 'white', fontSize: '18px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+					{carrier.pictureUrl
+						? <img src={carrier.pictureUrl} alt="" style={{ width: '52px', height: '52px', borderRadius: '12px', objectFit: 'cover' }} />
+						: initials}
+				</div>
+				<div style={{ flex: 1, minWidth: 0 }}>
+					<div style={{ fontSize: '15px', fontWeight: 600, color: '#0F172A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{carrier.companyName}</div>
+					<div style={{ fontSize: '12px', color: '#64748B', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
+						<span style={{ fontSize: '12px' }}>📍</span> {carrier.city || 'Şehir belirtilmedi'}
+					</div>
+				</div>
+				{isVerified && (
+					<span style={{ background: '#F0FDF4', color: '#15803D', border: '1px solid #BBF7D0', borderRadius: '9999px', padding: '3px 10px', fontSize: '11px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap', flexShrink: 0 }}>
+						✓ Onaylı
+					</span>
+				)}
+			</div>
+
+			{/* RATING ROW */}
+			<div style={{ display: 'flex', alignItems: 'center', gap: '6px', margin: '12px 0' }}>
+				<span style={{ color: '#F59E0B', fontSize: '14px' }}>{'★'.repeat(Math.round(ratingValue))}</span>
+				<span style={{ fontSize: '14px', fontWeight: 600, color: '#0F172A' }}>{ratingValue.toFixed(1)}</span>
+				<span style={{ fontSize: '12px', color: '#94A3B8' }}>({carrier.reviewCount} yorum)</span>
+				{experienceText && (
+					<span style={{ marginLeft: 'auto', background: '#FFF7ED', color: '#C2410C', borderRadius: '6px', padding: '2px 8px', fontSize: '11px', fontWeight: 600 }}>
+						{experienceText}
+					</span>
+				)}
+			</div>
+
+			{/* VEHICLE INFO */}
+			<div style={{ background: '#F8FAFC', borderRadius: '8px', padding: '10px 12px', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: carrier.vehicleSummary ? '#374151' : '#94A3B8', fontStyle: carrier.vehicleSummary ? 'normal' : 'italic' }}>
+				<Truck style={{ width: '14px', height: '14px', color: '#2563EB', flexShrink: 0 }} />
+				{carrier.vehicleSummary || 'Araç bilgisi eklenmemiş'}
+			</div>
+
+			{/* ROUTE TAGS */}
+			{serviceAreas.length > 0 && (
+				<div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', margin: '10px 0' }}>
+					{serviceAreas.slice(0, 3).map(area => (
+						<span key={area} style={{ background: '#F1F5F9', borderRadius: '6px', padding: '3px 10px', fontSize: '11px', color: '#64748B' }}>{area}</span>
+					))}
+					{serviceAreas.length > 3 && (
+						<span style={{ fontSize: '11px', color: '#94A3B8', padding: '3px 6px' }}>+{serviceAreas.length - 3} daha</span>
+					)}
+				</div>
+			)}
+
+			{/* BOTTOM: Price + CTA */}
+			<div style={{ borderTop: '1px solid #F1F5F9', paddingTop: '14px', marginTop: serviceAreas.length > 0 ? '4px' : '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+				<div>
+					{priceLabel ? (
+						<>
+							<span style={{ fontSize: '11px', color: '#94A3B8', display: 'block' }}>itibaren</span>
+							<span style={{ fontSize: '18px', fontWeight: 800, color: '#0F172A', display: 'block' }}>{priceLabel}</span>
+						</>
+					) : (
+						<span style={{ fontSize: '14px', color: '#64748B' }}>Fiyat Sorunuz</span>
+					)}
+				</div>
+				<button
+					onClick={e => { e.stopPropagation(); navigate(detailPath); }}
+					style={{ background: '#2563EB', color: 'white', border: 'none', borderRadius: '8px', padding: '9px 18px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', transition: 'all 150ms' }}
+					onMouseEnter={e => { e.currentTarget.style.background = '#1D4ED8'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(37,99,235,0.25)'; }}
+					onMouseLeave={e => { e.currentTarget.style.background = '#2563EB'; e.currentTarget.style.boxShadow = 'none'; }}
+				>
+					İncele & Teklif Al
+				</button>
 			</div>
 		</div>
 	);

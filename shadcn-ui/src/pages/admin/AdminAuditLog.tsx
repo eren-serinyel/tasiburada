@@ -25,6 +25,8 @@ interface AuditEntry {
 
 export default function AdminAuditLog() {
   const [search, setSearch] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [page, setPage] = useState(1);
   const [entries, setEntries] = useState<AuditEntry[]>([]);
   const [total, setTotal] = useState(0);
@@ -40,6 +42,8 @@ export default function AdminAuditLog() {
         page: String(page),
         limit: String(limit),
         ...(search ? { search } : {}),
+        ...(dateFrom ? { dateFrom } : {}),
+        ...(dateTo ? { dateTo } : {}),
       });
       const res = await adminApiClient(`/admin/audit-log?${params}`);
       const data = await res.json();
@@ -57,7 +61,7 @@ export default function AdminAuditLog() {
     } finally {
       setLoading(false);
     }
-  }, [page, search]);
+  }, [page, search, dateFrom, dateTo]);
 
   useEffect(() => { setPage(1); }, [search]);
   useEffect(() => { fetchLogs(); }, [fetchLogs]);
@@ -84,10 +88,20 @@ export default function AdminAuditLog() {
         }
       />
 
-      {/* Search */}
-      <div className="relative max-w-xs">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-        <Input placeholder="İşlem veya admin ara..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9 h-9 text-sm" />
+      {/* Filters */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 flex-wrap">
+        <div className="relative flex-1 max-w-xs">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+          <Input placeholder="İşlem veya admin ara..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9 h-9 text-sm" />
+        </div>
+        <div className="flex items-center gap-2">
+          <Input type="date" value={dateFrom} onChange={(e) => { setDateFrom(e.target.value); setPage(1); }} className="h-9 text-xs w-36" />
+          <span className="text-xs text-slate-400">—</span>
+          <Input type="date" value={dateTo} onChange={(e) => { setDateTo(e.target.value); setPage(1); }} className="h-9 text-xs w-36" />
+          {(dateFrom || dateTo) && (
+            <Button variant="ghost" size="sm" className="h-9 text-xs text-slate-500" onClick={() => { setDateFrom(''); setDateTo(''); setPage(1); }}>Temizle</Button>
+          )}
+        </div>
       </div>
 
       {/* Table */}

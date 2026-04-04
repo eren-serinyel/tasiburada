@@ -25,7 +25,15 @@ export class CarrierCompanyInfoService {
       phone: dto.phone ?? carrier.phone,
       email: dto.email ?? carrier.email,
       taxNumber: dto.taxNumber ?? carrier.taxNumber,
-      foundedYear: dto.foundedYear ?? carrier.foundedYear
+      foundedYear: dto.foundedYear ?? carrier.foundedYear,
+      addressLine1: dto.addressLine1 ?? carrier.addressLine1,
+      addressLine2: dto.addressLine2 ?? carrier.addressLine2,
+      district: dto.district ?? carrier.district,
+      activityCity: dto.activityCity ?? carrier.activityCity,
+      vehicleBrand: dto.vehicleBrand ?? carrier.vehicleBrand,
+      vehicleModel: dto.vehicleModel ?? carrier.vehicleModel,
+      vehicleYear: dto.vehicleYear ?? carrier.vehicleYear,
+      vehicleCapacityM3: dto.vehicleCapacityM3 ?? carrier.vehicleCapacityM3,
     });
 
     await this.profileStatusService.updateProfileCompletion(carrierId);

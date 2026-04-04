@@ -21,7 +21,7 @@ import {
   Building2, Calendar, Star, Truck, AlertTriangle, ExternalLink,
   Shield, Hash,
 } from 'lucide-react';
-import { formatDistanceToNow, format } from 'date-fns';
+import { format } from 'date-fns';
 import { tr } from 'date-fns/locale';
 
 interface Document {
@@ -39,6 +39,8 @@ interface Review {
   comment: string;
   createdAt: string;
   user?: { firstName: string; lastName: string };
+  customer?: { firstName: string; lastName: string };
+  shipment?: { origin: string; destination: string };
 }
 
 interface Shipment {
@@ -49,6 +51,7 @@ interface Shipment {
   destination: string;
   createdAt: string;
   price?: number;
+  customer?: { firstName: string; lastName: string };
 }
 
 interface Carrier {
@@ -81,6 +84,19 @@ export default function AdminCarrierDetail() {
   const [actionLoading, setActionLoading] = useState(false);
   const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
   const [rejectionReason, setRejectionReason] = useState('');
+  const [activeTab, setActiveTab] = useState('general');
+
+  // Shipments tab state
+  const [carrierShipments, setCarrierShipments] = useState<Shipment[]>([]);
+  const [shipmentsLoading, setShipmentsLoading] = useState(false);
+  const [shipmentsPage, setShipmentsPage] = useState(1);
+  const [shipmentsMeta, setShipmentsMeta] = useState({ total: 0, totalPages: 1 });
+
+  // Reviews tab state
+  const [carrierReviews, setCarrierReviews] = useState<Review[]>([]);
+  const [reviewsLoading, setReviewsLoading] = useState(false);
+  const [reviewsPage, setReviewsPage] = useState(1);
+  const [reviewsMeta, setReviewsMeta] = useState({ total: 0, totalPages: 1, averageRating: 0 });
 
   const fetchCarrier = () => {
     if (!carrierId) return;
@@ -89,16 +105,12 @@ export default function AdminCarrierDetail() {
     Promise.all([
       adminApiClient(`/admin/carriers/${carrierId}`).then((r) => r.json()),
       adminApiClient(`/admin/carriers/${carrierId}/documents`).then((r) => r.json()),
-      adminApiClient(`/admin/carriers/${carrierId}/shipments`).then((r) => r.json()),
-      adminApiClient(`/admin/carriers/${carrierId}/reviews`).then((r) => r.json()),
     ])
-      .then(([carrierRes, docsRes, shipmentsRes, reviewsRes]) => {
+      .then(([carrierRes, docsRes]) => {
         if (carrierRes.success) {
           setCarrier({
             ...carrierRes.data,
             documents: docsRes.success ? docsRes.data : [],
-            shipments: shipmentsRes.success ? shipmentsRes.data : [],
-            reviews: reviewsRes.success ? reviewsRes.data : [],
           });
         } else {
           toast.error(carrierRes.message);
@@ -112,7 +124,56 @@ export default function AdminCarrierDetail() {
       .finally(() => setLoading(false));
   };
 
+  const fetchCarrierShipments = async (page: number) => {
+    if (!carrierId) return;
+    setShipmentsLoading(true);
+    try {
+      const res = await adminApiClient(`/admin/carriers/${carrierId}/shipments?page=${page}&limit=10`);
+      const data = await res.json();
+      if (data.success) {
+        setCarrierShipments(data.data.shipments ?? []);
+        setShipmentsMeta({
+          total: data.data.pagination?.total ?? 0,
+          totalPages: data.data.pagination?.totalPages ?? 1,
+        });
+      }
+    } catch {
+      toast.error('İş verileri yüklenemedi.');
+    } finally {
+      setShipmentsLoading(false);
+    }
+  };
+
+  const fetchCarrierReviews = async (page: number) => {
+    if (!carrierId) return;
+    setReviewsLoading(true);
+    try {
+      const res = await adminApiClient(`/admin/carriers/${carrierId}/reviews?page=${page}&limit=10`);
+      const data = await res.json();
+      if (data.success) {
+        setCarrierReviews(data.data.reviews ?? []);
+        setReviewsMeta({
+          total: data.data.pagination?.total ?? 0,
+          totalPages: data.data.pagination?.totalPages ?? 1,
+          averageRating: data.data.averageRating ?? 0,
+        });
+      }
+    } catch {
+      toast.error('Yorum verileri yüklenemedi.');
+    } finally {
+      setReviewsLoading(false);
+    }
+  };
+
   useEffect(() => { fetchCarrier(); }, [carrierId]);
+
+  useEffect(() => {
+    if (activeTab === 'shipments') fetchCarrierShipments(shipmentsPage);
+  }, [activeTab, shipmentsPage, carrierId]);
+
+  useEffect(() => {
+    if (activeTab === 'reviews') fetchCarrierReviews(reviewsPage);
+  }, [activeTab, reviewsPage, carrierId]);
 
   const handleVerify = async (approved: boolean, reason?: string) => {
     if (!carrierId) return;
@@ -248,7 +309,7 @@ export default function AdminCarrierDetail() {
       </div>
 
       {/* Tabs */}
-      <Tabs defaultValue="general" className="space-y-4">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList className="bg-slate-100">
           <TabsTrigger value="general" className="text-xs">Genel Bilgiler</TabsTrigger>
           <TabsTrigger value="documents" className="text-xs">
@@ -317,43 +378,109 @@ export default function AdminCarrierDetail() {
 
         {/* Shipments Tab */}
         <TabsContent value="shipments">
-          {carrier.shipments && carrier.shipments.length > 0 ? (
+          {shipmentsLoading ? (
             <Card className="border-slate-200">
               <Table>
                 <TableHeader>
                   <TableRow className="bg-slate-50/50">
-                    <TableHead className="font-semibold text-slate-600 text-xs">Başlık</TableHead>
+                    <TableHead className="font-semibold text-slate-600 text-xs">İlan ID</TableHead>
                     <TableHead className="font-semibold text-slate-600 text-xs">Güzergah</TableHead>
+                    <TableHead className="font-semibold text-slate-600 text-xs">Müşteri</TableHead>
                     <TableHead className="font-semibold text-slate-600 text-xs">Durum</TableHead>
                     <TableHead className="font-semibold text-slate-600 text-xs">Tarih</TableHead>
+                    <TableHead className="font-semibold text-slate-600 text-xs">Fiyat</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {carrier.shipments.map((s) => (
-                    <TableRow key={s.id}>
-                      <TableCell className="text-sm font-medium text-slate-800">{s.loadDetails}</TableCell>
-                      <TableCell className="text-sm text-slate-600">{s.origin} → {s.destination}</TableCell>
-                      <TableCell>
-                        <StatusBadge status={s.status} statusMap={SHIPMENT_STATUS} size="sm" />
-                      </TableCell>
-                      <TableCell className="text-xs text-slate-500">
-                        {formatDistanceToNow(new Date(s.createdAt), { addSuffix: true, locale: tr })}
-                      </TableCell>
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <TableRow key={i}>
+                      {Array.from({ length: 6 }).map((_, j) => (
+                        <TableCell key={j}><div className="h-4 w-20 bg-slate-200 rounded animate-pulse" /></TableCell>
+                      ))}
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
             </Card>
+          ) : carrierShipments.length > 0 ? (
+            <div className="space-y-3">
+              <Card className="border-slate-200">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-slate-50/50">
+                      <TableHead className="font-semibold text-slate-600 text-xs">İlan ID</TableHead>
+                      <TableHead className="font-semibold text-slate-600 text-xs">Güzergah</TableHead>
+                      <TableHead className="font-semibold text-slate-600 text-xs">Müşteri</TableHead>
+                      <TableHead className="font-semibold text-slate-600 text-xs">Durum</TableHead>
+                      <TableHead className="font-semibold text-slate-600 text-xs">Tarih</TableHead>
+                      <TableHead className="font-semibold text-slate-600 text-xs">Fiyat</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {carrierShipments.map((s) => (
+                      <TableRow key={s.id}>
+                        <TableCell className="font-mono text-xs text-gray-400">{s.id.slice(0, 8)}</TableCell>
+                        <TableCell className="text-sm text-slate-600">{s.origin} → {s.destination}</TableCell>
+                        <TableCell className="text-sm text-slate-600">
+                          {s.customer ? `${s.customer.firstName} ${s.customer.lastName}` : '—'}
+                        </TableCell>
+                        <TableCell>
+                          <StatusBadge status={s.status} statusMap={SHIPMENT_STATUS} size="sm" />
+                        </TableCell>
+                        <TableCell className="text-xs text-slate-500">
+                          {new Date(s.createdAt).toLocaleDateString('tr-TR')}
+                        </TableCell>
+                        <TableCell className="text-sm font-medium text-slate-800">
+                          {s.price ? `₺${s.price.toLocaleString('tr-TR')}` : '—'}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </Card>
+              {shipmentsMeta.totalPages > 1 && (
+                <div className="flex items-center justify-between">
+                  <p className="text-xs text-slate-500">Toplam {shipmentsMeta.total} kayıt</p>
+                  <div className="flex items-center gap-2">
+                    <Button size="sm" variant="outline" disabled={shipmentsPage <= 1} onClick={() => setShipmentsPage((p) => p - 1)}>Önceki</Button>
+                    <span className="text-xs text-slate-600">{shipmentsPage} / {shipmentsMeta.totalPages}</span>
+                    <Button size="sm" variant="outline" disabled={shipmentsPage >= shipmentsMeta.totalPages} onClick={() => setShipmentsPage((p) => p + 1)}>Sonraki</Button>
+                  </div>
+                </div>
+              )}
+            </div>
           ) : (
-            <EmptyState icon={Truck} title="Henüz iş yok" description="Bu nakliyeciye ait iş kaydı bulunamadı." />
+            <EmptyState icon={Truck} title="📦 Bu nakliyeci henüz iş almamış" description="Bu nakliyeciye ait iş kaydı bulunamadı." />
           )}
         </TabsContent>
 
         {/* Reviews Tab */}
         <TabsContent value="reviews">
-          {carrier.reviews && carrier.reviews.length > 0 ? (
+          {reviewsLoading ? (
             <div className="space-y-3">
-              {carrier.reviews.map((r) => (
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div key={i} className="h-24 bg-slate-200 rounded-xl animate-pulse" />
+              ))}
+            </div>
+          ) : carrierReviews.length > 0 ? (
+            <div className="space-y-4">
+              {/* Summary */}
+              <Card className="border-slate-200">
+                <CardContent className="py-4 px-5 flex items-center gap-6">
+                  <div className="flex items-center gap-2">
+                    <span className="text-3xl font-bold text-slate-800">{reviewsMeta.averageRating.toFixed(1)}</span>
+                    <div className="flex items-center gap-0.5">
+                      {Array.from({ length: 5 }).map((_, i) => (
+                        <Star key={i} className={`h-4 w-4 ${i < Math.round(reviewsMeta.averageRating) ? 'text-amber-400 fill-amber-400' : 'text-slate-200'}`} />
+                      ))}
+                    </div>
+                  </div>
+                  <span className="text-sm text-slate-500">{reviewsMeta.total} yorum</span>
+                </CardContent>
+              </Card>
+
+              {/* Review Cards */}
+              {carrierReviews.map((r) => (
                 <Card key={r.id} className="border-slate-200">
                   <CardContent className="py-3 px-4">
                     <div className="flex items-center justify-between mb-2">
@@ -363,16 +490,33 @@ export default function AdminCarrierDetail() {
                             <Star key={i} className={`h-3 w-3 ${i < r.rating ? 'text-amber-400 fill-amber-400' : 'text-slate-200'}`} />
                           ))}
                         </div>
-                        <span className="text-xs text-slate-500">{r.user ? `${r.user.firstName} ${r.user.lastName}` : 'Anonim'}</span>
+                        <span className="text-sm font-medium text-slate-700">
+                          {(r.customer || r.user) ? `${(r.customer ?? r.user)!.firstName} ${(r.customer ?? r.user)!.lastName}` : 'Anonim'}
+                        </span>
                       </div>
                       <span className="text-xs text-slate-400">
-                        {formatDistanceToNow(new Date(r.createdAt), { addSuffix: true, locale: tr })}
+                        {new Date(r.createdAt).toLocaleDateString('tr-TR')}
                       </span>
                     </div>
-                    <p className="text-sm text-slate-700">{r.comment}</p>
+                    {r.comment && <p className="text-sm text-slate-700 mb-1.5">{r.comment}</p>}
+                    {r.shipment && (
+                      <p className="text-xs text-slate-400">📦 {r.shipment.origin} → {r.shipment.destination}</p>
+                    )}
                   </CardContent>
                 </Card>
               ))}
+
+              {/* Pagination */}
+              {reviewsMeta.totalPages > 1 && (
+                <div className="flex items-center justify-between">
+                  <p className="text-xs text-slate-500">Toplam {reviewsMeta.total} yorum</p>
+                  <div className="flex items-center gap-2">
+                    <Button size="sm" variant="outline" disabled={reviewsPage <= 1} onClick={() => setReviewsPage((p) => p - 1)}>Önceki</Button>
+                    <span className="text-xs text-slate-600">{reviewsPage} / {reviewsMeta.totalPages}</span>
+                    <Button size="sm" variant="outline" disabled={reviewsPage >= reviewsMeta.totalPages} onClick={() => setReviewsPage((p) => p + 1)}>Sonraki</Button>
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             <EmptyState icon={Star} title="Henüz yorum yok" description="Bu nakliyeciye henüz yorum yapılmamış." />

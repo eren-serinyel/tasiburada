@@ -69,6 +69,38 @@ export class CarrierCompanyInfoDto {
   @IsOptional()
   @IsNumber()
   foundedYear?: number;
+
+  @IsOptional()
+  @IsString()
+  addressLine1?: string;
+
+  @IsOptional()
+  @IsString()
+  addressLine2?: string;
+
+  @IsOptional()
+  @IsString()
+  district?: string;
+
+  @IsOptional()
+  @IsString()
+  activityCity?: string;
+
+  @IsOptional()
+  @IsString()
+  vehicleBrand?: string;
+
+  @IsOptional()
+  @IsString()
+  vehicleModel?: string;
+
+  @IsOptional()
+  @IsNumber()
+  vehicleYear?: number;
+
+  @IsOptional()
+  @IsNumber()
+  vehicleCapacityM3?: number;
 }
 
 export class CarrierActivityDto {
@@ -86,6 +118,10 @@ export class CarrierActivityDto {
   @IsOptional()
   @IsArray()
   serviceAreas?: string[];
+
+  @IsOptional()
+  @IsArray()
+  availableDates?: string[];
 }
 
 export class CarrierVehicleSelectionDto {

@@ -85,6 +85,7 @@ export class CustomerResponseDto {
   addressLine2?: string;
   city: string;
   district: string;
+  pictureUrl?: string | null;
   isActive: boolean;
   isVerified: boolean;
   fullName: string;

@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { adminApiClient } from '@/lib/adminAuth';
 import { toast } from '@/components/ui/sonner';
 import { Button } from '@/components/ui/button';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
@@ -16,7 +16,16 @@ import { Trash2, Star, ChevronLeft, ChevronRight, MessageSquare } from 'lucide-r
 import { formatDistanceToNow } from 'date-fns';
 import { tr } from 'date-fns/locale';
 
-type RatingFilter = 'all' | '1' | '2' | '3' | '4' | '5';
+type RatingFilter = null | 1 | 2 | 3 | 4 | 5;
+
+const ratingButtons: { value: RatingFilter; label: string }[] = [
+  { value: null, label: 'Tümü' },
+  { value: 1, label: '⭐1' },
+  { value: 2, label: '⭐⭐2' },
+  { value: 3, label: '⭐⭐⭐3' },
+  { value: 4, label: '⭐⭐⭐⭐4' },
+  { value: 5, label: '⭐⭐⭐⭐⭐5' },
+];
 
 interface Review {
   id: string;
@@ -28,7 +37,7 @@ interface Review {
 }
 
 export default function AdminReviews() {
-  const [ratingFilter, setRatingFilter] = useState<RatingFilter>('all');
+  const [ratingFilter, setRatingFilter] = useState<RatingFilter>(null);
   const [page, setPage] = useState(1);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [total, setTotal] = useState(0);
@@ -44,7 +53,7 @@ export default function AdminReviews() {
       const params = new URLSearchParams({
         page: String(page),
         limit: String(limit),
-        ...(ratingFilter !== 'all' ? { rating: ratingFilter } : {}),
+        ...(ratingFilter !== null ? { rating: String(ratingFilter) } : {}),
       });
       const res = await adminApiClient(`/admin/reviews?${params}`);
       const data = await res.json();
@@ -100,16 +109,19 @@ export default function AdminReviews() {
       <PageHeader title="Yorumlar" description={`Toplam ${total} yorum`} />
 
       {/* Rating filter */}
-      <Tabs value={ratingFilter} onValueChange={(v) => setRatingFilter(v as RatingFilter)}>
-        <TabsList className="bg-slate-100">
-          <TabsTrigger value="all" className="text-xs">Tümü</TabsTrigger>
-          {[5, 4, 3, 2, 1].map((r) => (
-            <TabsTrigger key={r} value={String(r)} className="text-xs gap-1">
-              {r} <Star className="h-3 w-3 text-amber-400 fill-amber-400" />
-            </TabsTrigger>
-          ))}
-        </TabsList>
-      </Tabs>
+      <div className="flex items-center gap-1 flex-wrap">
+        {ratingButtons.map((btn) => (
+          <Button
+            key={String(btn.value)}
+            variant={ratingFilter === btn.value ? 'default' : 'outline'}
+            size="sm"
+            className={`text-xs h-8 ${ratingFilter === btn.value ? 'bg-blue-600 hover:bg-blue-700 text-white' : ''}`}
+            onClick={() => setRatingFilter(btn.value)}
+          >
+            {btn.label}
+          </Button>
+        ))}
+      </div>
 
       {/* Table */}
       {error ? (

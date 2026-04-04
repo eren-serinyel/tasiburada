@@ -8,6 +8,8 @@ import offerRoutes from './offerRoutes';
 import reviewRoutes from './reviewRoutes';
 import adminRoutes from './adminRoutes';
 import notificationRoutes from './notificationRoutes';
+import authRoutes from './authRoutes';
+import paymentRoutes from './paymentRoutes';
 
 const router = Router();
 router.use('/', commonRoutes);
@@ -23,12 +25,14 @@ router.get('/health', (req, res) => {
 });
 
 // API Routes
+router.use('/auth', authRoutes);
 router.use('/customers', customerRoutes);
 router.use('/carriers', carrierRoutes);
 router.use('/vehicle-types', vehicleTypeRoutes);
 router.use('/shipments', shipmentRoutes);
 router.use('/offers', offerRoutes);
 router.use('/notifications', notificationRoutes);
+router.use('/payments', paymentRoutes);
 router.use('/', reviewRoutes);
 router.use('/admin', adminRoutes);
 

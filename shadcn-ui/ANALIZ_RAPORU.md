@@ -961,7 +961,7 @@ Sıra  Görev                                                Bağımlılık     
 4.5   S4.1-S4.3 — Kazanç sistemi                           Sprint 3       ✅
 ```
 
-### Sprint 5: Admin Panel Güçlendirme ✅ TAMAMLANDI
+### Sprint 5: Admin Panel Güçlendirme 🔴 DEVAM EDİYOR
 
 ```
 Sıra  Görev                                                Bağımlılık
@@ -1041,19 +1041,19 @@ Sıra  Görev                                                Bağımlılık
 
 | Dosya | Amaç | Sprint |
 |-------|------|--------|
-| src/domain/entities/Notification.ts | Bildirim entity | 4 |
-| src/domain/entities/Payment.ts | Ödeme entity | 4 |
-| src/application/services/NotificationService.ts | Bildirim servisi | 4 |
-| src/application/services/PaymentService.ts | Ödeme servisi | 4 |
-| src/presentation/controllers/NotificationController.ts | Bildirim controller | 4 |
-| src/presentation/controllers/PaymentController.ts | Ödeme controller | 4 |
-| src/presentation/routes/notificationRoutes.ts | Bildirim routes | 4 |
-| src/presentation/routes/paymentRoutes.ts | Ödeme routes | 4 |
-| shadcn-ui/src/pages/admin/AdminOffers.tsx | Admin teklifler | 5 |
-| shadcn-ui/src/pages/admin/AdminDocuments.tsx | Admin belgeler | 5 |
-| shadcn-ui/src/pages/admin/AdminReports.tsx | Admin raporlar | 5 |
-| shadcn-ui/src/pages/admin/AdminSettings.tsx | Admin ayarlar | 5 |
-| shadcn-ui/src/pages/admin/AdminManagement.tsx | Admin yönetimi | 5 |
+| src/domain/entities/Notification.ts | Bildirim entity | 4 | ✅ Oluşturuldu |
+| src/domain/entities/Payment.ts | Ödeme entity | 4 | ✅ Oluşturuldu |
+| src/application/services/NotificationService.ts | Bildirim servisi | 4 | ✅ Oluşturuldu |
+| src/application/services/PaymentService.ts | Ödeme servisi | 4 | ✅ Oluşturuldu |
+| src/presentation/controllers/NotificationController.ts | Bildirim controller | 4 | ✅ Oluşturuldu |
+| src/presentation/controllers/PaymentController.ts | Ödeme controller | 4 | ✅ Oluşturuldu |
+| src/presentation/routes/notificationRoutes.ts | Bildirim routes | 4 | ✅ Oluşturuldu |
+| src/presentation/routes/paymentRoutes.ts | Ödeme routes | 4 | ✅ Oluşturuldu |
+| shadcn-ui/src/pages/admin/AdminOffers.tsx | Admin teklifler | 5 | ❌ Bekliyor |
+| shadcn-ui/src/pages/admin/AdminDocuments.tsx | Admin belgeler | 5 | ❌ Bekliyor |
+| shadcn-ui/src/pages/admin/AdminReports.tsx | Admin raporlar | 5 | ❌ Bekliyor |
+| shadcn-ui/src/pages/admin/AdminSettings.tsx | Admin ayarlar | 5 | ❌ Bekliyor |
+| shadcn-ui/src/pages/admin/AdminManagement.tsx | Admin yönetimi | 5 | ❌ Bekliyor |
 
 ---
 
@@ -1090,14 +1090,14 @@ Her sprint sonunda doğrulanacak senaryolar:
 - [x] Ödeme kaydı oluşturabiliyor
 - [x] Nakliyeci kazanç geçmişini görebiliyor
 
-### Sprint 5 Sonrası ✓
-- [x] Admin dashboard gerçek trend verisi gösteriyor
-- [x] Admin nakliyeci detayında işler ve yorumlar dolmuş
-- [x] Admin teklifler sayfası çalışıyor
-- [x] Admin belgeler sayfası ile doğrulama yapılabiliyor
-- [x] Admin raporlar sayfasında grafikler görünüyor
-- [x] Admin ayarlar sayfası çalışıyor (superadmin)
-- [x] Admin yönetimi sayfası çalışıyor (superadmin)
+### Sprint 5 Sonrası ✖️ (Henüz Tamamlanmadı)
+- [ ] Admin dashboard gerçek trend verisi gösteriyor
+- [ ] Admin nakliyeci detayında işler ve yorumlar dolmuş
+- [ ] Admin teklifler sayfası çalışıyor
+- [ ] Admin belgeler sayfası ile doğrulama yapılabiliyor
+- [ ] Admin raporlar sayfasında grafikler görünüyor
+- [ ] Admin ayarlar sayfası çalışıyor (superadmin)
+- [ ] Admin yönetimi sayfası çalışıyor (superadmin)
 
 ---
 

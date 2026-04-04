@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Truck, User, LogOut, Menu, X, ChevronDown, Home, Users, HelpCircle, Package, History, CreditCard, Calendar, TrendingUp } from 'lucide-react';
 import { User as UserType } from '@/lib/types';
 import { getSessionUser, clearSessionUser } from '@/lib/storage';
@@ -19,6 +19,7 @@ export default function Navbar() {
   const [userRole, setUserRole] = useState<'customer' | 'carrier' | null>(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
 
   useEffect(() => {
     const syncUserState = () => {
@@ -106,20 +107,21 @@ export default function Navbar() {
       );
     }
 
-    const gradientClass = user.type === 'customer'
-      ? 'bg-gradient-to-r from-blue-500 to-sky-500'
-      : 'bg-gradient-to-r from-sky-500 to-cyan-500';
-    const IconComponent = user.type === 'customer' ? User : Truck;
+    const initials = [user.name, user.surname]
+      .filter(Boolean)
+      .map(n => (n as string).charAt(0).toUpperCase())
+      .join('')
+      .slice(0, 2) || 'U';
 
     return (
-      <div className={`${sizeClass} ${gradientClass} rounded-full flex items-center justify-center`}>
-        <IconComponent className={`${iconSizeClass} text-white`} />
+      <div className={`${sizeClass} rounded-full flex items-center justify-center bg-[#2563EB] text-white font-bold ${variant === 'desktop' ? 'text-xs' : 'text-sm'}`}>
+        {initials}
       </div>
     );
   };
 
   return (
-    <nav className="bg-white/95 backdrop-blur-lg shadow-lg border-b border-gray-100 sticky top-0 z-50">
+    <nav className="bg-white sticky top-0 z-50 border-b border-[#E2E8F0]" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           {/* Sol Alt - Logo */}
@@ -135,22 +137,23 @@ export default function Navbar() {
           {/* Desktop Navigation - Hide on smaller screens */}
           <div className="hidden lg:flex items-center space-x-6">
             <nav className="flex items-center space-x-1">
-              <Link to={user ? '/home' : '/'} className="flex items-center space-x-2 px-4 py-2 rounded-lg hover:bg-blue-50 transition-colors group">
-                <Home className="h-4 w-4 text-gray-600 group-hover:text-blue-600" />
-                <span className="text-sm font-medium text-gray-700 group-hover:text-blue-600">Ana Sayfa</span>
-              </Link>
-
-              <Link to="/nakliyeciler" className="flex items-center space-x-2 px-4 py-2 rounded-lg hover:bg-blue-50 transition-colors group">
-                <Users className="h-4 w-4 text-gray-600 group-hover:text-blue-600" />
-                <span className="text-sm font-medium text-gray-700 group-hover:text-blue-600">Nakliyeciler</span>
-              </Link>
-
-              {userRole === 'customer' && (
-                <Link to="/teklif-talebi" className="flex items-center space-x-2 px-4 py-2 rounded-lg hover:bg-green-50 transition-colors group">
-                  <Truck className="h-4 w-4 text-green-600 group-hover:text-green-700" />
-                  <span className="text-sm font-medium text-gray-700 group-hover:text-green-700">Teklif Talebi</span>
-                </Link>
-              )}
+              {[
+                { to: user ? '/home' : '/', label: 'Ana Sayfa', match: ['/home', '/'] },
+                { to: '/nakliyeciler', label: 'Nakliyeciler', match: ['/nakliyeciler'] },
+                ...(userRole === 'customer' ? [{ to: '/teklif-talebi', label: 'Teklif Talebi', match: ['/teklif-talebi'] }] : []),
+              ].map(link => {
+                const isActive = link.match.some(m => location.pathname === m || (m !== '/' && location.pathname.startsWith(m)));
+                return (
+                  <Link key={link.to} to={link.to}
+                    className={`relative px-3 py-2 text-[14px] font-medium transition-colors ${
+                      isActive ? 'text-[#2563EB]' : 'text-[#64748B] hover:text-[#0F172A]'
+                    }`}
+                  >
+                    {link.label}
+                    {isActive && <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-[#2563EB] rounded-full" />}
+                  </Link>
+                );
+              })}
 
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -194,10 +197,10 @@ export default function Navbar() {
                 <NotificationBell />
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <div className="flex items-center space-x-2 bg-gradient-to-r from-blue-50 to-sky-50 px-3 py-2 rounded-full cursor-pointer hover:from-blue-100 hover:to-sky-100 transition-all">
+                    <div className="flex items-center gap-2 px-2 py-1.5 rounded-full cursor-pointer hover:bg-[#F1F5F9] transition-colors">
                       {renderAvatar()}
-                      <span className="text-sm font-medium text-gray-900 max-w-40 truncate">{userDisplayName}</span>
-                      <ChevronDown className="h-3 w-3 text-gray-500" />
+                      <span className="text-sm font-medium text-[#0F172A] max-w-40 truncate">{userDisplayName}</span>
+                      <ChevronDown className="h-3 w-3 text-[#94A3B8]" />
                     </div>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-[220px] p-2 bg-white border border-gray-200 rounded-xl shadow-2xl">

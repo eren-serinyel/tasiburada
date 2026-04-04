@@ -1,4 +1,5 @@
 import 'reflect-metadata';
+import * as bcrypt from 'bcryptjs';
 import { AppDataSource, initializeDatabase, closeDatabase } from '../infrastructure/database/data-source';
 
 if (process.env.NODE_ENV === 'production') {
@@ -81,6 +82,41 @@ async function seed() {
           [name]
         );
       }
+    }
+
+    // ── Admin Users ──
+    const adminPassword = await bcrypt.hash('admin123456', 10);
+    const admins = [
+      { email: 'admin@tasiburada.com', role: 'superadmin' },
+    ];
+
+    for (const adm of admins) {
+      const exists = await qr.query(
+        `SELECT id FROM admins WHERE email = ? LIMIT 1`,
+        [adm.email]
+      );
+      if (exists.length === 0) {
+        await qr.query(
+          `INSERT INTO admins (id, email, passwordHash, role, isActive, createdAt, updatedAt) VALUES (UUID(), ?, ?, ?, true, NOW(), NOW())`,
+          [adm.email, adminPassword, adm.role]
+        );
+      }
+    }
+
+    // ── Test Carrier ──
+    const carrierExists = await qr.query(
+      `SELECT id FROM carriers WHERE email = ? LIMIT 1`,
+      ['nakliyeci@tasiburada.com']
+    );
+    if (carrierExists.length === 0) {
+      const carrierPasswordHash = await bcrypt.hash('Test1234A!', 10);
+      await qr.query(
+        `INSERT INTO carriers (id, companyName, email, passwordHash, phone, taxNumber, contactName, foundedYear, isActive, verifiedByAdmin, profileCompletion, createdAt, updatedAt) VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, true, true, 100, NOW(), NOW())`,
+        ['Test Nakliyat', 'nakliyeci@tasiburada.com', carrierPasswordHash, '05559876543', '9999999999', 'Test Nakliyeci', 2010]
+      );
+      console.log('✅ Test carrier oluşturuldu: nakliyeci@tasiburada.com');
+    } else {
+      console.log('ℹ️  Test carrier zaten mevcut.');
     }
 
     await qr.commitTransaction();

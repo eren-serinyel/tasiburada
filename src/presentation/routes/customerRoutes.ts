@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { CustomerController } from '../controllers/CustomerController';
 import { CustomerOfferController } from '../controllers/CustomerOfferController';
 import { authenticateCustomer } from '../middleware/auth';
+import { pictureUpload } from '../../infrastructure/upload/uploadMiddleware';
 
 const router = Router();
 const customerController = new CustomerController();
@@ -14,6 +15,7 @@ router.post('/login', customerController.login);
 // Protected routes (Customer only)
 router.get('/profile', authenticateCustomer, customerController.getProfile);
 router.put('/profile', authenticateCustomer, customerController.updateProfile);
+router.post('/me/picture', authenticateCustomer, pictureUpload.single('picture'), customerController.uploadPicture);
 router.put('/change-password', authenticateCustomer, customerController.changePassword);
 router.get('/shipments', authenticateCustomer, customerController.getShipments);
 router.get('/offers', authenticateCustomer, customerOfferController.getMyOffers);

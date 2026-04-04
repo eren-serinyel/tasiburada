@@ -9,9 +9,9 @@ import { Truck, User, Eye, EyeOff, ArrowRight, ShieldCheck, IdCard, Rocket, Brai
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 // import { mockCarriers, mockCustomers } from '@/lib/mockData';
 import { setSessionUser, getLastEmail, setLastEmail } from '@/lib/storage';
-import { APP_CONFIG } from '@/lib/config';
 
-const API_BASE_URL = APP_CONFIG.apiBaseUrl;
+// API Base URL - using Vite proxy
+const API_BASE_URL = '/api/v1';
 
 export default function Login() {
   const [searchParams] = useSearchParams();
@@ -19,6 +19,7 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [userType, setUserType] = useState<'customer' | 'carrier'>('customer');
+  const [userTypeManuallySelected, setUserTypeManuallySelected] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [rememberEmail, setRememberEmail] = useState(true);
@@ -40,20 +41,31 @@ export default function Login() {
     setError('');
     
     try {
-      // Gerçek API'ye POST isteği gönder
-      const endpoint = userType === 'customer' ? '/customers/login' : '/carriers/login';
-      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email: email,
-          password: password,
-        }),
-      });
+      // Gerçek API'ye POST isteği gönder — seçili role ile dene, başarısızsa diğerini dene
+      const primaryEndpoint = userType === 'customer' ? '/customers/login' : '/carriers/login';
+      const fallbackEndpoint = userType === 'customer' ? '/carriers/login' : '/customers/login';
+      const fallbackType: 'customer' | 'carrier' = userType === 'customer' ? 'carrier' : 'customer';
 
-      const result = await response.json();
+      const body = JSON.stringify({ email, password });
+      const headers = { 'Content-Type': 'application/json' };
+
+      let response = await fetch(`${API_BASE_URL}${primaryEndpoint}`, { method: 'POST', headers, body });
+      let result = await response.json();
+      let resolvedType: 'customer' | 'carrier' = userType;
+
+      // İlk endpoint başarısız ise diğerini dene
+      if (!response.ok || !result.success) {
+        try {
+          const fallbackRes = await fetch(`${API_BASE_URL}${fallbackEndpoint}`, { method: 'POST', headers, body });
+          const fallbackResult = await fallbackRes.json();
+          if (fallbackRes.ok && fallbackResult.success) {
+            response = fallbackRes;
+            result = fallbackResult;
+            resolvedType = fallbackType;
+            setUserType(fallbackType);
+          }
+        } catch { /* fallback da başarısız ise ana hatayı göster */ }
+      }
       
       if (response.ok && result.success) {
         // Başarılı giriş
@@ -63,7 +75,7 @@ export default function Login() {
         }
         
         // Kullanıcı bilgilerini session'a kaydet
-        if (userType === 'customer') {
+        if (resolvedType === 'customer') {
           setSessionUser({ ...result.data.customer, type: 'customer' }, 5 * 24 * 60 * 60 * 1000);
         } else {
           const c = result.data.carrier;
@@ -211,7 +223,7 @@ export default function Login() {
               </CardHeader>
               
               <CardContent className="space-y-6">
-                <Tabs value={userType} onValueChange={(value) => setUserType(value as 'customer' | 'carrier')} className="w-full">
+                <Tabs value={userType} onValueChange={(value) => { setUserType(value as 'customer' | 'carrier'); setUserTypeManuallySelected(true); }} className="w-full">
                   <TabsList className="grid w-full grid-cols-2 mb-6 bg-white/50 backdrop-blur-sm">
                     <TabsTrigger value="customer" className="flex items-center space-x-2 data-[state=active]:bg-gradient-to-r data-[state=active]:from-green-500 data-[state=active]:to-emerald-500 data-[state=active]:text-white">
                       <User className="h-4 w-4" />
@@ -271,15 +283,24 @@ export default function Login() {
                     </div>
                   </div>
                   {/* Remember me */}
-                  <div className="flex items-center gap-2">
-                    <input
-                      id="rememberEmail"
-                      type="checkbox"
-                      checked={rememberEmail}
-                      onChange={(e) => setRememberEmail(e.target.checked)}
-                      className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                    />
-                    <label htmlFor="rememberEmail" className="text-sm text-gray-600">E-postayı hatırla</label>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <input
+                        id="rememberEmail"
+                        type="checkbox"
+                        checked={rememberEmail}
+                        onChange={(e) => setRememberEmail(e.target.checked)}
+                        className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <label htmlFor="rememberEmail" className="text-sm text-gray-600">E-postayı hatırla</label>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => navigate('/sifremi-unuttum')}
+                      className="text-sm text-blue-600 hover:text-blue-800 hover:underline font-medium transition-colors"
+                    >
+                      Şifremi Unuttum?
+                    </button>
                   </div>
                   
                   <Button 
@@ -321,36 +342,37 @@ export default function Login() {
                   </div>
                 </div>
                 
+                {/* Demo Hesapları - Tek tıkla doldur (sadece DEV ortamında) */}
                 {import.meta.env.DEV && (
-                  <div className="p-6 bg-gradient-to-r from-blue-50/80 to-indigo-50/80 backdrop-blur-sm rounded-2xl border border-blue-200/30">
-                    <div className="flex items-center space-x-2 mb-3">
-                      <Award className="h-5 w-5 text-blue-600" />
-                      <p className="font-bold text-blue-900">Demo Hesapları</p>
+                <div className="p-6 bg-gradient-to-r from-blue-50/80 to-indigo-50/80 backdrop-blur-sm rounded-2xl border border-blue-200/30">
+                  <div className="flex items-center space-x-2 mb-3">
+                    <Award className="h-5 w-5 text-blue-600" />
+                    <p className="font-bold text-blue-900">Demo Hesapları</p>
+                  </div>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-blue-800 font-medium">👤 Müşteri: eren@gmail.com (ues2141)</p>
+                      <Button size="sm" variant="secondary" className="bg-white/70"
+                        onClick={() => { setUserType('customer'); setEmail('eren@gmail.com'); setPassword('ues2141'); }}>
+                        Doldur
+                      </Button>
                     </div>
-                    <div className="space-y-2 text-sm">
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="text-blue-800 font-medium">👤 Müşteri: eren@gmail.com (ues2141)</p>
-                        <Button size="sm" variant="secondary" className="bg-white/70"
-                          onClick={() => { setUserType('customer'); setEmail('eren@gmail.com'); setPassword('ues2141'); }}>
-                          Doldur
-                        </Button>
-                      </div>
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="text-blue-800 font-medium">👤 Müşteri: customer1@example.com (customer123)</p>
-                        <Button size="sm" variant="secondary" className="bg-white/70"
-                          onClick={() => { setUserType('customer'); setEmail('customer1@example.com'); setPassword('customer123'); }}>
-                          Doldur
-                        </Button>
-                      </div>
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="text-blue-800 font-medium">🚛 Nakliyeci: demo@tasiburada.com (demo123)</p>
-                        <Button size="sm" variant="secondary" className="bg-white/70"
-                          onClick={() => { setUserType('carrier'); setEmail('demo@tasiburada.com'); setPassword('demo123'); }}>
-                          Doldur
-                        </Button>
-                      </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-blue-800 font-medium">👤 Müşteri: customer1@example.com (customer123)</p>
+                      <Button size="sm" variant="secondary" className="bg-white/70"
+                        onClick={() => { setUserType('customer'); setEmail('customer1@example.com'); setPassword('customer123'); }}>
+                        Doldur
+                      </Button>
+                    </div>
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-blue-800 font-medium">🚛 Nakliyeci: demo@tasiburada.com (demo123)</p>
+                      <Button size="sm" variant="secondary" className="bg-white/70"
+                        onClick={() => { setUserType('carrier'); setEmail('demo@tasiburada.com'); setPassword('demo123'); }}>
+                        Doldur
+                      </Button>
                     </div>
                   </div>
+                </div>
                 )}
               </CardContent>
             </Card>

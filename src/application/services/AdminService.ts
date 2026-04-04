@@ -6,6 +6,7 @@ import { Review } from '../../domain/entities/Review';
 import { Offer, OfferStatus } from '../../domain/entities/Offer';
 import { CarrierDocument, CarrierDocumentStatus } from '../../domain/entities/CarrierDocument';
 import { Admin } from '../../domain/entities/Admin';
+import { PlatformSetting } from '../../domain/entities/PlatformSetting';
 import { AuditLogRepository } from '../../infrastructure/repositories/AuditLogRepository';
 import { NotificationService } from './NotificationService';
 import * as bcrypt from 'bcryptjs';
@@ -270,52 +271,104 @@ export class AdminService {
     return logs;
   }
 
+  async writeAuditLog(data: {
+    adminId: string;
+    action: string;
+    targetType: string;
+    targetId: string;
+    details?: Record<string, any>;
+  }) {
+    return this.auditLogRepository.log(data);
+  }
+
   // ─── Dashboard Trends ──────────────────────────────────────────────────────
 
-  async getStatsTrends(period: number = 30) {
+  async getStatsTrends(days: number = 30) {
     const shipmentRepo = AppDataSource.getRepository(Shipment);
-    const days = Math.min(period, 365);
+    const offerRepo = AppDataSource.getRepository(Offer);
+    const period = Math.min(days, 365);
 
-    const rows: { date: string; count: string }[] = await shipmentRepo
-      .createQueryBuilder('s')
-      .select('DATE(s.createdAt)', 'date')
-      .addSelect('COUNT(*)', 'count')
-      .where('s.createdAt >= DATE_SUB(NOW(), INTERVAL :days DAY)', { days })
-      .groupBy('DATE(s.createdAt)')
-      .orderBy('date', 'ASC')
-      .getRawMany();
+    const [shipmentRows, offerRows, completedRows] = await Promise.all([
+      shipmentRepo.createQueryBuilder('s')
+        .select('DATE(s.createdAt)', 'date')
+        .addSelect('COUNT(*)', 'count')
+        .where('s.createdAt >= DATE_SUB(NOW(), INTERVAL :days DAY)', { days: period })
+        .groupBy('DATE(s.createdAt)')
+        .getRawMany<{ date: string; count: string }>(),
+      offerRepo.createQueryBuilder('o')
+        .select('DATE(o.offeredAt)', 'date')
+        .addSelect('COUNT(*)', 'count')
+        .where('o.offeredAt >= DATE_SUB(NOW(), INTERVAL :days DAY)', { days: period })
+        .groupBy('DATE(o.offeredAt)')
+        .getRawMany<{ date: string; count: string }>(),
+      shipmentRepo.createQueryBuilder('s')
+        .select('DATE(s.updatedAt)', 'date')
+        .addSelect('COUNT(*)', 'count')
+        .where('s.status = :st AND s.updatedAt >= DATE_SUB(NOW(), INTERVAL :days DAY)', { st: ShipmentStatus.COMPLETED, days: period })
+        .groupBy('DATE(s.updatedAt)')
+        .getRawMany<{ date: string; count: string }>(),
+    ]);
 
-    const map = new Map(rows.map(r => [r.date, Number(r.count)]));
-    const result: { date: string; value: number }[] = [];
+    const shipmentMap = new Map(shipmentRows.map(r => [r.date, Number(r.count)]));
+    const offerMap = new Map(offerRows.map(r => [r.date, Number(r.count)]));
+    const completedMap = new Map(completedRows.map(r => [r.date, Number(r.count)]));
+
+    const trends: { date: string; shipments: number; offers: number; completed: number }[] = [];
     const now = new Date();
-    for (let i = days - 1; i >= 0; i--) {
+    for (let i = period - 1; i >= 0; i--) {
       const d = new Date(now);
       d.setDate(d.getDate() - i);
       const key = d.toISOString().slice(0, 10);
-      result.push({ date: key, value: map.get(key) || 0 });
+      trends.push({
+        date: key,
+        shipments: shipmentMap.get(key) || 0,
+        offers: offerMap.get(key) || 0,
+        completed: completedMap.get(key) || 0,
+      });
     }
-    return result;
+    return { trends };
   }
 
   // ─── Carrier Shipments & Reviews ───────────────────────────────────────────
 
-  async getCarrierShipments(carrierId: string) {
+  async getCarrierShipments(carrierId: string, params: { page?: number; limit?: number } = {}) {
+    const { page = 1, limit = 10 } = params;
     const shipmentRepo = AppDataSource.getRepository(Shipment);
-    return shipmentRepo.find({
-      where: { carrierId },
-      order: { createdAt: 'DESC' },
-      take: 50,
-    });
-  }
-
-  async getCarrierReviews(carrierId: string) {
-    const reviewRepo = AppDataSource.getRepository(Review);
-    return reviewRepo.find({
+    const [shipments, total] = await shipmentRepo.findAndCount({
       where: { carrierId },
       relations: ['customer'],
       order: { createdAt: 'DESC' },
-      take: 50,
+      take: limit,
+      skip: (page - 1) * limit,
     });
+    return {
+      shipments,
+      pagination: { total, page, limit, totalPages: Math.ceil(total / limit) },
+    };
+  }
+
+  async getCarrierReviews(carrierId: string, params: { page?: number; limit?: number } = {}) {
+    const { page = 1, limit = 10 } = params;
+    const reviewRepo = AppDataSource.getRepository(Review);
+    const [reviews, total] = await reviewRepo.findAndCount({
+      where: { carrierId },
+      relations: ['customer', 'shipment'],
+      order: { createdAt: 'DESC' },
+      take: limit,
+      skip: (page - 1) * limit,
+    });
+
+    const avgRaw = await reviewRepo
+      .createQueryBuilder('r')
+      .select('AVG(r.rating)', 'avg')
+      .where('r.carrierId = :carrierId', { carrierId })
+      .getRawOne<{ avg: string | null }>();
+
+    return {
+      reviews,
+      pagination: { total, page, limit, totalPages: Math.ceil(total / limit) },
+      averageRating: Math.round(Number(avgRaw?.avg || 0) * 10) / 10,
+    };
   }
 
   // ─── Offers ────────────────────────────────────────────────────────────────
@@ -623,6 +676,127 @@ export class AdminService {
       targetType: 'admin',
       targetId: targetAdminId,
       details: { email: admin.email },
+    });
+
+    return { success: true };
+  }
+
+  async resetAdminPassword(adminId: string, targetAdminId: string, newPassword: string) {
+    const adminRepo = AppDataSource.getRepository(Admin);
+    const admin = await adminRepo.findOne({ where: { id: targetAdminId } });
+    if (!admin) throw new Error('Admin bulunamadı.');
+
+    const hash = await bcrypt.hash(newPassword, 10);
+    await adminRepo.update(targetAdminId, { passwordHash: hash });
+
+    await this.auditLogRepository.log({
+      adminId,
+      action: 'ADMIN_PASSWORD_RESET',
+      targetType: 'admin',
+      targetId: targetAdminId,
+      details: { email: admin.email },
+    });
+
+    return { success: true };
+  }
+
+  // ─── Platform Settings ─────────────────────────────────────────────────────
+
+  async getSettings() {
+    const settingRepo = AppDataSource.getRepository(PlatformSetting);
+    const settings = await settingRepo.find({ order: { key: 'ASC' } });
+
+    const result: Record<string, any> = {};
+    for (const s of settings) {
+      switch (s.type) {
+        case 'number': result[s.key] = Number(s.value); break;
+        case 'boolean': result[s.key] = s.value === 'true'; break;
+        case 'json': try { result[s.key] = JSON.parse(s.value); } catch { result[s.key] = s.value; } break;
+        default: result[s.key] = s.value;
+      }
+    }
+    return { settings: result, raw: settings };
+  }
+
+  async updateSettings(adminId: string, updates: Record<string, any>) {
+    const settingRepo = AppDataSource.getRepository(PlatformSetting);
+    const changed: string[] = [];
+
+    for (const [key, value] of Object.entries(updates)) {
+      const valueStr = typeof value === 'object' ? JSON.stringify(value) : String(value);
+      const type = typeof value === 'number' ? 'number'
+        : typeof value === 'boolean' ? 'boolean'
+        : typeof value === 'object' ? 'json'
+        : 'string';
+
+      const existing = await settingRepo.findOne({ where: { key } });
+      if (existing) {
+        await settingRepo.update(existing.id, { value: valueStr, type: type as any });
+      } else {
+        const setting = settingRepo.create({ key, value: valueStr, type: type as any });
+        await settingRepo.save(setting);
+      }
+      changed.push(key);
+    }
+
+    await this.auditLogRepository.log({
+      adminId,
+      action: 'SETTINGS_UPDATED',
+      targetType: 'platform_setting',
+      targetId: 'bulk',
+      details: { changedKeys: changed },
+    });
+
+    return this.getSettings();
+  }
+
+  // ─── Separate Report Endpoints ─────────────────────────────────────────────
+
+  async getTopCarriers(limit: number = 10) {
+    const carrierRepo = AppDataSource.getRepository(Carrier);
+    const carriers = await carrierRepo.createQueryBuilder('c')
+      .select(['c.id', 'c.companyName', 'c.rating', 'c.completedShipments', 'c.email', 'c.verifiedByAdmin'])
+      .orderBy('c.completedShipments', 'DESC')
+      .take(limit)
+      .getMany();
+
+    return carriers.map(c => ({
+      id: c.id,
+      companyName: c.companyName,
+      email: c.email,
+      rating: Number(c.rating || 0),
+      completedShipments: c.completedShipments || 0,
+      verified: c.verifiedByAdmin,
+    }));
+  }
+
+  async getPopularRoutes(limit: number = 10) {
+    const shipmentRepo = AppDataSource.getRepository(Shipment);
+    return shipmentRepo.createQueryBuilder('s')
+      .select('s.origin', 'origin')
+      .addSelect('s.destination', 'destination')
+      .addSelect('COUNT(*)', 'count')
+      .addSelect('ROUND(AVG(s.price), 0)', 'avgPrice')
+      .groupBy('s.origin')
+      .addGroupBy('s.destination')
+      .orderBy('count', 'DESC')
+      .take(limit)
+      .getRawMany();
+  }
+
+  async deleteOffer(adminId: string, offerId: string) {
+    const offerRepo = AppDataSource.getRepository(Offer);
+    const offer = await offerRepo.findOne({ where: { id: offerId } });
+    if (!offer) throw new Error('Teklif bulunamadı.');
+
+    await offerRepo.delete(offerId);
+
+    await this.auditLogRepository.log({
+      adminId,
+      action: 'OFFER_DELETED',
+      targetType: 'offer',
+      targetId: offerId,
+      details: { shipmentId: offer.shipmentId, carrierId: offer.carrierId, status: offer.status },
     });
 
     return { success: true };

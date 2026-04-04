@@ -37,6 +37,7 @@ export class CarrierDashboardController {
                 data: stats
             });
         } catch (error: any) {
+            console.error("Dashboard stats error:", error);
             return res.status(500).json({ success: false, message: error.message });
         }
     }

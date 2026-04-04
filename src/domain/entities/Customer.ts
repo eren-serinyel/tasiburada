@@ -18,7 +18,7 @@ export class Customer {
   @Column({ type: 'varchar', length: 15, nullable: false })
   phone: string;
 
-  @Column({ type: 'varchar', length: 500, nullable: false })
+  @Column({ type: 'varchar', length: 500, nullable: true })
   addressLine1: string;
 
   @Column({ type: 'varchar', length: 500, nullable: true })
@@ -30,6 +30,9 @@ export class Customer {
   @Column({ type: 'varchar', length: 100, nullable: false })
   district: string;
 
+  @Column({ type: 'longtext', nullable: true })
+  pictureUrl?: string | null;
+
   @Column({ type: 'varchar', length: 255, nullable: false })
   passwordHash: string;
 
@@ -38,6 +41,15 @@ export class Customer {
 
   @Column({ type: 'boolean', default: false })
   isVerified: boolean;
+
+  @Column({ type: 'varchar', length: 10, nullable: true })
+  resetToken?: string | null;
+
+  @Column({ type: 'datetime', nullable: true })
+  resetTokenExpiry?: Date | null;
+
+  @Column({ type: 'varchar', length: 10, nullable: true })
+  verificationToken?: string | null;
 
   @CreateDateColumn()
   createdAt: Date;

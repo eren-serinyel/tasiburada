@@ -31,6 +31,7 @@ export default function CarrierRespond() {
   const [price, setPrice] = useState('');
   const [eta, setEta] = useState('');
   const [note, setNote] = useState('');
+  const [priceError, setPriceError] = useState('');
 
   useEffect(() => {
     if (!requestId) return;
@@ -53,6 +54,15 @@ export default function CarrierRespond() {
 
   const submitOffer = async () => {
     if (!shipment || !price) return;
+    const priceNum = Number(price);
+    if (isNaN(priceNum) || priceNum <= 0) {
+      toast.error('Geçerli bir fiyat giriniz.');
+      return;
+    }
+    if (priceNum < 100) {
+      toast.error('Minimum teklif tutarı ₺100 olmalıdır.');
+      return;
+    }
     setSubmitting(true);
     try {
       const body: Record<string, unknown> = {
@@ -118,7 +128,18 @@ export default function CarrierRespond() {
         <CardContent className="space-y-3">
           <div>
             <label className="text-sm">Fiyat (TL)</label>
-            <Input type="number" value={price} onChange={e => setPrice(e.target.value)} />
+            <Input
+              type="number"
+              value={price}
+              onChange={e => setPrice(e.target.value)}
+              onBlur={() => {
+                const v = parseFloat(price);
+                if (!price || isNaN(v) || v <= 0) setPriceError("Teklif fiyatı 0 TL'den büyük olmalıdır");
+                else if (v < 100) setPriceError('Minimum teklif tutarı ₺100\'dir');
+                else setPriceError('');
+              }}
+            />
+            {priceError && <p className="text-sm text-red-500 mt-1">{priceError}</p>}
           </div>
           <div>
             <label className="text-sm">Tahmini Süre (saat)</label>

@@ -22,6 +22,9 @@ export class CarrierActivity {
   @Column({ type: 'json', name: 'serviceAreasJson', nullable: true })
   serviceAreasJson?: string[] | null;
 
+  @Column({ type: 'text', nullable: true })
+  availableDates?: string;
+
   @CreateDateColumn()
   createdAt: Date;
 

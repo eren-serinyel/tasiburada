@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { adminApiClient } from '@/lib/adminAuth';
 import { toast } from '@/components/ui/sonner';
 import { Button } from '@/components/ui/button';
@@ -37,13 +37,21 @@ interface Shipment {
 
 export default function AdminShipments() {
   const [status, setStatus] = useState<ShipmentStatus>('all');
+  const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [shipments, setShipments] = useState<Shipment[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const limit = 20;
+
+  const handleSearchInput = (value: string) => {
+    setSearchInput(value);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => setSearch(value), 400);
+  };
 
   const fetchShipments = useCallback(async () => {
     setLoading(true);
@@ -92,7 +100,7 @@ export default function AdminShipments() {
         </Tabs>
         <div className="relative flex-1 max-w-xs">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-          <Input placeholder="Başlık veya şehir..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9 h-9 text-sm" />
+          <Input placeholder="Güzergah veya müşteri ara..." value={searchInput} onChange={(e) => handleSearchInput(e.target.value)} className="pl-9 h-9 text-sm" />
         </div>
       </div>
 

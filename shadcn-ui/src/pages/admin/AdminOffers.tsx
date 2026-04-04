@@ -1,4 +1,5 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { adminApiClient } from '@/lib/adminAuth';
 import { toast } from '@/components/ui/sonner';
 import { Button } from '@/components/ui/button';
@@ -11,12 +12,12 @@ import {
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
-  AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { PageHeader, EmptyState, ErrorState } from '@/components/admin/shared';
-import { Search, ChevronLeft, ChevronRight, HandCoins, ArrowRight, XCircle } from 'lucide-react';
-import { formatDistanceToNow } from 'date-fns';
-import { tr } from 'date-fns/locale';
+import { Search, ChevronLeft, ChevronRight, HandCoins, ArrowRight, MoreHorizontal, Eye, User, Trash2 } from 'lucide-react';
 
 type OfferStatusFilter = 'all' | 'pending' | 'accepted' | 'rejected' | 'withdrawn';
 
@@ -48,7 +49,8 @@ interface Offer {
   status: string;
   offeredAt: string;
   message?: string;
-  carrier?: { companyName: string };
+  carrierId?: string;
+  carrier?: { id?: string; companyName: string };
   shipment?: {
     id: string;
     origin: string;
@@ -58,14 +60,19 @@ interface Offer {
 }
 
 export default function AdminOffers() {
+  const navigate = useNavigate();
   const [status, setStatus] = useState<OfferStatusFilter>('all');
   const [search, setSearch] = useState('');
+  const [searchInput, setSearchInput] = useState('');
   const [page, setPage] = useState(1);
   const [offers, setOffers] = useState<Offer[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
-  const [cancellingId, setCancellingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const limit = 20;
 
   const fetchOffers = useCallback(async () => {
@@ -95,22 +102,37 @@ export default function AdminOffers() {
   useEffect(() => { setPage(1); }, [status, search]);
   useEffect(() => { fetchOffers(); }, [fetchOffers]);
 
-  const handleCancel = async (offerId: string) => {
-    setCancellingId(offerId);
+  // Debounced search
+  const handleSearchInput = (value: string) => {
+    setSearchInput(value);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => setSearch(value), 300);
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTargetId) return;
+    setDeletingId(deleteTargetId);
     try {
-      const res = await adminApiClient(`/admin/offers/${offerId}/cancel`, { method: 'PUT' });
+      const res = await adminApiClient(`/admin/offers/${deleteTargetId}`, { method: 'DELETE' });
       const data = await res.json();
       if (data.success) {
-        toast.success('Teklif iptal edildi.');
+        toast.success('Teklif silindi.');
         fetchOffers();
       } else {
-        toast.error(data.message);
+        toast.error(data.message || 'İşlem başarısız.');
       }
     } catch {
-      toast.error('İptal işlemi başarısız.');
+      toast.error('İşlem başarısız.');
     } finally {
-      setCancellingId(null);
+      setDeletingId(null);
+      setDeleteDialogOpen(false);
+      setDeleteTargetId(null);
     }
+  };
+
+  const copyId = (id: string) => {
+    navigator.clipboard.writeText(id);
+    toast.success('ID kopyalandı.');
   };
 
   const totalPages = Math.ceil(total / limit);
@@ -129,7 +151,7 @@ export default function AdminOffers() {
         </Tabs>
         <div className="relative flex-1 max-w-xs">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
-          <Input placeholder="Nakliyeci veya güzergah..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9 h-9 text-sm" />
+          <Input placeholder="Nakliyeci veya güzergah ara..." value={searchInput} onChange={(e) => handleSearchInput(e.target.value)} className="pl-9 h-9 text-sm" />
         </div>
       </div>
 
@@ -140,27 +162,28 @@ export default function AdminOffers() {
           <Table>
             <TableHeader>
               <TableRow className="bg-slate-50/50">
-                <TableHead className="font-semibold text-slate-600">Güzergah</TableHead>
-                <TableHead className="font-semibold text-slate-600">Nakliyeci</TableHead>
-                <TableHead className="font-semibold text-slate-600">Müşteri</TableHead>
-                <TableHead className="font-semibold text-slate-600">Fiyat</TableHead>
-                <TableHead className="font-semibold text-slate-600">Durum</TableHead>
-                <TableHead className="font-semibold text-slate-600">Tarih</TableHead>
-                <TableHead className="w-10" />
+                <TableHead className="font-semibold text-slate-600 text-xs">Teklif ID</TableHead>
+                <TableHead className="font-semibold text-slate-600 text-xs">İlan Güzergahı</TableHead>
+                <TableHead className="font-semibold text-slate-600 text-xs">Nakliyeci</TableHead>
+                <TableHead className="font-semibold text-slate-600 text-xs">Müşteri</TableHead>
+                <TableHead className="font-semibold text-slate-600 text-xs">Fiyat</TableHead>
+                <TableHead className="font-semibold text-slate-600 text-xs">Durum</TableHead>
+                <TableHead className="font-semibold text-slate-600 text-xs">Tarih</TableHead>
+                <TableHead className="font-semibold text-slate-600 text-xs w-10">İşlemler</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
-                Array.from({ length: 5 }).map((_, i) => (
+                Array.from({ length: 10 }).map((_, i) => (
                   <TableRow key={i}>
-                    {Array.from({ length: 7 }).map((_, j) => (
+                    {Array.from({ length: 8 }).map((_, j) => (
                       <TableCell key={j}><div className="h-4 w-20 bg-slate-200 rounded animate-pulse" /></TableCell>
                     ))}
                   </TableRow>
                 ))
               ) : offers.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7}>
+                  <TableCell colSpan={8}>
                     <EmptyState icon={HandCoins} title="Teklif bulunamadı" description="Filtre kriterlerinize uygun teklif yok." className="py-10" />
                   </TableCell>
                 </TableRow>
@@ -168,45 +191,80 @@ export default function AdminOffers() {
                 offers.map((o) => (
                   <TableRow key={o.id} className="hover:bg-slate-50/60 transition-colors">
                     <TableCell>
-                      <div className="flex items-center gap-1.5 text-sm text-slate-600">
-                        <span>{o.shipment?.origin ?? '—'}</span>
-                        <ArrowRight className="h-3 w-3 text-slate-400" />
-                        <span>{o.shipment?.destination ?? '—'}</span>
-                      </div>
+                      <button
+                        onClick={() => copyId(o.id)}
+                        className="font-mono text-xs text-gray-400 hover:text-gray-600 cursor-pointer"
+                        title="Kopyalamak için tıkla"
+                      >
+                        {o.id.slice(0, 8)}
+                      </button>
                     </TableCell>
-                    <TableCell className="text-sm text-slate-700">{o.carrier?.companyName ?? '—'}</TableCell>
+                    <TableCell>
+                      {o.shipment ? (
+                        <button
+                          onClick={() => navigate(`/admin/ilanlar/${o.shipment!.id}`)}
+                          className="flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-800 hover:underline"
+                        >
+                          <span>{o.shipment.origin}</span>
+                          <ArrowRight className="h-3 w-3 text-slate-400" />
+                          <span>{o.shipment.destination}</span>
+                        </button>
+                      ) : (
+                        <span className="text-sm text-slate-400">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {o.carrier ? (
+                        <button
+                          onClick={() => navigate(`/admin/nakliyeciler/${o.carrierId ?? o.carrier!.id}`)}
+                          className="text-sm text-slate-700 hover:text-blue-600 hover:underline"
+                        >
+                          {o.carrier.companyName}
+                        </button>
+                      ) : (
+                        <span className="text-sm text-slate-400">—</span>
+                      )}
+                    </TableCell>
                     <TableCell className="text-sm text-slate-600">
                       {o.shipment?.customer ? `${o.shipment.customer.firstName} ${o.shipment.customer.lastName}` : '—'}
                     </TableCell>
-                    <TableCell className="text-sm font-semibold text-emerald-700">{Number(o.price).toLocaleString('tr-TR')}₺</TableCell>
+                    <TableCell className="text-sm font-semibold text-emerald-700">₺{Number(o.price).toLocaleString('tr-TR')}</TableCell>
                     <TableCell>
                       <Badge variant="secondary" className={`text-xs ${statusColors[o.status] || 'bg-slate-100'}`}>
                         {statusLabels[o.status] || o.status}
                       </Badge>
                     </TableCell>
                     <TableCell className="text-xs text-slate-500">
-                      {formatDistanceToNow(new Date(o.offeredAt), { addSuffix: true, locale: tr })}
+                      {new Date(o.offeredAt).toLocaleDateString('tr-TR')}
                     </TableCell>
                     <TableCell>
-                      {o.status === 'pending' && (
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-7 w-7 text-rose-400 hover:text-rose-600 hover:bg-rose-50" disabled={cancellingId === o.id}>
-                              <XCircle className="h-3.5 w-3.5" />
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>Teklifi İptal Et</AlertDialogTitle>
-                              <AlertDialogDescription>Bu teklifi iptal etmek istediğinizden emin misiniz?</AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Vazgeç</AlertDialogCancel>
-                              <AlertDialogAction onClick={() => handleCancel(o.id)} className="bg-rose-600 hover:bg-rose-700">İptal Et</AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
-                      )}
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-7 w-7">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          {o.shipment && (
+                            <DropdownMenuItem onClick={() => navigate(`/admin/ilanlar/${o.shipment!.id}`)}>
+                              <Eye className="h-3.5 w-3.5 mr-2" /> İlanı Görüntüle
+                            </DropdownMenuItem>
+                          )}
+                          {o.carrier && (
+                            <DropdownMenuItem onClick={() => navigate(`/admin/nakliyeciler/${o.carrierId ?? o.carrier!.id}`)}>
+                              <User className="h-3.5 w-3.5 mr-2" /> Nakliyeci Profilini Gör
+                            </DropdownMenuItem>
+                          )}
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            className="text-rose-600 focus:text-rose-600"
+                            disabled={deletingId === o.id}
+                            onClick={() => { setDeleteTargetId(o.id); setDeleteDialogOpen(true); }}
+                          >
+                            <Trash2 className="h-3.5 w-3.5 mr-2" /> Teklifi Sil
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </TableCell>
                   </TableRow>
                 ))
@@ -217,21 +275,37 @@ export default function AdminOffers() {
           {totalPages > 1 && (
             <div className="flex items-center justify-between border-t border-slate-100 px-4 py-3">
               <p className="text-xs text-slate-500">
-                {total} kayıttan {(page - 1) * limit + 1} - {Math.min(page * limit, total)} gösteriliyor
+                {(page - 1) * limit + 1} - {Math.min(page * limit, total)} / {total} teklif
               </p>
               <div className="flex items-center gap-1">
-                <Button variant="outline" size="icon" className="h-7 w-7" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
-                  <ChevronLeft className="h-3.5 w-3.5" />
+                <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
+                  <ChevronLeft className="h-3.5 w-3.5 mr-1" /> Önceki
                 </Button>
                 <span className="px-2 text-xs text-slate-600">{page} / {totalPages}</span>
-                <Button variant="outline" size="icon" className="h-7 w-7" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>
-                  <ChevronRight className="h-3.5 w-3.5" />
+                <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>
+                  Sonraki <ChevronRight className="h-3.5 w-3.5 ml-1" />
                 </Button>
               </div>
             </div>
           )}
         </div>
       )}
+
+      {/* Delete Confirm Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Teklifi Sil</AlertDialogTitle>
+            <AlertDialogDescription>
+              Bu teklifi silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => { setDeleteDialogOpen(false); setDeleteTargetId(null); }}>Vazgeç</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-rose-600 hover:bg-rose-700">Sil</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

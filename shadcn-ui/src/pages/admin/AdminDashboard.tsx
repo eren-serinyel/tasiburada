@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import { toast } from '@/components/ui/sonner';
 import { PageHeader, StatCard, EmptyState } from '@/components/admin/shared';
-import { formatDistanceToNow, format } from 'date-fns';
+import { formatDistanceToNow } from 'date-fns';
 import { tr } from 'date-fns/locale';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip,
@@ -59,28 +59,36 @@ export default function AdminDashboard() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [pendingCarriers, setPendingCarriers] = useState<PendingCarrier[]>([]);
   const [recentReviews, setRecentReviews] = useState<RecentReview[]>([]);
-  const [trendData, setTrendData] = useState<{ date: string; value: number }[]>([]);
+  const [trendData, setTrendData] = useState<{ date: string; shipments: number; offers: number; completed: number }[]>([]);
+  const [trendLoading, setTrendLoading] = useState(true);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const load = async () => {
       try {
-        const [statsRes, carriersRes, reviewsRes, trendsRes] = await Promise.all([
+        const [statsRes, carriersRes, reviewsRes] = await Promise.all([
           adminApiClient('/admin/stats').then((r) => r.json()),
           adminApiClient('/admin/carriers?status=pending&limit=5').then((r) => r.json()),
           adminApiClient('/admin/reviews?limit=5').then((r) => r.json()),
-          adminApiClient('/admin/stats/trends?period=30').then((r) => r.json()),
         ]);
         if (statsRes.success) setStats(statsRes.data);
         if (carriersRes.success) setPendingCarriers(carriersRes.data?.carriers ?? []);
         if (reviewsRes.success) setRecentReviews(reviewsRes.data?.reviews ?? []);
-        if (trendsRes.success && Array.isArray(trendsRes.data)) {
-          setTrendData(trendsRes.data.map((d: { date: string; value: number }) => ({ date: format(new Date(d.date), 'dd MMM', { locale: tr }), value: d.value })));
-        }
       } catch {
         toast.error('Dashboard verileri yüklenemedi.');
       } finally {
         setLoading(false);
+      }
+
+      try {
+        const trendsRes = await adminApiClient('/admin/stats/trends?days=30').then((r) => r.json());
+        if (trendsRes.success) {
+          setTrendData(trendsRes.data?.trends ?? []);
+        }
+      } catch {
+        // Trend error handled by empty trendData
+      } finally {
+        setTrendLoading(false);
       }
     };
     load();
@@ -111,7 +119,6 @@ export default function AdminDashboard() {
     );
   }
 
-  const shipmentTrend = trendData.length > 0 ? trendData : [];
   const shipmentPieData = [
     { name: 'Bekliyor', value: Math.max(0, stats.totalShipments - stats.activeShipments - stats.completedShipments) },
     { name: 'Taşınıyor', value: stats.activeShipments },
@@ -127,19 +134,18 @@ export default function AdminDashboard() {
 
       {/* Alert Banner */}
       {stats.pendingCarriers > 0 && (
-        <div className="flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
-          <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
-          <p className="text-sm text-amber-800 flex-1">
-            <span className="font-semibold">{stats.pendingCarriers} nakliyeci</span> onay bekliyor.
+        <div className="flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-6 py-3 text-amber-800">
+          <AlertTriangle size={16} className="text-amber-600 shrink-0" />
+          <p className="text-sm flex-1">
+            <span className="font-semibold">{stats.pendingCarriers} nakliyeci</span> onay bekliyor
           </p>
           <Button
             size="sm"
             variant="outline"
             className="border-amber-300 text-amber-700 hover:bg-amber-100 shrink-0"
-            onClick={() => navigate('/admin/onay-kuyrugu')}
+            onClick={() => navigate('/admin/nakliyeciler?tab=bekleyen')}
           >
-            Onay Kuyruğu
-            <ArrowRight className="ml-1 h-3 w-3" />
+            İncele
           </Button>
         </div>
       )}
@@ -167,21 +173,39 @@ export default function AdminDashboard() {
             <CardTitle className="text-sm font-medium text-slate-500">İlan Trendi (30 gün)</CardTitle>
           </CardHeader>
           <CardContent className="pt-0">
-            <ResponsiveContainer width="100%" height={220}>
-              <AreaChart data={shipmentTrend}>
-                <defs>
-                  <linearGradient id="colorVal" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#f97316" stopOpacity={0.15} />
-                    <stop offset="95%" stopColor="#f97316" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#94a3b8' }} tickLine={false} axisLine={false} />
-                <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} tickLine={false} axisLine={false} width={30} />
-                <RechartsTooltip contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 12 }} />
-                <Area type="monotone" dataKey="value" stroke="#f97316" strokeWidth={2} fill="url(#colorVal)" />
-              </AreaChart>
-            </ResponsiveContainer>
+            {trendLoading ? (
+              <div className="h-[300px] bg-slate-100 rounded-lg animate-pulse" />
+            ) : trendData.length === 0 ? (
+              <div className="h-[300px] flex items-center justify-center">
+                <p className="text-sm text-slate-400">Trend verisi yüklenemedi</p>
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={300}>
+                <AreaChart data={trendData}>
+                  <defs>
+                    <linearGradient id="colorShipments" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#2563EB" stopOpacity={0.15} />
+                      <stop offset="95%" stopColor="#2563EB" stopOpacity={0} />
+                    </linearGradient>
+                    <linearGradient id="colorOffers" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#F97316" stopOpacity={0.15} />
+                      <stop offset="95%" stopColor="#F97316" stopOpacity={0} />
+                    </linearGradient>
+                    <linearGradient id="colorCompleted" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#16A34A" stopOpacity={0.15} />
+                      <stop offset="95%" stopColor="#16A34A" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                  <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#94a3b8' }} tickLine={false} axisLine={false} tickFormatter={(d: string) => new Date(d).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' })} />
+                  <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} tickLine={false} axisLine={false} width={30} />
+                  <RechartsTooltip contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 12 }} labelFormatter={(d: string) => new Date(d).toLocaleDateString('tr-TR')} />
+                  <Area type="monotone" dataKey="shipments" name="İlanlar" stroke="#2563EB" strokeWidth={2} fill="url(#colorShipments)" />
+                  <Area type="monotone" dataKey="offers" name="Teklifler" stroke="#F97316" strokeWidth={2} fill="url(#colorOffers)" />
+                  <Area type="monotone" dataKey="completed" name="Tamamlanan" stroke="#16A34A" strokeWidth={2} fill="url(#colorCompleted)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            )}
           </CardContent>
         </Card>
 
@@ -212,7 +236,7 @@ export default function AdminDashboard() {
                 </div>
               </>
             ) : (
-              <EmptyState icon={Package} title="Henüz veri yok" description="İlan dağılımı için yeterli kayıt oluşmadı." className="py-8" />
+              <p className="text-sm text-slate-400 py-10">Henüz veri yok</p>
             )}
           </CardContent>
         </Card>

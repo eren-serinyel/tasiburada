@@ -20,7 +20,7 @@ import { useNavigate } from "react-router-dom";
 import { setSessionUser } from '@/lib/storage';
 import { TURKISH_CITIES } from '@/lib/constants';
 import MultiSelect from '@/components/ui/multi-select';
-import { toast } from '@/components/ui/sonner';
+import { useToast } from '@/hooks/use-toast';
 // import { cities as sharedCities, VEHICLE_TYPES as VEHICLE_TYPES_MAP, SPECIAL_SERVICES, ADDITIONAL_SERVICE_OPTIONS } from '@/lib/carrierFormConstants';
 import {
   Select,
@@ -41,9 +41,11 @@ const API_BASE_URL = '/api/v1';
 
 export default function RegisterCarrier() {
   const navigate = useNavigate();
+  const { toast } = useToast();
 
   const [isLoading, setIsLoading] = useState(false);
   const [isGeoLoading, setIsGeoLoading] = useState(false);
+  const [termsAccepted, setTermsAccepted] = useState(false);
 
   const [formData, setFormData] = useState({
     // 1. Şirket Bilgileri
@@ -120,11 +122,10 @@ export default function RegisterCarrier() {
   const isValidEmail = (email: string) => /.+@.+\..+/.test(email);
   // +90xxxxxxxxxx veya 05xxxxxxxxx biçimleri
   const isValidPhone = (phone: string) => /^(?:\+90|05)\d{9}$/.test(phone.replace(/\s|-/g, ''));
-  // 11 haneli sadece rakam
-  const isValidTaxOrRegistry = (val: string) => /^[0-9]{11}$/.test(val);
+  // 10–15 haneli sadece rakam
+  const isValidTaxOrRegistry = (val: string) => /^\d{10,15}$/.test(val);
   // En az 8 karakter, 1 büyük harf ve 1 sayı
   const isValidPassword = (pw: string) => /^(?=.*[A-Z])(?=.*\d).{8,}$/.test(pw);
-  const maxYear = new Date().getFullYear();
 
   // Ek hizmet (checkbox) toggle helper
   // Ek hizmetler hızlı kayıtta toplanmıyor.
@@ -134,35 +135,16 @@ export default function RegisterCarrier() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     // Basit doğrulamalar (tek adım)
+    const showValidationError = (msg: string) => { toast({ title: 'Doğrulama Hatası', description: msg, variant: 'destructive' }); };
     // 1) Zorunlu alanlar
-    if (!formData.companyName) {
-      toast.error('Firma adı zorunludur.');
-      return;
-    }
-    if (!isValidTaxOrRegistry(formData.taxOrRegistry)) {
-      toast.error('Vergi numarası 11 haneli olmalıdır.');
-      return;
-    }
-    if (!formData.authorizedFullName) {
-      toast.error('Yetkili kişi adı zorunludur.');
-      return;
-    }
-    if (!isValidPhone(formData.phone)) {
-      toast.error('Telefon +90 veya 05 ile başlamalıdır.');
-      return;
-    }
-    if (!isValidEmail(formData.email)) {
-      toast.error('Geçerli bir e-posta giriniz.');
-      return;
-    }
-    if (!isValidPassword(formData.password)) {
-      toast.error('Şifre en az 8 karakter, 1 büyük harf ve 1 sayı içermelidir.');
-      return;
-    }
-    if (formData.password !== formData.confirmPassword) {
-      toast.error('Şifre tekrarı birebir aynı olmalıdır.');
-      return;
-    }
+    if (!formData.companyName) return showValidationError('Firma Adı zorunludur.');
+    if (!isValidTaxOrRegistry(formData.taxOrRegistry)) return showValidationError('Vergi Numarası veya Ticaret Sicil No 10–15 haneli olmalıdır.');
+    if (!formData.authorizedFullName) return showValidationError('Yetkili Ad Soyad zorunludur.');
+    if (!isValidPhone(formData.phone)) return showValidationError('Telefon +90 veya 05 ile başlamalıdır.');
+    if (!isValidEmail(formData.email)) return showValidationError('Geçerli bir e-posta giriniz.');
+    if (!isValidPassword(formData.password)) return showValidationError('Şifre en az 8 karakter, 1 büyük harf ve 1 sayı içermelidir.');
+    if (formData.password !== formData.confirmPassword) return showValidationError('Şifre Tekrar, şifreyle birebir aynı olmalıdır.');
+    if (!termsAccepted) return showValidationError('KVKK ve Kullanım Koşullarını kabul etmelisiniz.');
 
     setIsLoading(true);
     await new Promise(r => setTimeout(r, 300));
@@ -170,9 +152,9 @@ export default function RegisterCarrier() {
       const startYearNum = Number(formData.startYear) || new Date().getFullYear();
 
       // 1) Backend'e kayıt
-      const vehicleTypeIds = (formData.vehicleTypes || [])
-        .map((name) => nameToId[name])
-        .filter((id): id is number => Number.isFinite(id));
+      // Araç seçimi kaldırıldı, boş gönderiyoruz
+      const selectedVehicles: any[] = [];
+      const vehicleTypeIds: any[] = [];
 
       const normalizePhone = (phone: string) => phone.replace(/\s|-/g, '');
 
@@ -181,12 +163,18 @@ export default function RegisterCarrier() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           companyName: formData.companyName,
-          taxNumber: formData.taxOrRegistry,
+          taxNumber: formData.taxOrRegistry || formData.taxNumber,
           email: formData.email,
           phone: normalizePhone(formData.phone),
           contactName: formData.authorizedFullName,
           password: formData.password,
-          foundedYear: startYearNum
+          foundedYear: startYearNum,
+          vehicleTypeIds,
+          activityCity: formData.cityText || undefined,
+
+          // Frontend local usage (backend currently ignores these; safe to send)
+          vehicleTypeNames: formData.vehicleTypes,
+          selectedVehicles
         }),
       });
       const regJson = await registerRes.json().catch(() => ({}));
@@ -217,22 +205,6 @@ export default function RegisterCarrier() {
 
       if (token) {
         localStorage.setItem('authToken', token);
-      }
-
-      if (vehicleTypeIds.length > 0 && token) {
-        const vehicleRes = await fetch(`${API_BASE_URL}/carriers/me/vehicle-types`, {
-          method: 'PUT',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`
-          },
-          body: JSON.stringify({ vehicleTypeIds })
-        });
-
-        const vehicleJson = await vehicleRes.json().catch(() => ({}));
-        if (!vehicleRes.ok || vehicleJson?.success === false) {
-          toast.error(vehicleJson?.message || 'Araç tipleri kaydedilemedi.');
-        }
       }
 
       const sessionCarrier = {
@@ -280,14 +252,16 @@ export default function RegisterCarrier() {
         localStorage.setItem(`carrier_ops_${sessionCarrier.id}`, JSON.stringify(opsDraft));
       } catch { }
 
+      localStorage.setItem(`fastRegPending_${sessionCarrier.id}`, '1');
+      localStorage.setItem('profileCompletion', '20');
+      localStorage.setItem('companyTaxOrRegistry', formData.taxOrRegistry);
       window.dispatchEvent(new Event('userLogin'));
       setIsLoading(false);
-      toast.success('Kayıt başarıyla tamamlandı.');
-      navigate('/panel');
+      navigate(`/eposta-dogrula?email=${encodeURIComponent(formData.email)}&userType=carrier`);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Kayıt sırasında bir hata oluştu.';
       setIsLoading(false);
-      toast.error(message);
+      toast({ title: 'Hata', description: message, variant: 'destructive' });
     }
   };
 
@@ -374,19 +348,19 @@ export default function RegisterCarrier() {
                 <Input value={formData.companyName} onChange={(e) => handleChange('companyName', e.target.value)} placeholder="Örn. ABC Lojistik A.Ş." className="h-12 mt-1" />
               </div>
               <div>
-                <Label>Vergi Numarası</Label>
+                <Label>Vergi Numarası veya Ticaret Sicil Numarası</Label>
                 <Input
                   inputMode="numeric"
                   value={formData.taxOrRegistry}
                   onChange={(e) => handleChange('taxOrRegistry', e.target.value.replace(/\D/g, ''))}
-                  placeholder="Sadece rakam, 11 hane"
+                  placeholder="Sadece rakam, 10–15 hane"
                   className="h-12 mt-1"
-                  maxLength={11}
+                  maxLength={15}
                 />
               </div>
 
               <div>
-                <Label>Yetkili Kişi Ad Soyad</Label>
+                <Label>Yetkili Kişi Ad Soyad (opsiyonel)</Label>
                 <Input value={formData.authorizedFullName} onChange={(e) => handleChange('authorizedFullName', e.target.value)} placeholder="Ad Soyad" className="h-12 mt-1" />
               </div>
 
@@ -416,7 +390,7 @@ export default function RegisterCarrier() {
                 <Select value={String(formData.startYear || '')} onValueChange={(v) => handleChange('startYear', v)}>
                   <SelectTrigger className="h-12 mt-1"><SelectValue placeholder="Seçiniz" /></SelectTrigger>
                   <SelectContent>
-                    {Array.from({ length: (maxYear - 1990 + 1) }, (_, i) => 1990 + i).map((y) => (
+                    {Array.from({ length: (2025 - 1990 + 1) }, (_, i) => 1990 + i).map((y) => (
                       <SelectItem key={y} value={String(y)}>{y}</SelectItem>
                     ))}
                   </SelectContent>
@@ -433,8 +407,21 @@ export default function RegisterCarrier() {
                   <Input type="password" value={formData.confirmPassword} onChange={(e) => handleChange('confirmPassword', e.target.value)} placeholder="Tekrar şifre" className="h-12 mt-1" />
                 </div>
               </div>
+              <div className="flex items-start gap-2 pt-2">
+                <input
+                  id="termsAccepted"
+                  type="checkbox"
+                  checked={termsAccepted}
+                  onChange={(e) => setTermsAccepted(e.target.checked)}
+                  className="mt-1 h-4 w-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500"
+                />
+                <label htmlFor="termsAccepted" className="text-sm text-gray-600">
+                  <a href="/kullanim-sartlari" target="_blank" className="text-orange-600 underline hover:text-orange-800">Kullanım Koşulları</a>{' '}ve{' '}
+                  <a href="/gizlilik-politikasi" target="_blank" className="text-orange-600 underline hover:text-orange-800">KVKK Aydınlatma Metni</a>'ni okudum, kabul ediyorum.
+                </label>
+              </div>
               <div className="pt-2">
-                <Button type="submit" disabled={isLoading} className="w-full h-12 bg-gradient-to-r from-orange-600 to-blue-600 hover:from-orange-700 hover:to-blue-700">
+                <Button type="submit" disabled={isLoading || !termsAccepted} className="w-full h-12 bg-gradient-to-r from-orange-600 to-blue-600 hover:from-orange-700 hover:to-blue-700">
                   {isLoading ? 'Oluşturuluyor...' : 'Hesabı Oluştur ve Devam Et'}
                 </Button>
                 <p className="text-xs text-gray-500 mt-2">Detayları profilden tamamlayabilirsiniz.</p>

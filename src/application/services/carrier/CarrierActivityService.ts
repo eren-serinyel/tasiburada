@@ -8,6 +8,7 @@ type ActivityResponse = {
   district?: string;
   address?: string;
   serviceAreas: string[];
+  availableDates: string[];
   carrierId: string;
   id: string;
 };
@@ -25,11 +26,16 @@ export class CarrierActivityService {
       ? dto.serviceAreas.map(area => String(area).trim()).filter(Boolean)
       : [];
 
+    const availableDates = Array.isArray(dto.availableDates)
+      ? dto.availableDates.map(d => String(d).trim()).filter(Boolean)
+      : [];
+
     const activity = await this.repository.upsertForCarrier(carrierId, {
       city: dto.city,
       district: dto.district,
       address: dto.address,
-      serviceAreas
+      serviceAreas,
+      availableDates,
     });
 
     await this.profileStatusService.updateProfileCompletion(carrierId);
@@ -44,13 +50,15 @@ export class CarrierActivityService {
 
   private toResponse(activity: CarrierActivity): ActivityResponse {
     const serviceAreas = this.parseServiceAreas(activity.serviceAreasJson);
+    const availableDates = this.parseServiceAreas(activity.availableDates);
     return {
       id: activity.id,
       carrierId: activity.carrierId,
       city: activity.city,
       district: activity.district,
       address: activity.address,
-      serviceAreas
+      serviceAreas,
+      availableDates,
     };
   }
 

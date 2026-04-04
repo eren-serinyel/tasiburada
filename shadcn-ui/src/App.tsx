@@ -63,6 +63,9 @@ import CookiesPolicy from '@/pages/info/CookiesPolicy';
 import Help from '@/pages/info/Help';
 import RegisterCarrierPage from '@/pages/RegisterCarrier';
 import ProfileComplete from '@/pages/ProfileComplete';
+import CarrierOnboarding from '@/pages/CarrierOnboarding';
+import ForgotPassword from '@/pages/ForgotPassword';
+import VerifyEmail from '@/pages/VerifyEmail';
 
 const queryClient = new QueryClient();
 
@@ -109,10 +112,17 @@ const App = () => (
             <Route path="/home" element={<RoleHome />} />
             {/* Auth */}
             <Route path="/giris" element={<Login />} />
+            <Route path="/sifremi-unuttum" element={<ForgotPassword />} />
+            <Route path="/eposta-dogrula" element={<VerifyEmail />} />
             <Route path="/musteri-kayit" element={<RegisterUser />} />
             <Route path="/nakliyeci-kayit" element={<RegisterCarrier />} />
             <Route path="/nakliyeci-ol" element={<RegisterCarrierPage />} />
             <Route path="/profil-tamamla" element={<ProfileComplete />} />
+            <Route path="/nakliyeci-onboarding" element={
+              <ProtectedRoute requiredRole="carrier">
+                <CarrierOnboarding />
+              </ProtectedRoute>
+            } />
             <Route path="/panel" element={<Dashboard />} />
             {/** Talep oluşturma akışı devre dışı (müşteri sadece nakliyeci arıyor) */}
             <Route

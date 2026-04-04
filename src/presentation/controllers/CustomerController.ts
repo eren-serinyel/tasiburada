@@ -184,4 +184,40 @@ export class CustomerController {
       });
     }
   };
+
+  uploadPicture = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const customerId = req.user?.customerId;
+      if (!customerId) {
+        res.status(401).json({
+          success: false,
+          message: 'Yetkisiz erişim.'
+        });
+        return;
+      }
+
+      if (!req.file) {
+        res.status(400).json({
+          success: false,
+          message: 'Dosya yüklenmedi.'
+        });
+        return;
+      }
+
+      const pictureUrl = `/uploads/pictures/${req.file.filename}`;
+      const customer = await this.customerService.updatePicture(customerId, pictureUrl);
+
+      res.status(200).json({
+        success: true,
+        message: 'Profil fotoğrafı başarıyla yüklendi.',
+        data: customer
+      });
+    } catch (error: any) {
+      res.status(400).json({
+        success: false,
+        message: error.message || 'Profil fotoğrafı yüklenirken hata oluştu.',
+        error: error
+      });
+    }
+  };
 }
