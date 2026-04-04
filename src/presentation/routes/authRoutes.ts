@@ -4,6 +4,7 @@ import { AuthController } from '../controllers/AuthController';
 const router = Router();
 const authController = new AuthController();
 
+router.get('/check-email', authController.checkEmail);
 router.post('/forgot-password', authController.requestPasswordReset);
 router.post('/reset-password', authController.resetPassword);
 router.post('/verify-email', authController.verifyEmail);

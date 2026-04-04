@@ -48,7 +48,7 @@ export default function CarrierProfile() {
       }
 
       try {
-        const res = await fetch(`/api/v1/carriers/${carrierId}`);
+        const res = await apiClient(`/api/v1/carriers/${carrierId}`);
         const json = await res.json();
         if (res.ok && json?.success && json?.data?.carrier) {
           const c = json.data.carrier;
@@ -82,7 +82,7 @@ export default function CarrierProfile() {
           return;
         }
 
-        const reviewRes = await fetch(`/api/v1/reviews/carrier/${carrierId}`);
+        const reviewRes = await apiClient(`/api/v1/reviews/carrier/${carrierId}`);
         const reviewJson = await reviewRes.json();
         if (reviewRes.ok && reviewJson?.success && Array.isArray(reviewJson.data)) {
           setReviews(reviewJson.data);
@@ -153,7 +153,7 @@ export default function CarrierProfile() {
         toast({ title: 'Teşekkürler', description: 'Yorumunuz kaydedildi.' });
         setForm({ rating: 5, comment: '' });
         // Refresh reviews
-        const reviewRes = await fetch(`/api/v1/reviews/carrier/${carrierId}`);
+        const reviewRes = await apiClient(`/api/v1/reviews/carrier/${carrierId}`);
         const reviewJson = await reviewRes.json();
         if (reviewRes.ok && Array.isArray(reviewJson.data)) setReviews(reviewJson.data);
       } else {

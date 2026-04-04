@@ -23,7 +23,7 @@ export class CarrierAuthService {
       throw new Error('Bu vergi numarası ile kayıtlı hesap mevcut.');
     }
 
-    const passwordHash = await bcrypt.hash(dto.password, 10);
+    const passwordHash = await bcrypt.hash(dto.password, 12);
     const carrier = await this.carrierRepository.create({
       companyName: dto.companyName,
       contactName: dto.contactName,

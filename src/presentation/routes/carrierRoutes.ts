@@ -24,6 +24,7 @@ const offerController = new OfferController();
 // Public auth routes
 router.post('/register', authController.register);
 router.post('/login', authController.login);
+router.get('/availability-summary', searchController.getAvailabilitySummary);
 router.get('/search', searchController.search);
 router.get('/:carrierId/detail', detailController.getDetail);
 

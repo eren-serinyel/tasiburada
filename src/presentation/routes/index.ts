@@ -10,6 +10,7 @@ import adminRoutes from './adminRoutes';
 import notificationRoutes from './notificationRoutes';
 import authRoutes from './authRoutes';
 import paymentRoutes from './paymentRoutes';
+import configRoutes from './configRoutes';
 
 const router = Router();
 router.use('/', commonRoutes);
@@ -35,5 +36,6 @@ router.use('/notifications', notificationRoutes);
 router.use('/payments', paymentRoutes);
 router.use('/', reviewRoutes);
 router.use('/admin', adminRoutes);
+router.use('/config', configRoutes);
 
 export default router;

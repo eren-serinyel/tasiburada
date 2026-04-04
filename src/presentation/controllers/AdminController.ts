@@ -322,11 +322,11 @@ export class AdminController {
     try {
       const adminId = req.user?.adminId;
       if (!adminId) { res.status(401).json({ success: false, message: 'Yetkisiz erişim.' }); return; }
-      const { email, password, role } = req.body;
+      const { email, password, role, firstName, lastName } = req.body;
       if (!email || !password) {
         res.status(400).json({ success: false, message: 'E-posta ve şifre zorunludur.' }); return;
       }
-      const admin = await this.adminService.createAdmin(adminId, { email, password, role });
+      const admin = await this.adminService.createAdmin(adminId, { email, password, role, firstName, lastName });
       res.status(201).json({ success: true, message: 'Admin oluşturuldu.', data: admin });
     } catch (error: any) {
       res.status(400).json({ success: false, message: error.message || 'Admin oluşturulamadı.' });
@@ -363,8 +363,8 @@ export class AdminController {
       if (!adminId) { res.status(401).json({ success: false, message: 'Yetkisiz erişim.' }); return; }
       const { adminId: targetId } = req.params;
       const { newPassword } = req.body;
-      if (!newPassword || newPassword.length < 6) {
-        res.status(400).json({ success: false, message: 'Yeni şifre en az 6 karakter olmalıdır.' }); return;
+      if (!newPassword || newPassword.length < 8) {
+        res.status(400).json({ success: false, message: 'Yeni şifre en az 8 karakter olmalıdır.' }); return;
       }
       await this.adminService.resetAdminPassword(adminId, targetId, newPassword);
       res.status(200).json({ success: true, message: 'Admin şifresi sıfırlandı.' });
@@ -381,6 +381,28 @@ export class AdminController {
       res.status(200).json({ success: true, data });
     } catch (error: any) {
       res.status(500).json({ success: false, message: error.message || 'Ayarlar alınamadı.' });
+    }
+  };
+
+  // GET /config/public — auth gerektirmez
+  getPublicConfig = async (_req: Request, res: Response): Promise<void> => {
+    try {
+      const data = await this.adminService.getSettings();
+      res.json({
+        success: true,
+        data: {
+          minOfferPrice: Number(data.settings.min_offer_price ?? 100),
+          platformName: String(data.settings.platform_name ?? 'TaşıBurada'),
+        },
+      });
+    } catch {
+      res.json({
+        success: true,
+        data: {
+          minOfferPrice: 100,
+          platformName: 'TaşıBurada',
+        },
+      });
     }
   };
 

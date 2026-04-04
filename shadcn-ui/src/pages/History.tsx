@@ -19,6 +19,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import { toast } from '@/components/ui/sonner';
+import { formatLocation } from '@/utils/formatLocation';
 
 const API_BASE_URL = '/api/v1';
 
@@ -98,8 +99,20 @@ export default function History() {
     }
     setReviewSending(true);
     try {
-      // Attempt to send review to backend
-      await new Promise((r) => setTimeout(r, 600));
+      const res = await apiClient('/api/v1/reviews', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          shipmentId: reviewTarget.id,
+          rating: reviewStars,
+          comment: reviewText || undefined,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        toast.error(json?.message || 'Yorum gönderilemedi.');
+        return;
+      }
       toast.success('Yorumunuz gönderildi.');
       setShipments((prev) =>
         prev.map((s) => (s.id === reviewTarget.id ? { ...s, hasReview: true } : s))
@@ -189,9 +202,9 @@ export default function History() {
                 {/* Top row */}
                 <div className="flex items-center justify-between gap-3">
                   <p className="text-[16px] font-semibold text-gray-900 flex items-center gap-2 flex-wrap">
-                    {s.origin}
+                    {formatLocation(s.origin)}
                     <ArrowRight className="h-4 w-4 text-gray-400 flex-shrink-0" />
-                    {s.destination}
+                    {formatLocation(s.destination)}
                   </p>
                   {isCompleted && (
                     <span className="flex items-center gap-1 text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full px-2.5 py-1 whitespace-nowrap">

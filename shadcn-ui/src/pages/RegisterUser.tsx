@@ -11,6 +11,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { setSessionUser } from '@/lib/storage';
 import { CITIES_TR, getDistrictsForCity } from '@/lib/locations';
 import { useToast } from '@/hooks/use-toast';
+import { apiClient } from '@/lib/apiClient';
 
 // API Base URL - using Vite proxy
 const API_BASE_URL = '/api/v1';
@@ -137,7 +138,7 @@ export default function RegisterUser() {
     
     try {
       // Gerçek API'ye POST isteği gönder
-      const response = await fetch(`${API_BASE_URL}/customers/register`, {
+      const response = await apiClient(`${API_BASE_URL}/customers/register`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -398,7 +399,7 @@ export default function RegisterUser() {
                       value={formData.password} 
                       onChange={(e)=>handleChange('password', e.target.value)} 
                       className={`h-12 mt-1 ${errors.password ? 'border-red-500' : ''}`}
-                      placeholder="En az 6 karakter, harf ve rakam içermeli"
+                      placeholder="En az 8 karakter, 1 büyük harf, 1 rakam"
                       required 
                     />
                     {errors.password && <p className="text-red-500 text-sm mt-1">{errors.password}</p>}
@@ -410,7 +411,7 @@ export default function RegisterUser() {
                       value={formData.confirmPassword} 
                       onChange={(e)=>handleChange('confirmPassword', e.target.value)} 
                       className={`h-12 mt-1 ${errors.confirmPassword ? 'border-red-500' : ''}`}
-                      placeholder="Şifrenizi tekrar giriniz"
+                      placeholder="En az 8 karakter, 1 büyük harf, 1 rakam"
                       required 
                     />
                     {errors.confirmPassword && <p className="text-red-500 text-sm mt-1">{errors.confirmPassword}</p>}

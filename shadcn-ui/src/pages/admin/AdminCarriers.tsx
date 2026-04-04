@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { PageHeader, StatusBadge, EmptyState, ErrorState } from '@/components/admin/shared';
 import { CARRIER_STATUS, resolveCarrierStatus } from '@/lib/admin-constants';
-import { Search, MoreHorizontal, Eye, CheckCircle, XCircle, ChevronLeft, ChevronRight, Download, Star } from 'lucide-react';
+import { Search, MoreHorizontal, Eye, CheckCircle, XCircle, ChevronLeft, ChevronRight, Download, Star, Loader2 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { tr } from 'date-fns/locale';
 
@@ -58,6 +58,7 @@ export default function AdminCarriers() {
 
   // Bulk select
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [exportLoading, setExportLoading] = useState(false);
 
   const fetchCarriers = useCallback(async () => {
     setLoading(true);
@@ -104,27 +105,39 @@ export default function AdminCarriers() {
     return true;
   });
 
-  const exportToCSV = () => {
-    const headers = ['ID', 'Firma Adı', 'E-posta', 'Telefon', 'Şehir', 'Durum', 'Tamamlanan Sefer', 'Puan', 'Kayıt Tarihi'];
-    const rows = filteredCarriers.map((c) => [
-      c.id,
-      `"${c.companyName || ''}"`,
-      c.email || '',
-      c.phone || '',
-      c.city || '',
-      c.verifiedByAdmin ? 'Onaylı' : 'Beklemede',
-      c.completedShipments || 0,
-      c.rating ? Number(c.rating).toFixed(1) : '',
-      c.createdAt ? new Date(c.createdAt).toLocaleDateString('tr-TR') : '',
-    ]);
-    const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
-    const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `nakliyeciler_${new Date().toISOString().split('T')[0]}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
+  const exportToCSV = async () => {
+    setExportLoading(true);
+    try {
+      const params = new URLSearchParams({ page: '1', limit: '10000', status });
+      const res = await adminApiClient(`/admin/carriers?${params}`);
+      const data = await res.json();
+      const allCarriers: Carrier[] = data.data?.carriers ?? [];
+      const headers = ['ID', 'Firma Adı', 'E-posta', 'Telefon', 'Şehir', 'Durum', 'Tamamlanan Sefer', 'Puan', 'Kayıt Tarihi'];
+      const rows = allCarriers.map((c) => [
+        c.id,
+        `"${c.companyName || ''}"`,
+        c.email || '',
+        c.phone || '',
+        c.city || '',
+        c.verifiedByAdmin ? 'Onaylı' : 'Beklemede',
+        c.completedShipments || 0,
+        c.rating ? Number(c.rating).toFixed(1) : '',
+        c.createdAt ? new Date(c.createdAt).toLocaleDateString('tr-TR') : '',
+      ]);
+      const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
+      const blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `nakliyeciler_${new Date().toISOString().split('T')[0]}.csv`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('[AdminCarriers] CSV export:', error);
+      toast.error('CSV indirme başarısız.');
+    } finally {
+      setExportLoading(false);
+    }
   };
 
   const handleBulkApprove = async () => {
@@ -200,9 +213,10 @@ export default function AdminCarriers() {
             variant="outline"
             size="sm"
             onClick={exportToCSV}
+            disabled={exportLoading}
             className="gap-1.5 text-green-700 border-green-300 hover:bg-green-50 h-9"
           >
-            <Download className="h-3.5 w-3.5" /> CSV İndir
+            {exportLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />} CSV İndir
           </Button>
         </div>
 

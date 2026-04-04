@@ -602,6 +602,7 @@ export class AdminService {
     const { page = 1, limit = 20 } = params;
     const adminRepo = AppDataSource.getRepository(Admin);
     const [admins, total] = await adminRepo.findAndCount({
+      where: { deletedAt: null as any },
       order: { createdAt: 'DESC' },
       take: limit,
       skip: (page - 1) * limit,
@@ -614,7 +615,7 @@ export class AdminService {
     };
   }
 
-  async createAdmin(adminId: string, data: { email: string; password: string; role?: string }) {
+  async createAdmin(adminId: string, data: { email: string; password: string; role?: string; firstName?: string; lastName?: string }) {
     const adminRepo = AppDataSource.getRepository(Admin);
     const existing = await adminRepo.findOne({ where: { email: data.email } });
     if (existing) throw new Error('Bu e-posta adresi zaten kayıtlı.');
@@ -625,6 +626,8 @@ export class AdminService {
       passwordHash: hash,
       role: (data.role === 'superadmin' ? 'superadmin' : 'admin') as any,
       isActive: true,
+      firstName: data.firstName ?? null,
+      lastName: data.lastName ?? null,
     });
     const saved = await adminRepo.save(admin);
 
@@ -640,7 +643,7 @@ export class AdminService {
     return safe;
   }
 
-  async updateAdmin(adminId: string, targetAdminId: string, data: { role?: string; isActive?: boolean }) {
+  async updateAdmin(adminId: string, targetAdminId: string, data: { role?: string; isActive?: boolean; firstName?: string; lastName?: string }) {
     const adminRepo = AppDataSource.getRepository(Admin);
     const admin = await adminRepo.findOne({ where: { id: targetAdminId } });
     if (!admin) throw new Error('Admin bulunamadı.');
@@ -648,6 +651,8 @@ export class AdminService {
     const updateData: Partial<Admin> = {};
     if (data.role !== undefined) updateData.role = (data.role === 'superadmin' ? 'superadmin' : 'admin') as any;
     if (data.isActive !== undefined) updateData.isActive = data.isActive;
+    if (data.firstName !== undefined) updateData.firstName = data.firstName;
+    if (data.lastName !== undefined) updateData.lastName = data.lastName;
 
     await adminRepo.update(targetAdminId, updateData);
 
@@ -667,8 +672,9 @@ export class AdminService {
     const adminRepo = AppDataSource.getRepository(Admin);
     const admin = await adminRepo.findOne({ where: { id: targetAdminId } });
     if (!admin) throw new Error('Admin bulunamadı.');
+    if (admin.role === 'superadmin') throw new Error('Superadmin silinemez.');
 
-    await adminRepo.delete(targetAdminId);
+    await adminRepo.update(targetAdminId, { deletedAt: new Date(), isActive: false });
 
     await this.auditLogRepository.log({
       adminId,

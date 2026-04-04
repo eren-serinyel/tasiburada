@@ -12,6 +12,7 @@ import { SHIPMENT_STATUS } from '@/lib/admin-constants';
 import { Search, ChevronLeft, ChevronRight, Package, ArrowRight } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { tr } from 'date-fns/locale';
+import { formatLocation } from '@/utils/formatLocation';
 
 type ShipmentStatus = 'all' | 'pending' | 'active' | 'in_transit' | 'completed' | 'cancelled';
 
@@ -145,9 +146,9 @@ export default function AdminShipments() {
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-1.5 text-sm text-slate-600">
-                        <span>{s.origin}</span>
+                        <span>{formatLocation(s.origin)}</span>
                         <ArrowRight className="h-3 w-3 text-slate-400" />
-                        <span>{s.destination}</span>
+                        <span>{formatLocation(s.destination)}</span>
                       </div>
                     </TableCell>
                     <TableCell>

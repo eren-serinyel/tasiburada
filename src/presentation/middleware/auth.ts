@@ -48,14 +48,14 @@ export const authenticateToken = (req: Request, res: Response, next: NextFunctio
     }
 
     if (error instanceof jwt.JsonWebTokenError) {
-      res.status(403).json({
+      res.status(401).json({
         success: false,
         message: 'Geçersiz token.'
       });
       return;
     }
 
-    res.status(403).json({
+    res.status(401).json({
       success: false,
       message: 'Geçersiz token.'
     });
@@ -114,7 +114,7 @@ export const authenticateAdmin = (req: Request, res: Response, next: NextFunctio
       res.status(401).json({ success: false, message: 'Admin oturumunuz sona erdi.' });
       return;
     }
-    res.status(403).json({ success: false, message: 'Geçersiz admin token.' });
+    res.status(401).json({ success: false, message: 'Geçersiz admin token.' });
   }
 };
 

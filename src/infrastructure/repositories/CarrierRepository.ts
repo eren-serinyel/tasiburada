@@ -17,6 +17,7 @@ export interface CarrierSearchFilters {
   minProfileCompletion?: number;
   minCapacityKg?: number;
   searchText?: string;
+  availableDate?: string;
   sortBy?: CarrierSearchSort;
   limit: number;
   offset: number;
@@ -259,6 +260,13 @@ export class CarrierRepository extends BaseRepository<Carrier> {
       }));
     }
 
+    if (filters.availableDate) {
+      qb.andWhere(
+        "(activity.availableDates IS NOT NULL AND JSON_SEARCH(activity.availableDates, 'one', :availDate) IS NOT NULL)",
+        { availDate: filters.availableDate }
+      );
+    }
+
     if (filters.sortBy === 'experience') {
       qb.orderBy('carrier.foundedYear', 'ASC');
       qb.addOrderBy('carrier.rating', 'DESC');
@@ -285,5 +293,24 @@ export class CarrierRepository extends BaseRepository<Carrier> {
     }));
 
     return { total, items };
+  }
+
+  async countByAvailableDate(date: string): Promise<{ total: number; available: number }> {
+    const totalCount = await this.repository
+      .createQueryBuilder('carrier')
+      .where('carrier.isActive = :isActive', { isActive: true })
+      .getCount();
+
+    const availableCount = await this.repository
+      .createQueryBuilder('carrier')
+      .leftJoin('carrier.activity', 'activity')
+      .where('carrier.isActive = :isActive', { isActive: true })
+      .andWhere(
+        "(activity.availableDates IS NOT NULL AND JSON_SEARCH(activity.availableDates, 'one', :date) IS NOT NULL)",
+        { date }
+      )
+      .getCount();
+
+    return { total: totalCount, available: availableCount };
   }
 }

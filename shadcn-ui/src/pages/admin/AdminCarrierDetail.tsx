@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { tr } from 'date-fns/locale';
+import { formatLocation } from '@/utils/formatLocation';
 
 interface Document {
   id: string;
@@ -420,7 +421,7 @@ export default function AdminCarrierDetail() {
                     {carrierShipments.map((s) => (
                       <TableRow key={s.id}>
                         <TableCell className="font-mono text-xs text-gray-400">{s.id.slice(0, 8)}</TableCell>
-                        <TableCell className="text-sm text-slate-600">{s.origin} → {s.destination}</TableCell>
+                        <TableCell className="text-sm text-slate-600">{formatLocation(s.origin)} → {formatLocation(s.destination)}</TableCell>
                         <TableCell className="text-sm text-slate-600">
                           {s.customer ? `${s.customer.firstName} ${s.customer.lastName}` : '—'}
                         </TableCell>
@@ -500,7 +501,7 @@ export default function AdminCarrierDetail() {
                     </div>
                     {r.comment && <p className="text-sm text-slate-700 mb-1.5">{r.comment}</p>}
                     {r.shipment && (
-                      <p className="text-xs text-slate-400">📦 {r.shipment.origin} → {r.shipment.destination}</p>
+                      <p className="text-xs text-slate-400">📦 {formatLocation(r.shipment.origin)} → {formatLocation(r.shipment.destination)}</p>
                     )}
                   </CardContent>
                 </Card>

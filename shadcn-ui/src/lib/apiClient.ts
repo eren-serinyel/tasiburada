@@ -41,6 +41,8 @@ export async function apiClient(input: RequestInfo | URL, init: RequestInit = {}
     localStorage.removeItem(APP_CONFIG.tokenKey);
     localStorage.removeItem(APP_CONFIG.userTypeKey);
     localStorage.removeItem(APP_CONFIG.userIdKey);
+    localStorage.removeItem('currentUser');
+    localStorage.removeItem('currentUser_expiresAt');
 
     toast.error('Oturumunuz sona erdi');
 

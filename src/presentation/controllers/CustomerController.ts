@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { CustomerService } from '../../application/services/CustomerService';
+import { validatePassword } from '../../utils/validatePassword';
 import { 
   CreateCustomerDto, 
   UpdateCustomerDto, 
@@ -17,6 +18,11 @@ export class CustomerController {
   register = async (req: Request, res: Response): Promise<void> => {
     try {
       const createCustomerDto: CreateCustomerDto = req.body;
+      const passwordError = validatePassword(createCustomerDto.password);
+      if (passwordError) {
+        res.status(400).json({ success: false, message: passwordError });
+        return;
+      }
       const customer = await this.customerService.createCustomer(createCustomerDto);
 
       res.status(201).json({

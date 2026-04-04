@@ -8,7 +8,10 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Truck, User, Eye, EyeOff, ArrowRight, ShieldCheck, IdCard, Rocket, Brain, Award, AlertCircle } from 'lucide-react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 // import { mockCarriers, mockCustomers } from '@/lib/mockData';
-import { setSessionUser, getLastEmail, setLastEmail } from '@/lib/storage';
+import { getLastEmail, setLastEmail } from '@/lib/storage';
+import { useAuth } from '@/context/AuthContext';
+import { apiClient } from '@/lib/apiClient';
+import { useToast } from '@/hooks/use-toast';
 
 // API Base URL - using Vite proxy
 const API_BASE_URL = '/api/v1';
@@ -21,9 +24,12 @@ export default function Login() {
   const [userType, setUserType] = useState<'customer' | 'carrier'>('customer');
   const [userTypeManuallySelected, setUserTypeManuallySelected] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isCheckingEmail, setIsCheckingEmail] = useState(false);
   const [error, setError] = useState('');
   const [rememberEmail, setRememberEmail] = useState(true);
   const navigate = useNavigate();
+  const { login: authLogin } = useAuth();
+  const { toast } = useToast();
 
   useEffect(() => {
     const typeParam = searchParams.get('type');
@@ -34,6 +40,21 @@ export default function Login() {
     const last = getLastEmail();
     if (last) setEmail(last);
   }, [searchParams]);
+
+  const handleEmailBlur = async () => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) return;
+    setIsCheckingEmail(true);
+    try {
+      const res = await apiClient(`${API_BASE_URL}/auth/check-email?email=${encodeURIComponent(email)}`);
+      const json = await res.json();
+      if (json?.success && (json.userType === 'customer' || json.userType === 'carrier')) {
+        setUserType(json.userType);
+      }
+    } catch { /* ignore — sessiz hata */ } finally {
+      setIsCheckingEmail(false);
+    }
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,14 +70,14 @@ export default function Login() {
       const body = JSON.stringify({ email, password });
       const headers = { 'Content-Type': 'application/json' };
 
-      let response = await fetch(`${API_BASE_URL}${primaryEndpoint}`, { method: 'POST', headers, body });
+      let response = await apiClient(`${API_BASE_URL}${primaryEndpoint}`, { method: 'POST', headers, body });
       let result = await response.json();
       let resolvedType: 'customer' | 'carrier' = userType;
 
       // İlk endpoint başarısız ise diğerini dene
       if (!response.ok || !result.success) {
         try {
-          const fallbackRes = await fetch(`${API_BASE_URL}${fallbackEndpoint}`, { method: 'POST', headers, body });
+          const fallbackRes = await apiClient(`${API_BASE_URL}${fallbackEndpoint}`, { method: 'POST', headers, body });
           const fallbackResult = await fallbackRes.json();
           if (fallbackRes.ok && fallbackResult.success) {
             response = fallbackRes;
@@ -68,19 +89,13 @@ export default function Login() {
       }
       
       if (response.ok && result.success) {
-        // Başarılı giriş
-        // Token'ı localStorage'a kaydet
-        if (result.data.token) {
-          localStorage.setItem('authToken', result.data.token);
-        }
-        
-        // Kullanıcı bilgilerini session'a kaydet
+        // Başarılı giriş — AuthContext üzerinden oturumu başlat
+        let sessionUser;
         if (resolvedType === 'customer') {
-          setSessionUser({ ...result.data.customer, type: 'customer' }, 5 * 24 * 60 * 60 * 1000);
+          sessionUser = { ...result.data.customer, type: 'customer' as const };
         } else {
           const c = result.data.carrier;
-          // Frontend User tipine uyum için: name=companyName, surname='' olarak set edilir
-          const sessionCarrier = {
+          sessionUser = {
             id: c.id,
             name: c.companyName,
             surname: '',
@@ -88,11 +103,13 @@ export default function Login() {
             phone: c.phone || '',
             city: c.activityCity || '',
             type: 'carrier' as const,
-            createdAt: c.createdAt || new Date().toISOString(),
-          } as any;
-          setSessionUser(sessionCarrier, 5 * 24 * 60 * 60 * 1000);
+            createdAt: c.createdAt ? new Date(c.createdAt) : new Date(),
+            pictureUrl: null,
+          };
         }
-        
+
+        authLogin(result.data.token, sessionUser);
+
         // Remember email preference
         if (rememberEmail) {
           setLastEmail(email);
@@ -100,11 +117,8 @@ export default function Login() {
           setLastEmail(null);
         }
         
-        // Navbar'ı güncelle
-        window.dispatchEvent(new Event('userLogin'));
-        
         // Giriş yapıldı mesajı göster
-        setError('✅ Giriş yapıldı! Yönlendiriliyor...');
+        toast({ title: 'Giriş başarılı', description: 'Yönlendiriliyor...' });
         
         // Kısa bir gecikme sonrası yönlendir
         setTimeout(() => {
@@ -248,15 +262,23 @@ export default function Login() {
                     <Label htmlFor="email" className="text-sm font-semibold text-gray-700">
                       E-posta Adresi
                     </Label>
+                    <div className="relative">
                     <Input
                       id="email"
                       type="email"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
+                      onBlur={handleEmailBlur}
                       placeholder="ornek@email.com"
                       className="h-12 bg-white/50 backdrop-blur-sm border-white/30 focus:border-blue-500 focus:ring-blue-500/20 transition-all duration-300"
                       required
                     />
+                    {isCheckingEmail && (
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                        <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
+                      </div>
+                    )}
+                    </div>
                   </div>
                   
                   <div className="space-y-2">

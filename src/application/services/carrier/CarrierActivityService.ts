@@ -28,7 +28,14 @@ export class CarrierActivityService {
 
     const availableDates = Array.isArray(dto.availableDates)
       ? dto.availableDates.map(d => String(d).trim()).filter(Boolean)
-      : [];
+      : typeof dto.availableDates === 'string'
+        ? (() => {
+            try {
+              const parsed = JSON.parse(dto.availableDates as string);
+              return Array.isArray(parsed) ? parsed.map((d: unknown) => String(d).trim()).filter(Boolean) : [];
+            } catch { return []; }
+          })()
+        : [];
 
     const activity = await this.repository.upsertForCarrier(carrierId, {
       city: dto.city,

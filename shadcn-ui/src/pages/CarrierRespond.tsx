@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { apiClient } from '@/lib/apiClient';
 import { toast } from '@/components/ui/sonner';
+import { formatLocation } from '@/utils/formatLocation';
 
 const API_BASE_URL = '/api/v1';
 
@@ -32,6 +33,19 @@ export default function CarrierRespond() {
   const [eta, setEta] = useState('');
   const [note, setNote] = useState('');
   const [priceError, setPriceError] = useState('');
+  const [minOfferPrice, setMinOfferPrice] = useState(100);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await apiClient(`${API_BASE_URL}/config/public`);
+        const json = await res.json();
+        if (res.ok && json?.success && json?.data) {
+          setMinOfferPrice(Number(json.data.minOfferPrice ?? 100));
+        }
+      } catch { /* use default */ }
+    })();
+  }, []);
 
   useEffect(() => {
     if (!requestId) return;
@@ -59,8 +73,8 @@ export default function CarrierRespond() {
       toast.error('Geçerli bir fiyat giriniz.');
       return;
     }
-    if (priceNum < 100) {
-      toast.error('Minimum teklif tutarı ₺100 olmalıdır.');
+    if (priceNum < minOfferPrice) {
+      toast.error(`Minimum teklif tutarı ₺${minOfferPrice} olmalıdır.`);
       return;
     }
     setSubmitting(true);
@@ -111,7 +125,7 @@ export default function CarrierRespond() {
           <CardDescription>Müşteri talep özeti</CardDescription>
         </CardHeader>
         <CardContent className="space-y-2 text-sm">
-          <div><strong>Rota:</strong> {shipment.origin} → {shipment.destination}</div>
+          <div><strong>Rota:</strong> {formatLocation(shipment.origin)} → {formatLocation(shipment.destination)}</div>
           <div><strong>Tarih:</strong> {shipment.shipmentDate ? new Date(shipment.shipmentDate).toLocaleDateString('tr-TR') : '-'}</div>
           <div><strong>Taşıma Tipi:</strong> {shipment.transportType || '-'}</div>
           <div><strong>Yük Detayı:</strong> {shipment.loadDetails || '-'}</div>
@@ -135,11 +149,12 @@ export default function CarrierRespond() {
               onBlur={() => {
                 const v = parseFloat(price);
                 if (!price || isNaN(v) || v <= 0) setPriceError("Teklif fiyatı 0 TL'den büyük olmalıdır");
-                else if (v < 100) setPriceError('Minimum teklif tutarı ₺100\'dir');
+                else if (v < minOfferPrice) setPriceError(`Minimum teklif tutarı ₺${minOfferPrice}'dir`);
                 else setPriceError('');
               }}
             />
             {priceError && <p className="text-sm text-red-500 mt-1">{priceError}</p>}
+            <p className="text-xs text-slate-500 mt-1">Minimum teklif: ₺{minOfferPrice}</p>
           </div>
           <div>
             <label className="text-sm">Tahmini Süre (saat)</label>
@@ -151,7 +166,7 @@ export default function CarrierRespond() {
           </div>
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => navigate(-1)}>İptal</Button>
-            <Button onClick={submitOffer} disabled={submitting || !price}>
+            <Button onClick={submitOffer} disabled={submitting || !price || !!priceError}>
               {submitting ? 'Gönderiliyor...' : 'Gönder'}
             </Button>
           </div>

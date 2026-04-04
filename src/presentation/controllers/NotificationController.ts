@@ -26,7 +26,29 @@ export class NotificationController {
 
   markRead = async (req: Request, res: Response): Promise<void> => {
     try {
-      await this.notificationService.markRead(req.params.id);
+      const notificationId = req.params.id;
+      const userId = req.user?.customerId || req.user?.carrierId;
+      const userType = req.user?.type;
+
+      if (!userId || (userType !== 'customer' && userType !== 'carrier')) {
+        res.status(401).json({ success: false, message: 'Yetkisiz erişim.' });
+        return;
+      }
+
+      const notification = await this.notificationService.findById(notificationId);
+
+      if (!notification) {
+        res.status(404).json({ success: false, message: 'Bildirim bulunamadı.' });
+        return;
+      }
+
+      // Ownership kontrolü: bildirim bu kullanıcıya ait olmalı
+      if (notification.userId !== userId || notification.userType !== userType) {
+        res.status(403).json({ success: false, message: 'Bu bildirime erişim yetkiniz yok.' });
+        return;
+      }
+
+      await this.notificationService.markRead(notificationId);
       res.status(200).json({ success: true, message: 'Bildirim okundu olarak işaretlendi.' });
     } catch (error: any) {
       res.status(400).json({

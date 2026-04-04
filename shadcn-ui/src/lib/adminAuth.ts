@@ -5,12 +5,50 @@ const ADMIN_TOKEN_KEY = 'adminToken';
 const ADMIN_ID_KEY = 'adminId';
 const ADMIN_ROLE_KEY = 'adminRole';
 
+interface AdminTokenPayload {
+  id?: string;
+  role?: string;
+  type?: string;
+  exp?: number;
+}
+
+function decodeAdminToken(): AdminTokenPayload | null {
+  const token = getAdminToken();
+  if (!token) return null;
+  try {
+    const base64 = token.split('.')[1];
+    if (!base64) return null;
+    const normalized = base64.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=');
+    const jsonPayload = decodeURIComponent(
+      atob(padded)
+        .split('')
+        .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join('')
+    );
+    return JSON.parse(jsonPayload) as AdminTokenPayload;
+  } catch {
+    return null;
+  }
+}
+
 export function getAdminToken(): string | null {
   return typeof window !== 'undefined' ? localStorage.getItem(ADMIN_TOKEN_KEY) : null;
 }
 
 export function isAdminAuthenticated(): boolean {
-  return !!getAdminToken();
+  const payload = decodeAdminToken();
+  if (!payload) return false;
+  // Token süresi dolmuş mu?
+  if (payload.exp && payload.exp * 1000 < Date.now()) {
+    clearAdminAuth();
+    return false;
+  }
+  // Token admin tipine sahip olmalı
+  if (payload.type !== 'admin') return false;
+  // Rol tanımlı olmalı
+  if (!payload.role) return false;
+  return true;
 }
 
 export function setAdminAuth(token: string, adminId: string, role: string): void {
@@ -26,11 +64,17 @@ export function clearAdminAuth(): void {
 }
 
 export function getAdminRole(): string | null {
-  return typeof window !== 'undefined' ? localStorage.getItem(ADMIN_ROLE_KEY) : null;
+  const payload = decodeAdminToken();
+  if (!payload) return null;
+  if (payload.exp && payload.exp * 1000 < Date.now()) return null;
+  return payload.role ?? null;
 }
 
 export function getAdminId(): string | null {
-  return typeof window !== 'undefined' ? localStorage.getItem(ADMIN_ID_KEY) : null;
+  const payload = decodeAdminToken();
+  if (!payload) return null;
+  if (payload.exp && payload.exp * 1000 < Date.now()) return null;
+  return payload.id ?? null;
 }
 
 let adminRedirectInProgress = false;

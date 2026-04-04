@@ -10,6 +10,7 @@ import { Star, PackageOpen } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { apiClient } from '@/lib/apiClient';
 import { toast } from '@/components/ui/sonner';
+import { formatLocation } from '@/utils/formatLocation';
 
 const API_BASE_URL = '/api/v1';
 
@@ -165,7 +166,7 @@ export default function MyOffers() {
     for (const o of offers) {
       if (!seen.has(o.shipmentId)) {
         const s = o.shipment;
-        seen.set(o.shipmentId, s ? `${s.origin || '?'} → ${s.destination || '?'}` : o.shipmentId.slice(0, 8));
+        seen.set(o.shipmentId, s ? `${formatLocation(s.origin)} → ${formatLocation(s.destination)}` : o.shipmentId.slice(0, 8));
       }
     }
     return [...seen.entries()];

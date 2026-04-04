@@ -18,6 +18,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { PageHeader, EmptyState, ErrorState } from '@/components/admin/shared';
 import { Search, ChevronLeft, ChevronRight, HandCoins, ArrowRight, MoreHorizontal, Eye, User, Trash2 } from 'lucide-react';
+import { formatLocation } from '@/utils/formatLocation';
 
 type OfferStatusFilter = 'all' | 'pending' | 'accepted' | 'rejected' | 'withdrawn';
 
@@ -205,9 +206,9 @@ export default function AdminOffers() {
                           onClick={() => navigate(`/admin/ilanlar/${o.shipment!.id}`)}
                           className="flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-800 hover:underline"
                         >
-                          <span>{o.shipment.origin}</span>
+                          <span>{formatLocation(o.shipment.origin)}</span>
                           <ArrowRight className="h-3 w-3 text-slate-400" />
-                          <span>{o.shipment.destination}</span>
+                          <span>{formatLocation(o.shipment.destination)}</span>
                         </button>
                       ) : (
                         <span className="text-sm text-slate-400">—</span>

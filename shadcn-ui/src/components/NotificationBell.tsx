@@ -30,8 +30,8 @@ export default function NotificationBell() {
       if (res.ok && json?.success) {
         setUnreadCount(Number(json?.data?.unreadCount || 0));
       }
-    } catch {
-      // bell sessiz çalışmalı
+    } catch (error) {
+      console.error('[NotificationBell]:', error);
     }
   };
 
@@ -45,7 +45,8 @@ export default function NotificationBell() {
       } else {
         setNotifications([]);
       }
-    } catch {
+    } catch (error) {
+      console.error('[NotificationBell]:', error);
       setNotifications([]);
     } finally {
       setLoading(false);
@@ -71,8 +72,8 @@ export default function NotificationBell() {
         setNotifications(prev => prev.map(n => (n.id === notificationId ? { ...n, isRead: true } : n)));
         fetchUnreadCount();
       }
-    } catch {
-      // silent
+    } catch (error) {
+      console.error('[NotificationBell]:', error);
     }
   };
 
@@ -83,25 +84,22 @@ export default function NotificationBell() {
         setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
         setUnreadCount(0);
       }
-    } catch {
-      // silent
+    } catch (error) {
+      console.error('[NotificationBell]:', error);
     }
   };
 
   const getNotificationIcon = (type: string) => {
     switch (type) {
       case 'offer_received':
-      case 'NEW_OFFER':
         return <TrendingUp className="h-4 w-4 text-blue-500" />;
       case 'offer_accepted':
-      case 'OFFER_ACCEPTED':
         return <CheckCircle className="h-4 w-4 text-green-500" />;
       case 'offer_rejected':
-      case 'OFFER_REJECTED':
         return <X className="h-4 w-4 text-red-500" />;
       case 'shipment_update':
-      case 'SHIPMENT_STARTED':
-      case 'SHIPMENT_COMPLETED':
+      case 'shipment_started':
+      case 'shipment_completed':
         return <Package className="h-4 w-4 text-purple-500" />;
       case 'rating_received':
         return <Bell className="h-4 w-4 text-amber-500" />;

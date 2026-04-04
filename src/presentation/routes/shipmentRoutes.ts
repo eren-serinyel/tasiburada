@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { authenticateCarrier, authenticateCustomer } from '../middleware/auth';
+import { authenticateCarrier, authenticateCustomer, authenticateToken } from '../middleware/auth';
 import { ShipmentController } from '../controllers/ShipmentController';
 
 const router = Router();
@@ -9,7 +9,7 @@ router.post('/', authenticateCustomer, shipmentController.create);
 router.get('/my-shipments', authenticateCustomer, shipmentController.getMyShipments);
 router.get('/search', shipmentController.searchShipments);
 router.get('/pending', authenticateCarrier, shipmentController.getPending);
-router.get('/:id', shipmentController.getById);
+router.get('/:id', authenticateToken, shipmentController.getById);
 router.put('/:id', authenticateCustomer, shipmentController.update);
 router.put('/:id/assign-carrier', authenticateCustomer, shipmentController.assignCarrier);
 router.put('/:id/cancel', authenticateCustomer, shipmentController.cancel);

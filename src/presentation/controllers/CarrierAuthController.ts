@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { CarrierAuthService } from '../../application/services/carrier/CarrierAuthService';
+import { validatePassword } from '../../utils/validatePassword';
 import { CarrierProfileQueryService } from '../../application/services/carrier/CarrierProfileQueryService';
 
 export class CarrierAuthController {
@@ -8,6 +9,11 @@ export class CarrierAuthController {
 
   register = async (req: Request, res: Response) => {
     try {
+      const passwordError = validatePassword(req.body.password);
+      if (passwordError) {
+        res.status(400).json({ success: false, message: passwordError });
+        return;
+      }
       const { carrier, token, profileStatus } = await this.authService.register(req.body);
       res.status(201).json({
         success: true,

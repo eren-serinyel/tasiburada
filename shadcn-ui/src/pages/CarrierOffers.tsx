@@ -9,6 +9,7 @@ import { useNavigate } from 'react-router-dom';
 import { MapPin, Pencil, Trash2, CheckCircle2, XCircle } from 'lucide-react';
 import { apiClient } from '@/lib/apiClient';
 import { toast } from '@/components/ui/sonner';
+import { formatLocation } from '@/utils/formatLocation';
 
 const API_BASE_URL = '/api/v1';
 
@@ -129,7 +130,7 @@ export default function CarrierOffers() {
                 <CardHeader>
                   <CardTitle className="flex items-center justify-between">
                     <div className="flex items-center gap-2 text-sm text-gray-600">
-                      <MapPin className="h-4 w-4" /> {s ? `${s.origin} → ${s.destination}` : o.shipmentId}
+                      <MapPin className="h-4 w-4" /> {s ? `${formatLocation(s.origin)} → ${formatLocation(s.destination)}` : o.shipmentId}
                     </div>
                     <div className="flex items-center gap-2">
                       <Badge className={statusColor[o.status] || 'bg-gray-100 text-gray-800'}>{statusLabel[o.status] || o.status}</Badge>

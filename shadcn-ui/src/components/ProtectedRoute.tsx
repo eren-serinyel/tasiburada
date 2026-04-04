@@ -1,6 +1,7 @@
 import { ReactNode } from 'react';
 import { Navigate } from 'react-router-dom';
-import { getUserType, isAuthenticated, type UserType } from '@/lib/auth';
+import { useAuth } from '@/context/AuthContext';
+import { type UserType } from '@/lib/auth';
 
 interface ProtectedRouteProps {
   children: ReactNode;
@@ -8,11 +9,12 @@ interface ProtectedRouteProps {
 }
 
 export default function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps) {
-  if (!isAuthenticated()) {
+  const { isAuthenticated, userType } = useAuth();
+
+  if (!isAuthenticated) {
     return <Navigate to="/giris" replace />;
   }
 
-  const userType = getUserType();
   if (requiredRole && userType !== requiredRole) {
     return <Navigate to="/panel" replace />;
   }

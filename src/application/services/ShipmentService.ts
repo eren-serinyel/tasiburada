@@ -89,8 +89,44 @@ export class ShipmentService {
     return await this.shipmentRepository.findByCustomerIdWithOfferCount(customerId);
   }
 
-  async getShipmentById(shipmentId: string): Promise<Shipment | null> {
-    return await this.shipmentRepository.findByIdWithOffers(shipmentId);
+  async getShipmentById(
+    shipmentId: string,
+    requestingUserId: string,
+    requestingUserType: 'customer' | 'carrier' | 'admin'
+  ): Promise<Shipment> {
+    const shipment = await this.shipmentRepository.findByIdWithOffers(shipmentId);
+
+    if (!shipment) {
+      throw new NotFoundError('Taşıma talebi bulunamadı.');
+    }
+
+    // Admin her gönderiyi görebilir
+    if (requestingUserType === 'admin') {
+      return shipment;
+    }
+
+    // Müşteri: sadece kendi gönderisini görebilir
+    if (requestingUserType === 'customer') {
+      if (shipment.customerId !== requestingUserId) {
+        throw new ForbiddenError('Bu gönderiye erişim yetkiniz yok.');
+      }
+      return shipment;
+    }
+
+    // Nakliyeci: kendisine atanmış veya teklif verilebilir (PENDING/OFFER_RECEIVED) gönderileri görebilir
+    if (requestingUserType === 'carrier') {
+      const isAssigned = shipment.carrierId === requestingUserId;
+      const isOpenForOffers = (
+        shipment.status === ShipmentStatus.PENDING ||
+        shipment.status === ShipmentStatus.OFFER_RECEIVED
+      );
+      if (!isAssigned && !isOpenForOffers) {
+        throw new ForbiddenError('Bu gönderiye erişim yetkiniz yok.');
+      }
+      return shipment;
+    }
+
+    throw new ForbiddenError('Bu gönderiye erişim yetkiniz yok.');
   }
 
   async updateShipment(customerId: string, shipmentId: string, payload: UpdateShipmentPayload): Promise<Shipment> {
@@ -295,9 +331,18 @@ export class ShipmentService {
     return { shipments, total };
   }
 
-  async assignCarrier(shipmentId: string, carrierId: string): Promise<Shipment> {
+  async assignCarrier(
+    shipmentId: string,
+    carrierId: string,
+    requestingCustomerId: string
+  ): Promise<Shipment> {
     const shipment = await this.shipmentRepository.findById(shipmentId);
     if (!shipment) throw new NotFoundError('Taşıma bulunamadı');
+
+    // Ownership kontrolü
+    if (shipment.customerId !== requestingCustomerId) {
+      throw new ForbiddenError('Bu gönderiye nakliyeci atama yetkiniz yok.');
+    }
 
     const updated = await this.shipmentRepository.update(shipmentId, {
       carrierId,

@@ -1,10 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Truck, User, LogOut, Menu, X, ChevronDown, Home, Users, HelpCircle, Package, History, CreditCard, Calendar, TrendingUp } from 'lucide-react';
-import { User as UserType } from '@/lib/types';
-import { getSessionUser, clearSessionUser } from '@/lib/storage';
-import { clearAuth, getUserEmail, getUserId, getUserName, getUserType } from '@/lib/auth';
+import { useAuth } from '@/context/AuthContext';
 import NotificationBell from './NotificationBell';
 import {
   DropdownMenu,
@@ -15,82 +13,18 @@ import {
 } from '@/components/ui/dropdown-menu';
 
 export default function Navbar() {
-  const [user, setUser] = useState<UserType | null>(null);
-  const [userRole, setUserRole] = useState<'customer' | 'carrier' | null>(null);
+  const { user, userType: userRole, logout } = useAuth();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
 
-  useEffect(() => {
-    const syncUserState = () => {
-      const sessionUser = getSessionUser();
-      const tokenType = getUserType();
-      const tokenUserId = getUserId();
-      const tokenUserName = getUserName();
-      const tokenUserEmail = getUserEmail();
-
-      setUserRole(sessionUser?.type ?? tokenType);
-
-      if (sessionUser) {
-        const displayName = tokenUserName || `${sessionUser.name} ${sessionUser.surname}`.trim();
-        const [firstName = sessionUser.name, ...rest] = displayName.split(' ');
-
-        setUser({
-          ...sessionUser,
-          name: firstName,
-          surname: rest.join(' '),
-          email: tokenUserEmail || sessionUser.email,
-        });
-        return;
-      }
-
-      if (tokenType && tokenUserId) {
-        const [firstName = tokenUserName || 'Kullanici', ...rest] = (tokenUserName || 'Kullanici').split(' ');
-        setUser({
-          id: tokenUserId,
-          name: firstName,
-          surname: rest.join(' '),
-          email: tokenUserEmail,
-          phone: '',
-          city: '',
-          type: tokenType,
-          createdAt: new Date(),
-          pictureUrl: null,
-        });
-        return;
-      }
-
-      setUser(null);
-    };
-
-    syncUserState();
-
-    // localStorage değişikliklerini dinle
-    const handleStorageChange = () => {
-      syncUserState();
-    };
-
-    window.addEventListener('storage', handleStorageChange);
-    
-    // Manual localStorage değişiklikleri için custom event
-    window.addEventListener('userLogin', handleStorageChange);
-    
-    return () => {
-      window.removeEventListener('storage', handleStorageChange);
-      window.removeEventListener('userLogin', handleStorageChange);
-    };
-  }, []);
-
   const handleLogout = () => {
-    clearAuth();
-    clearSessionUser();
-    setUser(null);
-    setUserRole(null);
+    logout();
     navigate('/');
   };
 
-  const userDisplayName = getUserName() || [user?.name, user?.surname].filter(Boolean).join(' ').trim() || 'Kullanici';
-  const userDisplayEmail = getUserEmail() || user?.email || (user?.type === 'customer' ? 'Müşteri' : 'Nakliyeci');
+  const userDisplayName = [user?.name, user?.surname].filter(Boolean).join(' ').trim() || 'Kullanıcı';
+  const userDisplayEmail = user?.email || (user?.type === 'customer' ? 'Müşteri' : 'Nakliyeci');
 
   const renderAvatar = (variant: 'desktop' | 'mobile' = 'desktop') => {
     if (!user) return null;

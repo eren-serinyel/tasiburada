@@ -84,15 +84,41 @@ export default function Dashboard() {
   const navigate = useNavigate();
 
   const normalizeStatus = (status?: string): Shipment['status'] => {
-    switch (status) {
-      case 'matched': return 'matched';
-      case 'completed': return 'delivered';
-      case 'cancelled': return 'cancelled';
-      case 'in_transit': return 'matched';
-      case 'offer_received':
-      case 'pending':
-      default: return 'pending';
-    }
+    // Backend enum değerlerini olduğu gibi kullan, sadece küçük harfe normalize et
+    return ((status ?? 'pending').toLowerCase()) as Shipment['status'];
+  };
+
+  const statusConfig: Record<string, { label: string; color: string; bgColor: string }> = {
+    pending: {
+      label: 'Bekliyor',
+      color: 'text-yellow-700',
+      bgColor: 'bg-yellow-50 border-yellow-200',
+    },
+    offer_received: {
+      label: 'Teklif Alındı',
+      color: 'text-blue-700',
+      bgColor: 'bg-blue-50 border-blue-200',
+    },
+    matched: {
+      label: 'Nakliyeci Seçildi',
+      color: 'text-indigo-700',
+      bgColor: 'bg-indigo-50 border-indigo-200',
+    },
+    in_transit: {
+      label: 'Taşınıyor',
+      color: 'text-orange-700',
+      bgColor: 'bg-orange-50 border-orange-200',
+    },
+    completed: {
+      label: 'Tamamlandı',
+      color: 'text-green-700',
+      bgColor: 'bg-green-50 border-green-200',
+    },
+    cancelled: {
+      label: 'İptal Edildi',
+      color: 'text-red-700',
+      bgColor: 'bg-red-50 border-red-200',
+    },
   };
 
   const toUiShipment = (item: BackendShipment): Shipment => {
@@ -247,25 +273,12 @@ export default function Dashboard() {
   };
 
   const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'pending': return 'bg-yellow-100 text-yellow-800';
-      case 'accepted': return 'bg-blue-100 text-blue-800';
-      case 'in-transit': return 'bg-purple-100 text-purple-800';
-      case 'delivered': return 'bg-green-100 text-green-800';
-      case 'cancelled': return 'bg-red-100 text-red-800';
-      default: return 'bg-gray-100 text-gray-800';
-    }
+    const cfg = statusConfig[status];
+    return cfg ? `${cfg.bgColor} ${cfg.color}` : 'bg-gray-100 text-gray-800 border-gray-200';
   };
 
   const getStatusText = (status: string) => {
-    switch (status) {
-      case 'pending': return 'Bekliyor';
-      case 'accepted': return 'Kabul Edildi';
-      case 'in-transit': return 'Yolda';
-      case 'delivered': return 'Teslim Edildi';
-      case 'cancelled': return 'İptal Edildi';
-      default: return status;
-    }
+    return statusConfig[status]?.label ?? status;
   };
 
   // ── Nakliyeci Dashboard ─────────────────────────────────────────────────────
@@ -578,7 +591,7 @@ export default function Dashboard() {
           <Card className="rounded-xl shadow-sm border-l-4 border-purple-500">
             <CardContent className="pt-5 pb-4 px-5">
               <p className="text-xs text-gray-500 font-medium uppercase tracking-wide mb-1">Tamamlanan</p>
-              <p className="text-2xl font-bold text-gray-900">{shipments.filter(s => s.status === 'delivered').length}</p>
+              <p className="text-2xl font-bold text-gray-900">{shipments.filter(s => s.status === 'completed').length}</p>
             </CardContent>
           </Card>
         </div>

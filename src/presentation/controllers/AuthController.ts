@@ -1,8 +1,23 @@
 import { Request, Response } from 'express';
 import { AuthService } from '../../application/services/AuthService';
+import { validatePassword } from '../../utils/validatePassword';
 
 export class AuthController {
   private authService = new AuthService();
+
+  checkEmail = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { email } = req.query;
+      if (!email || typeof email !== 'string') {
+        res.status(400).json({ success: false, message: 'E-posta gerekli.' });
+        return;
+      }
+      const userType = await this.authService.checkEmailUserType(email.trim().toLowerCase());
+      res.status(200).json({ success: true, userType });
+    } catch (error: any) {
+      res.status(500).json({ success: false, message: error.message || 'Bir hata oluştu.' });
+    }
+  };
 
   requestPasswordReset = async (req: Request, res: Response): Promise<void> => {
     try {
@@ -32,6 +47,11 @@ export class AuthController {
       }
       if (userType !== 'customer' && userType !== 'carrier') {
         res.status(400).json({ success: false, message: 'userType "customer" veya "carrier" olmalıdır.' });
+        return;
+      }
+      const passwordError = validatePassword(newPassword);
+      if (passwordError) {
+        res.status(400).json({ success: false, message: passwordError });
         return;
       }
 

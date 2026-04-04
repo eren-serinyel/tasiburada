@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
@@ -25,8 +25,18 @@ export default function CarrierCalendar() {
   const [user, setUser] = useState<Carrier | null>(null);
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [availableDates, setAvailableDates] = useState<string[]>([]);
+  const [initialDates, setInitialDates] = useState<string[]>([]);
+  const [existingActivity, setExistingActivity] = useState<Record<string, unknown> | null>(null);
   const [calendarDays, setCalendarDays] = useState<CalendarDay[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
   const navigate = useNavigate();
+
+  const hasChanges = useMemo(() => {
+    const sorted = [...availableDates].sort().join(',');
+    const sortedInitial = [...initialDates].sort().join(',');
+    return sorted !== sortedInitial;
+  }, [availableDates, initialDates]);
 
   useEffect(() => {
     const storedUser = localStorage.getItem('currentUser');
@@ -43,21 +53,22 @@ export default function CarrierCalendar() {
 
     setUser(userData);
 
-    // Load availability: try backend first, fall back to localStorage
     (async () => {
       try {
-        const res = await apiClient(`/api/v1/carriers/${userData.id}`);
+        const res = await apiClient('/api/v1/carriers/me/activity');
         const json = await res.json();
-        if (res.ok && json?.success && Array.isArray(json.data?.activity?.availableDates)) {
-          setAvailableDates(json.data.activity.availableDates);
-          return;
+        if (res.ok && json?.success) {
+          const activity = json.data ?? {};
+          const dates: string[] = Array.isArray(activity.availableDates) ? activity.availableDates : [];
+          setAvailableDates(dates);
+          setInitialDates(dates);
+          setExistingActivity(activity);
         }
-      } catch {}
-      // localStorage fallback
-      try {
-        const savedDates = JSON.parse(localStorage.getItem(`availability_${userData.id}`) || '[]');
-        setAvailableDates(savedDates);
-      } catch {}
+      } catch {
+        toast.error('Takvim yüklenemedi.');
+      } finally {
+        setIsLoading(false);
+      }
     })();
   }, [navigate]);
 
@@ -117,20 +128,33 @@ export default function CarrierCalendar() {
   };
 
   const handleSave = async () => {
-    if (!user) return;
-    // Save to API
+    if (!user || isSaving) return;
+    setIsSaving(true);
     try {
-      await apiClient(`/api/v1/carriers/${user.id}/activity`, {
+      const body = {
+        city: (existingActivity?.city as string) ?? '',
+        district: existingActivity?.district,
+        address: existingActivity?.address,
+        serviceAreas: (existingActivity?.serviceAreas as string[]) ?? [],
+        availableDates,
+      };
+      const res = await apiClient('/api/v1/carriers/me/activity', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ availableDates }),
+        body: JSON.stringify(body),
       });
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        toast.error((json as { message?: string }).message ?? 'Kayıt başarısız.');
+        return;
+      }
+      setInitialDates([...availableDates]);
+      toast.success('Müsaitlik takvimi kaydedildi.');
     } catch {
-      // non-blocking: API may not yet support this field
+      toast.error('Kayıt sırasında bir hata oluştu.');
+    } finally {
+      setIsSaving(false);
     }
-    // Keep localStorage as cache
-    localStorage.setItem(`availability_${user.id}`, JSON.stringify(availableDates));
-    toast.success('Müsaitlik takvimi kaydedildi.');
   };
 
   const navigateMonth = (direction: 'prev' | 'next') => {
@@ -139,7 +163,7 @@ export default function CarrierCalendar() {
     setCurrentMonth(newMonth);
   };
 
-  if (!user) {
+  if (!user || isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[40vh]">
         <div className="h-8 w-8 animate-spin rounded-full border-2 border-gray-300 border-t-gray-800" />
@@ -253,9 +277,15 @@ export default function CarrierCalendar() {
       <div className="flex justify-end">
         <Button
           onClick={handleSave}
-          className="bg-blue-600 hover:bg-blue-700 px-6 py-2.5 text-sm font-semibold rounded-lg"
+          disabled={!hasChanges || isSaving}
+          className="bg-blue-600 hover:bg-blue-700 px-6 py-2.5 text-sm font-semibold rounded-lg disabled:opacity-60"
         >
-          Müsaitliği Kaydet
+          {isSaving ? (
+            <span className="flex items-center gap-2">
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+              Kaydediliyor...
+            </span>
+          ) : 'Müsaitliği Kaydet'}
         </Button>
       </div>
     </div>

@@ -1,16 +1,18 @@
 import 'reflect-metadata';
-import express from 'express';
+import express, { Request, Response } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
 import net from 'node:net';
 import path from 'node:path';
+import fs from 'node:fs';
 import { config } from 'dotenv';
 
 import { initializeDatabase, closeDatabase } from './infrastructure/database/data-source';
 import routes from './presentation/routes';
 import { AppError } from './domain/errors/AppError';
+import { authenticateToken } from './presentation/middleware/auth';
 
 // .env dosyasını yükle
 config();
@@ -80,7 +82,41 @@ app.use(cors({
 app.use(morgan('combined')); // HTTP request logger
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-app.use('/uploads', express.static(path.resolve(process.cwd(), 'uploads')));
+
+// Korumalı dosya servisi — /uploads dizini doğrudan erişime kapalı
+const SAFE_UPLOAD_FOLDERS = ['documents', 'pictures'] as const;
+
+app.get('/uploads/:folder/:filename', authenticateToken, (req: Request, res: Response): void => {
+  const { folder, filename } = req.params;
+
+  // İzin verilen klasör kontrolü
+  if (!SAFE_UPLOAD_FOLDERS.includes(folder as typeof SAFE_UPLOAD_FOLDERS[number])) {
+    res.status(403).json({ success: false, message: 'Erişim reddedildi.' });
+    return;
+  }
+
+  // Path traversal koruması
+  if (filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+    res.status(400).json({ success: false, message: 'Geçersiz dosya adı.' });
+    return;
+  }
+
+  const filePath = path.resolve(process.cwd(), 'uploads', folder, filename);
+
+  // Resolved path'in uploads dizini içinde olduğunu doğrula
+  const uploadsRoot = path.resolve(process.cwd(), 'uploads');
+  if (!filePath.startsWith(uploadsRoot + path.sep)) {
+    res.status(403).json({ success: false, message: 'Erişim reddedildi.' });
+    return;
+  }
+
+  if (!fs.existsSync(filePath)) {
+    res.status(404).json({ success: false, message: 'Dosya bulunamadı.' });
+    return;
+  }
+
+  res.sendFile(filePath);
+});
 
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,

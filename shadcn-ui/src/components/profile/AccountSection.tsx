@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -6,12 +6,15 @@ import { Label } from '@/components/ui/label';
 import { toast } from '@/components/ui/sonner';
 import { apiClient } from '@/lib/apiClient';
 import { setSessionUser } from '@/lib/storage';
-import { Save } from 'lucide-react';
+import { Camera, Save } from 'lucide-react';
 import type { SectionProps } from './types';
 import { API_BASE } from './helpers';
 
 export default function AccountSection({ user, onUserUpdate }: SectionProps) {
   const isCarrier = user.type === 'carrier';
+  const [pictureUrl, setPictureUrl] = useState<string | null>(null);
+  const [isUploadingPicture, setIsUploadingPicture] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [form, setForm] = useState({ name: user.name || '', surname: user.surname || '', email: user.email || '', phone: user.phone || '' });
   const [customerProfile, setCustomerProfile] = useState({ city: '', district: '', addressLine1: '', addressLine2: '' });
   const [customerProfileInitial, setCustomerProfileInitial] = useState({ city: '', district: '', addressLine1: '', addressLine2: '' });
@@ -34,6 +37,7 @@ export default function AccountSection({ user, onUserUpdate }: SectionProps) {
         setForm(updatedForm);
         setCustomerProfile(updatedAddr);
         setCustomerProfileInitial(updatedAddr);
+        if (data.pictureUrl) setPictureUrl(data.pictureUrl);
       } catch (err: any) {
         toast.error(err?.message || 'Profil bilgileri alınamadı.');
       } finally {
@@ -50,6 +54,26 @@ export default function AccountSection({ user, onUserUpdate }: SectionProps) {
     const addrDirty = customerProfile.city !== customerProfileInitial.city || customerProfile.district !== customerProfileInitial.district || customerProfile.addressLine1 !== customerProfileInitial.addressLine1 || customerProfile.addressLine2 !== customerProfileInitial.addressLine2;
     setDirty(baseDirty || addrDirty);
   }, [form, user, customerProfile, customerProfileInitial, isCarrier]);
+
+  const handlePictureChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsUploadingPicture(true);
+    try {
+      const formData = new FormData();
+      formData.append('picture', file);
+      const res = await apiClient(`${API_BASE}/customers/me/picture`, { method: 'POST', body: formData });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json?.success) throw new Error(json?.message || 'Fotoğraf yüklenemedi.');
+      setPictureUrl(json.data?.pictureUrl ?? null);
+      toast.success('Profil fotoğrafı güncellendi.');
+    } catch (err: any) {
+      toast.error(err?.message || 'Fotoğraf yüklenemedi.');
+    } finally {
+      setIsUploadingPicture(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
 
   const save = async () => {
     if (!dirty) { toast.info('Kaydedilecek değişiklik bulunamadı.'); return; }
@@ -86,6 +110,44 @@ export default function AccountSection({ user, onUserUpdate }: SectionProps) {
         <CardDescription>{isCarrier ? 'Temel iletişim bilgilerinizi güncelleyin.' : 'Profil ve adres bilgilerinizi güncelleyin.'}</CardDescription>
       </CardHeader>
       <CardContent>
+        {!isCarrier && (
+          <div className="flex items-center gap-4 mb-6 pb-6 border-b border-slate-100">
+            <div className="relative">
+              {pictureUrl ? (
+                <img
+                  src={pictureUrl}
+                  alt="Profil fotoğrafı"
+                  className="w-16 h-16 rounded-full object-cover border-2 border-slate-200"
+                />
+              ) : (
+                <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center border-2 border-slate-200">
+                  <Camera className="h-6 w-6 text-slate-400" />
+                </div>
+              )}
+            </div>
+            <div>
+              <p className="text-sm font-medium text-slate-700 mb-1">Profil Fotoğrafı</p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={isUploadingPicture}
+                onClick={() => fileInputRef.current?.click()}
+                className="h-8 text-xs"
+              >
+                <Camera className="h-3.5 w-3.5 mr-1.5" />
+                {isUploadingPicture ? 'Yükleniyor...' : 'Fotoğraf Değiştir'}
+              </Button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handlePictureChange}
+              />
+            </div>
+          </div>
+        )}
         {isLoading && !isCarrier && <div className="mb-4 text-sm text-slate-500">Profil bilgileri yükleniyor...</div>}
         <div className="grid md:grid-cols-2 gap-6">
           <div><Label>Ad</Label><Input value={form.name} onChange={(e) => setForm(v => ({ ...v, name: e.target.value }))} className="mt-1 border border-slate-200 rounded-lg bg-slate-50 focus-visible:ring-2 focus-visible:ring-blue-500 placeholder:text-slate-400" placeholder="Adınız" /></div>

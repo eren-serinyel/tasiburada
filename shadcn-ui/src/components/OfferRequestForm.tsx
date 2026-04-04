@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -55,6 +55,36 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
     photos: [] as File[],
     note: '',
   });
+
+  const [availabilitySummary, setAvailabilitySummary] = useState<{ total: number; available: number } | null>(null);
+  const [isCheckingAvailability, setIsCheckingAvailability] = useState(false);
+  const availabilityTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!form.date) {
+      setAvailabilitySummary(null);
+      return;
+    }
+    if (availabilityTimerRef.current) clearTimeout(availabilityTimerRef.current);
+    setIsCheckingAvailability(true);
+    setAvailabilitySummary(null);
+    availabilityTimerRef.current = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/v1/carriers/availability-summary?date=${encodeURIComponent(form.date)}`);
+        const json = await res.json();
+        if (res.ok && json?.success) {
+          setAvailabilitySummary(json.data);
+        }
+      } catch {
+        // silently ignore
+      } finally {
+        setIsCheckingAvailability(false);
+      }
+    }, 400);
+    return () => {
+      if (availabilityTimerRef.current) clearTimeout(availabilityTimerRef.current);
+    };
+  }, [form.date]);
 
   const ALT_OPTIONS_BY_TRANSPORT: Record<string, string[]> = {
     'evden-eve': ['1+1 ev','2+1 ev','3+1 ev','4+1 ev'],
@@ -479,6 +509,18 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
                 </div>
                 {isDateTooFar && (
                   <div style={{ fontSize: '13px', color: '#DC2626', marginTop: '6px' }}>30 günden ileri bir tarihte gün seçemezsiniz.</div>
+                )}
+                {!isDateTooFar && (isCheckingAvailability || availabilitySummary) && (
+                  <div style={{ fontSize: '13px', marginTop: '6px' }}>
+                    {isCheckingAvailability ? (
+                      <span style={{ color: '#64748B' }}>Müsaitlik kontrol ediliyor...</span>
+                    ) : availabilitySummary ? (
+                      <span style={{ color: availabilitySummary.available > 0 ? '#16A34A' : '#DC2626' }}>
+                        {availabilitySummary.available} nakliyeci bu tarihte müsait
+                        {availabilitySummary.available === 0 && ' — başka bir tarih seçmeyi deneyin'}
+                      </span>
+                    ) : null}
+                  </div>
                 )}
               </div>
 

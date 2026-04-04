@@ -6,6 +6,11 @@ import { Check, Star, Phone, ChevronRight, User } from 'lucide-react';
 import { apiClient } from '@/lib/apiClient';
 import { toast } from '@/components/ui/sonner';
 import { getUserType, getUserId } from '@/lib/auth';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel,
+  AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
+  AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 const API_BASE_URL = '/api/v1';
 
@@ -89,6 +94,7 @@ export default function ShipmentDetail() {
   const [shipment, setShipment] = useState<BackendShipment | null>(null);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
 
   const fetchShipment = useCallback(async () => {
     if (!id) return;
@@ -150,8 +156,7 @@ export default function ShipmentDetail() {
 
   const handleCancel = async () => {
     if (!shipment) return;
-    const confirmed = window.confirm('İlanı iptal etmek istediğinizden emin misiniz? Bu işlem geri alınamaz.');
-    if (!confirmed) return;
+    setCancelDialogOpen(false);
     setUpdating(true);
     try {
       const res = await apiClient(`${API_BASE_URL}/shipments/${shipment.id}/cancel`, { method: 'PUT' });
@@ -438,7 +443,7 @@ export default function ShipmentDetail() {
                   <button onClick={() => navigate(`/ilan-duzenle/${shipment.id}`)} style={{ width: '100%', height: '36px', background: 'white', color: '#374151', border: '0.5px solid #E2E8F0', borderRadius: '8px', fontSize: '13px', fontWeight: 500, cursor: 'pointer' }}>
                     İlanı Düzenle
                   </button>
-                  <button disabled={updating} onClick={handleCancel} style={{ width: '100%', height: '36px', background: 'white', color: '#DC2626', border: '0.5px solid #FECACA', borderRadius: '8px', fontSize: '13px', fontWeight: 500, cursor: 'pointer' }}>
+                  <button disabled={updating} onClick={() => setCancelDialogOpen(true)} style={{ width: '100%', height: '36px', background: 'white', color: '#DC2626', border: '0.5px solid #FECACA', borderRadius: '8px', fontSize: '13px', fontWeight: 500, cursor: 'pointer' }}>
                     İptal Et
                   </button>
                 </>
@@ -554,6 +559,23 @@ export default function ShipmentDetail() {
         )}
 
       </div>
+
+      <AlertDialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>İlanı İptal Et</AlertDialogTitle>
+            <AlertDialogDescription>
+              İlanı iptal etmek istediğinizden emin misiniz? Bu işlem geri alınamaz.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Vazgeç</AlertDialogCancel>
+            <AlertDialogAction onClick={handleCancel} className="bg-red-600 hover:bg-red-700">
+              Evet, İptal Et
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

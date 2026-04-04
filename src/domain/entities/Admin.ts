@@ -11,6 +11,12 @@ export class Admin {
   @Column({ type: 'varchar', length: 255 })
   passwordHash: string;
 
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  firstName: string | null;
+
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  lastName: string | null;
+
   @Column({ type: 'varchar', length: 20, default: 'admin' })
   role: 'admin' | 'superadmin';
 
@@ -19,6 +25,9 @@ export class Admin {
 
   @Column({ type: 'datetime', nullable: true })
   lastLogin: Date;
+
+  @Column({ type: 'datetime', nullable: true })
+  deletedAt: Date | null;
 
   @CreateDateColumn()
   createdAt: Date;

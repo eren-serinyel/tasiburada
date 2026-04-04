@@ -15,6 +15,7 @@ export interface CarrierSearchQuery {
 	searchText?: string;
 	serviceCity?: string;
 	serviceDistrict?: string;
+	availableDate?: string;
 	sortBy?: CarrierSearchSort;
 	limit?: number;
 	offset?: number;
@@ -55,6 +56,10 @@ export class CarrierSearchService {
 			offset: filters.offset,
 			items: items.map(item => this.mapToDto(item))
 		};
+	}
+
+	async getAvailabilitySummary(date: string): Promise<{ total: number; available: number }> {
+		return this.carrierRepository.countByAvailableDate(date);
 	}
 
 	private normalizeFilters(query: CarrierSearchQuery | Record<string, unknown>): CarrierSearchFilters {
@@ -136,6 +141,7 @@ export class CarrierSearchService {
 			minProfileCompletion: toInt((query as any).minProfileCompletion),
 			minCapacityKg: toInt((query as any).minCapacityKg),
 			searchText: toText((query as any).searchText),
+			availableDate: toText((query as any).availableDate),
 			sortBy: this.parseSort((query as any).sortBy),
 			limit,
 			offset

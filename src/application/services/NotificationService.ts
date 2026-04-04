@@ -31,6 +31,10 @@ export class NotificationService {
     await this.notificationRepository.markAsRead(id);
   }
 
+  async findById(id: string): Promise<import('../../domain/entities/Notification').Notification | null> {
+    return this.notificationRepository.findById(id);
+  }
+
   async markAllRead(userId: string, userType: 'customer' | 'carrier'): Promise<void> {
     await this.notificationRepository.markAllAsRead(userId, userType);
   }

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
-import { DollarSign, TrendingUp, Briefcase } from 'lucide-react';
+import { DollarSign, Briefcase } from 'lucide-react';
 import { apiClient } from '@/lib/apiClient';
 import {
   BarChart,
@@ -159,9 +159,6 @@ export default function Earnings() {
           <p className="text-sm text-white/70">Toplam Kazanç</p>
           <p className="text-[2.5rem] font-extrabold text-white leading-tight mt-1">
             ₺{fmt(periodTotal)}
-          </p>
-          <p className="text-white/80 text-sm mt-2 flex items-center gap-1">
-            <TrendingUp className="h-3.5 w-3.5" /> ↑ %12 geçen aya göre
           </p>
         </div>
 

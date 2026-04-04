@@ -1,16 +1,19 @@
 import * as bcrypt from 'bcryptjs';
+import * as crypto from 'crypto';
 import { CustomerRepository } from '../../infrastructure/repositories/CustomerRepository';
 import { CarrierRepository } from '../../infrastructure/repositories/CarrierRepository';
 import { AppDataSource } from '../../infrastructure/database/data-source';
 import { Customer } from '../../domain/entities/Customer';
 import { Carrier } from '../../domain/entities/Carrier';
+import { emailService } from './EmailService';
 
 export class AuthService {
   private customerRepository = new CustomerRepository();
   private carrierRepository = new CarrierRepository();
 
   private generateToken(): string {
-    return Math.random().toString(36).slice(2, 8).toUpperCase();
+    // 32 byte = 64 hex karakter — kriptografik olarak güvenli
+    return crypto.randomBytes(32).toString('hex');
   }
 
   private getRepository(userType: 'customer' | 'carrier') {
@@ -31,14 +34,24 @@ export class AuthService {
     }
 
     const resetToken = this.generateToken();
-    const resetTokenExpiry = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+    const resetTokenExpiry = new Date(Date.now() + 60 * 60 * 1000); // 60 dakika
 
     await repo.update(user.id, {
       resetToken,
       resetTokenExpiry,
     } as any);
 
-    return { success: true, resetToken, message: 'Token oluşturuldu.' };
+    // Geliştirme ortamında token konsola basılır (test edilebilirlik için)
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`[DEV] Reset token (${userType} — ${email}):`, resetToken);
+    }
+
+    // E-posta gönderimini arka planda yap (fire-and-forget)
+    emailService.sendPasswordReset(email, resetToken, userType).catch((err) => {
+      console.error('[EmailService] sendPasswordReset failed:', err);
+    });
+
+    return { success: true, message: 'Şifre sıfırlama talebi alındı. E-posta adresinizi kontrol edin.' };
   }
 
   async resetPassword(token: string, newPassword: string, userType: 'customer' | 'carrier') {
@@ -105,6 +118,24 @@ export class AuthService {
       verificationToken,
     } as any);
 
-    return { success: true, verificationToken, message: 'Yeni doğrulama kodu oluşturuldu.' };
+    // Geliştirme ortamında token konsola basılır (test edilebilirlik için)
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`[DEV] Verification token (${userType} — ${email}):`, verificationToken);
+    }
+
+    // E-posta gönderimini arka planda yap (fire-and-forget)
+    emailService.sendVerificationEmail(email, verificationToken, userType).catch((err) => {
+      console.error('[EmailService] sendVerificationEmail failed:', err);
+    });
+
+    return { success: true, message: 'Yeni doğrulama kodu oluşturuldu. E-posta adresinizi kontrol edin.' };
+  }
+
+  async checkEmailUserType(email: string): Promise<'customer' | 'carrier' | null> {
+    const customer = await this.customerRepository.findByEmail(email);
+    if (customer) return 'customer';
+    const carrier = await this.carrierRepository.findByEmail(email);
+    if (carrier) return 'carrier';
+    return null;
   }
 }

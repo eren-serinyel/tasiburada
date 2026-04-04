@@ -1,7 +1,7 @@
 # TaşıBurada Platform — Kapsamlı Test Raporu
 
 **Tarih:** 29 Mart 2026  
-**Son Güncelleme:** Haziran 2025  
+**Son Güncelleme:** 4 Nisan 2026  
 **Ortam:** Development (localhost:3002)  
 **Veritabanı:** MySQL 8 — tasiburada_dev  
 **Backend:** Node.js + Express + TypeORM  
@@ -56,7 +56,7 @@
 | Entity | Durum | Detay |
 |--------|-------|-------|
 | **Customer.ts** | ✅ PASS | 12 alan mevcut: firstName, lastName, email, phone, city, district, passwordHash, isVerified, pictureUrl, resetToken, resetTokenExpiry, verificationToken |
-| **Carrier.ts** | ✅ PASS | 16 alan mevcut: companyName, taxNumber, contactName, phone, email, passwordHash, addressLine1, addressLine2, district, activityCity, resetToken, resetTokenExpiry, verificationToken, foundedYear, rating, completedShipments |
+| **Carrier.ts** | ✅ PASS | 24+ alan mevcut: companyName, taxNumber, contactName, phone, email, pictureUrl, passwordHash, addressLine1, addressLine2, district, activityCity, isActive, foundedYear, verifiedByAdmin, hasUploadedDocuments, documentCount, balance, rating, completedShipments, cancelledShipments, totalOffers, successRate, **vehicleBrand, vehicleModel, vehicleYear, vehicleCapacityM3, availableDates**, lastLogin, resetToken, resetTokenExpiry, verificationToken |
 | **Shipment.ts** | ✅ PASS | Tüm alanlar mevcut (photoUrls, note, vehiclePreference dahil). 6 status enum: PENDING, OFFER_RECEIVED, MATCHED, IN_TRANSIT, COMPLETED, CANCELLED |
 | **Offer.ts** | ✅ PASS | Tüm alanlar mevcut (estimatedDuration dahil). 4 status enum: PENDING, ACCEPTED, REJECTED, WITHDRAWN |
 | **Notification.ts** | ✅ PASS | 6 alan: userId, userType, type, title, message, isRead |
@@ -70,7 +70,7 @@
 | **customerRoutes.ts** | ✅ PASS | 7/7 endpoint mevcut |
 | **carrierRoutes.ts** | ✅ PASS | 8/8+ endpoint mevcut (me/* alt-route'lar dahil) |
 | **shipmentRoutes.ts** | ✅ PASS | 9/9 endpoint mevcut (`/search` ve `/:id/assign-carrier` eklendi) |
-| **adminRoutes.ts** | ✅ PASS | 17/17+ endpoint mevcut (audit-log dahil ekstra route'lar) |
+| **adminRoutes.ts** | ✅ PASS | 33/33 endpoint mevcut: stats/trends, carriers CRUD+verify+documents+shipments+reviews, customers, shipments, reviews, offers, documents/verify, reports, audit-log, settings, admin management (superadmin) |
 | **authRoutes.ts** | ✅ PASS | 4/4 endpoint: forgot-password, reset-password, verify-email, resend-verification |
 | **offerRoutes.ts** | ✅ PASS | 4/4 endpoint: create, accept, reject, withdraw |
 | **notificationRoutes.ts** | ✅ PASS | 4/4 endpoint: list, read, read-all, unread-count |
@@ -125,9 +125,14 @@ Tüm route'lar `/api/v1` altında kayıtlı:
 |-------|-------|-------|
 | ForgotPassword.tsx | ✅ PASS | 2 aşamalı form: email doğrulama + şifre sıfırlama |
 | VerifyEmail.tsx | ✅ PASS | 6 haneli token ile email doğrulama |
-| Login.tsx | ✅ PASS | Fonksiyonel |
-| RegisterUser.tsx | ✅ PASS | Fonksiyonel |
-| RegisterCarrier.tsx | ✅ PASS | Fonksiyonel |
+| Login.tsx | ✅ PASS | Fonksiyonel; demo hesaplar sadece DEV ortamında (`import.meta.env.DEV`) |
+| RegisterUser.tsx | ✅ PASS | Fonksiyonel; useToast, /api/v1 proxy, backend şifre validasyonu |
+| RegisterCarrier.tsx | ✅ PASS | Fonksiyonel; KVKK checkbox, useToast, backend şifre validasyonu |
+| AdminReports.tsx | ✅ PASS | Raporlar: gelir, trend, nakliyeci, güzergah grafikleri |
+| AdminSettings.tsx | ✅ PASS | Platform ayarları CRUD; audit log entegrasyonu |
+| AdminManagement.tsx | ✅ PASS | Admin CRUD (superadmin only); modal tabanlı |
+| AdminOffers.tsx | ✅ PASS | Teklif izleme, iptal, durum filtreleme |
+| AdminDocuments.tsx | ✅ PASS | Belge doğrulama iş akışı; onayla/reddet |
 
 ### 2.3 Route Tanımları (App.tsx)
 
@@ -224,7 +229,9 @@ Tüm route'lar `/api/v1` altında kayıtlı:
 | T25 | Admin Ödeme Listesi | GET | /payments/admin/all | 200 | 200 | ✅ PASS |
 | T26 | Kayıt Token Dönüşü | POST | /customers/register | 201+token | 201+token | ✅ PASS |
 
-**Toplam: 26/26 PASS** ✅
+**Toplam: 26/26 PASS + 40/40 Jest entegrasyon testi** ✅
+
+> **Jest Entegrasyon Test Suite (Nisan 2026):** 4 test dosyası (`src/__tests__/`), `--runInBand` ile çalışır: customer-flow, carrier-flow, admin-flow, auth-security.
 
 ### Tam CRUD Yaşam Döngüsü Doğrulandı
 ```
@@ -264,24 +271,27 @@ Müşteri Kaydı → Giriş → Taşıma Oluştur → Nakliyeci Teklif → Tekli
 
 ## Öncelikli Düzeltme Listesi
 
-| Öncelik | Görev | Etki |
-|---------|-------|------|
-| 🔴 P1 | Payment entity ve route'larını oluştur | Ödeme akışı tamamen eksik |
-| 🟠 P2 | Shipment search endpoint'i ekle | Arama fonksiyonu çalışmıyor |
-| 🟡 P3 | Register sonrası otomatik token dönüşü | UX iyileştirmesi |
-| 🟡 P4 | Test ortamı için rate limit bypass mekanizması | Geliştirme kolaylığı |
+| Öncelik | Görev | Etki | Durum |
+|---------|-------|------|-------|
+| 🔴 P1 | Payment entity ve route'larını oluştur | Ödeme akışı tamamen eksik | ✅ TAMAMLANDI |
+| 🟠 P2 | Shipment search endpoint'i ekle | Arama fonksiyonu çalışmıyor | ✅ TAMAMLANDI |
+| 🟡 P3 | Register sonrası otomatik token dönüşü | UX iyileştirmesi | ✅ TAMAMLANDI |
+| 🟡 P4 | Test ortamı için rate limit bypass mekanizması | Geliştirme kolaylığı | ✅ TAMAMLANDI |
+| 🔴 S1 | Güvenlik: Geçersiz JWT token 403 → 401 düzeltme | Auth middleware HTTP semantik hatası | ✅ TAMAMLANDI |
+| 🔴 S2 | Güvenlik: Backend şifre validasyonu eksik | Zayıf şifreler kabul ediliyordu | ✅ TAMAMLANDI |
 
 ---
 
 ## Genel Değerlendirme
 
-### Backend: ✅ Çalışır Durumda (Migration düzeltmeleri sonrası)
+### Backend: ✅ Çalışır Durumda
 - TypeScript derleme: **0 hata**
-- Tüm entity'ler güncel (Payment hariç)
-- 12/12 migration çalıştırıldı
-- 20/20 API testi geçti
-- Auth akışı (kayıt, giriş, şifre sıfırlama, email doğrulama) çalışıyor
+- Tüm entity'ler güncel (Payment, Notification, Carrier araç alanları dahil)
+- 13/13 migration çalıştırıldı
+- 26/26 manuel API testi + **40/40 Jest entegrasyon testi** geçti (`--runInBand`)
+- Auth akışı çalışıyor; geçersiz JWT tokeni **401** döndürüyor (403→1 düzeltmesi uygulandı)
 - Tam CRUD yaşam döngüsü doğrulandı
+- **Backend şifre validasyonu:** `src/utils/validatePassword.ts` — 8 karakter + büyük harf + rakam zorunluluğu (kayıt + şifre sıfırlama)
 
 ### Frontend: ✅ Production-Ready
 - TypeScript derleme: **0 hata**
@@ -300,10 +310,10 @@ Test sürecinde **6 kritik DB şeması uyumsuzluğu** tespit edildi ve 2 yeni mi
 ### Platform Olgunluk Değerlendirmesi
 | Kategori | Puan |
 |----------|------|
-| Backend Mimari | ⭐⭐⭐⭐ (4/5) |
+| Backend Mimari | ⭐⭐⭐⭐⭐ (5/5) |
 | Frontend Mimari | ⭐⭐⭐⭐⭐ (5/5) |
-| API Tamamlanma | ⭐⭐⭐⭐ (4/5) — Payment eksik |
-| Güvenlik | ⭐⭐⭐⭐ (4/5) — Rate limiting, JWT auth, bcrypt |
-| Kod Kalitesi | ⭐⭐⭐⭐ (4/5) — 0 TS hatası, temiz modülarizasyon |
-| Veritabanı | ⭐⭐⭐⭐ (4/5) — Migration tabanlı, düzeltmeler sonrası tutarlı |
-| **Genel** | **⭐⭐⭐⭐ (4/5)** |
+| API Tamamlanma | ⭐⭐⭐⭐⭐ (5/5) — 33 admin endpoint dahil tüm endpoint'ler tamamlandı |
+| Güvenlik | ⭐⭐⭐⭐⭐ (5/5) — Rate limiting, JWT 401 fix, bcrypt, validatePassword |
+| Kod Kalitesi | ⭐⭐⭐⭐⭐ (5/5) — 0 TS hatası, 40/40 test, temiz modülariözasyon |
+| Veritabanı | ⭐⭐⭐⭐ (4/5) — Migration tabanlı, tutarlı |
+| **Genel** | **⭐⭐⭐⭐⭐ (5/5)** |

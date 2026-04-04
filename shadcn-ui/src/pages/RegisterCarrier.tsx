@@ -21,6 +21,8 @@ import { setSessionUser } from '@/lib/storage';
 import { TURKISH_CITIES } from '@/lib/constants';
 import MultiSelect from '@/components/ui/multi-select';
 import { useToast } from '@/hooks/use-toast';
+import { cn } from '@/lib/utils';
+import { apiClient } from '@/lib/apiClient';
 // import { cities as sharedCities, VEHICLE_TYPES as VEHICLE_TYPES_MAP, SPECIAL_SERVICES, ADDITIONAL_SERVICE_OPTIONS } from '@/lib/carrierFormConstants';
 import {
   Select,
@@ -46,6 +48,13 @@ export default function RegisterCarrier() {
   const [isLoading, setIsLoading] = useState(false);
   const [isGeoLoading, setIsGeoLoading] = useState(false);
   const [termsAccepted, setTermsAccepted] = useState(false);
+  const [selectedVehicleTypeIds, setSelectedVehicleTypeIds] = useState<number[]>([]);
+
+  const toggleVehicleType = (id: number) => {
+    setSelectedVehicleTypeIds((prev) =>
+      prev.includes(id) ? prev.filter((v) => v !== id) : [...prev, id]
+    );
+  };
 
   const [formData, setFormData] = useState({
     // 1. Şirket Bilgileri
@@ -92,6 +101,9 @@ export default function RegisterCarrier() {
   const handleChange = (field: string, value: any) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
+
+  const currentYear = new Date().getFullYear();
+  const years = Array.from({ length: 36 }, (_, i) => currentYear - i);
   const handleVehicleCapacityChange = (typeKey: string, value: string) => {
     setFormData((prev) => ({
       ...prev,
@@ -111,7 +123,7 @@ export default function RegisterCarrier() {
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/vehicle-types`);
+        const res = await apiClient(`${API_BASE_URL}/vehicle-types`);
         const json = await res.json();
         if (res.ok && json?.success && Array.isArray(json.data)) {
           setVehicleTypesList(json.data);
@@ -145,6 +157,10 @@ export default function RegisterCarrier() {
     if (!isValidPassword(formData.password)) return showValidationError('Şifre en az 8 karakter, 1 büyük harf ve 1 sayı içermelidir.');
     if (formData.password !== formData.confirmPassword) return showValidationError('Şifre Tekrar, şifreyle birebir aynı olmalıdır.');
     if (!termsAccepted) return showValidationError('KVKK ve Kullanım Koşullarını kabul etmelisiniz.');
+    if (selectedVehicleTypeIds.length === 0) {
+      toast({ title: 'Hata', description: 'En az bir araç tipi seçiniz.', variant: 'destructive' });
+      return;
+    }
 
     setIsLoading(true);
     await new Promise(r => setTimeout(r, 300));
@@ -152,13 +168,12 @@ export default function RegisterCarrier() {
       const startYearNum = Number(formData.startYear) || new Date().getFullYear();
 
       // 1) Backend'e kayıt
-      // Araç seçimi kaldırıldı, boş gönderiyoruz
+      const vehicleTypeIds = selectedVehicleTypeIds;
       const selectedVehicles: any[] = [];
-      const vehicleTypeIds: any[] = [];
 
       const normalizePhone = (phone: string) => phone.replace(/\s|-/g, '');
 
-      const registerRes = await fetch(`${API_BASE_URL}/carriers/register`, {
+      const registerRes = await apiClient(`${API_BASE_URL}/carriers/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -190,7 +205,7 @@ export default function RegisterCarrier() {
       let c = carrierFromRegister as any;
 
       if (!token || !c?.id) {
-        const loginRes = await fetch(`${API_BASE_URL}/carriers/login`, {
+        const loginRes = await apiClient(`${API_BASE_URL}/carriers/login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email: formData.email, password: formData.password })
@@ -252,12 +267,9 @@ export default function RegisterCarrier() {
         localStorage.setItem(`carrier_ops_${sessionCarrier.id}`, JSON.stringify(opsDraft));
       } catch { }
 
-      localStorage.setItem(`fastRegPending_${sessionCarrier.id}`, '1');
-      localStorage.setItem('profileCompletion', '20');
-      localStorage.setItem('companyTaxOrRegistry', formData.taxOrRegistry);
       window.dispatchEvent(new Event('userLogin'));
       setIsLoading(false);
-      navigate(`/eposta-dogrula?email=${encodeURIComponent(formData.email)}&userType=carrier`);
+      navigate('/nakliyeci-onboarding');
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Kayıt sırasında bir hata oluştu.';
       setIsLoading(false);
@@ -386,11 +398,34 @@ export default function RegisterCarrier() {
                 </Select>
               </div>
               <div>
+                <Label>Araç Tipleri <span className="text-muted-foreground">(en az 1 seçin)</span></Label>
+                <div className="grid grid-cols-2 gap-2 mt-1">
+                  {vehicleTypesList.map((vt) => (
+                    <button
+                      key={vt.id}
+                      type="button"
+                      onClick={() => toggleVehicleType(vt.id)}
+                      className={cn(
+                        'px-3 py-2 rounded-md border text-sm text-left transition-colors',
+                        selectedVehicleTypeIds.includes(vt.id)
+                          ? 'bg-orange-600 text-white border-orange-600'
+                          : 'bg-background border-input hover:bg-accent'
+                      )}
+                    >
+                      {vt.name}
+                    </button>
+                  ))}
+                </div>
+                {selectedVehicleTypeIds.length === 0 && vehicleTypesList.length > 0 && (
+                  <p className="text-sm text-muted-foreground mt-1">En az bir araç tipi seçiniz</p>
+                )}
+              </div>
+              <div>
                 <Label>Kuruluş Yılı (opsiyonel)</Label>
                 <Select value={String(formData.startYear || '')} onValueChange={(v) => handleChange('startYear', v)}>
                   <SelectTrigger className="h-12 mt-1"><SelectValue placeholder="Seçiniz" /></SelectTrigger>
                   <SelectContent>
-                    {Array.from({ length: (2025 - 1990 + 1) }, (_, i) => 1990 + i).map((y) => (
+                    {years.map((y) => (
                       <SelectItem key={y} value={String(y)}>{y}</SelectItem>
                     ))}
                   </SelectContent>

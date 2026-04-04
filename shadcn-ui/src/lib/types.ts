@@ -146,7 +146,7 @@ export interface ShipmentRequest {
   description?: string;
   specialRequirements?: string[];
   estimatedDuration?: number;
-  status: 'pending' | 'matched' | 'completed' | 'cancelled' | 'delivered';
+  status: 'pending' | 'offer_received' | 'matched' | 'in_transit' | 'completed' | 'cancelled' | 'delivered';
   price?: number;
   carrierId?: string;
   createdAt: Date;

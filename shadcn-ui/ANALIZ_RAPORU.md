@@ -1,8 +1,8 @@
 # TaşıBurada — Kapsamlı Denetim ve Analiz Raporu
 
 > Bu rapor; Admin Paneli, Kullanıcı Tarafı, MVP Önceliklendirme ve Uygulama Planı olmak üzere **4 faz** halinde hazırlanmıştır.  
-> **Tarih:** Haziran 2025  
-> **Kapsam:** Backend (22 entity, 60+ endpoint), Frontend (40+ sayfa/component), Admin Panel (10 sayfa)
+> **Tarih:** Haziran 2025 | **Son Güncelleme:** 4 Nisan 2026  
+> **Kapsam:** Backend (24+ entity, 33 admin + 40+ genel endpoint), Frontend (50+ sayfa/component), Admin Panel (15 sayfa)
 
 ---
 
@@ -17,25 +17,25 @@
 | # | Sayfa | Rota | Durum |
 |---|-------|------|-------|
 | 1 | AdminLogin | `/admin/giris` | ✅ Çalışıyor |
-| 2 | AdminDashboard | `/admin/panel` | ⚠️ Kısmi (sahte trend verisi) |
+| 2 | AdminDashboard | `/admin/panel` | ✅ Çalışıyor (gerçek trend verisi) |
 | 3 | AdminCarriers | `/admin/nakliyeciler` | ✅ Çalışıyor |
-| 4 | AdminCarrierDetail | `/admin/nakliyeciler/:carrierId` | ⚠️ Kısmi (İşler ve Yorumlar sekmeleri boş) |
-| 5 | AdminCustomers | `/admin/musteriler` | ⚠️ Alan adı uyumsuzlukları |
-| 6 | AdminShipments | `/admin/ilanlar` | ⚠️ Alan adı uyumsuzlukları, arama backend yok |
-| 7 | AdminReviews | `/admin/yorumlar` | ⚠️ Rating filtre backend desteği yok |
+| 4 | AdminCarrierDetail | `/admin/nakliyeciler/:carrierId` | ✅ Çalışıyor (İşler + Yorumlar sekmeleri dolu) |
+| 5 | AdminCustomers | `/admin/musteriler` | ✅ Çalışıyor |
+| 6 | AdminShipments | `/admin/ilanlar` | ✅ Çalışıyor (arama backend desteği var) |
+| 7 | AdminReviews | `/admin/yorumlar` | ✅ Çalışıyor (rating filtre backend destekli) |
 | 8 | AdminApprovalQueue | `/admin/onay-kuyrugu` | ✅ Çalışıyor |
-| 9 | AdminAuditLog | `/admin/audit-log` | ⚠️ Alan adı uyumsuzlukları |
+| 9 | AdminAuditLog | `/admin/audit-log` | ✅ Çalışıyor |
 | 10 | AdminLayout + Sidebar | — | ✅ Çalışıyor |
 
 ### Sidebar'da Olup Sayfası OLMAYAN Rotalar (5 adet)
 
 | # | Sidebar Öğesi | Rota | İkon |
 |---|--------------|------|------|
-| 1 | **Teklifler** | `/admin/teklifler` | HandCoins |
-| 2 | **Belgeler** | `/admin/belgeler` | FileCheck |
-| 3 | **Raporlar** | `/admin/raporlar` | BarChart3 |
-| 4 | **Ayarlar** | `/admin/ayarlar` | Settings |
-| 5 | **Admin Yönetimi** | `/admin/yonetim` | UserCog |
+| 1 | **Teklifler** | `/admin/teklifler` | HandCoins | ✅ AdminOffers.tsx |
+| 2 | **Belgeler** | `/admin/belgeler` | FileCheck | ✅ AdminDocuments.tsx |
+| 3 | **Raporlar** | `/admin/raporlar` | BarChart3 | ✅ AdminReports.tsx |
+| 4 | **Ayarlar** | `/admin/ayarlar` | Settings | ✅ AdminSettings.tsx |
+| 5 | **Admin Yönetimi** | `/admin/yonetim` | UserCog | ✅ AdminManagement.tsx |
 
 ---
 
@@ -792,17 +792,17 @@ Taşıma Yap → İş Tamamla → Kazanç Gör
 | S1.4 | ~~Frontend: NotificationBell → gerçek bildirim sayısı getir~~ ✅ |
 | S1.5 | ~~Polling ile periyodik güncelleme (her 30 saniye)~~ ✅ |
 
-### S2. Admin Panel Düzeltmeleri
+### S2. Admin Panel Düzeltmeleri ✅ TAMAMLANDI
 
 | ID | Görev |
 |----|-------|
-| S2.1 | AdminDashboard trend grafiğini gerçek veriye bağla (backend time-series endpoint gerekli) |
-| S2.2 | AdminCarrierDetail → İşler sekmesine o nakliyecinin shipment'larını getir |
-| S2.3 | AdminCarrierDetail → Yorumlar sekmesine o nakliyecinin review'larını getir |
-| S2.4 | AdminShipments → search backend desteği ekle |
-| S2.5 | AdminReviews → rating filtresi backend desteği ekle |
-| S2.6 | Admin Teklifler sayfası oluştur |
-| S2.7 | Admin Belgeler sayfası oluştur (belge doğrulama iş akışı) |
+| S2.1 | ~~AdminDashboard trend grafiğini gerçek veriye bağla~~ ✅ TAMAMLANDI |
+| S2.2 | ~~AdminCarrierDetail → İşler sekmesine o nakliyecinin shipment'larını getir~~ ✅ TAMAMLANDI |
+| S2.3 | ~~AdminCarrierDetail → Yorumlar sekmesine o nakliyecinin review'larını getir~~ ✅ TAMAMLANDI |
+| S2.4 | ~~AdminShipments → search backend desteği ekle~~ ✅ TAMAMLANDI |
+| S2.5 | ~~AdminReviews → rating filtresi backend desteği ekle~~ ✅ TAMAMLANDI |
+| S2.6 | ~~Admin Teklifler sayfası oluştur~~ ✅ TAMAMLANDI |
+| S2.7 | ~~Admin Belgeler sayfası oluştur (belge doğrulama iş akışı)~~ ✅ TAMAMLANDI |
 
 ### S3. Ödeme Sistemi (Basit MVP) ✅ TAMAMLANDI
 
@@ -844,15 +844,15 @@ Taşıma Yap → İş Tamamla → Kazanç Gör
 
 | ID | Görev |
 |----|-------|
-| N2.1 | Backend: Settings entity + CRUD |
-| N2.2 | Frontend: AdminSettings form sayfası |
+| N2.1 | ~~Backend: Settings entity + CRUD~~ | ✅ TAMAMLANDI |
+| N2.2 | ~~Frontend: AdminSettings form sayfası~~ | ✅ TAMAMLANDI |
 
 ### N3. Admin Yönetimi Sayfası
 
 | ID | Görev |
 |----|-------|
-| N3.1 | Backend: Admin CRUD endpoint'leri (superadmin only) |
-| N3.2 | Frontend: AdminManagement sayfa + form |
+| N3.1 | ~~Backend: Admin CRUD endpoint'leri (superadmin only)~~ | ✅ TAMAMLANDI |
+| N3.2 | ~~Frontend: AdminManagement sayfa + form~~ | ✅ TAMAMLANDI |
 
 ### N4. UI/UX İyileştirmeleri
 
@@ -1001,16 +1001,16 @@ Sıra  Görev                                                Bağımlılık
 - ~~**YENİ Service:** PaymentService (create, getByCustomer, getByShipment)~~ ✅
 - ~~**YENİ Endpoint:** GET /carriers/me/earnings-log~~ ✅
 
-### Sprint 5 Backend
-- **YENİ Endpoint:** GET /admin/stats/trends?period=30d (zaman serisi)
-- **YENİ Endpoint:** GET /admin/carriers/:id/shipments (o nakliyecinin ilanları)
-- **YENİ Endpoint:** GET /admin/carriers/:id/reviews (o nakliyecinin yorumları)
-- **YENİ Endpoint:** GET /admin/offers (teklifler listesi)
-- **YENİ Endpoint:** GET /admin/documents (belgeler listesi)
-- **YENİ Endpoint:** PUT /admin/documents/:id/verify (belge doğrulama)
-- **YENİ Endpoint:** GET /admin/reports/* (raporlama endpoint'leri)
-- **YENİ Entity:** PlatformSettings (key-value)
-- **YENİ Endpoint:** Admin CRUD (superadmin)
+### Sprint 5 Backend ✅ TAMAMLANDI
+- ~~**YENİ Endpoint:** GET /admin/stats/trends?period=30d~~ ✅
+- ~~**YENİ Endpoint:** GET /admin/carriers/:id/shipments~~ ✅
+- ~~**YENİ Endpoint:** GET /admin/carriers/:id/reviews~~ ✅
+- ~~**YENİ Endpoint:** GET /admin/offers~~ ✅
+- ~~**YENİ Endpoint:** GET /admin/documents~~ ✅
+- ~~**YENİ Endpoint:** PUT /admin/documents/:id/verify~~ ✅
+- ~~**YENİ Endpoint:** GET /admin/reports/*~~ ✅
+- ~~**YENİ Entity:** PlatformSettings (key-value)~~ ✅
+- ~~**YENİ Endpoint:** Admin CRUD (superadmin)~~ ✅
 
 ---
 
@@ -1049,11 +1049,11 @@ Sıra  Görev                                                Bağımlılık
 | src/presentation/controllers/PaymentController.ts | Ödeme controller | 4 | ✅ Oluşturuldu |
 | src/presentation/routes/notificationRoutes.ts | Bildirim routes | 4 | ✅ Oluşturuldu |
 | src/presentation/routes/paymentRoutes.ts | Ödeme routes | 4 | ✅ Oluşturuldu |
-| shadcn-ui/src/pages/admin/AdminOffers.tsx | Admin teklifler | 5 | ❌ Bekliyor |
-| shadcn-ui/src/pages/admin/AdminDocuments.tsx | Admin belgeler | 5 | ❌ Bekliyor |
-| shadcn-ui/src/pages/admin/AdminReports.tsx | Admin raporlar | 5 | ❌ Bekliyor |
-| shadcn-ui/src/pages/admin/AdminSettings.tsx | Admin ayarlar | 5 | ❌ Bekliyor |
-| shadcn-ui/src/pages/admin/AdminManagement.tsx | Admin yönetimi | 5 | ❌ Bekliyor |
+| shadcn-ui/src/pages/admin/AdminOffers.tsx | Admin teklifler | 5 | ✅ Oluşturuldu |
+| shadcn-ui/src/pages/admin/AdminDocuments.tsx | Admin belgeler | 5 | ✅ Oluşturuldu |
+| shadcn-ui/src/pages/admin/AdminReports.tsx | Admin raporlar | 5 | ✅ Oluşturuldu |
+| shadcn-ui/src/pages/admin/AdminSettings.tsx | Admin ayarlar | 5 | ✅ Oluşturuldu |
+| shadcn-ui/src/pages/admin/AdminManagement.tsx | Admin yönetimi | 5 | ✅ Oluşturuldu |
 
 ---
 
@@ -1090,25 +1090,57 @@ Her sprint sonunda doğrulanacak senaryolar:
 - [x] Ödeme kaydı oluşturabiliyor
 - [x] Nakliyeci kazanç geçmişini görebiliyor
 
-### Sprint 5 Sonrası ✖️ (Henüz Tamamlanmadı)
-- [ ] Admin dashboard gerçek trend verisi gösteriyor
-- [ ] Admin nakliyeci detayında işler ve yorumlar dolmuş
-- [ ] Admin teklifler sayfası çalışıyor
-- [ ] Admin belgeler sayfası ile doğrulama yapılabiliyor
-- [ ] Admin raporlar sayfasında grafikler görünüyor
-- [ ] Admin ayarlar sayfası çalışıyor (superadmin)
-- [ ] Admin yönetimi sayfası çalışıyor (superadmin)
+### Sprint 5 Sonrası ✅ TAMAMLANDI
+- [x] Admin dashboard gerçek trend verisi gösteriyor
+- [x] Admin nakliyeci detayında işler ve yorumlar dolmuş
+- [x] Admin teklifler sayfası çalışıyor
+- [x] Admin belgeler sayfası ile doğrulama yapılabiliyor
+- [x] Admin raporlar sayfasında grafikler görünüyor
+- [x] Admin ayarlar sayfası çalışıyor (superadmin)
+- [x] Admin yönetimi sayfası çalışıyor (superadmin)
+
+---
+
+### Sprint 6-7 Tamamlanan Ek İyileştirmeler ✅
+
+| İD | Görev | Durum |
+|----|-------|-------|
+| 6.1 | OfferComparison sayfası — vehicleBrand/vehicleModel geliştirme | ✅ TAMAMLANDI |
+| 6.2 | AdminCarriers CSV derg aktarma | ✅ TAMAMLANDI |
+| 6.3 | AdminCarriers toplu işlem (bulk approve/reject) | ✅ TAMAMLANDI |
+| 7.1 | AdminSettings audit log entegrasyonu | ✅ TAMAMLANDI |
+| 7.2 | RegisterCarrier activityCity — backend Carrier entity'e eklendi | ✅ TAMAMLANDI |
+| 7.3 | Güvenlik: Geçersiz JWT 403→1 düzeltme (auth middleware) | ✅ TAMAMLANDI |
+| 7.4 | Güvenlik: Backend şifre validasyonu — `validatePassword` utility | ✅ TAMAMLANDI |
+| 7.5 | 40/40 Jest entegrasyon testi eklendi (`src/__tests__/`) | ✅ TAMAMLANDI |
+
+---
+
+### Sprint 6-7 Tamamlanan Ek İyileştirmeler ✅
+
+| ID | Görev | Durum |
+|----|-------|-------|
+| 6.1 | OfferComparison — vehicleBrand/vehicleModel gerçek API'den gösterimi | ✅ TAMAMLANDI |
+| 6.2 | AdminCarriers CSV dışa aktarma | ✅ TAMAMLANDI |
+| 6.3 | AdminCarriers toplu işlem (bulk approve/reject) | ✅ TAMAMLANDI |
+| 7.1 | AdminSettings audit log entegrasyonu | ✅ TAMAMLANDI |
+| 7.2 | RegisterCarrier activityCity — backend Carrier entity'e eklendi | ✅ TAMAMLANDI |
+| 7.3 | Güvenlik: Geçersiz JWT 403→401 düzeltme (auth middleware) | ✅ TAMAMLANDI |
+| 7.4 | Güvenlik: Backend şifre validasyonu — `src/utils/validatePassword.ts` | ✅ TAMAMLANDI |
+| 7.5 | 40/40 Jest entegrasyon testi eklendi (`src/__tests__/`) | ✅ TAMAMLANDI |
 
 ---
 
 # Sonuç
 
-Bu rapor, TaşıBurada platformunun mevcut durumunun kapsamlı bir denetimini sunmaktadır. **30+ kritik sorun** tespit edilmiş olup, bunların büyük çoğunluğu mock data kullanımı ve frontend-backend alan uyumsuzluklarından kaynaklanmaktadır.
+Bu rapor, TaşıBurada platformunun kapsamlı bir denetimini sunmaktadır. Başlangıçta **30+ kritik sorun** tespit edilmiş olup, Sprint 1–7 sürecinde **tümü giderilmiştir.**
 
-**En acil öncelikler:**
-1. Mock data → gerçek API geçişi (8 sayfa)
-2. Alan adı uyumsuzlukları düzeltme (3+ entity)
-3. Route guard eksiklikleri (8 rota)
-4. Nakliyeci teklif verme akışının uçtan uca çalışması
+**Tamamlanan öncelikler:**
+1. ✅ Mock data → gerçek API geçişi (8 sayfa)
+2. ✅ Alan adı uyumsuzlukları düzeltme (firstName/lastName, origin/destination, targetType/targetId)
+3. ✅ Route guard eksiklikleri (8 rota korunuyor)
+4. ✅ Nakliyeci teklif verme akışı uçtan uca çalışıyor
+5. ✅ Admin panel tam (15 sayfa, 33 endpoint)
+6. ✅ Güvenlik: validatePassword utility + JWT 401 fix
 
-**Plan:** 5 sprint halinde, bağımlılık sırasına göre sistematik uygulama. Sprint 1-3 tamamlandığında platform temel akışı (ilan → teklif → kabul → taşıma → tamamlanma) çalışır hale gelecektir.
+**Platform Durumu (4 Nisan 2026):** Sprint 1–7 tamamlandı. 40/40 Jest entegrasyon testi geçiyor. Post-MVP özellikler (Google OAuth, SMS OTP, WebSocket mesajlaşma) bir sonraki aşamada planlanacak.
