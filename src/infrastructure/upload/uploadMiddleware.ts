@@ -3,10 +3,11 @@ import path from 'node:path';
 import multer from 'multer';
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
-const ALLOWED_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.pdf']);
+const ALLOWED_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp', '.pdf']);
 const ALLOWED_MIME_TYPES = new Set([
   'image/jpeg',
   'image/png',
+  'image/webp',
   'application/pdf'
 ]);
 

@@ -35,7 +35,8 @@ export async function apiClient(input: RequestInfo | URL, init: RequestInit = {}
     headers
   });
 
-  if (response.status === 401 && typeof window !== 'undefined' && !redirectInProgress) {
+  const isLoginEndpoint = resolvedInput.toString().includes('/login');
+  if (response.status === 401 && !isLoginEndpoint && typeof window !== 'undefined' && !redirectInProgress) {
     redirectInProgress = true;
 
     localStorage.removeItem(APP_CONFIG.tokenKey);

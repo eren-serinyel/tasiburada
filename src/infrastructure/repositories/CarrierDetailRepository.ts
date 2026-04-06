@@ -1,8 +1,10 @@
 import { BaseRepository } from './BaseRepository';
+import { AppDataSource } from '../database/data-source';
 import { Carrier } from '../../domain/entities/Carrier';
 import { Offer } from '../../domain/entities/Offer';
 import { CarrierDocument, CarrierDocumentStatus } from '../../domain/entities/CarrierDocument';
 import { CarrierVehicleType } from '../../domain/entities/CarrierVehicleType';
+import { Review } from '../../domain/entities/Review';
 
 export interface CarrierDetailVehicleDto {
   id: string;
@@ -40,6 +42,7 @@ export interface CarrierDetailStatsDto {
 
 export interface CarrierReviewSummaryDto {
   id: string;
+  customerId: string;
   author: string;
   rating: number;
   comment: string;
@@ -152,8 +155,26 @@ export class CarrierDetailRepository extends BaseRepository<Carrier> {
         : null,
       documents,
       documentsApproved: allDocumentsApproved,
-      recentReviews: []
+      recentReviews: await this.fetchRecentReviews(carrierId)
     };
+  }
+
+  private async fetchRecentReviews(carrierId: string): Promise<CarrierReviewSummaryDto[]> {
+    const reviews = await AppDataSource.getRepository(Review)
+      .createQueryBuilder('review')
+      .innerJoinAndSelect('review.customer', 'customer')
+      .where('review.carrierId = :carrierId', { carrierId })
+      .orderBy('review.createdAt', 'DESC')
+      .getMany();
+
+    return reviews.map(r => ({
+      id: r.id,
+      customerId: r.customerId,
+      author: `${(r.customer as any)?.firstName || ''} ${(r.customer as any)?.lastName?.charAt(0) || ''}.`.trim(),
+      rating: r.rating,
+      comment: r.comment || '',
+      createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : String(r.createdAt)
+    }));
   }
 
   private parseServiceAreas(raw: unknown): string[] {

@@ -181,4 +181,34 @@ export class ReviewService {
       createdAt: review.createdAt
     }));
   }
+
+  async updateReview(
+    reviewId: string,
+    customerId: string,
+    data: { rating?: number; comment?: string }
+  ): Promise<Review> {
+    const review = await this.reviewRepository.findById(reviewId);
+    if (!review) throw new NotFoundError('Yorum bulunamadı.');
+    if (review.customerId !== customerId) throw new ForbiddenError('Bu yorumu düzenleme yetkiniz yok.');
+
+    const updateData: Partial<Review> = {};
+    if (data.rating !== undefined) updateData.rating = this.ensureValidRating(data.rating);
+    if (data.comment !== undefined) updateData.comment = data.comment.trim();
+
+    const updated = await this.reviewRepository.update(reviewId, updateData as any);
+    if (!updated) throw new NotFoundError('Yorum güncellenemedi.');
+    return updated;
+  }
+
+  async deleteReview(reviewId: string, customerId: string): Promise<void> {
+    const review = await this.reviewRepository.findById(reviewId);
+    if (!review) throw new NotFoundError('Yorum bulunamadı.');
+    if (review.customerId !== customerId) throw new ForbiddenError('Bu yorumu silme yetkiniz yok.');
+
+    const carrierId = review.carrierId;
+    await this.reviewRepository.delete(reviewId);
+
+    const averageRating = await this.reviewRepository.getCarrierAverageRating(carrierId);
+    await this.carrierRepository.updateRating(carrierId, Number(averageRating.toFixed(2)));
+  }
 }

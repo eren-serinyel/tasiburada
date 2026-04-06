@@ -2,6 +2,12 @@ export interface User {
   id: string;
   name: string;
   surname: string;
+  /** API returns firstName for customers (mapped from DB) */
+  firstName?: string;
+  /** API returns lastName for customers (mapped from DB) */
+  lastName?: string;
+  /** Set for carrier accounts */
+  companyName?: string;
   email: string;
   phone: string;
   pictureUrl?: string | null;
@@ -98,6 +104,7 @@ export interface CarrierDetailStats {
 
 export interface CarrierDetailReview {
   id: string;
+  customerId: string;
   author: string;
   rating: number;
   comment: string;

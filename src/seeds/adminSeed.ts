@@ -11,9 +11,9 @@ async function seedAdmin() {
   const adminRepo = AppDataSource.getRepository(Admin);
 
   const email = process.env.ADMIN_EMAIL ?? 'admin@tasiburada.com';
-  const rawPassword = process.env.ADMIN_PASSWORD ?? 'Admin123!';
+  const rawPassword = process.env.ADMIN_PASSWORD ?? 'Maviface2141';
 
-  if (process.env.NODE_ENV === 'production' && rawPassword === 'Admin123!') {
+  if (process.env.NODE_ENV === 'production' && rawPassword === 'Maviface2141') {
     throw new Error('Üretim ortamında varsayılan admin şifresi kullanılamaz. ADMIN_PASSWORD ortam değişkenini ayarlayın.');
   }
 
@@ -24,7 +24,7 @@ async function seedAdmin() {
   }
 
   const passwordHash = await bcrypt.hash(rawPassword, 12);
-  const admin = adminRepo.create({
+  const                            admin = adminRepo.create({
     email,
     passwordHash,
     role: 'superadmin',

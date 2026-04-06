@@ -21,6 +21,9 @@ interface CreateShipmentPayload {
   weight?: number;
   shipmentDate: string | Date;
   price?: number;
+  note?: string;
+  vehiclePreference?: string;
+  contactPhone?: string;
 }
 
 interface UpdateShipmentPayload {
@@ -81,6 +84,9 @@ export class ShipmentService {
       weight: payload.weight,
       shipmentDate: new Date(payload.shipmentDate),
       price: payload.price,
+      note: payload.note,
+      vehiclePreference: payload.vehiclePreference,
+      contactPhone: payload.contactPhone ?? null,
       status: ShipmentStatus.PENDING
     });
   }

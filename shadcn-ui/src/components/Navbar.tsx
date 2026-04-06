@@ -23,33 +23,38 @@ export default function Navbar() {
     navigate('/');
   };
 
-  const userDisplayName = [user?.name, user?.surname].filter(Boolean).join(' ').trim() || 'Kullanıcı';
+  const userDisplayName = (() => {
+    if (!user) return 'Kullanıcı';
+    if (user.type === 'carrier') {
+      return user.companyName ?? user.name ?? user.email?.split('@')[0] ?? 'Kullanıcı';
+    }
+    return user.firstName ?? user.name ?? user.email?.split('@')[0] ?? 'Kullanıcı';
+  })();
   const userDisplayEmail = user?.email || (user?.type === 'customer' ? 'Müşteri' : 'Nakliyeci');
 
   const renderAvatar = (variant: 'desktop' | 'mobile' = 'desktop') => {
     if (!user) return null;
     const sizeClass = variant === 'desktop' ? 'w-8 h-8' : 'w-10 h-10';
-    const iconSizeClass = variant === 'desktop' ? 'h-4 w-4' : 'h-5 w-5';
 
-    if (user.type === 'carrier' && user.pictureUrl) {
+    if (user.pictureUrl) {
       return (
         <img
           src={user.pictureUrl}
-          alt={userDisplayName || 'Nakliyeci avatarı'}
+          alt={userDisplayName}
           className={`${sizeClass} rounded-full object-cover border border-blue-100 shadow-sm`}
         />
       );
     }
 
-    const initials = [user.name, user.surname]
-      .filter(Boolean)
-      .map(n => (n as string).charAt(0).toUpperCase())
-      .join('')
-      .slice(0, 2) || 'U';
+    const firstChar =
+      (user.type === 'carrier'
+        ? (user.companyName ?? user.name)
+        : (user.firstName ?? user.name)
+      )?.charAt(0).toUpperCase() ?? 'U';
 
     return (
       <div className={`${sizeClass} rounded-full flex items-center justify-center bg-[#2563EB] text-white font-bold ${variant === 'desktop' ? 'text-xs' : 'text-sm'}`}>
-        {initials}
+        {firstChar}
       </div>
     );
   };
@@ -141,8 +146,8 @@ export default function Navbar() {
                     {/* Kullanıcı Bilgisi */}
                     <div className="flex items-center gap-3 px-3 py-3 mb-1">
                       <div className="flex-shrink-0">
-                        {user.pictureUrl && user.type === 'carrier' ? (
-                          <img src={user.pictureUrl} alt="" className="w-10 h-10 rounded-full object-cover border border-blue-100" />
+                        {user.pictureUrl ? (
+                          <img src={user.pictureUrl} alt={userDisplayName} className="w-10 h-10 rounded-full object-cover border border-blue-100" />
                         ) : (
                           <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm ${user.type === 'customer' ? 'bg-gradient-to-br from-blue-500 to-sky-500' : 'bg-gradient-to-br from-sky-500 to-cyan-500'}`}>
                             {(userDisplayName || 'U').charAt(0).toUpperCase()}

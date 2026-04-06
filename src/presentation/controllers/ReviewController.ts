@@ -107,4 +107,42 @@ export class ReviewController {
       res.status(500).json({ success: false, message: error.message || 'Yorumlar alinirken hata olustu.' });
     }
   };
+
+  update = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const customerId = req.user?.customerId;
+      if (!customerId) {
+        res.status(401).json({ success: false, message: 'Yetkisiz erisim.' });
+        return;
+      }
+      const reviewId = req.params.id;
+      const { rating, comment } = req.body;
+
+      const review = await this.reviewService.updateReview(reviewId, customerId, { rating, comment });
+      res.status(200).json({ success: true, message: 'Yorum guncellendi.', data: review });
+    } catch (error: any) {
+      let statusCode = 400;
+      if (error.message?.includes('bulunamad')) statusCode = 404;
+      else if (error.message?.includes('yetkiniz yok')) statusCode = 403;
+      res.status(statusCode).json({ success: false, message: error.message || 'Yorum guncellenirken hata olustu.' });
+    }
+  };
+
+  remove = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const customerId = req.user?.customerId;
+      if (!customerId) {
+        res.status(401).json({ success: false, message: 'Yetkisiz erisim.' });
+        return;
+      }
+      const reviewId = req.params.id;
+      await this.reviewService.deleteReview(reviewId, customerId);
+      res.status(200).json({ success: true, message: 'Yorum silindi.' });
+    } catch (error: any) {
+      let statusCode = 400;
+      if (error.message?.includes('bulunamad')) statusCode = 404;
+      else if (error.message?.includes('yetkiniz yok')) statusCode = 403;
+      res.status(statusCode).json({ success: false, message: error.message || 'Yorum silinirken hata olustu.' });
+    }
+  };
 }

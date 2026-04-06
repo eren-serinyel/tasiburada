@@ -6,13 +6,15 @@ import { Label } from '@/components/ui/label';
 import { toast } from '@/components/ui/sonner';
 import { apiClient } from '@/lib/apiClient';
 import { setSessionUser } from '@/lib/storage';
+import { useAuth } from '@/context/AuthContext';
 import { Camera, Save } from 'lucide-react';
 import type { SectionProps } from './types';
 import { API_BASE } from './helpers';
 
 export default function AccountSection({ user, onUserUpdate }: SectionProps) {
+  const { updateUser } = useAuth();
   const isCarrier = user.type === 'carrier';
-  const [pictureUrl, setPictureUrl] = useState<string | null>(null);
+  const [pictureUrl, setPictureUrl] = useState<string | null>(user.pictureUrl ?? null);
   const [isUploadingPicture, setIsUploadingPicture] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [form, setForm] = useState({ name: user.name || '', surname: user.surname || '', email: user.email || '', phone: user.phone || '' });
@@ -58,14 +60,62 @@ export default function AccountSection({ user, onUserUpdate }: SectionProps) {
   const handlePictureChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Dosya çok büyük. Maksimum 5MB yükleyebilirsiniz.');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      toast.error('Geçersiz dosya tipi. JPG, PNG veya WebP yükleyebilirsiniz.');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
     setIsUploadingPicture(true);
     try {
       const formData = new FormData();
       formData.append('picture', file);
-      const res = await apiClient(`${API_BASE}/customers/me/picture`, { method: 'POST', body: formData });
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok || !json?.success) throw new Error(json?.message || 'Fotoğraf yüklenemedi.');
-      setPictureUrl(json.data?.pictureUrl ?? null);
+
+      let newPictureUrl: string | null = null;
+
+      if (isCarrier) {
+        const res = await apiClient(`${API_BASE}/carriers/me/profile-picture`, { method: 'PUT', body: formData });
+        const json = await res.json().catch(() => ({}));
+        console.log('[PictureUpload] carrier response:', json);
+        if (!res.ok || !json?.success) throw new Error(json?.message || 'Fotoğraf yüklenemedi.');
+        newPictureUrl = json.pictureUrl ?? json.data?.pictureUrl ?? null;
+      } else {
+        const res = await apiClient(`${API_BASE}/customers/me/picture`, { method: 'POST', body: formData });
+        const json = await res.json().catch(() => ({}));
+        console.log('[PictureUpload] customer response:', json);
+        if (!res.ok || !json?.success) throw new Error(json?.message || 'Fotoğraf yüklenemedi.');
+        newPictureUrl = json.data?.pictureUrl ?? json.pictureUrl ?? null;
+      }
+
+      // Fallback: response'da pictureUrl yoksa profili yeniden çek
+      if (!newPictureUrl) {
+        try {
+          const profileEndpoint = isCarrier ? `${API_BASE}/carriers/${user.id}` : `${API_BASE}/customers/profile`;
+          const profileRes = await apiClient(profileEndpoint);
+          const profileJson = await profileRes.json().catch(() => ({}));
+          console.log('[PictureUpload] fallback profile response:', profileJson);
+          newPictureUrl = isCarrier
+            ? (profileJson?.data?.carrier?.pictureUrl ?? null)
+            : (profileJson?.data?.pictureUrl ?? null);
+        } catch { /* ignore */ }
+      }
+
+      console.log('[PictureUpload] resolved pictureUrl:', newPictureUrl);
+
+      if (newPictureUrl) {
+        setPictureUrl(newPictureUrl);
+        const updated = { ...user, pictureUrl: newPictureUrl };
+        setSessionUser(updated);
+        updateUser({ pictureUrl: newPictureUrl });
+        onUserUpdate?.(updated);
+      }
       toast.success('Profil fotoğrafı güncellendi.');
     } catch (err: any) {
       toast.error(err?.message || 'Fotoğraf yüklenemedi.');
@@ -90,7 +140,7 @@ export default function AccountSection({ user, onUserUpdate }: SectionProps) {
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok || !json?.success) throw new Error(json?.message || 'Profil güncellenemedi.');
-      const updated = { ...user, name: form.name, surname: form.surname, email: form.email, phone: form.phone };
+      const updated = { ...user, name: form.name, surname: form.surname, email: form.email, phone: form.phone, pictureUrl: pictureUrl ?? user.pictureUrl };
       setSessionUser(updated);
       onUserUpdate?.(updated);
       setCustomerProfileInitial(customerProfile);
@@ -110,8 +160,7 @@ export default function AccountSection({ user, onUserUpdate }: SectionProps) {
         <CardDescription>{isCarrier ? 'Temel iletişim bilgilerinizi güncelleyin.' : 'Profil ve adres bilgilerinizi güncelleyin.'}</CardDescription>
       </CardHeader>
       <CardContent>
-        {!isCarrier && (
-          <div className="flex items-center gap-4 mb-6 pb-6 border-b border-slate-100">
+        <div className="flex items-center gap-4 mb-6 pb-6 border-b border-slate-100">
             <div className="relative">
               {pictureUrl ? (
                 <img
@@ -141,13 +190,12 @@ export default function AccountSection({ user, onUserUpdate }: SectionProps) {
               <input
                 ref={fileInputRef}
                 type="file"
-                accept="image/*"
+                accept="image/jpeg,image/png,image/webp"
                 className="hidden"
                 onChange={handlePictureChange}
               />
             </div>
           </div>
-        )}
         {isLoading && !isCarrier && <div className="mb-4 text-sm text-slate-500">Profil bilgileri yükleniyor...</div>}
         <div className="grid md:grid-cols-2 gap-6">
           <div><Label>Ad</Label><Input value={form.name} onChange={(e) => setForm(v => ({ ...v, name: e.target.value }))} className="mt-1 border border-slate-200 rounded-lg bg-slate-50 focus-visible:ring-2 focus-visible:ring-blue-500 placeholder:text-slate-400" placeholder="Adınız" /></div>

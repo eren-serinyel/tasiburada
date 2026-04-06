@@ -194,7 +194,7 @@ export default function CarrierHome() {
               </Link>
             </Button>
             <Button variant="default" size="sm" className="bg-blue-600 hover:bg-blue-700" asChild>
-              <Link to="/carrier/directory">
+              <Link to="/ilanlar">
                 <Search className="mr-2 h-4 w-4" />
                 Yük Ara
               </Link>
@@ -267,7 +267,7 @@ export default function CarrierHome() {
                   <TabsTrigger value="available">Sizin İçin Önerilenler</TabsTrigger>
                   <TabsTrigger value="active">Aktif İşlerim</TabsTrigger>
                 </TabsList>
-                <Link to="/carrier/directory" className="text-sm text-blue-600 hover:underline flex items-center font-medium">
+                <Link to="/ilanlar" className="text-sm text-blue-600 hover:underline flex items-center font-medium">
                   Tüm İlanları Gör <ArrowRight className="ml-1 h-3 w-3" />
                 </Link>
               </div>
@@ -281,8 +281,7 @@ export default function CarrierHome() {
                   <Card className="flex items-center justify-center py-10 text-gray-500">Henüz ilan yok</Card>
                 ) : (
                   pendingJobs.map((job) => (
-                    <Card key={job.id} className="overflow-hidden hover:shadow-md transition-shadow">
-                      <div className="p-6">
+                    <Card key={job.id} className="overflow-hidden hover:shadow-md transition-shadow cursor-pointer" onClick={() => navigate(`/ilan/${job.id}`)}>                      <div className="p-6">
                         <div className="flex items-center justify-between mb-4">
                           <div className="flex items-center gap-2">
                             <Badge variant="secondary">Bekliyor</Badge>
@@ -315,7 +314,7 @@ export default function CarrierHome() {
                     <p className="text-lg font-medium text-gray-900">Aktif iş bulunamadı</p>
                     <p className="text-sm text-gray-500 max-w-sm mt-1 mx-auto">Şu anda üzerinde çalıştığınız bir taşıma işi yok. Fırsatları inceleyip teklif verin.</p>
                     <Button className="mt-6" asChild>
-                       <Link to="/carrier/directory">İş Ara</Link>
+                       <Link to="/ilanlar">İş Ara</Link>
                     </Button>
                   </Card>
                 ) : (
@@ -366,7 +365,7 @@ export default function CarrierHome() {
                         </div>
                       </div>
                       <div className="bg-gray-50 px-6 py-3 border-t flex justify-end">
-                          <Button variant="ghost" size="sm" className="text-blue-600 hover:text-blue-700 hover:bg-blue-50">
+                          <Button variant="ghost" size="sm" className="text-blue-600 hover:text-blue-700 hover:bg-blue-50" onClick={(e) => { e.stopPropagation(); navigate(`/ilan/${job.id}`); }}>
                               Detayları Gör <ArrowRight className="ml-2 h-4 w-4" />
                           </Button>
                       </div>

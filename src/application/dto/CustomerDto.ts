@@ -1,4 +1,4 @@
-import { IsString, IsEmail, IsPhoneNumber, IsOptional, Length, IsBoolean } from 'class-validator';
+import { IsString, IsEmail, IsOptional, Length, IsBoolean } from 'class-validator';
 
 export class CreateCustomerDto {
   @IsString()
@@ -13,28 +13,7 @@ export class CreateCustomerDto {
   email: string;
 
   @IsString()
-  @Length(10, 15)
-  phone: string;
-
-  @IsString()
-  @Length(10, 500)
-  addressLine1: string;
-
-  @IsOptional()
-  @IsString()
-  @Length(0, 500)
-  addressLine2?: string;
-
-  @IsString()
-  @Length(2, 100)
-  city: string;
-
-  @IsString()
-  @Length(2, 100)
-  district: string;
-
-  @IsString()
-  @Length(6, 255)
+  @Length(8, 255)
   password: string;
 }
 
@@ -80,11 +59,11 @@ export class CustomerResponseDto {
   firstName: string;
   lastName: string;
   email: string;
-  phone: string;
-  addressLine1: string;
-  addressLine2?: string;
-  city: string;
-  district: string;
+  phone: string | null;
+  addressLine1: string | null;
+  addressLine2?: string | null;
+  city: string | null;
+  district: string | null;
   pictureUrl?: string | null;
   isActive: boolean;
   isVerified: boolean;

@@ -470,6 +470,13 @@ export default function ShipmentDetail() {
                 </>
               )}
 
+              {/* CARRIER — pending / offer_received: teklif ver */}
+              {userType === 'carrier' && ['pending', 'offer_received'].includes(shipment.status) && (
+                <button onClick={() => navigate(`/nakliyeci/yanit/${shipment.id}`)} style={{ width: '100%', height: '40px', background: 'linear-gradient(135deg, #1D4ED8 0%, #2563EB 100%)', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>
+                  Teklif Ver
+                </button>
+              )}
+
               {/* CARRIER — matched */}
               {isCarrierOwner && shipment.status === 'matched' && (
                 <button disabled={updating} onClick={handleStart} style={{ width: '100%', height: '40px', background: 'linear-gradient(135deg, #0F172A 0%, #1E3A5F 100%)', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>

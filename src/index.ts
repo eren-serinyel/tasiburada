@@ -83,38 +83,46 @@ app.use(morgan('combined')); // HTTP request logger
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Korumalı dosya servisi — /uploads dizini doğrudan erişime kapalı
-const SAFE_UPLOAD_FOLDERS = ['documents', 'pictures'] as const;
-
-app.get('/uploads/:folder/:filename', authenticateToken, (req: Request, res: Response): void => {
-  const { folder, filename } = req.params;
-
-  // İzin verilen klasör kontrolü
-  if (!SAFE_UPLOAD_FOLDERS.includes(folder as typeof SAFE_UPLOAD_FOLDERS[number])) {
-    res.status(403).json({ success: false, message: 'Erişim reddedildi.' });
-    return;
-  }
-
-  // Path traversal koruması
+// Yardımcı: dosya yolunu güvenli şekilde çözümle ve doğrula
+const resolveUploadFile = (folder: string, filename: string): string | null => {
   if (filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+    return null;
+  }
+  const filePath = path.resolve(process.cwd(), 'uploads', folder, filename);
+  const uploadsRoot = path.resolve(process.cwd(), 'uploads');
+  if (!filePath.startsWith(uploadsRoot + path.sep)) {
+    return null;
+  }
+  return filePath;
+};
+
+// Herkese açık: profil fotoğrafları — <img> tagları header gönderemez
+app.get('/uploads/pictures/:filename', (req: Request, res: Response): void => {
+  const { filename } = req.params;
+  const filePath = resolveUploadFile('pictures', filename);
+  if (!filePath) {
     res.status(400).json({ success: false, message: 'Geçersiz dosya adı.' });
     return;
   }
-
-  const filePath = path.resolve(process.cwd(), 'uploads', folder, filename);
-
-  // Resolved path'in uploads dizini içinde olduğunu doğrula
-  const uploadsRoot = path.resolve(process.cwd(), 'uploads');
-  if (!filePath.startsWith(uploadsRoot + path.sep)) {
-    res.status(403).json({ success: false, message: 'Erişim reddedildi.' });
-    return;
-  }
-
   if (!fs.existsSync(filePath)) {
     res.status(404).json({ success: false, message: 'Dosya bulunamadı.' });
     return;
   }
+  res.sendFile(filePath);
+});
 
+// Korumalı: belgeler — Bearer token zorunlu
+app.get('/uploads/documents/:filename', authenticateToken, (req: Request, res: Response): void => {
+  const { filename } = req.params;
+  const filePath = resolveUploadFile('documents', filename);
+  if (!filePath) {
+    res.status(400).json({ success: false, message: 'Geçersiz dosya adı.' });
+    return;
+  }
+  if (!fs.existsSync(filePath)) {
+    res.status(404).json({ success: false, message: 'Dosya bulunamadı.' });
+    return;
+  }
   res.sendFile(filePath);
 });
 

@@ -17,6 +17,8 @@ import {
   Check,
   Search,
   Loader2,
+  Pencil,
+  Trash2,
 } from 'lucide-react';
 import { toast } from '@/components/ui/sonner';
 import { formatLocation } from '@/utils/formatLocation';
@@ -39,6 +41,14 @@ interface BackendShipment {
   hasReview?: boolean;
 }
 
+interface CustomerReview {
+  id: string;
+  shipmentId: string;
+  rating: number;
+  comment: string;
+  createdAt: string;
+}
+
 function fmt(n: number) {
   return n.toLocaleString('tr-TR', { minimumFractionDigits: 0 });
 }
@@ -56,15 +66,37 @@ export default function History() {
   const [reviewText, setReviewText] = useState('');
   const [reviewSending, setReviewSending] = useState(false);
 
+  /* Edit/delete review state */
+  const [reviewsMap, setReviewsMap] = useState<Record<string, CustomerReview>>({});
+  const [editTarget, setEditTarget] = useState<CustomerReview | null>(null);
+  const [editStars, setEditStars] = useState(0);
+  const [editHover, setEditHover] = useState(0);
+  const [editText, setEditText] = useState('');
+  const [editSending, setEditSending] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<CustomerReview & { shipmentId: string } | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteActionLoading, setDeleteActionLoading] = useState(false);
+
   const fetchShipments = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await apiClient(`${API_BASE_URL}/customers/shipments`);
-      const json = await res.json();
-      if (res.ok && json?.success && Array.isArray(json.data)) {
-        setShipments(json.data);
+      const [shipmentsRes, reviewsRes] = await Promise.all([
+        apiClient(`${API_BASE_URL}/customers/shipments`),
+        apiClient(`${API_BASE_URL}/customers/me/reviews`),
+      ]);
+      const shipmentsJson = await shipmentsRes.json();
+      if (shipmentsRes.ok && shipmentsJson?.success && Array.isArray(shipmentsJson.data)) {
+        setShipments(shipmentsJson.data);
       } else {
         setShipments([]);
+      }
+      const reviewsJson = await reviewsRes.json().catch(() => ({}));
+      if (reviewsRes.ok && reviewsJson?.success && Array.isArray(reviewsJson.data)) {
+        const map: Record<string, CustomerReview> = {};
+        for (const r of reviewsJson.data) {
+          map[r.shipmentId] = r;
+        }
+        setReviewsMap(map);
       }
     } catch {
       setShipments([]);
@@ -114,6 +146,7 @@ export default function History() {
         return;
       }
       toast.success('Yorumunuz gönderildi.');
+      if (json?.data) setReviewsMap(prev => ({ ...prev, [reviewTarget.id]: json.data }));
       setShipments((prev) =>
         prev.map((s) => (s.id === reviewTarget.id ? { ...s, hasReview: true } : s))
       );
@@ -124,6 +157,46 @@ export default function History() {
       toast.error('Yorum gönderilemedi.');
     } finally {
       setReviewSending(false);
+    }
+  };
+
+  const handleEditReviewSubmit = async () => {
+    if (!editTarget || editStars === 0) { toast.error('Lütfen puan seçin.'); return; }
+    setEditSending(true);
+    try {
+      const res = await apiClient(`/api/v1/reviews/${editTarget.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rating: editStars, comment: editText }),
+      });
+      const json = await res.json();
+      if (!res.ok) { toast.error(json?.message || 'Güncelleme başarısız.'); return; }
+      setReviewsMap(prev => ({ ...prev, [editTarget.shipmentId]: { ...prev[editTarget.shipmentId], rating: editStars, comment: editText } }));
+      toast.success('Yorumunuz güncellendi.');
+      setEditTarget(null);
+    } catch {
+      toast.error('Bağlantı hatası.');
+    } finally {
+      setEditSending(false);
+    }
+  };
+
+  const handleDeleteReview = async () => {
+    if (!deleteTarget) return;
+    setDeleteActionLoading(true);
+    try {
+      const res = await apiClient(`/api/v1/reviews/${deleteTarget.id}`, { method: 'DELETE' });
+      const json = await res.json();
+      if (!res.ok) { toast.error(json?.message || 'Silme başarısız.'); return; }
+      setReviewsMap(prev => { const next = { ...prev }; delete next[deleteTarget.shipmentId]; return next; });
+      setShipments(prev => prev.map(s => s.id === deleteTarget.shipmentId ? { ...s, hasReview: false } : s));
+      setDeleteDialogOpen(false);
+      setDeleteTarget(null);
+      toast.success('Yorumunuz silindi.');
+    } catch {
+      toast.error('Bağlantı hatası.');
+    } finally {
+      setDeleteActionLoading(false);
     }
   };
 
@@ -262,9 +335,24 @@ export default function History() {
                       </Button>
                     )}
                     {isCompleted && s.hasReview && (
-                      <Button variant="ghost" size="sm" className="text-[13px] h-8 text-gray-500">
-                        Yorumu Gör
-                      </Button>
+                      <div className="flex items-center gap-1">
+                        <Button variant="ghost" size="sm" className="text-[12px] h-7 gap-1 text-blue-600"
+                          onClick={() => {
+                            const r = reviewsMap[s.id];
+                            if (r) { setEditTarget(r); setEditStars(r.rating); setEditText(r.comment ?? ''); }
+                          }}
+                        >
+                          <Pencil className="h-3 w-3" /> Düzenle
+                        </Button>
+                        <Button variant="ghost" size="sm" className="text-[12px] h-7 gap-1 text-red-600 hover:text-red-700"
+                          onClick={() => {
+                            const r = reviewsMap[s.id];
+                            if (r) { setDeleteTarget({ ...r, shipmentId: s.id }); setDeleteDialogOpen(true); }
+                          }}
+                        >
+                          <Trash2 className="h-3 w-3" /> Sil
+                        </Button>
+                      </div>
                     )}
                     <Link
                       to={`/ilan/${s.id}`}
@@ -352,6 +440,75 @@ export default function History() {
                 className="w-full h-10 text-gray-500"
               >
                 Vazgeç
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Edit Review modal ── */}
+      {editTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4 p-6 space-y-5">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-gray-900">Yorumu Düzenle</h3>
+              <button onClick={() => setEditTarget(null)} className="text-gray-400 hover:text-gray-600">
+                <XIcon className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {[1, 2, 3, 4, 5].map((star) => (
+                <button
+                  key={star}
+                  type="button"
+                  onMouseEnter={() => setEditHover(star)}
+                  onMouseLeave={() => setEditHover(0)}
+                  onClick={() => setEditStars(star)}
+                  className="transition-transform hover:scale-110"
+                >
+                  <Star
+                    className="h-8 w-8"
+                    fill={(editHover || editStars) >= star ? '#F59E0B' : 'none'}
+                    stroke={(editHover || editStars) >= star ? '#F59E0B' : '#e5e7eb'}
+                    strokeWidth={1.5}
+                  />
+                </button>
+              ))}
+            </div>
+
+            <textarea
+              value={editText}
+              onChange={(e) => setEditText(e.target.value)}
+              placeholder="Yorumunuzu güncelleyin..."
+              className="w-full min-h-[100px] resize-y rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:outline-none focus:border-blue-600 focus:ring-1 focus:ring-blue-600/20"
+            />
+
+            <div className="flex gap-2">
+              <Button onClick={handleEditReviewSubmit} disabled={editSending || editStars === 0} className="flex-1 bg-blue-600 hover:bg-blue-700 h-10">
+                {editSending ? <span className="flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> Kaydediliyor...</span> : 'Kaydet'}
+              </Button>
+              <Button variant="ghost" onClick={() => setEditTarget(null)} className="flex-1 h-10 text-gray-500">Vazgeç</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Delete Review confirmation ── */}
+      {deleteDialogOpen && deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm mx-4 p-6 space-y-4">
+            <h3 className="text-base font-semibold text-gray-900">Yorumu Sil</h3>
+            <p className="text-sm text-gray-500">Yorumunuzu silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.</p>
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={() => { setDeleteDialogOpen(false); setDeleteTarget(null); }}>İptal</Button>
+              <Button
+                variant="destructive"
+                disabled={deleteActionLoading}
+                onClick={handleDeleteReview}
+              >
+                {deleteActionLoading ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+                Sil
               </Button>
             </div>
           </div>

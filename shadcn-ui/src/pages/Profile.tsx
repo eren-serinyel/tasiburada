@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useAuth } from '@/context/AuthContext';
 import { AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -35,6 +36,7 @@ export default function Profile() {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const photoPreviewUrlRef = useRef<string | null>(null);
 
+  const { refreshUser, updateUser } = useAuth();
   const isCarrier = user?.type === 'carrier';
   const initials = useInitials(user?.name, user?.surname);
 
@@ -150,19 +152,39 @@ export default function Profile() {
     setIsSavingPhoto(true);
     try {
       const fd = new FormData(); fd.append('picture', photoFile);
-      const token = localStorage.getItem('authToken');
       const endpoint = isCarrier
-        ? '/api/v1/carriers/me/profile-picture'
-        : '/api/v1/customers/me/picture';
+        ? `${API_BASE_URL}/carriers/me/profile-picture`
+        : `${API_BASE_URL}/customers/me/picture`;
       const method = isCarrier ? 'PUT' : 'POST';
-      const res = await fetch(endpoint, { method, headers: token ? { Authorization: `Bearer ${token}` } : undefined, body: fd });
+      const res = await apiClient(endpoint, { method, body: fd });
       const json = await res.json().catch(() => null);
+      console.log('[Profile.savePhoto] response:', json);
       if (!res.ok || !json?.success) throw new Error(json?.message || 'Profil fotoğrafı kaydedilemedi.');
-      const savedUrl = json?.data?.pictureUrl ?? json?.pictureUrl ?? photo;
-      const updated = { ...user, pictureUrl: savedUrl };
-      setUser(updated); setSessionUser(updated); setPhoto(savedUrl); setPhotoFile(null); setDirtyPhoto(false);
+      const savedUrl = json?.data?.pictureUrl ?? json?.pictureUrl ?? null;
+
+      // Fallback: response'da URL yoksa profili yeniden çek
+      let finalUrl = savedUrl;
+      if (!finalUrl) {
+        try {
+          const profileEndpoint = isCarrier ? `${API_BASE_URL}/carriers/${user.id}` : `${API_BASE_URL}/customers/profile`;
+          const pRes = await apiClient(profileEndpoint);
+          const pJson = await pRes.json().catch(() => ({}));
+          finalUrl = isCarrier
+            ? (pJson?.data?.carrier?.pictureUrl ?? null)
+            : (pJson?.data?.pictureUrl ?? null);
+        } catch { /* ignore */ }
+      }
+
+      if (finalUrl) {
+        const updated = { ...user, pictureUrl: finalUrl };
+        setUser(updated); setSessionUser(updated); setPhoto(finalUrl);
+        updateUser({ pictureUrl: finalUrl });
+      } else {
+        setPhoto(savedUrl ?? photo);
+      }
+      setPhotoFile(null); setDirtyPhoto(false);
       if (photoPreviewUrlRef.current) { URL.revokeObjectURL(photoPreviewUrlRef.current); photoPreviewUrlRef.current = null; }
-      try { localStorage.setItem(`profile_photo_${user.id}`, savedUrl); } catch {}
+      try { if (finalUrl) localStorage.setItem(`profile_photo_${user.id}`, finalUrl); } catch {}
       toast.success('Profil fotoğrafı kaydedildi.');
     } catch (err: any) { toast.error(err?.message || 'Fotoğraf kaydedilemedi.'); } finally { setIsSavingPhoto(false); }
   };
@@ -176,7 +198,14 @@ export default function Profile() {
     toast.success('Profiliniz onaya gönderildi.');
   };
 
-  const handleUserUpdate = (u: UserType) => { setUser(u); };
+  const handleUserUpdate = (u: UserType) => {
+    setUser(u);
+    if (u.pictureUrl) {
+      setPhoto(u.pictureUrl);
+      setDirtyPhoto(false);
+    }
+    updateUser({ pictureUrl: u.pictureUrl ?? undefined });
+  };
 
   // Sidebar Item
   const Item = ({ id, label, icon: Icon }: { id: SidebarKey; label: string; icon: any }) => (

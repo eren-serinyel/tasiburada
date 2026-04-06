@@ -27,12 +27,6 @@ export class CustomerService {
       throw new Error('Bu email adresi zaten kayıtlı.');
     }
 
-    // Telefon numarası zaten kayıtlı mı kontrol et
-    const existingPhone = await this.customerRepository.findByPhone(createDto.phone);
-    if (existingPhone) {
-      throw new Error('Bu telefon numarası zaten kayıtlı.');
-    }
-
     // Şifreyi hash'le
     const passwordHash = await bcrypt.hash(createDto.password, 12);
 
@@ -41,11 +35,6 @@ export class CustomerService {
       firstName: createDto.firstName,
       lastName: createDto.lastName,
       email: createDto.email,
-      phone: createDto.phone,
-      addressLine1: createDto.addressLine1,
-      addressLine2: createDto.addressLine2,
-      city: createDto.city,
-      district: createDto.district,
       passwordHash,
       isActive: true,
       isVerified: false
@@ -64,6 +53,11 @@ export class CustomerService {
     );
 
     return { customer: this.mapToResponseDto(customer), token, userType: 'customer' };
+  }
+
+  async checkEmailExists(email: string): Promise<boolean> {
+    const customer = await this.customerRepository.findByEmail(email);
+    return !!customer;
   }
 
   async login(loginDto: LoginDto): Promise<{ customer: CustomerResponseDto; token: string }> {

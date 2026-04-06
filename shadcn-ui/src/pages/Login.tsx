@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Truck, User, Eye, EyeOff, ArrowRight, ShieldCheck, IdCard, Rocket, Brain, Award, AlertCircle } from 'lucide-react';
+import { Truck, User, Eye, EyeOff, ArrowRight, ShieldCheck, IdCard, Rocket, Brain, AlertCircle, XCircle, WifiOff } from 'lucide-react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 // import { mockCarriers, mockCustomers } from '@/lib/mockData';
 import { getLastEmail, setLastEmail } from '@/lib/storage';
@@ -26,6 +26,7 @@ export default function Login() {
   const [isLoading, setIsLoading] = useState(false);
   const [isCheckingEmail, setIsCheckingEmail] = useState(false);
   const [error, setError] = useState('');
+  const [errorStatus, setErrorStatus] = useState<number | undefined>();
   const [rememberEmail, setRememberEmail] = useState(true);
   const navigate = useNavigate();
   const { login: authLogin } = useAuth();
@@ -60,38 +61,19 @@ export default function Login() {
     e.preventDefault();
     setIsLoading(true);
     setError('');
-    
-    try {
-      // Gerçek API'ye POST isteği gönder — seçili role ile dene, başarısızsa diğerini dene
-      const primaryEndpoint = userType === 'customer' ? '/customers/login' : '/carriers/login';
-      const fallbackEndpoint = userType === 'customer' ? '/carriers/login' : '/customers/login';
-      const fallbackType: 'customer' | 'carrier' = userType === 'customer' ? 'carrier' : 'customer';
+    setErrorStatus(undefined);
 
+    try {
+      const endpoint = userType === 'customer' ? '/customers/login' : '/carriers/login';
       const body = JSON.stringify({ email, password });
       const headers = { 'Content-Type': 'application/json' };
 
-      let response = await apiClient(`${API_BASE_URL}${primaryEndpoint}`, { method: 'POST', headers, body });
-      let result = await response.json();
-      let resolvedType: 'customer' | 'carrier' = userType;
+      const response = await apiClient(`${API_BASE_URL}${endpoint}`, { method: 'POST', headers, body });
+      const result = await response.json();
 
-      // İlk endpoint başarısız ise diğerini dene
-      if (!response.ok || !result.success) {
-        try {
-          const fallbackRes = await apiClient(`${API_BASE_URL}${fallbackEndpoint}`, { method: 'POST', headers, body });
-          const fallbackResult = await fallbackRes.json();
-          if (fallbackRes.ok && fallbackResult.success) {
-            response = fallbackRes;
-            result = fallbackResult;
-            resolvedType = fallbackType;
-            setUserType(fallbackType);
-          }
-        } catch { /* fallback da başarısız ise ana hatayı göster */ }
-      }
-      
       if (response.ok && result.success) {
-        // Başarılı giriş — AuthContext üzerinden oturumu başlat
         let sessionUser;
-        if (resolvedType === 'customer') {
+        if (userType === 'customer') {
           sessionUser = { ...result.data.customer, type: 'customer' as const };
         } else {
           const c = result.data.carrier;
@@ -104,39 +86,45 @@ export default function Login() {
             city: c.activityCity || '',
             type: 'carrier' as const,
             createdAt: c.createdAt ? new Date(c.createdAt) : new Date(),
-            pictureUrl: null,
+            pictureUrl: c.pictureUrl ?? null,
           };
         }
 
         authLogin(result.data.token, sessionUser);
 
-        // Remember email preference
         if (rememberEmail) {
           setLastEmail(email);
         } else {
           setLastEmail(null);
         }
-        
-        // Giriş yapıldı mesajı göster
+
         toast({ title: 'Giriş başarılı', description: 'Yönlendiriliyor...' });
-        
-        // Kısa bir gecikme sonrası yönlendir
         setTimeout(() => {
           const redirect = searchParams.get('redirect');
           navigate(redirect || '/home');
         }, 1000);
       } else {
-        // Hata durumu
-        const errorMessage = result.message || 'Giriş sırasında bir hata oluştu.';
-        setError(`❌ ${errorMessage}`);
+        const status = response.status;
+        setErrorStatus(status);
+        let errorMessage = result.message || 'Giriş sırasında bir hata oluştu.';
+        if (status === 403) {
+          errorMessage = userType === 'carrier'
+            ? 'Bu hesap bir müşteri hesabıdır. Lütfen "Müşteri" sekmesinden giriş yapın.'
+            : 'Bu hesap bir nakliyeci hesabıdır. Lütfen "Nakliyeci" sekmesinden giriş yapın.';
+        } else if (status === 404) {
+          errorMessage = 'Bu e-posta adresiyle kayıtlı hesap bulunamadı.';
+        } else if (status === 429) {
+          errorMessage = 'Çok fazla başarısız deneme. Lütfen birkaç dakika bekleyin.';
+        }
+        setError(errorMessage);
       }
     } catch {
-      setError('🔴 Bağlantı hatası! Lütfen internet bağlantınızı kontrol edin.');
+      setErrorStatus(undefined);
+      setError('Sunucuya bağlanılamıyor. Lütfen internet bağlantınızı kontrol edin.');
     } finally {
       setIsLoading(false);
     }
   };
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-100 relative overflow-hidden">
       {/* Animated Background Elements */}
@@ -237,7 +225,7 @@ export default function Login() {
               </CardHeader>
               
               <CardContent className="space-y-6">
-                <Tabs value={userType} onValueChange={(value) => { setUserType(value as 'customer' | 'carrier'); setUserTypeManuallySelected(true); }} className="w-full">
+                <Tabs value={userType} onValueChange={(value) => { setUserType(value as 'customer' | 'carrier'); setUserTypeManuallySelected(true); setError(''); setErrorStatus(undefined); }} className="w-full">
                   <TabsList className="grid w-full grid-cols-2 mb-6 bg-white/50 backdrop-blur-sm">
                     <TabsTrigger value="customer" className="flex items-center space-x-2 data-[state=active]:bg-gradient-to-r data-[state=active]:from-green-500 data-[state=active]:to-emerald-500 data-[state=active]:text-white">
                       <User className="h-4 w-4" />
@@ -250,12 +238,43 @@ export default function Login() {
                   </TabsList>
                 </Tabs>
                 
-                {error && (
-                  <Alert variant="destructive">
-                    <AlertCircle className="h-4 w-4" />
-                    <AlertDescription>{error}</AlertDescription>
-                  </Alert>
-                )}
+                {error && (() => {
+                  const errorType = !errorStatus ? 'network' : errorStatus === 403 ? 'wrong-type' : errorStatus === 401 ? 'wrong-credentials' : errorStatus === 429 ? 'rate-limit' : 'generic';
+                  return (
+                    <div className={[
+                      'flex items-start gap-3 p-3 rounded-lg border text-sm',
+                      errorType === 'wrong-type'        ? 'bg-blue-50 border-blue-200 text-blue-800'   : '',
+                      errorType === 'wrong-credentials' ? 'bg-red-50 border-red-200 text-red-800'     : '',
+                      errorType === 'network'           ? 'bg-orange-50 border-orange-200 text-orange-800' : '',
+                      errorType === 'rate-limit'        ? 'bg-yellow-50 border-yellow-200 text-yellow-800' : '',
+                      errorType === 'generic'           ? 'bg-red-50 border-red-200 text-red-800'     : '',
+                    ].join(' ').trim()}>
+                      {errorType === 'wrong-type' ? (
+                        <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                      ) : errorType === 'network' ? (
+                        <WifiOff className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                      ) : (
+                        <XCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                      )}
+                      <div>
+                        <p className="font-medium">{error}</p>
+                        {errorType === 'wrong-type' && (
+                          <button
+                            type="button"
+                            className="mt-1 underline text-xs font-semibold"
+                            onClick={() => {
+                              setUserType(userType === 'carrier' ? 'customer' : 'carrier');
+                              setError('');
+                              setErrorStatus(undefined);
+                            }}
+                          >
+                            {userType === 'carrier' ? 'Müşteri sekmesine geç →' : 'Nakliyeci sekmesine geç →'}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })()}
                 
                 <form onSubmit={handleLogin} className="space-y-6">
                   <div className="space-y-2">
@@ -364,38 +383,7 @@ export default function Login() {
                   </div>
                 </div>
                 
-                {/* Demo Hesapları - Tek tıkla doldur (sadece DEV ortamında) */}
-                {import.meta.env.DEV && (
-                <div className="p-6 bg-gradient-to-r from-blue-50/80 to-indigo-50/80 backdrop-blur-sm rounded-2xl border border-blue-200/30">
-                  <div className="flex items-center space-x-2 mb-3">
-                    <Award className="h-5 w-5 text-blue-600" />
-                    <p className="font-bold text-blue-900">Demo Hesapları</p>
-                  </div>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-blue-800 font-medium">👤 Müşteri: eren@gmail.com (ues2141)</p>
-                      <Button size="sm" variant="secondary" className="bg-white/70"
-                        onClick={() => { setUserType('customer'); setEmail('eren@gmail.com'); setPassword('ues2141'); }}>
-                        Doldur
-                      </Button>
-                    </div>
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-blue-800 font-medium">👤 Müşteri: customer1@example.com (customer123)</p>
-                      <Button size="sm" variant="secondary" className="bg-white/70"
-                        onClick={() => { setUserType('customer'); setEmail('customer1@example.com'); setPassword('customer123'); }}>
-                        Doldur
-                      </Button>
-                    </div>
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-blue-800 font-medium">🚛 Nakliyeci: demo@tasiburada.com (demo123)</p>
-                      <Button size="sm" variant="secondary" className="bg-white/70"
-                        onClick={() => { setUserType('carrier'); setEmail('demo@tasiburada.com'); setPassword('demo123'); }}>
-                        Doldur
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-                )}
+
               </CardContent>
             </Card>
           </div>

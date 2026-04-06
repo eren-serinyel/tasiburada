@@ -4,7 +4,12 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Separator } from '@/components/ui/separator';
-import { Star, Truck, MapPin, Package, MessageCircle, Phone, Mail, Calendar, Award } from 'lucide-react';
+import { Star, Truck, MapPin, Package, MessageCircle, Phone, Mail, Calendar, Award, Pencil, Trash2 } from 'lucide-react';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel,
+  AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
+  AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Carrier } from '@/lib/types';
 import { getCarrierExperienceYears, maskName } from '@/lib/utils';
@@ -37,8 +42,15 @@ export default function CarrierProfile() {
   const isCustomer = sessionUser && sessionUser.type === 'customer';
   const userId = sessionUser?.id;
 
-  // Form state for review
+  // Form state for new review
   const [form, setForm] = useState({ rating: 5, comment: '' });
+  // Edit state
+  const [editRating, setEditRating] = useState(5);
+  const [editComment, setEditComment] = useState('');
+  const [editSaving, setEditSaving] = useState(false);
+  // Delete state
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -106,10 +118,68 @@ export default function CarrierProfile() {
   }, [reviews, carrier?.rating]);
 
   // hasUserReviewed: check if current customer already reviewed
-  const hasUserReviewed = useMemo(() => {
-    if (!isCustomer || !userId) return false;
-    return reviews.some(r => r.customerId === userId);
+  const myReview = useMemo(() => {
+    if (!isCustomer || !userId) return null;
+    return reviews.find(r => r.customerId === userId) ?? null;
   }, [reviews, isCustomer, userId]);
+  const hasUserReviewed = Boolean(myReview);
+
+  // Initialise edit form when myReview loads
+  useEffect(() => {
+    if (myReview) {
+      setEditRating(myReview.rating);
+      setEditComment(myReview.comment ?? '');
+    }
+  }, [myReview?.id]);  // only re-init when the review id changes
+
+  const handleUpdateReview = async () => {
+    if (!myReview) return;
+    if (!editComment.trim()) {
+      toast({ title: 'Yorum gerekli', description: 'Lütfen bir yorum yazın.' });
+      return;
+    }
+    setEditSaving(true);
+    try {
+      const res = await apiClient(`/api/v1/reviews/${myReview.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rating: editRating, comment: editComment.trim() }),
+      });
+      const json = await res.json();
+      if (res.ok && json?.success) {
+        toast({ title: 'Güncellendi', description: 'Yorumunuz güncellendi.' });
+        setReviews(prev => prev.map(r =>
+          r.id === myReview.id ? { ...r, rating: editRating, comment: editComment.trim() } : r
+        ));
+      } else {
+        toast({ title: 'Hata', description: json?.message || 'Güncellenemedi.', variant: 'destructive' });
+      }
+    } catch {
+      toast({ title: 'Hata', description: 'Bağlantı hatası.', variant: 'destructive' });
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
+  const handleDeleteReview = async () => {
+    if (!myReview) return;
+    setDeleteLoading(true);
+    try {
+      const res = await apiClient(`/api/v1/reviews/${myReview.id}`, { method: 'DELETE' });
+      const json = await res.json();
+      if (res.ok && json?.success) {
+        toast({ title: 'Silindi', description: 'Yorumunuz silindi.' });
+        setReviews(prev => prev.filter(r => r.id !== myReview.id));
+        setDeleteDialogOpen(false);
+      } else {
+        toast({ title: 'Hata', description: json?.message || 'Silinemedi.', variant: 'destructive' });
+      }
+    } catch {
+      toast({ title: 'Hata', description: 'Bağlantı hatası.', variant: 'destructive' });
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
 
   if (loading || !carrier) {
     return <div>Yükleniyor...</div>;
@@ -364,9 +434,48 @@ export default function CarrierProfile() {
                   </Button>
                 </div>
               )}
-              {isCustomer && hasUserReviewed && (
-                <div className="mb-4 p-3 border rounded bg-green-50 text-green-700 text-sm">
-                  Bu nakliyeciye zaten yorum yaptınız.
+              {isCustomer && hasUserReviewed && myReview && (
+                <div className="mb-6 p-4 border rounded-md bg-gray-50">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="font-medium text-sm">Yorumunuzu Düzenleyin</span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-destructive hover:text-destructive h-7 px-2"
+                      onClick={() => setDeleteDialogOpen(true)}
+                    >
+                      <Trash2 className="h-4 w-4 mr-1" />
+                      Sil
+                    </Button>
+                  </div>
+                  <div className="mb-3">
+                    <Label className="text-xs text-gray-600">Puan</Label>
+                    <div className="flex items-center gap-1 mt-1">
+                      {Array.from({ length: 5 }, (_, i) => i + 1).map((v) => (
+                        <button
+                          key={v}
+                          type="button"
+                          onClick={() => setEditRating(v)}
+                          className="focus:outline-none"
+                        >
+                          <Star className={`h-6 w-6 ${v <= editRating ? 'fill-yellow-400 text-yellow-400' : 'text-gray-300'}`} />
+                        </button>
+                      ))}
+                      <span className="ml-2 text-sm text-gray-600">{editRating}/5</span>
+                    </div>
+                  </div>
+                  <div className="mb-3">
+                    <Label className="text-xs text-gray-600">Yorum</Label>
+                    <Textarea
+                      value={editComment}
+                      onChange={(e) => setEditComment(e.target.value)}
+                      rows={3}
+                    />
+                  </div>
+                  <Button onClick={handleUpdateReview} disabled={editSaving} size="sm">
+                    <Pencil className="h-4 w-4 mr-1" />
+                    {editSaving ? 'Kaydediliyor...' : 'Güncelle'}
+                  </Button>
                 </div>
               )}
 
@@ -397,6 +506,28 @@ export default function CarrierProfile() {
                   ))}
                 </div>
               )}
+
+              {/* Delete confirmation dialog */}
+              <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Yorumu Sil</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Yorumunuz kalıcı olarak silinecek. Emin misiniz?
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel disabled={deleteLoading}>İptal</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={handleDeleteReview}
+                      disabled={deleteLoading}
+                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    >
+                      {deleteLoading ? 'Siliniyor...' : 'Evet, Sil'}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             </CardContent>
           </Card>
         </div>

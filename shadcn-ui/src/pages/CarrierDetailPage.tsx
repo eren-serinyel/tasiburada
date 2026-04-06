@@ -15,9 +15,16 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import {
   ChevronLeft, MapPin, ShieldCheck, CheckCircle2, AlertTriangle, Star, Truck,
   MessageSquareText, ClipboardList, Phone, Mail, Calendar, Award,
-  TrendingUp, Package, BadgeCheck, Lock
+  TrendingUp, Package, BadgeCheck, Lock, Pencil, Trash2, Loader2
 } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter
+} from '@/components/ui/dialog';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle
+} from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
 import { cn, formatPrice, formatDate } from '@/lib/utils';
 import type { CarrierDetail, CarrierDetailDocument, CarrierDetailReview } from '@/lib/types';
@@ -89,6 +96,14 @@ const CarrierDetailPage = () => {
   const [reviewForm, setReviewForm] = useState({ rating: 5, comment: '' });
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const [reviewSubmitted, setReviewSubmitted] = useState(false);
+  /* edit/delete review state */
+  const [editingReview, setEditingReview] = useState<import('@/lib/types').CarrierDetailReview | null>(null);
+  const [editRating, setEditRating] = useState(0);
+  const [editComment, setEditComment] = useState('');
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [reviewToDelete, setReviewToDelete] = useState<import('@/lib/types').CarrierDetailReview | null>(null);
+  const [reviewActionLoading, setReviewActionLoading] = useState(false);
+  const [localReviews, setLocalReviews] = useState<import('@/lib/types').CarrierDetailReview[] | null>(null);
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -110,6 +125,7 @@ const CarrierDetailPage = () => {
         toast({ title: 'Teşekkürler!', description: 'Yorumunuz kaydedildi.' });
         setReviewSubmitted(true);
         queryClient.invalidateQueries({ queryKey: ['carrier-detail', carrierId] });
+        setLocalReviews(null);
       } else {
         toast({ title: 'Hata', description: json?.message || 'Yorum gönderilemedi.', variant: 'destructive' });
       }
@@ -117,6 +133,55 @@ const CarrierDetailPage = () => {
       toast({ title: 'Hata', description: 'Bağlantı hatası.', variant: 'destructive' });
     } finally {
       setReviewSubmitting(false);
+    }
+  };
+
+  const handleUpdateReview = async () => {
+    if (!editingReview) return;
+    setReviewActionLoading(true);
+    try {
+      const res = await apiClient(`/api/v1/reviews/${editingReview.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rating: editRating, comment: editComment }),
+      });
+      const json = await res.json();
+      if (res.ok && json?.success) {
+        setLocalReviews(prev =>
+          (prev ?? activeReviews).map(r =>
+            r.id === editingReview.id ? { ...r, rating: editRating, comment: editComment } : r
+          )
+        );
+        setEditingReview(null);
+        toast({ title: 'Yorumunuz güncellendi.' });
+      } else {
+        toast({ title: 'Güncelleme başarısız', description: json?.message || 'Bir hata oluştu.', variant: 'destructive' });
+      }
+    } catch {
+      toast({ title: 'Bağlantı hatası.', variant: 'destructive' } as any);
+    } finally {
+      setReviewActionLoading(false);
+    }
+  };
+
+  const handleDeleteReview = async () => {
+    if (!reviewToDelete) return;
+    setReviewActionLoading(true);
+    try {
+      const res = await apiClient(`/api/v1/reviews/${reviewToDelete.id}`, { method: 'DELETE' });
+      const json = await res.json();
+      if (res.ok && json?.success) {
+        setLocalReviews(prev => (prev ?? activeReviews).filter(r => r.id !== reviewToDelete.id));
+        setDeleteDialogOpen(false);
+        setReviewToDelete(null);
+        toast({ title: 'Yorumunuz silindi.' });
+      } else {
+        toast({ title: 'Silme başarısız', description: json?.message || 'Bir hata oluştu.', variant: 'destructive' });
+      }
+    } catch {
+      toast({ title: 'Bağlantı hatası.', variant: 'destructive' } as any);
+    } finally {
+      setReviewActionLoading(false);
     }
   };
 
@@ -133,16 +198,15 @@ const CarrierDetailPage = () => {
   });
 
   /* ─── Rating distribution (computed from reviews) ─── */
+  const activeReviews = localReviews ?? data?.recentReviews ?? [];
   const ratingDistribution = useMemo(() => {
     const dist = [0, 0, 0, 0, 0];
-    if (data?.recentReviews) {
-      data.recentReviews.forEach(r => {
-        const idx = Math.max(0, Math.min(4, Math.round(r.rating) - 1));
-        dist[idx]++;
-      });
-    }
+    activeReviews.forEach(r => {
+      const idx = Math.max(0, Math.min(4, Math.round(r.rating) - 1));
+      dist[idx]++;
+    });
     return dist;
-  }, [data?.recentReviews]);
+  }, [activeReviews]);
 
   /* ─── Trust badges from documents ─── */
   const trustBadges = useMemo(() => {
@@ -205,7 +269,7 @@ const CarrierDetailPage = () => {
 
   const profilePercent = clampPercentage(data.profile.overallPercentage ?? 0);
   const ratingValue = Number(data.rating.average ?? 0);
-  const ratingCount = Number(data.rating.count ?? 0);
+  const ratingCount = activeReviews.length;
   const initials = buildInitials(data.companyName);
   const successRatePercent = normalizeSuccessRate(data.stats.successRate);
   const experienceText = data.experienceYears !== null
@@ -596,7 +660,7 @@ const CarrierDetailPage = () => {
                   )}
 
                   {/* Review list */}
-                  {data.recentReviews.length === 0 ? (
+                  {activeReviews.length === 0 ? (
                     <Card>
                       <CardContent className="py-12 text-center">
                         <Star className="h-12 w-12 mx-auto text-muted-foreground/40 mb-3" />
@@ -608,8 +672,14 @@ const CarrierDetailPage = () => {
                     </Card>
                   ) : (
                     <div className="space-y-3">
-                      {data.recentReviews.map(review => (
-                        <ReviewCard key={review.id} review={review} />
+                      {activeReviews.map(review => (
+                        <ReviewCard
+                          key={review.id}
+                          review={review}
+                          myId={sessionUser?.id}
+                          onEdit={r => { setEditingReview(r); setEditRating(r.rating); setEditComment(r.comment ?? ''); }}
+                          onDelete={r => { setReviewToDelete(r); setDeleteDialogOpen(true); }}
+                        />
                       ))}
                     </div>
                   )}
@@ -763,6 +833,58 @@ const CarrierDetailPage = () => {
             { label: 'Kapat', onClick: () => setAuthModalOpen(false), variant: 'outline' }
           ]}
         />
+
+        {/* ── Edit Review Dialog ── */}
+        <Dialog open={!!editingReview} onOpenChange={open => { if (!open) setEditingReview(null); }}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Yorumu Düzenle</DialogTitle>
+            </DialogHeader>
+            <div className="flex gap-1 my-2">
+              {[1,2,3,4,5].map(star => (
+                <button key={star} type="button" onClick={() => setEditRating(star)} className="focus:outline-none">
+                  <Star className={cn('h-7 w-7 transition-colors cursor-pointer', star <= editRating ? 'fill-yellow-400 text-yellow-400' : 'text-gray-300')} />
+                </button>
+              ))}
+            </div>
+            <Textarea
+              value={editComment}
+              onChange={e => setEditComment(e.target.value)}
+              placeholder="Yorumunuzu yazın..."
+              rows={4}
+            />
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setEditingReview(null)}>İptal</Button>
+              <Button onClick={handleUpdateReview} disabled={reviewActionLoading || editRating === 0}>
+                {reviewActionLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                Kaydet
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* ── Delete Review AlertDialog ── */}
+        <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Yorumu Sil</AlertDialogTitle>
+              <AlertDialogDescription>
+                Yorumunuzu silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>İptal</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleDeleteReview}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                disabled={reviewActionLoading}
+              >
+                {reviewActionLoading ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+                Sil
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </TooltipProvider>
   );
@@ -888,7 +1010,17 @@ const DocumentRow = ({ document }: { document: CarrierDetailDocument }) => {
   );
 };
 
-const ReviewCard = ({ review }: { review: CarrierDetailReview }) => {
+const ReviewCard = ({
+  review,
+  myId,
+  onEdit,
+  onDelete
+}: {
+  review: CarrierDetailReview;
+  myId?: string;
+  onEdit?: (r: CarrierDetailReview) => void;
+  onDelete?: (r: CarrierDetailReview) => void;
+}) => {
   const initials = review.author
     .split(/\s+/)
     .map(w => w[0])
@@ -908,7 +1040,19 @@ const ReviewCard = ({ review }: { review: CarrierDetailReview }) => {
           <div className="flex-1 min-w-0">
             <div className="flex items-center justify-between">
               <p className="font-semibold text-sm text-foreground">{review.author}</p>
-              <span className="text-xs text-muted-foreground">{formatDate(new Date(review.createdAt))}</span>
+              <div className="flex items-center gap-1">
+                <span className="text-xs text-muted-foreground">{formatDate(new Date(review.createdAt))}</span>
+                {myId && review.customerId === myId && onEdit && onDelete && (
+                  <>
+                    <Button variant="ghost" size="sm" className="h-6 w-6 p-0 ml-1" onClick={() => onEdit(review)}>
+                      <Pencil className="h-3 w-3" />
+                    </Button>
+                    <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-destructive hover:text-destructive" onClick={() => onDelete(review)}>
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </>
+                )}
+              </div>
             </div>
             <div className="flex items-center gap-0.5 mt-1">
               {Array.from({ length: 5 }).map((_, i) => (

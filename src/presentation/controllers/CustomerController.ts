@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { CustomerService } from '../../application/services/CustomerService';
 import { validatePassword } from '../../utils/validatePassword';
+import { CarrierRepository } from '../../infrastructure/repositories/CarrierRepository';
 import { 
   CreateCustomerDto, 
   UpdateCustomerDto, 
@@ -42,8 +43,20 @@ export class CustomerController {
   login = async (req: Request, res: Response): Promise<void> => {
     try {
       const loginDto: LoginDto = req.body;
-      const result = await this.customerService.login(loginDto);
 
+      // E-posta müşteri tablosunda hiç yoksa → nakliyeci tablosuna bak → 403
+      // Şifre yanlışsa (müşteri bulundu ama hash eşleşmedi) → direkt 401
+      const customerExists = await this.customerService.checkEmailExists(loginDto.email);
+      if (!customerExists) {
+        const carrierRepo = new CarrierRepository();
+        const carrier = await carrierRepo.findByEmail(loginDto.email).catch(() => null);
+        if (carrier) {
+          res.status(403).json({ success: false, message: 'Bu hesap bir nakliyeci hesabıdır. Lütfen "Nakliyeci" sekmesinden giriş yapın.' });
+          return;
+        }
+      }
+
+      const result = await this.customerService.login(loginDto);
       res.status(200).json({
         success: true,
         message: 'Giriş başarılı.',
@@ -53,7 +66,6 @@ export class CustomerController {
       res.status(401).json({
         success: false,
         message: error.message || 'Giriş yapılırken hata oluştu.',
-        error: error
       });
     }
   };

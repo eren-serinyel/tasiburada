@@ -48,6 +48,11 @@ export class CarrierAuthService {
     return { carrier, token, profileStatus };
   }
 
+  async checkEmailExists(email: string): Promise<boolean> {
+    const carrier = await this.carrierRepository.findByEmail(email);
+    return !!carrier;
+  }
+
   async login(dto: CarrierLoginDto): Promise<{ carrier: Carrier; token: string }> {
     const carrier = await this.carrierRepository.findByEmail(dto.email);
     if (!carrier) {

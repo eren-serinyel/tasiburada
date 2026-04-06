@@ -85,6 +85,9 @@ export class Shipment {
     @Column({ type: 'varchar', length: 100, nullable: true })
     vehiclePreference: string;
 
+    @Column({ type: 'varchar', length: 20, nullable: true })
+    contactPhone: string | null;
+
     @CreateDateColumn()
     createdAt: Date;
 

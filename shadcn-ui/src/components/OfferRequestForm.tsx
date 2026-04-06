@@ -22,17 +22,33 @@ import { ADDITIONAL_SERVICE_OPTIONS, SPECIAL_SERVICES } from '@/lib/carrierFormC
 import { AnimatePresence, motion } from 'framer-motion';
 import { useToast } from '@/hooks/use-toast';
 import { useNavigate, Link } from 'react-router-dom';
+import { useAuth } from '@/context/AuthContext';
+import { apiClient } from '@/lib/apiClient';
 
 type Step = 1 | 2 | 3;
+
+interface CustomerAddress {
+  id: number;
+  label: string | null;
+  addressLine1: string;
+  addressLine2: string | null;
+  city: string;
+  district: string;
+  isDefault: boolean;
+}
 
 export default function OfferRequestForm({ showHeader = false }: { showHeader?: boolean }) {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { user, isAuthenticated } = useAuth();
   const [step, setStep] = useState<Step>(1);
   const [submitting, setSubmitting] = useState(false);
   const [loadingResults, setLoadingResults] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [carriers, setCarriers] = useState<Carrier[]>([]);
+  const [savedAddresses, setSavedAddresses] = useState<CustomerAddress[]>([]);
+  const [needsPhone, setNeedsPhone] = useState(false);
+  const [phone, setPhone] = useState('');
   const [form, setForm] = useState({
     originCity: '',
     originDistrict: '',
@@ -85,6 +101,34 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
       if (availabilityTimerRef.current) clearTimeout(availabilityTimerRef.current);
     };
   }, [form.date]);
+
+  // Load saved addresses for authenticated customers
+  useEffect(() => {
+    if (isAuthenticated && user?.type === 'customer') {
+      apiClient('/api/v1/customers/me/addresses')
+        .then((r) => r.json())
+        .then((d) => { if (d.success) setSavedAddresses(d.data ?? []); })
+        .catch(() => {});
+    }
+  }, [isAuthenticated, user?.type]);
+
+  // Load profile phone for pre-fill
+  useEffect(() => {
+    if (isAuthenticated && user?.type === 'customer') {
+      apiClient('/api/v1/customers/profile')
+        .then((r) => r.json())
+        .then((d) => {
+          if (d.success) {
+            if (!d.data?.phone) {
+              setNeedsPhone(true);
+            } else {
+              setPhone(d.data.phone);
+            }
+          }
+        })
+        .catch(() => {});
+    }
+  }, [isAuthenticated, user?.type]);
 
   const ALT_OPTIONS_BY_TRANSPORT: Record<string, string[]> = {
     'evden-eve': ['1+1 ev','2+1 ev','3+1 ev','4+1 ev'],
@@ -149,28 +193,44 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
 
   const suitableCarriersBase = useMemo(() => {
     if (!(canNextFrom1 && canNextFrom2)) return [] as Carrier[];
-    const selectedOptionKeys = Object.values(form.serviceOptions || {}).flat();
-    return carriers.filter((c) => {
-      const servesBoth = c.serviceAreas.includes(form.originCity) && c.serviceAreas.includes(form.destinationCity);
-      const scopeMatch = !form.scope || !(c.scopes && c.scopes.length) || (c.scopes || []).includes(form.scope);
-      const vehicleOk = !form.vehicleType || c.vehicle.type === (form.vehicleType as any);
-      const wantsInsurance = form.insurance !== 'none' || form.extras.sigorta || selectedOptionKeys.some(k => k.includes('sigorta'));
-      const hasInsurance = (c.badges || []).some(b => ['Sigorta', 'Soğuk Zincir'].includes(b));
-      const insuranceOk = !wantsInsurance || hasInsurance;
-      const wantsPackaging = form.extras.ambalaj || selectedOptionKeys.some(k => k.includes('paket') || k.includes('ambalaj'));
-      const hasPackaging = (c.badges || []).some(b => ['Profesyonel', 'Altın Taşıyıcı'].includes(b));
-      const extrasOk = (!wantsPackaging || hasPackaging);
-      const estWeight = (form.placeType && TEMPLATE_WEIGHTS[form.placeType])
-        ? TEMPLATE_WEIGHTS[form.placeType]
-        : Number(form.weightKg || 0);
-      const weightOk = !estWeight || c.vehicle.capacity >= estWeight;
-      return servesBoth && scopeMatch && vehicleOk && extrasOk && weightOk && insuranceOk;
-    });
-  }, [form, canNextFrom1, canNextFrom2, carriers]);
+    // Backend zaten tarih filtresi uyguladı.
+    // ServiceAreas verisi tutarsız (bölge adları vs şehir adları karışık) olduğundan
+    // rota eşleşmesini zorunlu tutmuyoruz; CarrierCard'daki badge zaten gösteriyor.
+    return carriers;
+  }, [canNextFrom1, canNextFrom2, carriers]);
 
-  useEffect(() => {
-    setCarriers([]);
+  const isLoggedIn = useMemo(() => {
+    try {
+      return Boolean(localStorage.getItem('userToken')) || Boolean(getSessionUser());
+    } catch {
+      return Boolean(getSessionUser());
+    }
   }, []);
+
+  // Step 3 açıldığında backend'den filtrelenmiş nakliyecileri çek
+  useEffect(() => {
+    if (step !== 3 || !isLoggedIn) return;
+    if (!form.originCity || !form.destinationCity || !form.date) return;
+
+    setLoadingResults(true);
+    setCarriers([]);
+
+    // Sadece tarih filtresi — serviceAreas verisi tutarsız olduğundan backend'e gönderilmiyor
+    const params = new URLSearchParams({ availableDate: form.date, limit: '50' });
+
+    const token = localStorage.getItem('authToken');
+    fetch(`/api/v1/carriers/search?${params}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+      .then((r) => r.json())
+      .then((json) => {
+        if (json.success && Array.isArray(json.data?.items)) {
+          setCarriers(json.data.items.map(mapSearchResultToCarrier));
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoadingResults(false));
+  }, [step, form.originCity, form.destinationCity, form.date, isLoggedIn]);
 
   const [onlyApproved, setOnlyApproved] = useState(false);
   const [minRating, setMinRating] = useState(0);
@@ -191,14 +251,6 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
 
   const goNext = () => setStep((s) => (s < 3 ? ((s + 1) as Step) : s));
   const goPrev = () => setStep((s) => (s > 1 ? ((s - 1) as Step) : s));
-
-  const isLoggedIn = useMemo(() => {
-    try {
-      return Boolean(localStorage.getItem('userToken')) || Boolean(getSessionUser());
-    } catch {
-      return Boolean(getSessionUser());
-    }
-  }, []);
 
   const handleGoToStep3 = () => {
     if (!canNextFrom2) return;
@@ -248,14 +300,53 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
     })();
   }, [form.destinationCity]);
 
-  const requestOffer = async (carrier: Carrier) => {
-    const user = getSessionUser() || (localStorage.getItem('currentUser') ? JSON.parse(localStorage.getItem('currentUser') as string) : null);
-    if (!user) {
-      toast({ title: 'Giriş gerekli', description: 'Teklif göndermek için giriş yapmalısınız.', variant: 'destructive' });
+  // Tüm form verilerinden shipment payload'u üretir
+  const buildShipmentPayload = () => {
+    // serviceOptions içindeki seçimleri düz array'e çevir
+    const extraServicesFromOptions = Object.values(form.serviceOptions || {}).flat();
+    const contactPhone = phone.trim() || undefined;
+
+    return {
+      origin: [form.originCity, form.originDistrict].filter(Boolean).join(', '),
+      destination: [form.destinationCity, form.destinationDistrict].filter(Boolean).join(', '),
+      loadDetails: [form.transportType, form.placeType].filter(Boolean).join(' / ') || 'Belirtilmedi',
+      transportType: form.transportType || undefined,
+      placeType: form.placeType || undefined,
+      hasElevator: form.hasElevator || undefined,
+      floor: form.floor ? Number(form.floor) : undefined,
+      insuranceType: form.insurance !== 'none' ? form.insurance : undefined,
+      timePreference: form.timeWindow || undefined,
+      extraServices: extraServicesFromOptions.length ? extraServicesFromOptions : undefined,
+      weight: form.weightKg ? Number(form.weightKg) : (form.placeType && TEMPLATE_WEIGHTS[form.placeType]) ? TEMPLATE_WEIGHTS[form.placeType] : undefined,
+      vehiclePreference: form.vehicleType || undefined,
+      note: form.note || undefined,
+      shipmentDate: form.date || new Date().toISOString().split('T')[0],
+      contactPhone,
+    };
+  };
+
+  // Profil telefonunu güncelle (opsiyonel, sadece numara yoksa)
+  const savePhoneIfNeeded = async () => {
+    if (needsPhone && phone.trim()) {
+      await apiClient('/api/v1/customers/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: phone.trim() }),
+      }).catch(() => {});
+      setNeedsPhone(false);
+    }
+  };
+
+  // Talebi yayınla — nakliyeci seçmeden marketplace'e gönderir
+  const publishRequest = async () => {
+    if (!isLoggedIn) { setShowLoginModal(true); return; }
+    if (needsPhone && !phone.trim()) {
+      toast({ title: 'Telefon gerekli', description: 'Nakliyecilerin sizi arayabilmesi için telefon numarası gereklidir.', variant: 'destructive' });
       return;
     }
     setSubmitting(true);
     try {
+      await savePhoneIfNeeded();
       const token = localStorage.getItem('authToken');
       const res = await fetch('/api/v1/shipments/', {
         method: 'POST',
@@ -263,20 +354,39 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({
-          origin: [form.originCity, form.originDistrict].filter(Boolean).join(', '),
-          destination: [form.destinationCity, form.destinationDistrict].filter(Boolean).join(', '),
-          loadDetails: [form.transportType, form.loadType, form.vehicleType, form.placeType].filter(Boolean).join(' / ') || 'Belirtilmedi',
-          transportType: form.transportType || undefined,
-          placeType: form.placeType || undefined,
-          hasElevator: form.hasElevator || undefined,
-          floor: form.floor ? Number(form.floor) : undefined,
-          insuranceType: form.insurance !== 'none' ? form.insurance : undefined,
-          timePreference: form.timeWindow || undefined,
-          extraServices: form.extraServices?.length ? form.extraServices : undefined,
-          weight: form.weightKg ? Number(form.weightKg) : undefined,
-          shipmentDate: form.date || new Date().toISOString().split('T')[0],
-        }),
+        body: JSON.stringify(buildShipmentPayload()),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (res.ok && json?.success) {
+        toast({ title: 'Talep yayınlandı!', description: 'Nakliyecilerden teklifler gelmeye başlayacak.' });
+        navigate('/ilanlarim');
+      } else {
+        toast({ title: 'Hata', description: json?.message || 'Talep oluşturulamadı.', variant: 'destructive' });
+      }
+    } catch {
+      toast({ title: 'Bağlantı Hatası', description: 'Sunucuya bağlanılamadı.', variant: 'destructive' });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const requestOffer = async (carrier: Carrier) => {
+    const sessionUser = getSessionUser() || (localStorage.getItem('currentUser') ? JSON.parse(localStorage.getItem('currentUser') as string) : null);
+    if (!sessionUser) {
+      toast({ title: 'Giriş gerekli', description: 'Teklif göndermek için giriş yapmalısınız.', variant: 'destructive' });
+      return;
+    }
+    setSubmitting(true);
+    try {
+      await savePhoneIfNeeded();
+      const token = localStorage.getItem('authToken');
+      const res = await fetch('/api/v1/shipments/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(buildShipmentPayload()),
       });
       const json = await res.json().catch(() => ({}));
       if (res.ok && json?.success) {
@@ -436,6 +546,37 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
                 </div>
               </div>
 
+              {/* Saved addresses quick-fill */}
+              {savedAddresses.length > 0 && (
+                <div style={{ marginBottom: '20px', padding: '14px 16px', background: '#EFF6FF', borderRadius: '10px', border: '1px solid #BFDBFE' }}>
+                  <label style={{ ...labelStyle, color: '#1D4ED8', marginBottom: '8px' }}>
+                    📌 Kayıtlı adreslerden çıkış noktası seç
+                  </label>
+                  <Select
+                    value=""
+                    onValueChange={(val) => {
+                      const addr = savedAddresses.find((a) => String(a.id) === val);
+                      if (addr) {
+                        handleChange('originCity', addr.city);
+                        handleChange('originDistrict', addr.district);
+                      }
+                    }}
+                  >
+                    <SelectTrigger style={{ ...inputStyle, background: 'white' }}>
+                      <SelectValue placeholder="Kayıtlı adres seçin..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {savedAddresses.map((a) => (
+                        <SelectItem key={a.id} value={String(a.id)}>
+                          {a.label ? `${a.label} — ` : ''}{a.city}, {a.district}
+                          {a.isDefault ? ' (Varsayılan)' : ''}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
               {/* Route grid: origin → arrow → destination */}
               <div className="grid items-end" style={{ gridTemplateColumns: '1fr auto 1fr', gap: '12px' }}>
                 {/* Origin */}
@@ -516,7 +657,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
                       <span style={{ color: '#64748B' }}>Müsaitlik kontrol ediliyor...</span>
                     ) : availabilitySummary ? (
                       <span style={{ color: availabilitySummary.available > 0 ? '#16A34A' : '#DC2626' }}>
-                        {availabilitySummary.available} nakliyeci bu tarihte müsait
+                        Bu tarihte aktif {availabilitySummary.available} nakliyeci görünüyor
                         {availabilitySummary.available === 0 && ' — başka bir tarih seçmeyi deneyin'}
                       </span>
                     ) : null}
@@ -870,6 +1011,33 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
                 </div>
               </div>
 
+              {/* Phone — her zaman göster; profil varsa pre-fill, yoksa gerekli */}
+              <div style={{ marginBottom: '20px', padding: '16px', background: needsPhone ? '#FFFBEB' : '#F8FAFC', border: `1px solid ${needsPhone ? '#FDE68A' : '#E2E8F0'}`, borderRadius: '12px' }}>
+                <div className="flex items-center" style={{ gap: '8px', marginBottom: '10px' }}>
+                  <Phone style={{ width: '16px', height: '16px', color: needsPhone ? '#D97706' : '#64748B' }} />
+                  <span style={{ fontSize: '14px', fontWeight: 600, color: needsPhone ? '#92400E' : '#374151' }}>
+                    {needsPhone ? 'Telefon numaranızı ekleyin' : 'İletişim numarası'}
+                  </span>
+                </div>
+                {needsPhone && (
+                  <p style={{ fontSize: '13px', color: '#92400E', marginBottom: '10px' }}>
+                    Nakliyecilerin sizi arayabilmesi için telefon numarası gereklidir.
+                  </p>
+                )}
+                <Input
+                  type="tel"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="5XX XXX XX XX"
+                  style={{ ...inputStyle, background: 'white' }}
+                />
+                {!needsPhone && (
+                  <p style={{ fontSize: '12px', color: '#94A3B8', marginTop: '6px' }}>
+                    Profilinizdeki numara kullanılıyor. Bu talep için farklı bir numara girebilirsiniz.
+                  </p>
+                )}
+              </div>
+
               {/* Edit links */}
               <div className="flex" style={{ gap: '16px', marginTop: '8px', marginBottom: '24px' }}>
                 <span onClick={() => setStep(1)} className="hover:underline" style={{ fontSize: '13px', color: '#2563EB', cursor: 'pointer' }}>✏️ Adım 1'i Düzenle</span>
@@ -942,12 +1110,8 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
                   type="button"
                   disabled={submitting}
                   className="inline-flex items-center hover:shadow-[0_4px_12px_rgba(37,99,235,0.3)]"
-                  style={{ background: '#2563EB', color: 'white', border: 'none', borderRadius: '10px', padding: '12px 32px', fontSize: '15px', fontWeight: 600, cursor: 'pointer', gap: '8px', transition: 'all 150ms' }}
-                  onClick={() => {
-                    if (!isLoggedIn) { setShowLoginModal(true); return; }
-                    toast({ title: 'Talep yayınlandı!', description: 'Nakliyecilerden teklifler gelecektir.' });
-                    navigate('/ilanlarim');
-                  }}
+                  style={{ background: '#2563EB', color: 'white', border: 'none', borderRadius: '10px', padding: '12px 32px', fontSize: '15px', fontWeight: 600, cursor: submitting ? 'not-allowed' : 'pointer', gap: '8px', transition: 'all 150ms' }}
+                  onClick={publishRequest}
                 >
                   {submitting ? (
                     <><Loader2 className="animate-spin" style={{ width: '16px', height: '16px' }} /> Yayınlanıyor...</>
@@ -1159,4 +1323,52 @@ function CarrierCard({ carrier, form, onRequest }: { carrier: Carrier; form: any
       </CardContent>
     </Card>
   );
+}
+
+// ─── Backend search response → Carrier shape dönüşümü ────────────────────────
+
+function parseVehicleSummary(summary: string | null): { type: Carrier['vehicle']['type']; capacity: number } {
+  if (!summary) return { type: 'kamyonet', capacity: 0 };
+  const match = summary.match(/^(\w+)\s*\((\d+)kg\)/i);
+  if (match) {
+    const rawType = match[1].toLowerCase();
+    const typeMap: Record<string, Carrier['vehicle']['type']> = {
+      kamyonet: 'kamyonet', kamyon: 'kamyon', tir: 'tir',
+      panelvan: 'panelvan', panel: 'panelvan',
+    };
+    return { type: typeMap[rawType] ?? 'kamyonet', capacity: parseInt(match[2], 10) };
+  }
+  return { type: 'kamyonet', capacity: 0 };
+}
+
+function mapSearchResultToCarrier(item: {
+  id: string; companyName: string; city: string | null;
+  rating: number; reviewCount: number; vehicleSummary: string | null;
+  serviceAreas: string[]; startingPrice: number | null;
+  experienceYears: number | null; profileCompletion: number | null;
+  pictureUrl: string | null;
+}): Carrier {
+  const { type: vehicleType, capacity } = parseVehicleSummary(item.vehicleSummary);
+  const nameParts = item.companyName.trim().split(/\s+/);
+  return {
+    id: item.id,
+    name: nameParts[0] ?? item.companyName,
+    surname: nameParts.slice(1).join(' '),
+    email: '',
+    phone: '',
+    city: item.city ?? '',
+    type: 'carrier',
+    createdAt: new Date(),
+    vehicle: { id: '', type: vehicleType, capacity, licensePlate: '' },
+    serviceAreas: item.serviceAreas ?? [],
+    loadTypes: [],
+    documents: { license: '', src: '', kBelgesi: '' },
+    rating: item.rating ?? 0,
+    reviewCount: item.reviewCount ?? 0,
+    isApproved: (item.profileCompletion ?? 0) >= 80,
+    baseFee: item.startingPrice ?? 0,
+    badges: [],
+    scopes: [],
+    pictureUrl: item.pictureUrl,
+  };
 }
