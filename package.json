@@ -15,9 +15,14 @@
     "seed": "npx ts-node src/database/seed/seed.ts",
     "seed:clear": "npx ts-node -e \"require('reflect-metadata'); var ds = require('./src/infrastructure/database/data-source'); ds.initializeDatabase().then(function() { return require('./src/database/seed/clearDatabase').clearDatabase(); }).then(function() { return ds.closeDatabase(); }).then(function() { process.exit(0); })\"",
     "setup": "npm run migration:run && npm run seed",
-    "test": "jest",
-    "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage"
+    "test": "jest --runInBand",
+    "test:watch": "jest --watch --runInBand",
+    "test:coverage": "jest --coverage --runInBand",
+    "test:auth": "jest --runInBand --testPathPattern=auth-security",
+    "test:customer": "jest --runInBand --testPathPattern=customer-flow",
+    "test:carrier": "jest --runInBand --testPathPattern=carrier-flow",
+    "test:admin": "jest --runInBand --testPathPattern=admin-flow",
+    "test:e2e": "jest --runInBand --testPathPattern=e2e-scenarios"
   },
   "keywords": [
     "nodejs",

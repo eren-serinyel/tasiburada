@@ -45,6 +45,10 @@ export class OfferService {
       throw new ValidationError('shipmentId ve price alanları zorunludur.');
     }
 
+    if (payload.price <= 0) {
+      throw new ValidationError('Teklif fiyatı 0\'dan büyük olmalıdır.');
+    }
+
     const shipment = await this.shipmentRepository.findById(payload.shipmentId);
     if (!shipment) {
       throw new NotFoundError('Taşıma talebi bulunamadı.');

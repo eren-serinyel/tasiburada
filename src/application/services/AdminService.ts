@@ -10,6 +10,7 @@ import { PlatformSetting } from '../../domain/entities/PlatformSetting';
 import { AuditLogRepository } from '../../infrastructure/repositories/AuditLogRepository';
 import { NotificationService } from './NotificationService';
 import * as bcrypt from 'bcryptjs';
+import { ValidationError } from '../../domain/errors/AppError';
 
 export class AdminService {
   private auditLogRepository: AuditLogRepository;
@@ -111,7 +112,8 @@ export class AdminService {
       relations: ['documents', 'vehicles'],
     });
     if (!carrier) throw new Error('Nakliyeci bulunamadı.');
-    return carrier;
+    const { passwordHash, resetToken, verificationToken, ...safeCarrier } = carrier as any;
+    return safeCarrier;
   }
 
   async verifyCarrier(
@@ -167,8 +169,10 @@ export class AdminService {
     query.orderBy('customer.createdAt', 'DESC').take(limit).skip((page - 1) * limit);
     const [customers, total] = await query.getManyAndCount();
 
+    const safeCustomers = customers.map(({ passwordHash, ...rest }: any) => rest);
+
     return {
-      customers,
+      customers: safeCustomers,
       pagination: { total, page, limit, totalPages: Math.ceil(total / limit) },
     };
   }
@@ -725,6 +729,23 @@ export class AdminService {
   }
 
   async updateSettings(adminId: string, updates: Record<string, any>) {
+    const numericValidations: Record<string, (v: number) => string | null> = {
+      min_offer_price: (v) => v < 0 ? 'Min teklif fiyatı negatif olamaz.' : null,
+      max_cancellation_rate: (v) => v < 0 || v > 100 ? 'İptal oranı 0-100 arasında olmalıdır.' : null,
+      platform_commission: (v) => v < 0 || v > 100 ? 'Komisyon oranı 0-100 arasında olmalıdır.' : null,
+      commission_rate: (v) => v < 0 || v > 100 ? 'Komisyon oranı 0-100 arasında olmalıdır.' : null,
+      min_password_length: (v) => v < 6 || v > 32 ? 'Şifre uzunluğu 6-32 arasında olmalıdır.' : null,
+      session_timeout: (v) => v < 1 ? 'Oturum zaman aşımı en az 1 dakika olmalıdır.' : null,
+    };
+
+    for (const [key, value] of Object.entries(updates)) {
+      const validate = numericValidations[key];
+      if (validate && typeof value === 'number') {
+        const error = validate(value);
+        if (error) throw new ValidationError(error);
+      }
+    }
+
     const settingRepo = AppDataSource.getRepository(PlatformSetting);
     const changed: string[] = [];
 

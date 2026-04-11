@@ -1,11 +1,13 @@
 import 'reflect-metadata';
-import express from 'express';
+import express, { Request, Response } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import path from 'node:path';
+import fs from 'node:fs';
 import routes from '../../presentation/routes';
 import { AppError } from '../../domain/errors/AppError';
+import { authenticateToken } from '../../presentation/middleware/auth';
 
 /**
  * Creates a fully configured Express app for integration tests.
@@ -24,12 +26,40 @@ function buildTestApp(): express.Application {
   }));
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-  app.use('/uploads', express.static(path.resolve(process.cwd(), 'uploads')));
+
+  // Upload routes — mirror index.ts behaviour
+  const resolveUploadFile = (folder: string, filename: string): string | null => {
+    if (filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+      return null;
+    }
+    const filePath = path.resolve(process.cwd(), 'uploads', folder, filename);
+    const uploadsRoot = path.resolve(process.cwd(), 'uploads');
+    if (!filePath.startsWith(uploadsRoot + path.sep)) {
+      return null;
+    }
+    return filePath;
+  };
+
+  app.get('/uploads/pictures/:filename', (req: Request, res: Response): void => {
+    const { filename } = req.params;
+    const filePath = resolveUploadFile('pictures', filename);
+    if (!filePath) { res.status(400).json({ success: false, message: 'Geçersiz dosya adı.' }); return; }
+    if (!fs.existsSync(filePath)) { res.status(404).json({ success: false, message: 'Dosya bulunamadı.' }); return; }
+    res.sendFile(filePath);
+  });
+
+  app.get('/uploads/documents/:filename', authenticateToken, (req: Request, res: Response): void => {
+    const { filename } = req.params;
+    const filePath = resolveUploadFile('documents', filename);
+    if (!filePath) { res.status(400).json({ success: false, message: 'Geçersiz dosya adı.' }); return; }
+    if (!fs.existsSync(filePath)) { res.status(404).json({ success: false, message: 'Dosya bulunamadı.' }); return; }
+    res.sendFile(filePath);
+  });
 
   // Tight rate limits for auth in production; in tests we loosen them.
   const testLimiter = rateLimit({
     windowMs: 60 * 1000,
-    limit: 1000, // effectively disabled for tests
+    limit: 1000,
     standardHeaders: false,
     legacyHeaders: false,
   });

@@ -70,6 +70,13 @@ export class ShipmentService {
       throw new ValidationError('Varış noktası en az 3 karakter olmalıdır.');
     }
 
+    const shipmentDate = new Date(payload.shipmentDate);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (shipmentDate < today) {
+      throw new ValidationError('Taşıma tarihi geçmiş bir tarih olamaz.');
+    }
+
     return await this.shipmentRepository.createShipmentRecord({
       customerId,
       origin,
