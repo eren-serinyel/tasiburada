@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Truck, Package, Star, Clock, MapPin, TrendingUp, AlertTriangle, CheckCircle2, ChevronRight, ArrowRight, Bell } from 'lucide-react';
+import { Truck, Package, Star, Clock, MapPin, TrendingUp, AlertTriangle, CheckCircle2, ChevronRight, ArrowRight, Bell, RotateCcw } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { User as UserType, Carrier, Shipment } from '@/lib/types';
 import { getCarrierProfileTasks } from '@/lib/utils';
@@ -595,6 +595,39 @@ export default function Dashboard() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Son Tamamlanan — Tekrar Oluştur */}
+        {(() => {
+          const completedList = shipments.filter(s => s.status === 'completed');
+          const activeCount = shipments.filter(s => !['completed', 'cancelled'].includes(s.status)).length;
+          const lastCompleted = completedList[0] ?? null;
+          if (!lastCompleted || activeCount > 0) return null;
+          return (
+            <Card className="rounded-xl shadow-sm border-l-4 border-emerald-400">
+              <CardContent className="py-4 px-5 flex items-center justify-between gap-4">
+                <div className="min-w-0">
+                  <p className="text-xs text-gray-500 font-medium uppercase tracking-wide mb-0.5">Son taşıman</p>
+                  <p className="font-medium text-gray-900 truncate">{lastCompleted.origin.city} → {lastCompleted.destination.city}</p>
+                  {lastCompleted.description && <p className="text-xs text-gray-500 truncate">{lastCompleted.description}</p>}
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-1 flex-shrink-0"
+                  onClick={() => {
+                    sessionStorage.setItem('repeatShipment', JSON.stringify({
+                      origin: `${lastCompleted.origin.city}`,
+                      destination: `${lastCompleted.destination.city}`,
+                    }));
+                    navigate('/teklif-talebi?repeat=true');
+                  }}
+                >
+                  <RotateCcw className="h-3 w-3" /> Tekrar
+                </Button>
+              </CardContent>
+            </Card>
+          );
+        })()}
 
         {/* İlan Listesi */}
         <Card className="rounded-xl shadow-sm">

@@ -5,10 +5,14 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Star, PackageOpen, ArrowLeft } from 'lucide-react';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog';
+import { Star, PackageOpen, ArrowLeft, BarChart2 } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { apiClient } from '@/lib/apiClient';
 import { toast } from '@/components/ui/sonner';
+import { cn } from '@/lib/utils';
 
 interface OfferCarrier {
   id: string;
@@ -20,6 +24,7 @@ interface OfferCarrier {
   vehicleType?: string | null;
   vehicleBrand?: string | null;
   vehicleModel?: string | null;
+  vehicleCapacityM3?: number | null;
   activityCity?: string | null;
 }
 
@@ -99,6 +104,18 @@ export default function OfferComparison() {
   const [loading, setLoading] = useState(true);
   const [decidingId, setDecidingId] = useState<string | null>(null);
   const [confirmOffer, setConfirmOffer] = useState<BackendOffer | null>(null);
+  const [compareMode, setCompareMode] = useState(false);
+  const [selectedForCompare, setSelectedForCompare] = useState<string[]>([]);
+
+  const toggleCompare = (offerId: string) => {
+    setSelectedForCompare((prev) =>
+      prev.includes(offerId)
+        ? prev.filter(id => id !== offerId)
+        : prev.length < 3
+          ? [...prev, offerId]
+          : prev
+    );
+  };
 
   const fetchOffers = async () => {
     try {
@@ -145,6 +162,47 @@ export default function OfferComparison() {
   const stCfg = shipmentStatusConfig[shipment?.status || ''] || { label: '', bg: 'bg-gray-100', text: 'text-gray-600' };
   const lowestPrice = offers.length > 0 ? Number(offers[0].price) : null;
 
+  /* ── Comparison table row definitions ── */
+  const compareRows = useMemo(() => [
+    {
+      label: 'Fiyat',
+      render: (o: BackendOffer) => (
+        <span className="font-bold text-primary">₺{fmtPrice(Number(o.price))}</span>
+      ),
+      best: (items: BackendOffer[]) => Math.min(...items.map(o => Number(o.price))),
+      isBest: (o: BackendOffer, best: number) => Number(o.price) === best,
+    },
+    {
+      label: 'Puan',
+      render: (o: BackendOffer) => (
+        <span>{o.carrier?.rating ? `${Number(o.carrier.rating).toFixed(1)} / 5` : '—'}</span>
+      ),
+      best: (items: BackendOffer[]) => Math.max(...items.map(o => o.carrier?.rating ?? 0)),
+      isBest: (o: BackendOffer, best: number) => (o.carrier?.rating ?? 0) === best,
+    },
+    {
+      label: 'Teslim Süresi',
+      render: (o: BackendOffer) =>
+        o.estimatedDuration ? <span>{o.estimatedDuration} saat</span> : <span>—</span>,
+      best: (items: BackendOffer[]) => {
+        const durations = items.filter(o => o.estimatedDuration).map(o => o.estimatedDuration!);
+        return durations.length > 0 ? Math.min(...durations) : Infinity;
+      },
+      isBest: (o: BackendOffer, best: number) => o.estimatedDuration === best,
+    },
+    {
+      label: 'Tamamlanan İş',
+      render: (o: BackendOffer) => <span>{o.carrier?.completedShipments ?? 0} iş</span>,
+    },
+    {
+      label: 'Araç Kapasitesi',
+      render: (o: BackendOffer) =>
+        o.carrier?.vehicleCapacityM3
+          ? <span>{o.carrier.vehicleCapacityM3} m³</span>
+          : <span>—</span>,
+    },
+  ] as const, []);
+
   if (loading) {
     return (
       <div className="flex min-h-[40vh] items-center justify-center">
@@ -173,18 +231,26 @@ export default function OfferComparison() {
               }
             </p>
           </div>
-          {shipment && (
-            <div className="flex items-center gap-2">
-              {shipment.shipmentDate && (
-                <span className="inline-flex items-center bg-gray-100 text-gray-600 text-xs font-medium px-2.5 py-1 rounded">
-                  📅 {fmtDate(shipment.shipmentDate)}
+          <div className="flex items-center gap-2">
+            {shipment && (
+              <>
+                {shipment.shipmentDate && (
+                  <span className="inline-flex items-center bg-gray-100 text-gray-600 text-xs font-medium px-2.5 py-1 rounded">
+                    📅 {fmtDate(shipment.shipmentDate)}
+                  </span>
+                )}
+                <span className={`inline-flex items-center px-2.5 py-1 rounded text-[11px] font-semibold ${stCfg.bg} ${stCfg.text}`}>
+                  {stCfg.label}
                 </span>
-              )}
-              <span className={`inline-flex items-center px-2.5 py-1 rounded text-[11px] font-semibold ${stCfg.bg} ${stCfg.text}`}>
-                {stCfg.label}
-              </span>
-            </div>
-          )}
+              </>
+            )}
+            {selectedForCompare.length >= 2 && (
+              <Button size="sm" onClick={() => setCompareMode(true)}>
+                <BarChart2 className="h-4 w-4 mr-2" />
+                {selectedForCompare.length} Teklifi Karşılaştır
+              </Button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -215,6 +281,19 @@ export default function OfferComparison() {
                   <div className="absolute top-0 right-0 bg-blue-600 text-white text-[10px] font-bold tracking-[0.08em] px-2.5 py-1 rounded-bl-lg rounded-tr-xl">
                     EN UYGUN
                   </div>
+                )}
+
+                {/* Compare checkbox */}
+                {offer.status === 'pending' && (
+                  <label className="flex items-center gap-2 text-sm cursor-pointer mb-3">
+                    <input
+                      type="checkbox"
+                      checked={selectedForCompare.includes(offer.id)}
+                      onChange={() => toggleCompare(offer.id)}
+                      className="rounded"
+                    />
+                    Karşılaştır
+                  </label>
                 )}
 
                 {/* Carrier info */}
@@ -337,6 +416,85 @@ export default function OfferComparison() {
           })}
         </div>
       )}
+
+      {/* ── Comparison Dialog ── */}
+      <Dialog open={compareMode} onOpenChange={setCompareMode}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Teklif Karşılaştırması</DialogTitle>
+          </DialogHeader>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr>
+                  <th className="text-left p-2 text-muted-foreground font-normal w-32">
+                    Kriter
+                  </th>
+                  {selectedForCompare.map(id => {
+                    const offer = offers.find(o => o.id === id);
+                    return (
+                      <th key={id} className="text-center p-2 font-semibold">
+                        {offer?.carrier?.companyName || offer?.carrier?.contactName || 'Nakliyeci'}
+                      </th>
+                    );
+                  })}
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {compareRows.map((row) => {
+                  const compareOffers = selectedForCompare
+                    .map(id => offers.find(o => o.id === id)!)
+                    .filter(Boolean);
+                  const best = 'best' in row && row.best ? row.best(compareOffers) : undefined;
+
+                  return (
+                    <tr key={row.label}>
+                      <td className="p-2 text-muted-foreground">
+                        {row.label}
+                      </td>
+                      {compareOffers.map((offer) => (
+                        <td
+                          key={offer.id}
+                          className={cn(
+                            'p-2 text-center',
+                            best !== undefined && 'isBest' in row && row.isBest?.(offer, best)
+                              ? 'bg-green-50 font-semibold'
+                              : ''
+                          )}
+                        >
+                          {row.render(offer)}
+                        </td>
+                      ))}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Accept from comparison */}
+          <div className="flex gap-3 pt-4">
+            {selectedForCompare.map(id => {
+              const offer = offers.find(o => o.id === id);
+              if (!offer || offer.status !== 'pending') return null;
+              return (
+                <Button
+                  key={id}
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => {
+                    setConfirmOffer(offer);
+                    setCompareMode(false);
+                  }}
+                >
+                  {offer.carrier?.companyName || offer.carrier?.contactName || 'Nakliyeci'} Seç
+                </Button>
+              );
+            })}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* ── Confirm Accept Dialog ── */}
       <AlertDialog open={!!confirmOffer} onOpenChange={(open) => { if (!open) setConfirmOffer(null); }}>

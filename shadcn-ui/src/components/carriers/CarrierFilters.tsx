@@ -164,11 +164,11 @@ const CarrierFilters = ({ filters, onChange, hideHeader }: CarrierFiltersProps) 
 	};
 
 	return (
-		<div className="bg-white rounded-lg">
+		<div className="bg-white rounded-2xl shadow-sm border border-transparent">
 			{!hideHeader && (
-				<div className="flex items-center gap-2 p-4 border-b bg-slate-50/50 rounded-t-lg">
-					<SlidersHorizontal className="h-4 w-4 text-slate-700" />
-					<h3 className="font-semibold text-slate-900">Filtreleme Seçenekleri</h3>
+				<div className="flex items-center gap-2 px-5 py-4 border-b border-slate-100 bg-slate-50/50 rounded-t-2xl">
+					<SlidersHorizontal className="h-4 w-4 text-blue-600" />
+					<h3 className="font-bold text-slate-800 text-[15px]">Filtreleme Seçenekleri</h3>
 				</div>
 			)}
 
@@ -176,12 +176,14 @@ const CarrierFilters = ({ filters, onChange, hideHeader }: CarrierFiltersProps) 
 
 				{/* 1. KONUM & HİZMET ALANI */}
 				<section className="space-y-4">
-					<div className="flex items-center gap-2 text-slate-800 font-medium pb-2 border-b border-slate-100">
-						<MapPin className="h-4 w-4 text-blue-600" />
-						<span>Konum ve Hizmet Bölgesi</span>
+					<div className="flex items-center gap-2 pb-3 mb-1 border-b border-slate-100">
+						<div className="w-6 h-6 flex items-center justify-center rounded-md bg-blue-50 text-blue-600 shrink-0">
+							<MapPin className="h-3.5 w-3.5" />
+						</div>
+						<span className="font-semibold text-sm text-slate-800">Konum ve Hizmet Bölgesi</span>
 					</div>
 
-					<div className="grid gap-3">
+					<div className="grid gap-3 flex-1">
 						<div className="space-y-1.5">
 							<Label className="text-xs text-slate-500">Hizmet Verdiği İl</Label>
 							<Select value={serviceCityValue} onValueChange={handleServiceCityChange}>
@@ -230,9 +232,11 @@ const CarrierFilters = ({ filters, onChange, hideHeader }: CarrierFiltersProps) 
 
 				{/* 2. ARAÇ & KAPASİTE */}
 				<section className="space-y-4">
-					<div className="flex items-center gap-2 text-slate-800 font-medium pb-2 border-b border-slate-100">
-						<Truck className="h-4 w-4 text-blue-600" />
-						<span>Araç ve Kapasite</span>
+					<div className="flex items-center gap-2 pb-3 mb-1 border-b border-slate-100">
+						<div className="w-6 h-6 flex items-center justify-center rounded-md bg-blue-50 text-blue-600 shrink-0">
+							<Truck className="h-3.5 w-3.5" />
+						</div>
+						<span className="font-semibold text-sm text-slate-800">Araç ve Kapasite</span>
 					</div>
 
 					<div className="space-y-3">
@@ -271,9 +275,11 @@ const CarrierFilters = ({ filters, onChange, hideHeader }: CarrierFiltersProps) 
 
 				{/* 3. HİZMET TÜRLERİ */}
 				<section className="space-y-4">
-					<div className="flex items-center gap-2 text-slate-800 font-medium pb-2 border-b border-slate-100">
-						<Box className="h-4 w-4 text-blue-600" />
-						<span>Hizmet Türleri</span>
+					<div className="flex items-center gap-2 pb-3 mb-1 border-b border-slate-100">
+						<div className="w-6 h-6 flex items-center justify-center rounded-md bg-blue-50 text-blue-600 shrink-0">
+							<Box className="h-3.5 w-3.5" />
+						</div>
+						<span className="font-semibold text-sm text-slate-800">Hizmet Türleri</span>
 					</div>
 					<div className="grid grid-cols-2 gap-2">
 						{LOAD_TYPE_OPTIONS.map(opt => (
@@ -293,9 +299,11 @@ const CarrierFilters = ({ filters, onChange, hideHeader }: CarrierFiltersProps) 
 
 				{/* 4. PROFİL VE GÜVEN */}
 				<section className="space-y-4">
-					<div className="flex items-center gap-2 text-slate-800 font-medium pb-2 border-b border-slate-100">
-						<Shield className="h-4 w-4 text-blue-600" />
-						<span>Profil ve Güvenilirlik</span>
+					<div className="flex items-center gap-2 pb-3 mb-1 border-b border-slate-100">
+						<div className="w-6 h-6 flex items-center justify-center rounded-md bg-blue-50 text-blue-600 shrink-0">
+							<Shield className="h-3.5 w-3.5" />
+						</div>
+						<span className="font-semibold text-sm text-slate-800">Profil ve Güvenilirlik</span>
 					</div>
 
 					<div className="space-y-3">
@@ -339,9 +347,11 @@ const CarrierFilters = ({ filters, onChange, hideHeader }: CarrierFiltersProps) 
 
 				{/* 5. PUAN & SIRALAMA */}
 				<section className="space-y-4">
-					<div className="flex items-center gap-2 text-slate-800 font-medium pb-2 border-b border-slate-100">
-						<AuthorIcon className="h-4 w-4 text-blue-600" />
-						<span>Puan ve Sıralama</span>
+					<div className="flex items-center gap-2 pb-3 mb-1 border-b border-slate-100">
+						<div className="w-6 h-6 flex items-center justify-center rounded-md bg-blue-50 text-blue-600 shrink-0">
+							<AuthorIcon className="h-3.5 w-3.5" />
+						</div>
+						<span className="font-semibold text-sm text-slate-800">Puan ve Sıralama</span>
 					</div>
 
 					<div className="space-y-3">
@@ -372,8 +382,8 @@ const CarrierFilters = ({ filters, onChange, hideHeader }: CarrierFiltersProps) 
 					</div>
 				</section>
 
-				<Button variant="outline" className="w-full mt-4 border-dashed text-slate-600 hover:text-slate-900 border-slate-300" onClick={resetFilters}>
-					<RotateCcw className="h-3.5 w-3.5 mr-2" />
+				<Button variant="outline" className="w-full mt-6 bg-slate-50 border-slate-200 text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors shadow-none rounded-xl h-10" onClick={resetFilters}>
+					<RotateCcw className="h-3.5 w-3.5 mr-2 text-slate-400" />
 					Filtreleri Temizle
 				</Button>
 			</div>

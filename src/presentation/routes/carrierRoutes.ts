@@ -8,6 +8,7 @@ import { CarrierDetailController } from '../controllers/CarrierDetailController'
 import { CarrierDashboardController } from '../controllers/CarrierDashboardController';
 import { CarrierReviewController } from '../controllers/CarrierReviewController';
 import { OfferController } from '../controllers/OfferController';
+import { ShipmentInviteController } from '../controllers/ShipmentInviteController';
 import { documentUpload, pictureUpload } from '../../infrastructure/upload/uploadMiddleware';
 
 const router = Router();
@@ -19,6 +20,7 @@ const detailController = new CarrierDetailController();
 const dashboardController = new CarrierDashboardController();
 const reviewController = new CarrierReviewController();
 const offerController = new OfferController();
+const inviteController = new ShipmentInviteController();
 
 
 // Public auth routes
@@ -63,6 +65,7 @@ router.get('/:carrierId/documents', authCarrier, documentController.getDocuments
 router.put('/:carrierId/documents', authCarrier, documentUpload.single('file'), documentController.updateDocuments);
 router.put('/:carrierId/profile-picture', authCarrier, pictureUpload.single('picture'), profileController.updateProfilePicture);
 router.put('/:carrierId/security', authCarrier, profileController.updateSecurity);
+router.get('/me/invites', authCarrier, inviteController.getCarrierInvites);
 router.get('/:carrierId', profileController.getCarrierProfile);
 
 export default router;

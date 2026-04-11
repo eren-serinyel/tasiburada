@@ -6,6 +6,7 @@ import { ForbiddenError, NotFoundError, ValidationError } from '../../domain/err
 import { NotificationService } from './NotificationService';
 import { AppDataSource } from '../../infrastructure/database/data-source';
 import { CarrierEarningsLog } from '../../domain/entities/CarrierEarningsLog';
+import { CustomerCarrierRelationRepository } from '../../infrastructure/repositories/CustomerCarrierRelationRepository';
 
 interface CreateShipmentPayload {
   origin: string;
@@ -293,6 +294,17 @@ export class ShipmentService {
     }
     if (!updatedShipment) {
       throw new NotFoundError('Taşıma tamamlandı ancak kayıt getirilemedi.');
+    }
+
+    // CustomerCarrierRelation güncelle
+    if (updatedShipment.carrierId && updatedShipment.customerId) {
+      try {
+        await CustomerCarrierRelationRepository.upsertRelation(
+          updatedShipment.customerId,
+          updatedShipment.carrierId,
+          shipmentId
+        );
+      } catch { /* relation hatası taşımayı etkilemesin */ }
     }
 
     try {

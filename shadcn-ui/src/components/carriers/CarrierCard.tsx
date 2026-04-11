@@ -2,11 +2,13 @@ import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { MapPin, Star, Truck, ShieldCheck, ChevronRight } from 'lucide-react';
+import { MapPin, Star, Truck, ShieldCheck, ChevronRight, Heart } from 'lucide-react';
 import { CarrierSearchItem } from '@/lib/types';
-import { formatPrice } from '@/lib/utils';
+import { formatPrice, cn } from '@/lib/utils';
 import { memo, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useFavorites } from '@/hooks/useFavorites';
+import { useToast } from '@/hooks/use-toast';
 
 interface CarrierCardProps {
 	carrier: CarrierSearchItem;
@@ -20,6 +22,9 @@ const normalizeNumber = (value: unknown, fallback = 0): number => {
 
 const CarrierCard = ({ carrier, onInspect }: CarrierCardProps) => {
 	const navigate = useNavigate();
+	const { isFavorite, toggleFavorite, isCustomer } = useFavorites();
+	const { toast } = useToast();
+	const liked = isFavorite(carrier.id);
 
 	const initials = useMemo(() => {
 		const parts = carrier.companyName.split(' ').filter(Boolean);
@@ -50,6 +55,14 @@ const CarrierCard = ({ carrier, onInspect }: CarrierCardProps) => {
 			return;
 		}
 		navigate(detailPath);
+	};
+
+	const handleToggleFavorite = async (e: React.MouseEvent) => {
+		e.stopPropagation();
+		const result = await toggleFavorite(carrier.id);
+		if (result !== null) {
+			toast({ title: result ? 'Favorilere eklendi' : 'Favorilerden çıkarıldı' });
+		}
 	};
 
 	return (
@@ -89,6 +102,15 @@ const CarrierCard = ({ carrier, onInspect }: CarrierCardProps) => {
 							</div>
 						</div>
 					</div>
+					{isCustomer && (
+						<button
+							onClick={handleToggleFavorite}
+							className="p-1.5 rounded-full hover:bg-slate-100 transition-colors shrink-0"
+							title={liked ? 'Favorilerden çıkar' : 'Favorilere ekle'}
+						>
+							<Heart className={cn('h-5 w-5 transition-colors', liked ? 'fill-red-500 text-red-500' : 'text-slate-400 hover:text-red-400')} />
+						</button>
+					)}
 				</div>
 			</CardHeader>
 

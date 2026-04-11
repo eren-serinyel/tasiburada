@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Truck, User, LogOut, Menu, X, ChevronDown, Home, Users, HelpCircle, Package, History, CreditCard, Calendar, TrendingUp } from 'lucide-react';
+import { Truck, User, LogOut, Menu, X, ChevronDown, Home, Users, HelpCircle, Package, History, CreditCard, Calendar, TrendingUp, Heart } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import NotificationBell from './NotificationBell';
 import {
@@ -177,6 +177,11 @@ export default function Navbar() {
                         <DropdownMenuItem asChild>
                           <Link to="/tekliflerim" className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-blue-50 cursor-pointer w-full text-sm text-gray-700">
                             <TrendingUp className="h-4 w-4 text-gray-500" /> Tekliflerim
+                          </Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem asChild>
+                          <Link to="/kayitli-firmalarim" className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-blue-50 cursor-pointer w-full text-sm text-gray-700">
+                            <Heart className="h-4 w-4 text-gray-500" /> Kayıtlı Firmalarım
                           </Link>
                         </DropdownMenuItem>
                         <DropdownMenuItem asChild>

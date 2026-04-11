@@ -1,4 +1,4 @@
-﻿import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
@@ -7,6 +7,7 @@ import {
   Plus, Package, MessageSquare, Truck, CheckCircle2,
   MapPin, RotateCcw, Home, Building2, ChevronRight,
   Star, Phone, UserCheck, FileEdit, Headphones,
+  Heart, History, Settings, HeadphonesIcon
 } from 'lucide-react';
 import { Shipment } from '@/lib/types';
 import { getSessionUser } from '@/lib/storage';
@@ -567,28 +568,56 @@ export default function CustomerHome() {
 
           {/* ═══ BLOK 5 — Hızlı İşlemler ═══ */}
           <div className="rounded-xl border bg-card p-4">
-            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">
-              Hızlı İşlemler
-            </h3>
             <div className="space-y-1">
-              {([
-                { icon: Home,      label: 'Ev Taşıma Talebi',      path: '/teklif-talebi?type=residential' },
-                { icon: Building2, label: 'Ofis Taşıma Talebi',    path: '/teklif-talebi?type=office' },
-                { icon: Package,   label: 'Parça Eşya Gönder',     path: '/teklif-talebi?type=partial' },
-                { icon: RotateCcw, label: 'Geçmiş Talebi Kopyala', path: '/gecmis', disabled: completedShipments.length === 0 },
-                { icon: Headphones,label: 'Destek Al',              path: '/destek' },
-              ] as const).map(({ icon: Icon, label, path, disabled }) => (
+              <h3 className="text-sm font-semibold text-muted-foreground
+                             uppercase tracking-wide mb-3">
+                Hızlı İşlemler
+              </h3>
+              {[
+                {
+                  icon: Heart,
+                  label: 'Kayıtlı Firmalarım',
+                  description: 'Daha önce çalıştığın nakliyeciler',
+                  href: '/kayitli-firmalarim',
+                },
+                {
+                  icon: History,
+                  label: 'Geçmiş İşlerim',
+                  description: 'Tamamlanan taşımalar',
+                  href: '/gecmis',
+                },
+                {
+                  icon: Settings,
+                  label: 'Hesap Ayarları',
+                  description: 'Profil ve güvenlik',
+                  href: '/profilim',
+                },
+                {
+                  icon: HeadphonesIcon,
+                  label: 'Destek Al',
+                  description: 'Yardım ve SSS',
+                  href: '/destek',
+                },
+              ].map(({ icon: Icon, label, description, href }) => (
                 <button
-                  key={label}
-                  onClick={() => navigate(path)}
-                  disabled={disabled}
-                  className={cn(
-                    'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-left hover:bg-muted transition-colors',
-                    disabled && 'opacity-40 cursor-not-allowed'
-                  )}
+                  key={href}
+                  onClick={() => navigate(href)}
+                  className="w-full flex items-center gap-3 px-3 py-2.5
+                             rounded-lg text-left hover:bg-muted
+                             transition-colors group"
                 >
-                  <Icon className="h-4 w-4 text-muted-foreground shrink-0" />
-                  {label}
+                  <div className="w-8 h-8 rounded-lg bg-muted
+                                  group-hover:bg-background
+                                  flex items-center justify-center
+                                  flex-shrink-0 transition-colors">
+                    <Icon className="h-4 w-4 text-muted-foreground" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium">{label}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {description}
+                    </p>
+                  </div>
                 </button>
               ))}
             </div>

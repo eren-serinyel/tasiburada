@@ -6,11 +6,13 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Star, PackageOpen } from 'lucide-react';
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { Star, PackageOpen, Sparkles, Bookmark, CheckCircle2, XCircle } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { apiClient } from '@/lib/apiClient';
 import { toast } from '@/components/ui/sonner';
 import { formatLocation } from '@/utils/formatLocation';
+import { cn } from '@/lib/utils';
 
 const API_BASE_URL = '/api/v1';
 
@@ -21,6 +23,9 @@ interface OfferCarrier {
   rating?: number;
   completedShipments?: number;
   pictureUrl?: string | null;
+  vehicleBrand?: string | null;
+  vehicleModel?: string | null;
+  vehicleCapacityM3?: number | null;
 }
 
 interface OfferShipment {
@@ -46,6 +51,8 @@ interface BackendOffer {
   offeredAt: string;
 }
 
+type SortOption = 'price_asc' | 'price_desc' | 'rating_desc' | 'duration_asc' | 'date_desc';
+
 /* ── Helpers ── */
 const shipmentStatusConfig: Record<string, { label: string; bg: string; text: string }> = {
   pending:        { label: 'Teklif Bekleniyor', bg: 'bg-amber-50',  text: 'text-amber-700' },
@@ -62,16 +69,19 @@ const fmtPrice = (n: number) =>
 const fmtDate = (d: string) =>
   new Date(d).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' });
 
-function timeAgo(dateStr: string): string {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'Az önce';
-  if (mins < 60) return `${mins} dk önce`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours} saat önce`;
+function getOfferAge(createdAt: string): string {
+  const diff = Date.now() - new Date(createdAt).getTime();
+  const hours = Math.floor(diff / (1000 * 60 * 60));
   const days = Math.floor(hours / 24);
-  return `${days} gün önce`;
+  if (days > 0) return `${days} gün önce`;
+  if (hours > 0) return `${hours} saat önce`;
+  return 'Az önce';
 }
+
+const isOldOffer = (createdAt: string): boolean => {
+  const diff = Date.now() - new Date(createdAt).getTime();
+  return diff > 48 * 60 * 60 * 1000;
+};
 
 function getInitials(name?: string | null): string {
   if (!name) return 'N';
@@ -99,7 +109,26 @@ export default function MyOffers() {
   const [decidingId, setDecidingId] = useState<string | null>(null);
   const [filterShipmentId, setFilterShipmentId] = useState<string>('all');
   const [confirmOffer, setConfirmOffer] = useState<BackendOffer | null>(null);
+  const [sortBy, setSortBy] = useState<SortOption>('date_desc');
+  const [selectedOffer, setSelectedOffer] = useState<BackendOffer | null>(null);
+  const [showBookmarked, setShowBookmarked] = useState(false);
   const navigate = useNavigate();
+
+  const [bookmarked, setBookmarked] = useState<string[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('bookmarkedOffers') ?? '[]');
+    } catch { return []; }
+  });
+
+  const toggleBookmark = (offerId: string) => {
+    setBookmarked((prev) => {
+      const next = prev.includes(offerId)
+        ? prev.filter(id => id !== offerId)
+        : [...prev, offerId];
+      localStorage.setItem('bookmarkedOffers', JSON.stringify(next));
+      return next;
+    });
+  };
 
   const fetchOffers = async () => {
     try {
@@ -139,11 +168,39 @@ export default function MyOffers() {
     }
   };
 
+  /* ── Badge helpers ── */
+  const pendingOffers = useMemo(() => offers.filter(o => o.status === 'pending'), [offers]);
+
+  const bestPrice = useMemo(() =>
+    pendingOffers.length > 0 ? Math.min(...pendingOffers.map(o => Number(o.price))) : null,
+  [pendingOffers]);
+
+  const bestRating = useMemo(() =>
+    pendingOffers.length > 0 ? Math.max(...pendingOffers.map(o => o.carrier?.rating ?? 0)) : null,
+  [pendingOffers]);
+
+  const fastestDuration = useMemo(() => {
+    const durations = pendingOffers.filter(o => o.estimatedDuration).map(o => o.estimatedDuration!);
+    return durations.length > 0 ? Math.min(...durations) : null;
+  }, [pendingOffers]);
+
+  const getBadge = (offer: BackendOffer): string | null => {
+    if (offer.status !== 'pending') return null;
+    if (bestPrice !== null && Number(offer.price) === bestPrice) return 'En Uygun Fiyat';
+    if (bestRating !== null && bestRating > 0 && (offer.carrier?.rating ?? 0) === bestRating) return 'En Yüksek Puan';
+    if (fastestDuration !== null && offer.estimatedDuration === fastestDuration) return 'En Hızlı';
+    return null;
+  };
+
   /* ── Group offers by shipmentId ── */
   const grouped = useMemo(() => {
-    const filtered = filterShipmentId === 'all'
+    let filtered = filterShipmentId === 'all'
       ? offers
       : offers.filter(o => o.shipmentId === filterShipmentId);
+
+    if (showBookmarked) {
+      filtered = filtered.filter(o => bookmarked.includes(o.id));
+    }
 
     const map = new Map<string, { shipment: OfferShipment | undefined; offers: BackendOffer[] }>();
     for (const o of filtered) {
@@ -153,12 +210,27 @@ export default function MyOffers() {
       }
       map.get(key)!.offers.push(o);
     }
-    // Sort offers within each group by price ascending
+
+    // Sort offers within each group
     for (const group of map.values()) {
-      group.offers.sort((a, b) => Number(a.price) - Number(b.price));
+      group.offers.sort((a, b) => {
+        switch (sortBy) {
+          case 'price_asc':
+            return Number(a.price) - Number(b.price);
+          case 'price_desc':
+            return Number(b.price) - Number(a.price);
+          case 'rating_desc':
+            return (b.carrier?.rating ?? 0) - (a.carrier?.rating ?? 0);
+          case 'duration_asc':
+            return (a.estimatedDuration ?? 999) - (b.estimatedDuration ?? 999);
+          case 'date_desc':
+          default:
+            return new Date(b.offeredAt).getTime() - new Date(a.offeredAt).getTime();
+        }
+      });
     }
     return [...map.entries()];
-  }, [offers, filterShipmentId]);
+  }, [offers, filterShipmentId, sortBy, showBookmarked, bookmarked]);
 
   /* ── Unique shipment options for filter ── */
   const shipmentOptions = useMemo(() => {
@@ -191,19 +263,53 @@ export default function MyOffers() {
             Nakliyecilerden gelen teklifleri karşılaştırın ve en uygununu seçin.
           </p>
         </div>
-        {shipmentOptions.length > 1 && (
-          <Select value={filterShipmentId} onValueChange={setFilterShipmentId}>
-            <SelectTrigger className="w-[220px] text-sm">
-              <SelectValue placeholder="Tüm İlanlar" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">Tüm İlanlar</SelectItem>
-              {shipmentOptions.map(([id, label]) => (
-                <SelectItem key={id} value={id}>{label}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Bookmark filter */}
+          <button
+            onClick={() => setShowBookmarked(!showBookmarked)}
+            className={cn(
+              'text-sm px-3 py-1 rounded-full border transition-colors',
+              showBookmarked
+                ? 'bg-primary text-primary-foreground border-primary'
+                : 'border-input hover:bg-muted'
+            )}
+          >
+            <Bookmark className="h-3 w-3 inline mr-1" />
+            Kaydettiklerim
+          </button>
+
+          {/* Sort */}
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">Sırala:</span>
+            <Select value={sortBy} onValueChange={(v) => setSortBy(v as SortOption)}>
+              <SelectTrigger className="w-48 h-8 text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="price_asc">En Düşük Fiyat</SelectItem>
+                <SelectItem value="price_desc">En Yüksek Fiyat</SelectItem>
+                <SelectItem value="rating_desc">En Yüksek Puan</SelectItem>
+                <SelectItem value="duration_asc">En Hızlı Teslimat</SelectItem>
+                <SelectItem value="date_desc">En Yeni Teklif</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Shipment filter */}
+          {shipmentOptions.length > 1 && (
+            <Select value={filterShipmentId} onValueChange={setFilterShipmentId}>
+              <SelectTrigger className="w-[220px] text-sm h-8">
+                <SelectValue placeholder="Tüm İlanlar" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tüm İlanlar</SelectItem>
+                {shipmentOptions.map(([id, label]) => (
+                  <SelectItem key={id} value={id}>{label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </div>
       </div>
 
       {/* ── Empty ── */}
@@ -221,14 +327,15 @@ export default function MyOffers() {
       ) : grouped.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <PackageOpen className="h-12 w-12 text-gray-300 mb-4" />
-          <p className="text-[15px] text-gray-500">Bu ilan için teklif bulunamadı.</p>
+          <p className="text-[15px] text-gray-500">
+            {showBookmarked ? 'Kaydedilmiş teklif bulunamadı.' : 'Bu ilan için teklif bulunamadı.'}
+          </p>
         </div>
       ) : (
         <div className="space-y-8">
           {grouped.map(([shipmentId, group]) => {
             const s = group.shipment;
             const stCfg = shipmentStatusConfig[s?.status || ''] || { label: s?.status || '', bg: 'bg-gray-100', text: 'text-gray-600' };
-            const lowestPrice = group.offers.length > 0 ? Number(group.offers[0].price) : null;
 
             return (
               <section key={shipmentId}>
@@ -255,20 +362,41 @@ export default function MyOffers() {
                 {/* ── Offer cards grid ── */}
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
                   {group.offers.map((offer) => {
-                    const isCheapest = lowestPrice !== null && Number(offer.price) === lowestPrice && offer.status === 'pending';
+                    const badge = getBadge(offer);
                     const carrierName = offer.carrier?.companyName || offer.carrier?.contactName || 'Nakliyeci';
 
                     return (
                       <div
                         key={offer.id}
-                        className="relative bg-white border border-gray-200 rounded-xl p-5 transition-all duration-200 hover:shadow-md hover:-translate-y-0.5"
+                        className="relative bg-white border border-gray-200 rounded-xl p-5 transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 cursor-pointer"
+                        onClick={() => setSelectedOffer(offer)}
                       >
-                        {/* Cheapest ribbon */}
-                        {isCheapest && (
-                          <div className="absolute top-0 right-0 bg-blue-600 text-white text-[10px] font-bold tracking-[0.08em] px-2.5 py-1 rounded-bl-lg rounded-tr-xl">
-                            EN UYGUN
-                          </div>
+                        {/* Badge */}
+                        {badge && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary border border-primary/20 mb-3">
+                            <Sparkles className="h-3 w-3" />
+                            {badge}
+                          </span>
                         )}
+
+                        {/* Bookmark button */}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleBookmark(offer.id);
+                          }}
+                          className="absolute top-3 right-3 p-1 rounded-md hover:bg-muted transition-colors"
+                          title={bookmarked.includes(offer.id) ? 'Kaydedildi' : 'Daha sonra karar ver'}
+                        >
+                          <Bookmark
+                            className={cn(
+                              'h-4 w-4',
+                              bookmarked.includes(offer.id)
+                                ? 'fill-primary text-primary'
+                                : 'text-muted-foreground'
+                            )}
+                          />
+                        </button>
 
                         {/* Carrier info */}
                         <div className="flex items-center gap-3 mb-4">
@@ -321,9 +449,17 @@ export default function MyOffers() {
                           </div>
                         )}
 
-                        {/* Time */}
-                        <div className="text-xs text-gray-400 mb-4">
-                          {timeAgo(offer.offeredAt)}
+                        {/* Time with age indicator */}
+                        <div className="mb-4">
+                          <span className={cn(
+                            'text-xs',
+                            isOldOffer(offer.offeredAt)
+                              ? 'text-orange-500'
+                              : 'text-muted-foreground'
+                          )}>
+                            {isOldOffer(offer.offeredAt) && '⚠️ '}
+                            {getOfferAge(offer.offeredAt)}
+                          </span>
                         </div>
 
                         {/* Actions */}
@@ -332,7 +468,7 @@ export default function MyOffers() {
                             <Button
                               className="flex-1 bg-blue-600 hover:bg-blue-700 text-white text-sm"
                               disabled={decidingId === offer.id}
-                              onClick={() => setConfirmOffer(offer)}
+                              onClick={(e) => { e.stopPropagation(); setConfirmOffer(offer); }}
                             >
                               Kabul Et
                             </Button>
@@ -340,7 +476,7 @@ export default function MyOffers() {
                               variant="outline"
                               className="flex-1 border-red-300 text-red-600 hover:bg-red-50 text-sm"
                               disabled={decidingId === offer.id}
-                              onClick={() => decide(offer.id, false)}
+                              onClick={(e) => { e.stopPropagation(); decide(offer.id, false); }}
                             >
                               Reddet
                             </Button>
@@ -370,6 +506,140 @@ export default function MyOffers() {
           })}
         </div>
       )}
+
+      {/* ── Offer Detail Sheet ── */}
+      <Sheet open={!!selectedOffer} onOpenChange={(o) => { if (!o) setSelectedOffer(null); }}>
+        <SheetContent className="w-full sm:max-w-lg">
+          <SheetHeader>
+            <SheetTitle>Teklif Detayı</SheetTitle>
+          </SheetHeader>
+
+          {selectedOffer && (
+            <div className="space-y-4 mt-4">
+              {/* Carrier info */}
+              <div className="flex items-center gap-3">
+                {selectedOffer.carrier?.pictureUrl ? (
+                  <img src={selectedOffer.carrier.pictureUrl} className="w-12 h-12 rounded-full object-cover" alt="" />
+                ) : (
+                  <div className={`w-12 h-12 rounded-full bg-gradient-to-br ${pickGradient(selectedOffer.carrierId)} flex items-center justify-center text-white font-semibold`}>
+                    {getInitials(selectedOffer.carrier?.companyName || selectedOffer.carrier?.contactName)}
+                  </div>
+                )}
+                <div>
+                  <p className="font-semibold">
+                    {selectedOffer.carrier?.companyName || selectedOffer.carrier?.contactName || 'Nakliyeci'}
+                  </p>
+                  <div className="flex items-center gap-1">
+                    <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
+                    <span className="text-sm">
+                      {selectedOffer.carrier?.rating ? Number(selectedOffer.carrier.rating).toFixed(1) : '—'}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      ({selectedOffer.carrier?.completedShipments ?? 0} iş)
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Price */}
+              <div className="p-4 bg-muted/50 rounded-xl text-center">
+                <p className="text-3xl font-bold text-primary">
+                  ₺{fmtPrice(Number(selectedOffer.price))}
+                </p>
+                {selectedOffer.estimatedDuration && (
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Tahmini süre: {selectedOffer.estimatedDuration} saat
+                  </p>
+                )}
+              </div>
+
+              {/* Message */}
+              {selectedOffer.message && (
+                <div>
+                  <p className="text-sm font-medium mb-1">Nakliyecinin notu:</p>
+                  <p className="text-sm text-muted-foreground bg-muted/30 p-3 rounded-lg">
+                    {selectedOffer.message}
+                  </p>
+                </div>
+              )}
+
+              {/* Vehicle info */}
+              {(selectedOffer.carrier?.vehicleBrand || selectedOffer.carrier?.vehicleModel) && (
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <p className="text-muted-foreground">Araç</p>
+                    <p className="font-medium">
+                      {selectedOffer.carrier.vehicleBrand}{' '}
+                      {selectedOffer.carrier.vehicleModel}
+                    </p>
+                  </div>
+                  {selectedOffer.carrier.vehicleCapacityM3 && (
+                    <div>
+                      <p className="text-muted-foreground">Kapasite</p>
+                      <p className="font-medium">
+                        {selectedOffer.carrier.vehicleCapacityM3} m³
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Shipment route */}
+              {selectedOffer.shipment && (
+                <div className="text-sm border-t pt-3">
+                  <p className="text-muted-foreground mb-1">Taşıma Güzergahı</p>
+                  <p className="font-medium">{selectedOffer.shipment.origin} → {selectedOffer.shipment.destination}</p>
+                </div>
+              )}
+
+              {/* Age indicator */}
+              <div className="text-sm">
+                <span className={cn(
+                  isOldOffer(selectedOffer.offeredAt) ? 'text-orange-500' : 'text-muted-foreground'
+                )}>
+                  {isOldOffer(selectedOffer.offeredAt) && '⚠️ '}
+                  Teklif tarihi: {getOfferAge(selectedOffer.offeredAt)}
+                </span>
+              </div>
+
+              {/* Action buttons */}
+              {selectedOffer.status === 'pending' && (
+                <div className="flex gap-3 pt-4">
+                  <Button
+                    className="flex-1"
+                    onClick={() => {
+                      setConfirmOffer(selectedOffer);
+                      setSelectedOffer(null);
+                    }}
+                  >
+                    <CheckCircle2 className="h-4 w-4 mr-2" />
+                    Kabul Et
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="flex-1 text-destructive border-destructive/30 hover:bg-destructive/5"
+                    onClick={() => {
+                      decide(selectedOffer.id, false);
+                      setSelectedOffer(null);
+                    }}
+                  >
+                    <XCircle className="h-4 w-4 mr-2" />
+                    Reddet
+                  </Button>
+                </div>
+              )}
+
+              <Button
+                variant="ghost"
+                className="w-full"
+                onClick={() => navigate(`/nakliyeci/${selectedOffer.carrierId}`)}
+              >
+                Nakliyeci Profilini Gör →
+              </Button>
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
 
       {/* ── Confirm Accept Dialog ── */}
       <AlertDialog open={!!confirmOffer} onOpenChange={(open) => { if (!open) setConfirmOffer(null); }}>

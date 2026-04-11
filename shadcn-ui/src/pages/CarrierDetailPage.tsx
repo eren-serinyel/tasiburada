@@ -15,7 +15,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import {
   ChevronLeft, MapPin, ShieldCheck, CheckCircle2, AlertTriangle, Star, Truck,
   MessageSquareText, ClipboardList, Phone, Mail, Calendar, Award,
-  TrendingUp, Package, BadgeCheck, Lock, Pencil, Trash2, Loader2
+  TrendingUp, Package, BadgeCheck, Lock, Pencil, Trash2, Loader2, Heart
 } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -26,6 +26,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle
 } from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/use-toast';
+import { useFavorites } from '@/hooks/useFavorites';
 import { cn, formatPrice, formatDate } from '@/lib/utils';
 import type { CarrierDetail, CarrierDetailDocument, CarrierDetailReview } from '@/lib/types';
 import { getSessionUser } from '@/lib/storage';
@@ -720,6 +721,10 @@ const CarrierDetailPage = () => {
                     Başlangıç fiyatı:{' '}
                     <span className="font-semibold text-foreground">{startingPriceText}</span>
                   </p>
+
+                  {isCustomer && carrierId && (
+                    <FavoriteButton carrierId={carrierId} />
+                  )}
                 </CardContent>
               </Card>
 
@@ -891,6 +896,27 @@ const CarrierDetailPage = () => {
 };
 
 export default CarrierDetailPage;
+
+/* ─── FavoriteButton ─── */
+function FavoriteButton({ carrierId }: { carrierId: string }) {
+  const { isFavorite, toggleFavorite } = useFavorites();
+  const { toast } = useToast();
+  const liked = isFavorite(carrierId);
+
+  const handleClick = async () => {
+    const result = await toggleFavorite(carrierId);
+    if (result !== null) {
+      toast({ title: result ? 'Favorilere eklendi' : 'Favorilerden çıkarıldı' });
+    }
+  };
+
+  return (
+    <Button variant="outline" onClick={handleClick} className="w-full">
+      <Heart className={cn('h-4 w-4 mr-2', liked ? 'fill-red-500 text-red-500' : '')} />
+      {liked ? 'Favorilerden Çıkar' : 'Favorilere Ekle'}
+    </Button>
+  );
+}
 
 /* ─── Utility functions ─── */
 

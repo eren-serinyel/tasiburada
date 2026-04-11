@@ -66,6 +66,7 @@ import ProfileComplete from '@/pages/ProfileComplete';
 import CarrierOnboarding from '@/pages/CarrierOnboarding';
 import ForgotPassword from '@/pages/ForgotPassword';
 import VerifyEmail from '@/pages/VerifyEmail';
+import FavoriteCarriers from './pages/FavoriteCarriers';
 
 const queryClient = new QueryClient();
 
@@ -142,7 +143,7 @@ const App = () => (
               </ProtectedRoute>
             } />
             <Route path="/campaigns" element={<Campaigns />} />
-            <Route path="/support" element={<Support />} />
+            <Route path="/destek" element={<Support />} />
             <Route path="/loyalty" element={<Loyalty />} />
             {/* Turkish slugs and info pages */}
             <Route
@@ -183,6 +184,11 @@ const App = () => (
             <Route path="/odemeler" element={
               <ProtectedRoute requiredRole="customer">
                 <Payments />
+              </ProtectedRoute>
+            } />
+            <Route path="/kayitli-firmalarim" element={
+              <ProtectedRoute requiredRole="customer">
+                <FavoriteCarriers />
               </ProtectedRoute>
             } />
             <Route

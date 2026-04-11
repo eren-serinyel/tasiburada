@@ -12,7 +12,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import {
   MapPin, Package, Truck, Shield, Award, MessageSquare, Star,
   CheckCircle2, XCircle, Info, Images, Lock, X, ArrowRight,
-  Calendar, LayoutGrid, CheckCircle, Phone, Plus, Check, Loader2,
+  Calendar, LayoutGrid, CheckCircle, Phone, Plus, Check, Loader2, UserCheck,
 } from 'lucide-react';
 import { Carrier, LOAD_TYPES, VEHICLE_TYPES } from '@/lib/types';
 import { getSessionUser } from '@/lib/storage';
@@ -21,7 +21,7 @@ import FileUpload from '@/components/ui/file-upload';
 import { ADDITIONAL_SERVICE_OPTIONS, SPECIAL_SERVICES } from '@/lib/carrierFormConstants';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useToast } from '@/hooks/use-toast';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { apiClient } from '@/lib/apiClient';
 
@@ -39,6 +39,8 @@ interface CustomerAddress {
 
 export default function OfferRequestForm({ showHeader = false }: { showHeader?: boolean }) {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const typeParam = searchParams.get('type');
   const { toast } = useToast();
   const { user, isAuthenticated } = useAuth();
   const [step, setStep] = useState<Step>(1);
@@ -49,6 +51,8 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
   const [savedAddresses, setSavedAddresses] = useState<CustomerAddress[]>([]);
   const [needsPhone, setNeedsPhone] = useState(false);
   const [phone, setPhone] = useState('');
+  const [inviteCarrierId, setInviteCarrierId] = useState<string | null>(null);
+  const [inviteCarrierName, setInviteCarrierName] = useState<string | null>(null);
   const [form, setForm] = useState({
     originCity: '',
     originDistrict: '',
@@ -129,6 +133,59 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
         .catch(() => {});
     }
   }, [isAuthenticated, user?.type]);
+
+  // Handle URL "type" parameter mappings
+  useEffect(() => {
+    if (typeParam) {
+      setForm((prev) => {
+        let mapped = prev.transportType;
+        if (typeParam === 'residential') mapped = 'evden-eve';
+        else if (typeParam === 'office') mapped = 'ofis-tasima';
+        else if (typeParam === 'partial') mapped = 'parca';
+        else if (typeParam === 'storage') mapped = 'depolama';
+        return mapped !== prev.transportType ? { ...prev, transportType: mapped } : prev;
+      });
+    }
+  }, [typeParam]);
+
+  // Repeat shipment: prefill from sessionStorage
+  useEffect(() => {
+    const raw = sessionStorage.getItem('repeatShipment');
+    if (!raw) return;
+    try {
+      const data = JSON.parse(raw);
+      sessionStorage.removeItem('repeatShipment');
+
+      setForm(prev => {
+        const next = { ...prev };
+        if (data.origin) {
+          const parts = data.origin.split(', ');
+          next.originCity = parts[0] ?? '';
+          next.originDistrict = parts[1] ?? '';
+        }
+        if (data.destination) {
+          const parts = data.destination.split(', ');
+          next.destinationCity = parts[0] ?? '';
+          next.destinationDistrict = parts[1] ?? '';
+        }
+        if (data.transportType) next.transportType = data.transportType;
+        if (data.weight) next.weightKg = String(data.weight);
+        if (data.placeType) next.placeType = data.placeType;
+        if (data.floor) next.floor = String(data.floor);
+        if (data.hasElevator !== undefined) next.hasElevator = data.hasElevator;
+        if (data.insuranceType && data.insuranceType !== 'none') next.insurance = data.insuranceType;
+        if (data.extraServices) next.extraServices = data.extraServices;
+        return next;
+      });
+
+      if (data.inviteCarrierId) {
+        setInviteCarrierId(data.inviteCarrierId);
+        setInviteCarrierName(data.inviteCarrierName ?? null);
+      }
+    } catch {
+      // ignore parse errors
+    }
+  }, []);
 
   const ALT_OPTIONS_BY_TRANSPORT: Record<string, string[]> = {
     'evden-eve': ['1+1 ev','2+1 ev','3+1 ev','4+1 ev'],
@@ -358,7 +415,18 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
       });
       const json = await res.json().catch(() => ({}));
       if (res.ok && json?.success) {
-        toast({ title: 'Talep yayınlandı!', description: 'Nakliyecilerden teklifler gelmeye başlayacak.' });
+        const newShipmentId = json.data?.id;
+        // Davet gönder (başarısız olsa bile talep oluşturuldu sayılır)
+        if (inviteCarrierId && newShipmentId) {
+          try {
+            await apiClient(`/api/v1/shipments/${newShipmentId}/invite/${inviteCarrierId}`, { method: 'POST' });
+            toast({ title: `${inviteCarrierName || 'Nakliyeci'} davet edildi`, description: 'Firma talebinizi görüp teklif verebilir.' });
+          } catch {
+            // davet başarısız — devam et
+          }
+        } else {
+          toast({ title: 'Talep yayınlandı!', description: 'Nakliyecilerden teklifler gelmeye başlayacak.' });
+        }
         navigate('/ilanlarim');
       } else {
         toast({ title: 'Hata', description: json?.message || 'Talep oluşturulamadı.', variant: 'destructive' });
@@ -1010,6 +1078,17 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
                   </div>
                 </div>
               </div>
+
+              {/* Invite banner */}
+              {inviteCarrierId && inviteCarrierName && (
+                <div style={{ marginBottom: '16px', padding: '12px 16px', background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div className="flex items-center" style={{ gap: '8px', fontSize: '13px', color: '#1E40AF' }}>
+                    <UserCheck style={{ width: '16px', height: '16px' }} />
+                    <span><strong>{inviteCarrierName}</strong> bu talebe öncelikli davet edilecek</span>
+                  </div>
+                  <button onClick={() => { setInviteCarrierId(null); setInviteCarrierName(null); }} style={{ fontSize: '12px', color: '#2563EB', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>Kaldır</button>
+                </div>
+              )}
 
               {/* Phone — her zaman göster; profil varsa pre-fill, yoksa gerekli */}
               <div style={{ marginBottom: '20px', padding: '16px', background: needsPhone ? '#FFFBEB' : '#F8FAFC', border: `1px solid ${needsPhone ? '#FDE68A' : '#E2E8F0'}`, borderRadius: '12px' }}>

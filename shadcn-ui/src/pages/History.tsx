@@ -3,7 +3,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { apiClient } from '@/lib/apiClient';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   ArrowRight,
   Calendar,
@@ -19,6 +19,8 @@ import {
   Loader2,
   Pencil,
   Trash2,
+  Copy,
+  RotateCcw,
 } from 'lucide-react';
 import { toast } from '@/components/ui/sonner';
 import { formatLocation } from '@/utils/formatLocation';
@@ -54,6 +56,7 @@ function fmt(n: number) {
 }
 
 export default function History() {
+  const navigate = useNavigate();
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [search, setSearch] = useState('');
   const [shipments, setShipments] = useState<BackendShipment[]>([]);
@@ -362,6 +365,47 @@ export default function History() {
                     </Link>
                   </div>
                 </div>
+
+                {/* Repeat buttons */}
+                {isCompleted && (
+                  <div className="flex gap-2 pt-1 flex-wrap">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-[12px] h-7 gap-1"
+                      onClick={() => {
+                        sessionStorage.setItem('repeatShipment', JSON.stringify({
+                          origin: s.origin,
+                          destination: s.destination,
+                          loadDetails: s.loadDetails,
+                          weight: s.weight,
+                        }));
+                        navigate('/teklif-talebi?repeat=true');
+                      }}
+                    >
+                      <Copy className="h-3 w-3" /> Tekrar Oluştur
+                    </Button>
+                    {s.carrierName && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="text-[12px] h-7 gap-1"
+                        onClick={() => {
+                          sessionStorage.setItem('repeatShipment', JSON.stringify({
+                            origin: s.origin,
+                            destination: s.destination,
+                            loadDetails: s.loadDetails,
+                            weight: s.weight,
+                            inviteCarrierName: s.carrierName,
+                          }));
+                          navigate('/teklif-talebi?repeat=true&invite=true');
+                        }}
+                      >
+                        <RotateCcw className="h-3 w-3" /> Aynı Firma ile Tekrar
+                      </Button>
+                    )}
+                  </div>
+                )}
               </CardContent>
             </Card>
           );

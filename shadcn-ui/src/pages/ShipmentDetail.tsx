@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { Check, Star, Phone, ChevronRight, User } from 'lucide-react';
+import { Check, Star, Phone, ChevronRight, User, RotateCcw, Copy } from 'lucide-react';
 import { apiClient } from '@/lib/apiClient';
 import { toast } from '@/components/ui/sonner';
 import { getUserType, getUserId } from '@/lib/auth';
@@ -306,6 +306,43 @@ export default function ShipmentDetail() {
   const lastDoneIdx = timelineSteps.reduce((last, s, i) => (s.done ? i : last), -1);
   const activeIdx = isCancelled ? -1 : (lastDoneIdx + 1 < timelineSteps.length ? lastDoneIdx + 1 : -1);
 
+  /* ── Repeat helpers ── */
+  const handleRepeatShipment = () => {
+    if (!shipment) return;
+    sessionStorage.setItem('repeatShipment', JSON.stringify({
+      origin: shipment.origin,
+      destination: shipment.destination,
+      transportType: shipment.transportType,
+      loadDetails: shipment.loadDetails,
+      weight: shipment.weight,
+      placeType: shipment.placeType,
+      floor: shipment.floor,
+      hasElevator: shipment.hasElevator,
+      insuranceType: shipment.insuranceType,
+      extraServices: shipment.extraServices,
+    }));
+    navigate('/teklif-talebi?repeat=true');
+  };
+
+  const handleRepeatWithCarrier = () => {
+    if (!shipment || !shipment.carrierId) return;
+    sessionStorage.setItem('repeatShipment', JSON.stringify({
+      origin: shipment.origin,
+      destination: shipment.destination,
+      transportType: shipment.transportType,
+      loadDetails: shipment.loadDetails,
+      weight: shipment.weight,
+      placeType: shipment.placeType,
+      floor: shipment.floor,
+      hasElevator: shipment.hasElevator,
+      insuranceType: shipment.insuranceType,
+      extraServices: shipment.extraServices,
+      inviteCarrierId: shipment.carrierId,
+      inviteCarrierName: shipment.carrier?.companyName,
+    }));
+    navigate('/teklif-talebi?repeat=true&invite=true');
+  };
+
   /* ── Detail rows ── */
   const detailRows: { label: string; value: React.ReactNode }[] = [
     { label: 'ÇIKIŞ', value: shipment.origin },
@@ -459,13 +496,34 @@ export default function ShipmentDetail() {
               {/* CUSTOMER — completed */}
               {userType === 'customer' && shipment.status === 'completed' && (
                 <>
+                  <div style={{ padding: '10px 12px', background: '#F0FDF4', border: '0.5px solid #BBF7D0', borderRadius: '8px', marginBottom: '4px' }}>
+                    <div style={{ fontSize: '12px', fontWeight: 600, color: '#15803D' }}>Taşıma tamamlandı 🎉</div>
+                    <div style={{ fontSize: '11px', color: '#166534', marginTop: '2px' }}>Deneyiminizi paylaşın veya tekrar ilan oluşturun</div>
+                  </div>
                   {shipment.carrierId && (
                     <button onClick={() => navigate(`/nakliyeci/${shipment.carrierId}`)} style={{ width: '100%', height: '36px', background: '#2563EB', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 500, cursor: 'pointer' }}>
-                      Yorum Yaz
+                      Nakliyeciyi Değerlendir
                     </button>
                   )}
-                  <button onClick={() => navigate('/teklif-talebi')} style={{ width: '100%', height: '36px', background: 'white', color: '#374151', border: '0.5px solid #E2E8F0', borderRadius: '8px', fontSize: '13px', fontWeight: 500, cursor: 'pointer' }}>
-                    Yeniden İlan Ver
+                  {shipment.carrierId && (
+                    <button onClick={() => handleRepeatWithCarrier()} style={{ width: '100%', height: '36px', background: 'white', color: '#374151', border: '0.5px solid #E2E8F0', borderRadius: '8px', fontSize: '13px', fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                      <RotateCcw style={{ width: '14px', height: '14px' }} /> Bu Firma ile Tekrar
+                    </button>
+                  )}
+                  <button onClick={() => handleRepeatShipment()} style={{ width: '100%', height: '36px', background: 'white', color: '#374151', border: '0.5px solid #E2E8F0', borderRadius: '8px', fontSize: '13px', fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                    <Copy style={{ width: '14px', height: '14px' }} /> Bu İlanı Tekrar Oluştur
+                  </button>
+                </>
+              )}
+
+              {/* CUSTOMER — cancelled */}
+              {userType === 'customer' && shipment.status === 'cancelled' && (
+                <>
+                  <div style={{ padding: '10px 12px', background: '#FEF2F2', border: '0.5px solid #FECACA', borderRadius: '8px', marginBottom: '4px' }}>
+                    <div style={{ fontSize: '12px', color: '#991B1B' }}>Bu ilan iptal edildi.</div>
+                  </div>
+                  <button onClick={() => handleRepeatShipment()} style={{ width: '100%', height: '36px', background: 'white', color: '#374151', border: '0.5px solid #E2E8F0', borderRadius: '8px', fontSize: '13px', fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
+                    <RotateCcw style={{ width: '14px', height: '14px' }} /> Yeniden Oluştur
                   </button>
                 </>
               )}

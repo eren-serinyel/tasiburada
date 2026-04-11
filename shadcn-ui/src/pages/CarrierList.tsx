@@ -11,7 +11,7 @@ import {
 } from '@/lib/carrierSearch';
 import { CarrierSearchItem } from '@/lib/types';
 import { formatPrice } from '@/lib/utils';
-import { SearchX, Star, Truck } from 'lucide-react';
+import { ArrowRight, Award, MapPin, SearchX, Shield, Star, Truck } from 'lucide-react';
 
 const HIGHLIGHT_LIMIT = 12;
 
@@ -50,122 +50,137 @@ export default function CarrierList() {
 	const hasResults = carriers.length > 0;
 
 	return (
-		<div style={{ background: '#F8FAFC', minHeight: '100vh' }}>
-
+		<div className="bg-slate-50 min-h-screen pb-24">
 			{/* ═══ HERO HEADER ═══ */}
-			<div style={{ background: 'linear-gradient(180deg, #EFF6FF 0%, #F8FAFC 100%)', borderBottom: '1px solid #E2E8F0', padding: '32px 40px' }}>
-				<div style={{ maxWidth: '1320px', margin: '0 auto' }}>
+			<div className="bg-white border-b border-slate-200 relative overflow-hidden">
+				{/* Subtle background abstract blobs */}
+				<div className="absolute top-0 right-0 -mr-20 -mt-20 w-96 h-96 rounded-full bg-blue-50 blur-3xl opacity-60 pointer-events-none" />
+				<div className="absolute bottom-0 left-0 -ml-20 -mb-20 w-80 h-80 rounded-full bg-indigo-50 blur-3xl opacity-60 pointer-events-none" />
+
+				<div className="max-w-[1320px] mx-auto px-6 py-12 md:py-16 relative z-10">
 					{/* Badge */}
-					<div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: '9999px', padding: '5px 14px', marginBottom: '12px' }}>
-						<span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#2563EB', animation: 'pulse 2s infinite' }} />
-						<span style={{ fontSize: '12px', fontWeight: 600, color: '#2563EB' }}>GÜVENİLİR NAKLİYAT AĞI</span>
+					<div className="inline-flex items-center gap-2 bg-blue-50 border border-blue-100 rounded-full px-4 py-1.5 mb-6">
+						<span className="w-2 h-2 rounded-full bg-blue-600 animate-pulse" />
+						<span className="text-xs font-semibold text-blue-700 tracking-wide">GÜVENİLİR NAKLİYAT AĞI</span>
 					</div>
 
-					<h1 style={{ fontSize: 'clamp(1.5rem, 3vw, 2.25rem)', fontWeight: 800, color: '#0F172A', letterSpacing: '-0.02em', lineHeight: 1.2, margin: 0 }}>
+					<h1 className="text-3xl md:text-5xl font-extrabold text-slate-900 tracking-tight leading-tight mb-4">
 						Yükünüz İçin En Doğru<br />
-						<span style={{ color: '#2563EB' }}>Nakliyeciyi Bulun</span>
+						<span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600">
+							Nakliyeciyi Bulun
+						</span>
 					</h1>
 
-					<p style={{ fontSize: '15px', color: '#64748B', maxWidth: '520px', marginTop: '10px', lineHeight: 1.6 }}>
+					<p className="text-base md:text-lg text-slate-600 max-w-2xl leading-relaxed">
 						Yüzlerce onaylı nakliyeci arasından puan, yorum ve fiyat karşılaştırması yaparak size en uygun olanı hemen seçin.
 					</p>
 
-					<div style={{ marginTop: '16px', display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-						<span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', border: '1px solid #E2E8F0', borderRadius: '9999px', padding: '8px 18px', background: 'white', fontSize: '13px', fontWeight: 500, color: '#374151' }}>
-							✓ Onaylı Profiller
+					<div className="mt-8 flex flex-wrap gap-3">
+						<span className="inline-flex items-center gap-2 border border-slate-200 rounded-full px-5 py-2 bg-white/80 backdrop-blur-sm text-sm font-medium text-slate-700 shadow-sm">
+							<span className="text-green-500 font-bold">✓</span> Onaylı Profiller
 						</span>
-						<span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', border: '1px solid #E2E8F0', borderRadius: '9999px', padding: '8px 18px', background: 'white', fontSize: '13px', fontWeight: 500, color: '#374151' }}>
-							★ Gerçek Müşteri Yorumları
+						<span className="inline-flex items-center gap-2 border border-slate-200 rounded-full px-5 py-2 bg-white/80 backdrop-blur-sm text-sm font-medium text-slate-700 shadow-sm">
+							<Star className="w-4 h-4 text-amber-500 fill-amber-500" /> Gerçek Müşteri Yorumları
 						</span>
 					</div>
 				</div>
 			</div>
 
 			{/* ═══ MAIN CONTENT GRID ═══ */}
-			<div style={{ display: 'grid', gridTemplateColumns: '280px 1fr', gap: '24px', padding: '32px 40px', maxWidth: '1320px', margin: '0 auto' }}>
-
+			<div className="max-w-[1320px] mx-auto px-6 pt-10 flex flex-col lg:flex-row gap-8">
+				
 				{/* ── LEFT: FILTER PANEL ── */}
-				<aside>
-					<div style={{ background: 'white', border: '1px solid #E2E8F0', borderRadius: '14px', padding: '20px', position: 'sticky', top: '88px', maxHeight: 'calc(100vh - 110px)', overflowY: 'auto' }}>
+				<aside className="w-full lg:w-[300px] shrink-0">
+					<div className="sticky top-24 max-h-[calc(100vh-120px)] overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-sm scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
 						<CarrierFilters filters={filters} onChange={handleFilterChange} hideHeader />
 					</div>
 				</aside>
 
 				{/* ── RIGHT: RESULTS ── */}
-				<main>
+				<main className="flex-1 min-w-0">
 					{/* Results header */}
-					<div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+					<div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
 						<div>
-							<div style={{ fontSize: '12px', color: '#94A3B8' }}>Bulunan Sonuçlar</div>
-							<div style={{ fontSize: '16px', fontWeight: 600, color: '#0F172A' }}>
-								{isFetching ? '...' : total} nakliyeci listeleniyor
-							</div>
+							<div className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-1">Bulunan Sonuçlar</div>
+							<h2 className="text-xl font-semibold text-slate-900">
+								{isFetching ? (
+									<span className="inline-block w-8 h-6 bg-slate-200 animate-pulse rounded align-middle" />
+								) : total} nakliyeci listeleniyor
+							</h2>
 						</div>
 						{total > HIGHLIGHT_LIMIT && (
-							<button onClick={handleViewAll} style={{ height: '36px', border: '1px solid #E2E8F0', borderRadius: '8px', padding: '0 16px', fontSize: '13px', fontWeight: 500, color: '#374151', background: 'white', cursor: 'pointer' }}>
-								Tümünü Gör →
+							<button 
+								onClick={handleViewAll} 
+								className="h-10 px-5 inline-flex items-center justify-center rounded-xl font-medium text-sm transition-all bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 hover:text-slate-900 hover:shadow-sm"
+							>
+								Tümünü Gör <ArrowRight className="w-4 h-4 ml-2" />
 							</button>
 						)}
 					</div>
 
 					{/* Error */}
 					{isError && (
-						<div style={{ background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: '10px', padding: '14px 18px', marginBottom: '16px', fontSize: '13px', color: '#B91C1C' }}>
+						<div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-6 text-sm text-red-700 flex items-center gap-3">
+							<span className="w-6 h-6 flex items-center justify-center bg-red-100 rounded-full shrink-0">!</span>
 							Liste alınamadı — {(error as Error)?.message || 'Beklenmeyen bir hata oluştu.'}
 						</div>
 					)}
 
 					{/* Card grid */}
 					{isLoading ? (
-						<div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '14px' }}>
+						<div className="grid grid-cols-1 md:grid-cols-2 gap-5">
 							{Array.from({ length: 6 }).map((_, i) => (
-								<div key={i} className="animate-pulse" style={{ background: 'white', border: '1px solid #E2E8F0', borderRadius: '14px', padding: '20px' }}>
-									<div style={{ display: 'flex', gap: '12px', marginBottom: '12px' }}>
-										<div style={{ width: '52px', height: '52px', borderRadius: '12px', background: '#E2E8F0', flexShrink: 0 }} />
-										<div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px' }}>
-											<div style={{ height: '14px', width: '60%', background: '#F1F5F9', borderRadius: '4px' }} />
-											<div style={{ height: '10px', width: '40%', background: '#F1F5F9', borderRadius: '4px' }} />
-											<div style={{ height: '10px', width: '30%', background: '#F1F5F9', borderRadius: '4px' }} />
+								<div key={i} className="animate-pulse bg-white border border-slate-200 rounded-2xl p-5">
+									<div className="flex gap-4 mb-4">
+										<div className="w-14 h-14 rounded-xl bg-slate-100 shrink-0" />
+										<div className="flex-1 space-y-2 py-1">
+											<div className="h-4 w-3/4 bg-slate-100 rounded" />
+											<div className="h-3 w-1/2 bg-slate-100 rounded" />
 										</div>
 									</div>
-									<div style={{ background: '#F8FAFC', borderRadius: '8px', height: '36px', marginBottom: '10px' }} />
-									<div style={{ display: 'flex', gap: '4px', marginBottom: '14px' }}>
-										{[1,2,3].map(j => <div key={j} style={{ height: '22px', width: '60px', background: '#F1F5F9', borderRadius: '6px' }} />)}
+									<div className="h-10 bg-slate-50 rounded-lg mb-4" />
+									<div className="flex gap-2 mb-5">
+										{[1,2,3].map(j => <div key={j} className="h-6 w-16 bg-slate-100 rounded-full" />)}
 									</div>
-									<div style={{ borderTop: '1px solid #F1F5F9', paddingTop: '14px', display: 'flex', justifyContent: 'space-between' }}>
-										<div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-											<div style={{ height: '10px', width: '40px', background: '#F1F5F9', borderRadius: '4px' }} />
-											<div style={{ height: '18px', width: '64px', background: '#E2E8F0', borderRadius: '4px' }} />
+									<div className="pt-4 border-t border-slate-100 flex justify-between items-center">
+										<div className="space-y-2">
+											<div className="h-2 w-8 bg-slate-100 rounded" />
+											<div className="h-5 w-20 bg-slate-200 rounded" />
 										</div>
-										<div style={{ height: '36px', width: '120px', background: '#E2E8F0', borderRadius: '8px' }} />
+										<div className="h-10 w-32 bg-slate-200 rounded-xl" />
 									</div>
 								</div>
 							))}
 						</div>
 					) : hasResults ? (
-						<div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '14px' }}>
+						<div className="grid grid-cols-1 md:grid-cols-2 gap-5">
 							{carriers.map(c => <InlineCarrierCard key={c.id} carrier={c} navigate={navigate} />)}
 						</div>
 					) : (
 						/* Empty state */
-						<div style={{ textAlign: 'center', padding: '60px 20px' }}>
-							<SearchX style={{ width: '48px', height: '48px', color: '#CBD5E1', margin: '0 auto 16px' }} />
-							<div style={{ fontSize: '18px', fontWeight: 600, color: '#0F172A', marginBottom: '8px' }}>Nakliyeci bulunamadı</div>
-							<div style={{ fontSize: '14px', color: '#64748B', marginBottom: '20px' }}>Filtreleri değiştirerek tekrar deneyin</div>
+						<div className="text-center py-20 px-6 bg-white border border-slate-200 border-dashed rounded-2xl">
+							<div className="w-16 h-16 bg-slate-50 flex items-center justify-center rounded-full mx-auto mb-4">
+								<SearchX className="w-8 h-8 text-slate-400" />
+							</div>
+							<h3 className="text-lg font-semibold text-slate-900 mb-2">Nakliyeci bulunamadı</h3>
+							<p className="text-sm text-slate-500 mb-6 max-w-sm mx-auto">Seçtiğiniz filtrelere uygun nakliyeci şu anda listelenmiyor. Filtreleri esneterek tekrar arayabilirsiniz.</p>
 							<button
 								onClick={() => handleFilterChange({ serviceAreas: [], vehicleTypeIds: [] })}
-								style={{ border: '1px solid #2563EB', borderRadius: '8px', padding: '10px 24px', fontSize: '14px', fontWeight: 500, color: '#2563EB', background: 'white', cursor: 'pointer' }}
+								className="inline-flex items-center justify-center h-10 px-6 rounded-xl font-medium text-sm transition-all bg-white border border-blue-200 text-blue-600 hover:bg-blue-50 hover:border-blue-300"
 							>
 								Filtreleri Temizle
 							</button>
 						</div>
 					)}
 
-					{/* View All */}
+					{/* View All BOTTOM */}
 					{hasResults && total > HIGHLIGHT_LIMIT && (
-						<div style={{ display: 'flex', justifyContent: 'center', marginTop: '32px', paddingTop: '24px', borderTop: '1px solid #E2E8F0' }}>
-							<button onClick={handleViewAll} style={{ background: '#2563EB', color: 'white', border: 'none', borderRadius: '8px', padding: '12px 32px', fontSize: '14px', fontWeight: 600, cursor: 'pointer' }}>
-								Tüm Nakliyecileri Keşfet →
+						<div className="flex justify-center mt-12 pt-8 border-t border-slate-200">
+							<button 
+								onClick={handleViewAll} 
+								className="group relative h-12 px-8 inline-flex items-center justify-center rounded-xl font-semibold text-sm transition-all bg-blue-600 text-white overflow-hidden hover:bg-blue-700 hover:shadow-[0_8px_20px_rgba(37,99,235,0.25)] hover:-translate-y-0.5"
+							>
+								<span className="relative z-10 flex items-center gap-2">Tüm Nakliyecileri Keşfet <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" /></span>
 							</button>
 						</div>
 					)}
@@ -190,79 +205,89 @@ function InlineCarrierCard({ carrier, navigate }: { carrier: CarrierSearchItem; 
 	return (
 		<div
 			onClick={() => navigate(detailPath)}
-			style={{ background: 'white', border: '1px solid #E2E8F0', borderRadius: '14px', padding: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.04)', cursor: 'pointer', transition: 'all 200ms', display: 'flex', flexDirection: 'column' }}
-			onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.08)'; e.currentTarget.style.transform = 'translateY(-3px)'; e.currentTarget.style.borderColor = '#CBD5E1'; }}
-			onMouseLeave={e => { e.currentTarget.style.boxShadow = '0 1px 3px rgba(0,0,0,0.04)'; e.currentTarget.style.transform = 'translateY(0)'; e.currentTarget.style.borderColor = '#E2E8F0'; }}
+			className="group bg-white border border-slate-200 rounded-2xl p-5 cursor-pointer transition-all duration-300 hover:shadow-[0_12px_28px_rgba(0,0,0,0.06)] hover:-translate-y-1 hover:border-blue-200 flex flex-col h-full relative overflow-hidden"
 		>
+			{/* Decorative top-right corner gradient on hover */}
+			<div className="absolute -top-10 -right-10 w-28 h-28 bg-gradient-to-bl from-blue-100 to-transparent rounded-full opacity-0 group-hover:opacity-60 transition-opacity duration-300 pointer-events-none" />
+
 			{/* TOP: Avatar + Info + Verified */}
-			<div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
-				<div style={{ width: '52px', height: '52px', borderRadius: '12px', background: 'linear-gradient(135deg, #1E3A5F 0%, #2563EB 100%)', color: 'white', fontSize: '18px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+			<div className="flex items-start gap-4 z-10 relative">
+				<div className="w-14 h-14 rounded-xl bg-gradient-to-br from-slate-800 to-blue-900 text-white text-lg font-bold flex items-center justify-center shrink-0 shadow-inner overflow-hidden border-2 border-white ring-1 ring-slate-100">
 					{carrier.pictureUrl
-						? <img src={carrier.pictureUrl} alt="" style={{ width: '52px', height: '52px', borderRadius: '12px', objectFit: 'cover' }} />
+						? <img src={carrier.pictureUrl} alt="" className="w-full h-full object-cover" />
 						: initials}
 				</div>
-				<div style={{ flex: 1, minWidth: 0 }}>
-					<div style={{ fontSize: '15px', fontWeight: 600, color: '#0F172A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{carrier.companyName}</div>
-					<div style={{ fontSize: '12px', color: '#64748B', display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px' }}>
-						<span style={{ fontSize: '12px' }}>📍</span> {carrier.city || 'Şehir belirtilmedi'}
+				<div className="flex-1 min-w-0 pt-0.5">
+					<h3 className="text-[15px] font-bold text-slate-900 truncate pr-2 group-hover:text-blue-600 transition-colors">{carrier.companyName}</h3>
+					<div className="flex items-center gap-1.5 mt-1">
+						<MapPin className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+						<span className="text-xs text-slate-500 font-medium">{carrier.city || 'Şehir belirtilmedi'}</span>
 					</div>
 				</div>
-				{isVerified && (
-					<span style={{ background: '#F0FDF4', color: '#15803D', border: '1px solid #BBF7D0', borderRadius: '9999px', padding: '3px 10px', fontSize: '11px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px', whiteSpace: 'nowrap', flexShrink: 0 }}>
-						✓ Onaylı
-					</span>
-				)}
 			</div>
 
-			{/* RATING ROW */}
-			<div style={{ display: 'flex', alignItems: 'center', gap: '6px', margin: '12px 0' }}>
-				<span style={{ color: '#F59E0B', fontSize: '14px' }}>{'★'.repeat(Math.round(ratingValue))}</span>
-				<span style={{ fontSize: '14px', fontWeight: 600, color: '#0F172A' }}>{ratingValue.toFixed(1)}</span>
-				<span style={{ fontSize: '12px', color: '#94A3B8' }}>({carrier.reviewCount} yorum)</span>
+			{/* RATING & VERIFIED ROW */}
+			<div className="flex items-center gap-2 mt-4 mb-1 flex-wrap">
+				{isVerified && (
+					<span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-100 text-[11px] font-semibold tracking-wide">
+						<Shield className="w-3 h-3" /> ONAYLI
+					</span>
+				)}
+				<div className="flex items-center gap-1 bg-slate-50 px-2 py-0.5 rounded-md border border-slate-100">
+					<Star className="w-3 h-3 text-amber-400 fill-amber-400" />
+					<span className="text-xs font-bold text-slate-700">{ratingValue.toFixed(1)}</span>
+					<span className="text-[11px] font-medium text-slate-400 ml-0.5">({carrier.reviewCount})</span>
+				</div>
 				{experienceText && (
-					<span style={{ marginLeft: 'auto', background: '#FFF7ED', color: '#C2410C', borderRadius: '6px', padding: '2px 8px', fontSize: '11px', fontWeight: 600 }}>
+					<span className="ml-auto inline-flex items-center gap-1 bg-amber-50 text-amber-700 rounded-md px-2 py-0.5 border border-amber-100 text-[11px] font-semibold">
+						<Award className="w-3 h-3" />
 						{experienceText}
 					</span>
 				)}
 			</div>
 
 			{/* VEHICLE INFO */}
-			<div style={{ background: '#F8FAFC', borderRadius: '8px', padding: '10px 12px', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: carrier.vehicleSummary ? '#374151' : '#94A3B8', fontStyle: carrier.vehicleSummary ? 'normal' : 'italic' }}>
-				<Truck style={{ width: '14px', height: '14px', color: '#2563EB', flexShrink: 0 }} />
-				{carrier.vehicleSummary || 'Araç bilgisi eklenmemiş'}
+			<div className="mt-4 bg-slate-50/70 border border-slate-100 rounded-lg p-2.5 flex items-center gap-2.5 text-xs">
+				<div className="w-6 h-6 flex items-center justify-center rounded bg-white shadow-sm border border-slate-100 shrink-0">
+					<Truck className="w-3.5 h-3.5 text-blue-500" />
+				</div>
+				<span className={carrier.vehicleSummary ? "text-slate-700 font-medium" : "text-slate-400 italic"}>
+					{carrier.vehicleSummary || 'Araç bilgisi bulunmuyor'}
+				</span>
 			</div>
 
 			{/* ROUTE TAGS */}
 			{serviceAreas.length > 0 && (
-				<div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', margin: '10px 0' }}>
+				<div className="flex flex-wrap gap-1.5 mt-4">
 					{serviceAreas.slice(0, 3).map(area => (
-						<span key={area} style={{ background: '#F1F5F9', borderRadius: '6px', padding: '3px 10px', fontSize: '11px', color: '#64748B' }}>{area}</span>
+						<span key={area} className="bg-slate-100 px-2.5 py-1 rounded-full text-[11px] font-medium text-slate-600 border border-slate-200/50">
+							{area}
+						</span>
 					))}
 					{serviceAreas.length > 3 && (
-						<span style={{ fontSize: '11px', color: '#94A3B8', padding: '3px 6px' }}>+{serviceAreas.length - 3} daha</span>
+						<span className="px-2 py-1 text-[11px] font-medium text-slate-400">+{serviceAreas.length - 3} daha</span>
 					)}
 				</div>
 			)}
+			<div className="flex-1" /> {/* Spacer */}
 
 			{/* BOTTOM: Price + CTA */}
-			<div style={{ borderTop: '1px solid #F1F5F9', paddingTop: '14px', marginTop: serviceAreas.length > 0 ? '4px' : '10px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+			<div className="mt-5 pt-4 border-t border-slate-100 flex justify-between items-end">
 				<div>
 					{priceLabel ? (
 						<>
-							<span style={{ fontSize: '11px', color: '#94A3B8', display: 'block' }}>itibaren</span>
-							<span style={{ fontSize: '18px', fontWeight: 800, color: '#0F172A', display: 'block' }}>{priceLabel}</span>
+							<span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">BAŞLANGIÇ</span>
+							<span className="text-xl font-extrabold text-slate-900 block leading-none">{priceLabel}</span>
 						</>
 					) : (
-						<span style={{ fontSize: '14px', color: '#64748B' }}>Fiyat Sorunuz</span>
+						<span className="text-sm font-semibold text-slate-500">Fiyat Sorunuz</span>
 					)}
 				</div>
 				<button
 					onClick={e => { e.stopPropagation(); navigate(detailPath); }}
-					style={{ background: '#2563EB', color: 'white', border: 'none', borderRadius: '8px', padding: '9px 18px', fontSize: '13px', fontWeight: 600, cursor: 'pointer', transition: 'all 150ms' }}
-					onMouseEnter={e => { e.currentTarget.style.background = '#1D4ED8'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(37,99,235,0.25)'; }}
-					onMouseLeave={e => { e.currentTarget.style.background = '#2563EB'; e.currentTarget.style.boxShadow = 'none'; }}
+					className="relative h-10 px-5 inline-flex items-center justify-center rounded-xl font-semibold text-[13px] transition-all bg-blue-50 text-blue-700 group-hover:bg-blue-600 group-hover:text-white group-hover:shadow-md"
 				>
-					İncele & Teklif Al
+					Profili İncele
 				</button>
 			</div>
 		</div>
