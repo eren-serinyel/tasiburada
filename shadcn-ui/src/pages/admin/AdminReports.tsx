@@ -9,39 +9,51 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from '@/components/ui/table';
+import { Badge } from '@/components/ui/badge';
 import { PageHeader, EmptyState, ErrorState } from '@/components/admin/shared';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
-  ResponsiveContainer,
+  ResponsiveContainer, BarChart, Bar,
 } from 'recharts';
 import {
   Truck, HandCoins, TrendingUp, BarChart3, ArrowRight, MapPin,
+  CheckCircle2, Package, Users, TrendingDown,
 } from 'lucide-react';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-interface Overview {
-  totalShipments: number;
-  totalOffers: number;
-  matchRate: number;
+interface Kpi {
   totalRevenue: number;
-  monthlyTrend: { month: string; shipments: number; offers: number; revenue: number }[];
+  totalShipments: number;
+  completedShipments: number;
+  totalOffers: number;
+  acceptedOffers: number;
+  matchRate: number;
+  cancelRate: number;
+  newCarriers: number;
+  newCustomers: number;
+}
+
+interface Overview {
+  kpi: Kpi;
+  monthlyShipments: { month: string; count: number }[];
+  monthlyOffers: { month: string; count: number }[];
 }
 
 interface TopCarrier {
-  carrierId: string;
+  id: string;
   companyName: string;
-  city?: string;
-  completedCount: number;
+  email: string;
   rating: number;
-  totalRevenue: number;
+  completedShipments: number;
+  verified: boolean;
 }
 
 interface PopularRoute {
   origin: string;
   destination: string;
-  count: number;
-  avgPrice: number;
+  count: string | number;
+  avgPrice: string | number | null;
 }
 
 // ─── Constants ──────────────────────────────────────────────────────────────
@@ -64,6 +76,22 @@ function Stars({ count }: { count: number }) {
       {Array.from({ length: 5 }, (_, i) => (i < filled ? '⭐' : '☆')).join('')}
     </span>
   );
+}
+
+/** Merges monthlyShipments + monthlyOffers into a single chart array */
+function buildTrendData(
+  shipments: { month: string; count: number }[],
+  offers: { month: string; count: number }[],
+) {
+  const map: Record<string, { month: string; İlanlar: number; Teklifler: number }> = {};
+  for (const s of shipments) {
+    map[s.month] = { month: s.month, İlanlar: s.count, Teklifler: 0 };
+  }
+  for (const o of offers) {
+    if (map[o.month]) map[o.month].Teklifler = o.count;
+    else map[o.month] = { month: o.month, İlanlar: 0, Teklifler: o.count };
+  }
+  return Object.values(map).sort((a, b) => a.month.localeCompare(b.month));
 }
 
 // ─── Component ──────────────────────────────────────────────────────────────
@@ -212,29 +240,34 @@ export default function AdminReports() {
             <>
               {/* KPI Cards */}
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                <KpiCard icon={Truck} iconColor="text-blue-600" label="Toplam İlan" value={overview.totalShipments.toLocaleString('tr-TR')} />
-                <KpiCard icon={HandCoins} iconColor="text-amber-600" label="Toplam Teklif" value={overview.totalOffers.toLocaleString('tr-TR')} />
-                <KpiCard icon={BarChart3} iconColor="text-indigo-600" label="Eşleşme Oranı" value={`%${overview.matchRate.toFixed(1)}`} />
-                <KpiCard icon={TrendingUp} iconColor="text-emerald-600" label="Toplam Gelir" value={`₺${overview.totalRevenue.toLocaleString('tr-TR')}`} />
+                <KpiCard icon={Package} iconColor="text-blue-600" label="Toplam İlan" value={overview.kpi.totalShipments.toLocaleString('tr-TR')} />
+                <KpiCard icon={HandCoins} iconColor="text-amber-600" label="Toplam Teklif" value={overview.kpi.totalOffers.toLocaleString('tr-TR')} />
+                <KpiCard icon={BarChart3} iconColor="text-indigo-600" label="Eşleşme Oranı" value={`%${overview.kpi.matchRate.toFixed(1)}`} />
+                <KpiCard icon={CheckCircle2} iconColor="text-emerald-600" label="Tamamlanan" value={overview.kpi.completedShipments.toLocaleString('tr-TR')} />
+              </div>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                <KpiCard icon={TrendingDown} iconColor="text-rose-500" label="İptal Oranı" value={`%${overview.kpi.cancelRate.toFixed(1)}`} />
+                <KpiCard icon={TrendingUp} iconColor="text-violet-600" label="Kabul Oranı" value={`%${(overview.kpi.acceptedOffers / Math.max(overview.kpi.totalOffers, 1) * 100).toFixed(1)}`} />
+                <KpiCard icon={Truck} iconColor="text-sky-600" label="Yeni Nakliyeci" value={overview.kpi.newCarriers.toLocaleString('tr-TR')} />
+                <KpiCard icon={Users} iconColor="text-orange-500" label="Yeni Müşteri" value={overview.kpi.newCustomers.toLocaleString('tr-TR')} />
               </div>
 
               {/* Monthly Trend Chart */}
-              {overview.monthlyTrend?.length > 0 && (
+              {(overview.monthlyShipments?.length > 0 || overview.monthlyOffers?.length > 0) && (
                 <Card className="bg-white shadow-sm border-slate-200">
                   <CardHeader className="pb-2">
                     <CardTitle className="text-sm font-semibold text-slate-700">Aylık Trend</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <ResponsiveContainer width="100%" height={280}>
-                      <AreaChart data={overview.monthlyTrend}>
+                      <AreaChart data={buildTrendData(overview.monthlyShipments ?? [], overview.monthlyOffers ?? [])}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#F1F5F9" />
                         <XAxis dataKey="month" tick={{ fontSize: 11 }} stroke="#94a3b8" />
                         <YAxis tick={{ fontSize: 11 }} stroke="#94a3b8" />
                         <Tooltip />
                         <Legend />
-                        <Area type="monotone" dataKey="shipments" name="İlanlar" stroke="#2563EB" fill="#EFF6FF" strokeWidth={2} />
-                        <Area type="monotone" dataKey="offers" name="Teklifler" stroke="#F97316" fill="#FFF7ED" strokeWidth={2} />
-                        <Area type="monotone" dataKey="revenue" name="Gelir (₺)" stroke="#16A34A" fill="#F0FDF4" strokeWidth={2} />
+                        <Area type="monotone" dataKey="İlanlar" stroke="#2563EB" fill="#EFF6FF" strokeWidth={2} />
+                        <Area type="monotone" dataKey="Teklifler" stroke="#F97316" fill="#FFF7ED" strokeWidth={2} />
                       </AreaChart>
                     </ResponsiveContainer>
                   </CardContent>
@@ -259,10 +292,10 @@ export default function AdminReports() {
                     <TableRow className="bg-slate-50/50">
                       <TableHead className="text-xs font-semibold text-slate-500 w-12">Sıra</TableHead>
                       <TableHead className="text-xs font-semibold text-slate-500">Firma Adı</TableHead>
-                      <TableHead className="text-xs font-semibold text-slate-500">Şehir</TableHead>
+                      <TableHead className="text-xs font-semibold text-slate-500">E-posta</TableHead>
                       <TableHead className="text-xs font-semibold text-slate-500 text-right">Tamamlanan İş</TableHead>
                       <TableHead className="text-xs font-semibold text-slate-500">Puan</TableHead>
-                      <TableHead className="text-xs font-semibold text-slate-500 text-right">Toplam Kazanç</TableHead>
+                      <TableHead className="text-xs font-semibold text-slate-500">Durum</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -282,16 +315,18 @@ export default function AdminReports() {
                       </TableRow>
                     ) : (
                       carriers.map((c, i) => (
-                        <TableRow key={c.carrierId} className="hover:bg-slate-50/60 transition-colors">
+                        <TableRow key={c.id} className="hover:bg-slate-50/60 transition-colors">
                           <TableCell className="text-sm font-medium text-slate-600">
                             {i < 3 ? <span className="text-base">{medals[i]}</span> : i + 1}
                           </TableCell>
                           <TableCell className="text-sm font-medium text-slate-700">{c.companyName}</TableCell>
-                          <TableCell className="text-xs text-slate-500">{c.city ?? '—'}</TableCell>
-                          <TableCell className="text-sm text-right text-slate-700">{c.completedCount.toLocaleString('tr-TR')}</TableCell>
+                          <TableCell className="text-xs text-slate-500">{c.email}</TableCell>
+                          <TableCell className="text-sm text-right text-slate-700">{c.completedShipments.toLocaleString('tr-TR')}</TableCell>
                           <TableCell><Stars count={c.rating} /></TableCell>
-                          <TableCell className="text-sm text-right font-semibold text-emerald-700">
-                            ₺{Number(c.totalRevenue).toLocaleString('tr-TR')}
+                          <TableCell>
+                            {c.verified
+                              ? <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px]">Onaylı</Badge>
+                              : <Badge variant="outline" className="text-slate-500 text-[10px]">Beklemede</Badge>}
                           </TableCell>
                         </TableRow>
                       ))

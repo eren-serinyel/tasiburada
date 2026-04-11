@@ -1,4 +1,5 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import logoImg from '@/images/logo.png';
 import { Truck, Mail, Phone, MapPin, Facebook, Twitter, Instagram, Linkedin, ArrowRight, ShieldCheck, IdCard, Rocket, Brain } from 'lucide-react';
 import { getSessionUser } from '@/lib/storage';
 import { getUserType } from '@/lib/auth';
@@ -82,12 +83,7 @@ export default function Footer() {
           {/* Company Info & Info Cards */}
           <div className="space-y-6">
             <div className="flex items-center space-x-3">
-              <div className="p-2 bg-gradient-to-r from-blue-500 to-sky-500 rounded-xl">
-                <Truck className="h-8 w-8 text-white" />
-              </div>
-              <span className="text-3xl font-bold bg-gradient-to-r from-white to-blue-100 bg-clip-text text-transparent">
-                Taşıburada
-              </span>
+              <img src={logoImg} alt="Taşıburada" className="h-16 w-auto brightness-0 invert scale-[3] origin-left ml-4" />
             </div>
             
             <p className="text-gray-300 text-lg leading-relaxed max-w-md mt-6">

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import logoImg from '@/images/logo.png';
 import { getSessionUser, clearSessionUser } from '@/lib/storage';
 import { Button } from '@/components/ui/button';
 import { Link, useNavigate } from 'react-router-dom';
@@ -29,8 +30,7 @@ export default function Navbar() {
         <div className="flex justify-between items-center h-16">
           {/* Logo */}
           <Link to="/" className="flex items-center space-x-2">
-            <Truck className="h-8 w-8 text-blue-600" />
-            <span className="text-xl font-bold text-gray-900">Taşıburada</span>
+            <img src={logoImg} alt="Taşıburada" className="h-11 w-auto scale-[3] origin-left ml-3" />
           </Link>
 
           {/* Desktop Navigation */}

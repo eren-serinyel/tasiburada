@@ -30,29 +30,37 @@ export async function apiClient(input: RequestInfo | URL, init: RequestInit = {}
     headers.set('Authorization', `Bearer ${token}`);
   }
 
-  const response = await fetch(resolvedInput, {
-    ...init,
-    headers
-  });
+  try {
+    const response = await fetch(resolvedInput, {
+      ...init,
+      headers
+    });
 
-  const isLoginEndpoint = resolvedInput.toString().includes('/login');
-  if (response.status === 401 && !isLoginEndpoint && typeof window !== 'undefined' && !redirectInProgress) {
-    redirectInProgress = true;
+    const isLoginEndpoint = resolvedInput.toString().includes('/login');
+    if (response.status === 401 && !isLoginEndpoint && typeof window !== 'undefined' && !redirectInProgress) {
+      redirectInProgress = true;
 
-    localStorage.removeItem(APP_CONFIG.tokenKey);
-    localStorage.removeItem(APP_CONFIG.userTypeKey);
-    localStorage.removeItem(APP_CONFIG.userIdKey);
-    localStorage.removeItem('currentUser');
-    localStorage.removeItem('currentUser_expiresAt');
+      localStorage.removeItem(APP_CONFIG.tokenKey);
+      localStorage.removeItem(APP_CONFIG.userTypeKey);
+      localStorage.removeItem(APP_CONFIG.userIdKey);
+      localStorage.removeItem('currentUser');
+      localStorage.removeItem('currentUser_expiresAt');
 
-    toast.error('Oturumunuz sona erdi');
+      toast.error('Oturumunuz sona erdi');
 
-    setTimeout(() => {
-      window.location.href = '/giris';
-    }, 100);
+      setTimeout(() => {
+        window.location.href = '/giris';
+      }, 100);
+    }
+
+    return response;
+  } catch (error: any) {
+    console.error('[API Client Error]', error);
+    if (error instanceof TypeError || (error.name === 'TypeError' && error.message.toLowerCase().includes('fetch'))) {
+      toast.error('Sunucuya bağlanılamadı. Lütfen internetinizi veya sunucu durumunu kontrol edin.');
+    }
+    throw error;
   }
-
-  return response;
 }
 
 window.addEventListener('focus', () => {

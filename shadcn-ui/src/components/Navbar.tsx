@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import logoImg from '@/images/logo.png';
 import { Button } from '@/components/ui/button';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Truck, User, LogOut, Menu, X, ChevronDown, Home, Users, HelpCircle, Package, History, CreditCard, Calendar, TrendingUp, Heart } from 'lucide-react';
@@ -62,14 +63,11 @@ export default function Navbar() {
   return (
     <nav className="bg-white sticky top-0 z-50 border-b border-[#E2E8F0]" style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between items-center h-16">
+        <div className="flex justify-between items-center h-[72px]">
           {/* Sol Alt - Logo */}
-          <div className="flex items-center">
+          <div className="flex items-center min-w-[170px]">
             <Link to={user ? '/home' : '/'} className="flex items-center space-x-2">
-              <Truck className="h-6 w-6 sm:h-8 sm:w-8 text-blue-600" />
-              <span className="text-lg sm:text-2xl font-bold bg-gradient-to-r from-blue-600 to-sky-600 bg-clip-text text-transparent">
-                Taşıburada
-              </span>
+              <img src={logoImg} alt="Taşıburada" className="h-11 w-auto max-w-none object-contain md:h-12 scale-[2.4] origin-left ml-4" />
             </Link>
           </div>
 

@@ -22,7 +22,7 @@ export default function AdminProtectedRoute({ children }: Props) {
     let isMounted = true;
     const verifyToken = async () => {
       try {
-        const res = await adminApiClient('/api/v1/admin/me');
+        const res = await adminApiClient('/admin/me');
         if (!isMounted) return;
         
         if (res.ok) {

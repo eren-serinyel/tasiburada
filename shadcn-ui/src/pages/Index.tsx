@@ -244,7 +244,7 @@ export default function Index() {
                 <div className="relative">
                   <div className="absolute inset-0 bg-gradient-to-r from-cyan-500 to-blue-500 rounded-3xl blur-xl opacity-0 group-hover:opacity-30 transition-opacity duration-500" />
                   <div className="relative w-20 h-20 sm:w-24 sm:h-24 mx-auto bg-gradient-to-r from-cyan-500 to-blue-500 rounded-3xl flex items-center justify-center group-hover:scale-110 transition-transform duration-300 shadow-lg">
-                    <Truck className="h-10 w-10 sm:h-12 sm:w-12 text-white" />
+                    <CheckCircle className="h-10 w-10 sm:h-12 sm:w-12 text-white" />
                   </div>
                 </div>
               </div>
