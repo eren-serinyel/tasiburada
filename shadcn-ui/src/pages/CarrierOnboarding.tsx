@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -14,9 +14,9 @@ import { useToast } from '@/hooks/use-toast';
 import { apiClient } from '@/lib/apiClient';
 
 const SERVICE_AREA_OPTIONS: Record<string, string> = {
-  sehirici: 'ÅehiriÃ§i TaÅŸÄ±ma',
-  sehirlerarasi: 'ÅehirlerarasÄ± TaÅŸÄ±ma',
-  uluslararasi: 'UluslararasÄ± TaÅŸÄ±ma',
+  sehirici: 'Şehiriçi Taşıma',
+  sehirlerarasi: 'Şehirlerarası Taşıma',
+  uluslararasi: 'Uluslararası Taşıma',
 };
 
 const REQUIRED_DOC_KEYS = ['k_belgesi', 'src', 'ruhsat', 'vergi_levhasi'] as const;
@@ -24,9 +24,9 @@ const REQUIRED_DOC_KEYS = ['k_belgesi', 'src', 'ruhsat', 'vergi_levhasi'] as con
 const DOC_LIST = [
   { key: 'k_belgesi', label: 'K Belgesi', required: true },
   { key: 'src', label: 'SRC Belgesi', required: true },
-  { key: 'ruhsat', label: 'AraÃ§ RuhsatÄ±', required: true },
-  { key: 'vergi_levhasi', label: 'Vergi LevhasÄ±', required: true },
-  { key: 'sigorta', label: 'Sigorta PoliÃ§esi', required: false },
+  { key: 'ruhsat', label: 'Araç Ruhsatı', required: true },
+  { key: 'vergi_levhasi', label: 'Vergi Levhası', required: true },
+  { key: 'sigorta', label: 'Sigorta Poliçesi', required: false },
 ] as const;
 
 type OnboardingStep = 1 | 2 | 3;
@@ -40,20 +40,20 @@ export default function CarrierOnboarding() {
   const [step, setStep] = useState<OnboardingStep>(1);
   const [saving, setSaving] = useState(false);
 
-  // Step 1 â€” Vehicle
+  // Step 1 — Vehicle
   const [vehicleBrand, setVehicleBrand] = useState('');
   const [vehicleModel, setVehicleModel] = useState('');
   const [vehicleYear, setVehicleYear] = useState('');
   const [vehicleCapacityM3, setVehicleCapacityM3] = useState('');
 
-  // Step 2 â€” Activity
+  // Step 2 — Activity
   const [city, setCity] = useState('');
   const [district, setDistrict] = useState('');
   const [districts, setDistricts] = useState<string[]>([]);
   const [loadingDistricts, setLoadingDistricts] = useState(false);
   const [serviceAreas, setServiceAreas] = useState<string[]>([]);
 
-  // Step 3 â€” Documents
+  // Step 3 — Documents
   const [uploadedDocs, setUploadedDocs] = useState<Record<string, boolean>>({});
   const [uploadingDoc, setUploadingDoc] = useState<string | null>(null);
 
@@ -72,13 +72,13 @@ export default function CarrierOnboarding() {
   }, [city]);
 
   const stepLabels = [
-    { id: 1, label: 'AraÃ§ Bilgileri', icon: Truck },
+    { id: 1, label: 'Araç Bilgileri', icon: Truck },
     { id: 2, label: 'Faaliyet', icon: MapPin },
     { id: 3, label: 'Belgeler', icon: FileText },
   ];
 
   const handleSkip = () => {
-    toast({ title: 'AtlandÄ±', description: 'Bu adÄ±mÄ± daha sonra profilinizden tamamlayabilirsiniz.' });
+    toast({ title: 'Atlandı', description: 'Bu adımı daha sonra profilinizden tamamlayabilirsiniz.' });
     if (step < 3) {
       setStep(s => (s + 1) as OnboardingStep);
     } else {
@@ -102,12 +102,12 @@ export default function CarrierOnboarding() {
       });
       if (!res.ok) {
         const json = await res.json().catch(() => ({}));
-        toast({ title: 'Hata', description: (json as any).message ?? 'AraÃ§ bilgileri kaydedilemedi.', variant: 'destructive' });
+        toast({ title: 'Hata', description: (json as any).message ?? 'Araç bilgileri kaydedilemedi.', variant: 'destructive' });
         return;
       }
       setStep(2);
     } catch {
-      toast({ title: 'BaÄŸlantÄ± HatasÄ±', description: 'Sunucuya baÄŸlanÄ±lamadÄ±.', variant: 'destructive' });
+      toast({ title: 'Bağlantı Hatası', description: 'Sunucuya bağlanılamadı.', variant: 'destructive' });
     } finally {
       setSaving(false);
     }
@@ -115,7 +115,7 @@ export default function CarrierOnboarding() {
 
   const handleStep2Next = async () => {
     if (!city) {
-      toast({ title: 'Eksik Alan', description: 'Faaliyet ÅŸehri zorunludur.', variant: 'destructive' });
+      toast({ title: 'Eksik Alan', description: 'Faaliyet şehri zorunludur.', variant: 'destructive' });
       return;
     }
     setSaving(true);
@@ -132,7 +132,7 @@ export default function CarrierOnboarding() {
       }
       setStep(3);
     } catch {
-      toast({ title: 'BaÄŸlantÄ± HatasÄ±', description: 'Sunucuya baÄŸlanÄ±lamadÄ±.', variant: 'destructive' });
+      toast({ title: 'Bağlantı Hatası', description: 'Sunucuya bağlanılamadı.', variant: 'destructive' });
     } finally {
       setSaving(false);
     }
@@ -150,12 +150,12 @@ export default function CarrierOnboarding() {
       });
       if (!res.ok) {
         const json = await res.json().catch(() => ({}));
-        toast({ title: 'YÃ¼kleme HatasÄ±', description: (json as any).message ?? 'Belge yÃ¼klenemedi.', variant: 'destructive' });
+        toast({ title: 'Yükleme Hatası', description: (json as any).message ?? 'Belge yüklenemedi.', variant: 'destructive' });
         return;
       }
       setUploadedDocs(prev => ({ ...prev, [docKey]: true }));
     } catch {
-      toast({ title: 'Hata', description: 'Belge yÃ¼klenemedi.', variant: 'destructive' });
+      toast({ title: 'Hata', description: 'Belge yüklenemedi.', variant: 'destructive' });
     } finally {
       setUploadingDoc(null);
     }
@@ -167,8 +167,8 @@ export default function CarrierOnboarding() {
     setSaving(true);
     try {
       await apiClient('/api/v1/carriers/me/profile-status', { method: 'PUT' });
-    } catch { /* non-blocking â€” profil yÃ¼zdesi arka planda hesaplanÄ±r */ }
-    toast({ title: 'Tebrikler!', description: 'Profil adÄ±mlarÄ± tamamlandÄ±.' });
+    } catch { /* non-blocking — profil yüzdesi arka planda hesaplanır */ }
+    toast({ title: 'Tebrikler!', description: 'Profil adımları tamamlandı.' });
     setSaving(false);
     navigate('/profil-tamamla');
   };
@@ -202,32 +202,32 @@ export default function CarrierOnboarding() {
         </div>
 
         <Card className="shadow-xl border-0">
-          {/* Step 1 â€” Vehicle Info */}
+          {/* Step 1 — Vehicle Info */}
           {step === 1 && (
             <>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-xl">
-                  <Truck className="h-6 w-6 text-blue-600" /> AraÃ§ Bilgileri
+                  <Truck className="h-6 w-6 text-blue-600" /> Araç Bilgileri
                 </CardTitle>
-                <CardDescription>TaÅŸÄ±macÄ±lÄ±kta kullandÄ±ÄŸÄ±nÄ±z araÃ§ hakkÄ±nda temel bilgileri girin.</CardDescription>
+                <CardDescription>Taşımacılıkta kullandığınız araç hakkında temel bilgileri girin.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label className="mb-1 block text-sm">AraÃ§ MarkasÄ±</Label>
-                    <Input placeholder="Ã¶r: Ford" value={vehicleBrand} onChange={e => setVehicleBrand(e.target.value)} />
+                    <Label className="mb-1 block text-sm">Araç Markası</Label>
+                    <Input placeholder="ör: Ford" value={vehicleBrand} onChange={e => setVehicleBrand(e.target.value)} />
                   </div>
                   <div>
-                    <Label className="mb-1 block text-sm">AraÃ§ Modeli</Label>
-                    <Input placeholder="Ã¶r: Transit" value={vehicleModel} onChange={e => setVehicleModel(e.target.value)} />
+                    <Label className="mb-1 block text-sm">Araç Modeli</Label>
+                    <Input placeholder="ör: Transit" value={vehicleModel} onChange={e => setVehicleModel(e.target.value)} />
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label className="mb-1 block text-sm">Model YÄ±lÄ±</Label>
+                    <Label className="mb-1 block text-sm">Model Yılı</Label>
                     <Input
                       type="number"
-                      placeholder="Ã¶r: 2020"
+                      placeholder="ör: 2020"
                       min={1990}
                       max={2026}
                       value={vehicleYear}
@@ -235,10 +235,10 @@ export default function CarrierOnboarding() {
                     />
                   </div>
                   <div>
-                    <Label className="mb-1 block text-sm">Kapasite (mÂ³)</Label>
+                    <Label className="mb-1 block text-sm">Kapasite (m³)</Label>
                     <Input
                       type="number"
-                      placeholder="Ã¶r: 15"
+                      placeholder="ör: 15"
                       min={0}
                       value={vehicleCapacityM3}
                       onChange={e => setVehicleCapacityM3(e.target.value)}
@@ -249,23 +249,23 @@ export default function CarrierOnboarding() {
             </>
           )}
 
-          {/* Step 2 â€” Activity Info */}
+          {/* Step 2 — Activity Info */}
           {step === 2 && (
             <>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-xl">
                   <MapPin className="h-6 w-6 text-blue-600" /> Faaliyet Bilgileri
                 </CardTitle>
-                <CardDescription>Faaliyet gÃ¶sterdiÄŸiniz ÅŸehri ve hizmet alanlarÄ±nÄ± belirtin.</CardDescription>
+                <CardDescription>Faaliyet gösterdiğiniz şehri ve hizmet alanlarını belirtin.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div>
                   <Label className="mb-1 block text-sm">
-                    Faaliyet Åehri <span className="text-red-500">*</span>
+                    Faaliyet Şehri <span className="text-red-500">*</span>
                   </Label>
                   <Select value={city} onValueChange={setCity}>
                     <SelectTrigger>
-                      <SelectValue placeholder="Åehir seÃ§in..." />
+                      <SelectValue placeholder="Şehir seçin..." />
                     </SelectTrigger>
                     <SelectContent>
                       {TURKISH_CITIES.map(c => (
@@ -275,14 +275,14 @@ export default function CarrierOnboarding() {
                   </Select>
                 </div>
                 <div>
-                  <Label className="mb-1 block text-sm">Ä°lÃ§e</Label>
+                  <Label className="mb-1 block text-sm">İlçe</Label>
                   <Select
                     value={district}
                     onValueChange={setDistrict}
                     disabled={loadingDistricts || districts.length === 0}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder={loadingDistricts ? 'YÃ¼kleniyor...' : 'Ä°lÃ§e seÃ§in...'} />
+                      <SelectValue placeholder={loadingDistricts ? 'Yükleniyor...' : 'İlçe seçin...'} />
                     </SelectTrigger>
                     <SelectContent>
                       {districts.map(d => (
@@ -292,25 +292,25 @@ export default function CarrierOnboarding() {
                   </Select>
                 </div>
                 <MultiSelect
-                  label="Hizmet AlanlarÄ±"
+                  label="Hizmet Alanları"
                   options={SERVICE_AREA_OPTIONS}
                   selectedValues={serviceAreas}
                   onSelectionChange={setServiceAreas}
-                  placeholder="Hizmet alanÄ± seÃ§in..."
+                  placeholder="Hizmet alanı seçin..."
                 />
               </CardContent>
             </>
           )}
 
-          {/* Step 3 â€” Documents */}
+          {/* Step 3 — Documents */}
           {step === 3 && (
             <>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-xl">
-                  <FileText className="h-6 w-6 text-blue-600" /> Belge YÃ¼kleme
+                  <FileText className="h-6 w-6 text-blue-600" /> Belge Yükleme
                 </CardTitle>
                 <CardDescription>
-                  Zorunlu 4 belgeyi yÃ¼kleyin. Sigorta poliÃ§esi isteÄŸe baÄŸlÄ±dÄ±r.
+                  Zorunlu 4 belgeyi yükleyin. Sigorta poliçesi isteğe bağlıdır.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
@@ -331,14 +331,14 @@ export default function CarrierOnboarding() {
                           htmlFor={`doc-${doc.key}`}
                           className="text-xs text-blue-600 cursor-pointer hover:underline mt-0.5 block"
                         >
-                          Dosya seÃ§ (pdf, jpg, png)
+                          Dosya seç (pdf, jpg, png)
                         </label>
                       )}
                       {uploadingDoc === doc.key && (
-                        <p className="text-xs text-blue-500 mt-0.5">YÃ¼kleniyor...</p>
+                        <p className="text-xs text-blue-500 mt-0.5">Yükleniyor...</p>
                       )}
                       {uploadedDocs[doc.key] && (
-                        <p className="text-xs text-green-600 mt-0.5">YÃ¼klendi âœ“</p>
+                        <p className="text-xs text-green-600 mt-0.5">Yüklendi ✓</p>
                       )}
                     </div>
                     {uploadedDocs[doc.key] ? (
@@ -381,16 +381,16 @@ export default function CarrierOnboarding() {
             </div>
             <div className="flex items-center gap-2">
               <Button variant="outline" onClick={handleSkip} disabled={saving} className="gap-1 text-gray-500">
-                <SkipForward className="h-4 w-4" /> Åimdi Atla
+                <SkipForward className="h-4 w-4" /> Şimdi Atla
               </Button>
               {step === 1 && (
                 <Button onClick={handleStep1Next} disabled={saving} className="gap-1 bg-blue-600 hover:bg-blue-700">
-                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <>Ä°leri <ChevronRight className="h-4 w-4" /></>}
+                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <>İleri <ChevronRight className="h-4 w-4" /></>}
                 </Button>
               )}
               {step === 2 && (
                 <Button onClick={handleStep2Next} disabled={saving || !city} className="gap-1 bg-blue-600 hover:bg-blue-700">
-                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <>Ä°leri <ChevronRight className="h-4 w-4" /></>}
+                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <>İleri <ChevronRight className="h-4 w-4" /></>}
                 </Button>
               )}
               {step === 3 && (

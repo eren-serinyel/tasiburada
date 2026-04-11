@@ -112,7 +112,7 @@ export default function SecuritySection({ user }: SectionProps) {
           <div>
             <Label>Yeni Şifre</Label>
             <div className="relative mt-1 mb-3">
-              <Input type={showNewPwd ? 'text' : 'password'} value={newPwd} onChange={(e) => setNewPwd(e.target.value)} className="pr-12" placeholder="En az 6 karakter" />
+              <Input type={showNewPwd ? 'text' : 'password'} value={newPwd} onChange={(e) => setNewPwd(e.target.value)} className="pr-12" placeholder="En az 8 karakter, 1 büyük harf, 1 rakam" />
               <button type="button" aria-label="Yeni şifreyi göster" className="absolute inset-y-0 right-2 flex items-center text-slate-500" onClick={() => setShowNewPwd(p => !p)}>
                 {showNewPwd ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </button>
