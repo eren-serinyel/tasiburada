@@ -1,0 +1,11 @@
+{
+  "job_id": "E2E-GOV-FIX",
+  "title": "E2E Governance Block Test",
+  "priority": 1,
+  "risk_level": "medium",
+  "depends_on": [],
+  "status": "failed_permanently",
+  "rationale": "Job at revision limit",
+  "revision_count": 2,
+  "updated_at": "2026-04-12T09:06:01.134Z"
+}

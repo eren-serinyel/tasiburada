@@ -41,6 +41,7 @@ export class AdminService {
       totalOffers,
       totalReviews,
       avgRatingRaw,
+      revenueRaw,
     ] = await Promise.all([
       customerRepo.count(),
       carrierRepo.count(),
@@ -55,6 +56,11 @@ export class AdminService {
         .createQueryBuilder('review')
         .select('AVG(review.rating)', 'avg')
         .getRawOne<{ avg: string | null }>(),
+      shipmentRepo
+        .createQueryBuilder('shipment')
+        .select('SUM(shipment.price)', 'total')
+        .where('shipment.status = :status', { status: ShipmentStatus.COMPLETED })
+        .getRawOne<{ total: string | null }>(),
     ]);
 
     return {
@@ -68,6 +74,7 @@ export class AdminService {
       totalOffers,
       totalReviews,
       avgRating: Math.round(Number(avgRatingRaw?.avg || 0) * 10) / 10,
+      totalRevenue: Number(revenueRaw?.total || 0),
     };
   }
 
@@ -308,26 +315,29 @@ export class AdminService {
       shipmentRepo.createQueryBuilder('s')
         .select('DATE(s.updatedAt)', 'date')
         .addSelect('COUNT(*)', 'count')
+        .addSelect('SUM(s.price)', 'revenue')
         .where('s.status = :st AND s.updatedAt >= DATE_SUB(NOW(), INTERVAL :days DAY)', { st: ShipmentStatus.COMPLETED, days: period })
         .groupBy('DATE(s.updatedAt)')
-        .getRawMany<{ date: string; count: string }>(),
+        .getRawMany<{ date: string; count: string; revenue: string }>(),
     ]);
 
     const shipmentMap = new Map(shipmentRows.map(r => [r.date, Number(r.count)]));
     const offerMap = new Map(offerRows.map(r => [r.date, Number(r.count)]));
-    const completedMap = new Map(completedRows.map(r => [r.date, Number(r.count)]));
+    const completedMap = new Map(completedRows.map(r => [r.date, { count: Number(r.count), revenue: Number(r.revenue || 0) }]));
 
-    const trends: { date: string; shipments: number; offers: number; completed: number }[] = [];
+    const trends: { date: string; shipments: number; offers: number; completed: number; revenue: number }[] = [];
     const now = new Date();
     for (let i = period - 1; i >= 0; i--) {
       const d = new Date(now);
       d.setDate(d.getDate() - i);
       const key = d.toISOString().slice(0, 10);
+      const completedData = completedMap.get(key) || { count: 0, revenue: 0 };
       trends.push({
         date: key,
         shipments: shipmentMap.get(key) || 0,
         offers: offerMap.get(key) || 0,
-        completed: completedMap.get(key) || 0,
+        completed: completedData.count,
+        revenue: completedData.revenue,
       });
     }
     return { trends };

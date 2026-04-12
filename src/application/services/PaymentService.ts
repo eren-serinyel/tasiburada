@@ -13,17 +13,38 @@ export class PaymentService {
     method: PaymentMethod;
     note?: string;
   }): Promise<Payment> {
-    const shipment = await this.shipmentRepo.findOne({ where: { id: data.shipmentId } });
-    if (!shipment) throw new Error('Taşıma bulunamadı');
+    return await AppDataSource.manager.transaction(async (transactionalEntityManager) => {
+      const shipment = await transactionalEntityManager.findOne(Shipment, { 
+        where: { id: data.shipmentId } 
+      });
 
-    const payment = this.paymentRepo.create({
-      ...data,
-      status: PaymentStatus.COMPLETED,
-      completedAt: new Date(),
-      transactionId: 'TXN-' + Date.now()
+      if (!shipment) {
+        throw new Error('Taşıma bulunamadı');
+      }
+
+      const existingPayment = await transactionalEntityManager.findOne(Payment, {
+        where: { shipmentId: data.shipmentId, status: PaymentStatus.COMPLETED }
+      });
+
+      if (existingPayment) {
+        throw new Error('Bu taşıma için zaten ödeme yapılmış.');
+      }
+
+      const payment = transactionalEntityManager.create(Payment, {
+        ...data,
+        status: PaymentStatus.COMPLETED,
+        completedAt: new Date(),
+        transactionId: 'TXN-' + Date.now()
+      });
+
+      const savedPayment = await transactionalEntityManager.save(payment);
+
+      // Status transition: In many flows, payment unblocks the carrier. 
+      // We will keep it matched but we could transition to IN_TRANSIT here if business logic dictates.
+      // For now, let's just ensure the payment is linked.
+      
+      return savedPayment;
     });
-
-    return await this.paymentRepo.save(payment);
   }
 
   async getPaymentsByCustomer(customerId: string): Promise<Payment[]> {

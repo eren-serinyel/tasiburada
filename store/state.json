@@ -1,0 +1,16 @@
+{
+  "current_phase": 1,
+  "planner": "local_rule_engine",
+  "executor": "test",
+  "paused": false,
+  "processed_artifacts": [
+    "E2E-GOV-FIX-result.json"
+  ],
+  "last_processed_artifact": "E2E-GOV-FIX-result.json",
+  "last_completed_job": "E2E-GOV-FIX",
+  "active_job": null,
+  "last_verdict": "fail",
+  "active_risk_level": null,
+  "next_job_candidate": null,
+  "updated_at": "2026-04-12T09:06:01.138Z"
+}

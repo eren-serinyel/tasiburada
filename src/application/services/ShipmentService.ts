@@ -7,6 +7,7 @@ import { NotificationService } from './NotificationService';
 import { AppDataSource } from '../../infrastructure/database/data-source';
 import { CarrierEarningsLog } from '../../domain/entities/CarrierEarningsLog';
 import { CustomerCarrierRelationRepository } from '../../infrastructure/repositories/CustomerCarrierRelationRepository';
+import { containsContactInfo } from '../../utils/security';
 
 interface CreateShipmentPayload {
   origin: string;
@@ -41,6 +42,7 @@ interface UpdateShipmentPayload {
   weight?: number;
   shipmentDate?: string | Date;
   price?: number;
+  note?: string;
 }
 
 export class ShipmentService {
@@ -75,6 +77,11 @@ export class ShipmentService {
     today.setHours(0, 0, 0, 0);
     if (shipmentDate < today) {
       throw new ValidationError('Taşıma tarihi geçmiş bir tarih olamaz.');
+    }
+
+    // PLATFORM BYPASS PROTECTION
+    if (containsContactInfo(payload.loadDetails) || (payload.note && containsContactInfo(payload.note))) {
+      throw new ValidationError('İlan detaylarında veya not kısmında iletişim bilgisi (telefon, e-posta, link) paylaşılması güvenlik kurallarımız gereği yasaktır.');
     }
 
     return await this.shipmentRepository.createShipmentRecord({
@@ -151,6 +158,14 @@ export class ShipmentService {
 
     if (shipment.status !== ShipmentStatus.PENDING) {
       throw new ValidationError('Sadece bekleyen taşıma talepleri güncellenebilir.');
+    }
+
+    // PLATFORM BYPASS PROTECTION
+    if (
+      (payload.loadDetails && containsContactInfo(payload.loadDetails)) ||
+      (payload.note && containsContactInfo(payload.note))
+    ) {
+      throw new ValidationError('İlan detaylarında veya not kısmında iletişim bilgisi (telefon, e-posta, link) paylaşılması yasaktır.');
     }
 
     const updatedShipment = await this.shipmentRepository.update(shipmentId, {

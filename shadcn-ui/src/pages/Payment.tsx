@@ -114,9 +114,27 @@ export default function Payment() {
 
     setPaying(true);
     try {
-      await new Promise((resolve) => window.setTimeout(resolve, 800));
+      const res = await apiClient('/api/v1/payments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          shipmentId: shipment.id,
+          amount: total,
+          method: method === 'card' ? 'CREDIT_CARD' : 'BANK_TRANSFER',
+          note: showInvoice ? JSON.stringify(invoice) : undefined
+        }),
+      });
+
+      const json = await res.json();
+      if (!res.ok) {
+        toast.error(json?.message || 'Ödeme işlemi başarısız oldu.');
+        return;
+      }
+
       toast.success('Ödeme başarıyla alındı.');
       navigate('/ilanlarim');
+    } catch {
+      toast.error('Ödeme sistemine bağlanılamadı.');
     } finally {
       setPaying(false);
     }

@@ -1,0 +1,7 @@
+{
+  "artifact_id": "ART-E2E-GOV-FIX",
+  "job_id": "E2E-GOV-FIX",
+  "verdict": "fail",
+  "summary": "Test execution for E2E-GOV-FIX finished with fail.",
+  "created_at": "2026-04-12T09:06:00.839Z"
+}

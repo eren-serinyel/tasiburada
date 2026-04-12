@@ -13,7 +13,18 @@ class EmailService {
   private getTransporter(): nodemailer.Transporter {
     if (!this.transporter) {
       if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) {
-        throw new Error('SMTP yapılandırması eksik (SMTP_HOST, SMTP_USER, SMTP_PASS gerekli).');
+        console.warn('⚠️ SMTP yapılandırması eksik (SMTP_HOST, SMTP_USER, SMTP_PASS). E-postalar konsola yazdırılacak.');
+        // Return a mock transporter for development
+        return {
+          sendMail: async (mailOptions: any) => {
+            console.log('📧 [MOCK EMAIL SENT]');
+            console.log(`PO: ${mailOptions.from}`);
+            console.log(`TO: ${mailOptions.to}`);
+            console.log(`SUBJECT: ${mailOptions.subject}`);
+            console.log(`BODY: ${mailOptions.html?.substring(0, 100)}...`);
+            return { messageId: 'mock-id' };
+          }
+        } as any;
       }
       this.transporter = nodemailer.createTransport({
         host: SMTP_HOST,

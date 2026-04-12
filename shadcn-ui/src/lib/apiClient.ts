@@ -37,20 +37,34 @@ export async function apiClient(input: RequestInfo | URL, init: RequestInit = {}
     });
 
     const isLoginEndpoint = resolvedInput.toString().includes('/login');
-    if (response.status === 401 && !isLoginEndpoint && typeof window !== 'undefined' && !redirectInProgress) {
-      redirectInProgress = true;
 
-      localStorage.removeItem(APP_CONFIG.tokenKey);
-      localStorage.removeItem(APP_CONFIG.userTypeKey);
-      localStorage.removeItem(APP_CONFIG.userIdKey);
-      localStorage.removeItem('currentUser');
-      localStorage.removeItem('currentUser_expiresAt');
+    if (!response.ok) {
+      // 401 Handling (Existing)
+      if (response.status === 401 && !isLoginEndpoint && typeof window !== 'undefined' && !redirectInProgress) {
+        redirectInProgress = true;
+        localStorage.removeItem(APP_CONFIG.tokenKey);
+        localStorage.removeItem(APP_CONFIG.userTypeKey);
+        localStorage.removeItem(APP_CONFIG.userIdKey);
+        localStorage.removeItem('currentUser');
+        localStorage.removeItem('currentUser_expiresAt');
+        toast.error('Oturumunuz sona erdi');
+        setTimeout(() => {
+          window.location.href = '/giris';
+        }, 100);
+      }
 
-      toast.error('Oturumunuz sona erdi');
-
-      setTimeout(() => {
-        window.location.href = '/giris';
-      }, 100);
+      // Automatically show toast for other errors if message exists
+      try {
+        const errorData = await response.clone().json();
+        if (errorData && errorData.message) {
+          toast.error(errorData.message);
+        }
+      } catch (e) {
+        // Fallback if not JSON
+        if (response.status >= 500) {
+          toast.error('Sunucu hatası oluştu.');
+        }
+      }
     }
 
     return response;

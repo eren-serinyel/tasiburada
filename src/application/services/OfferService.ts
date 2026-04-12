@@ -5,6 +5,7 @@ import { OfferRepository } from '../../infrastructure/repositories/OfferReposito
 import { ShipmentRepository } from '../../infrastructure/repositories/ShipmentRepository';
 import { NotificationService } from './NotificationService';
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from '../../domain/errors/AppError';
+import { containsContactInfo } from '../../utils/security';
 import { AppDataSource } from '../../infrastructure/database/data-source';
 
 interface CreateOfferPayload {
@@ -63,6 +64,21 @@ export class OfferService {
       throw new ConflictError('Bu taşıma talebi için zaten teklif verdiniz.');
     }
 
+    // CARRIER ELIGIBILITY CHECK: Must be verified by admin
+    const carrier = await this.carrierRepository.findById(carrierId);
+    if (!carrier || !carrier.isActive) {
+      throw new ForbiddenError('Hesabınız aktif değil. Lütfen destekle iletişime geçin.');
+    }
+
+    if (!carrier.verifiedByAdmin) {
+      throw new ForbiddenError('Teklif verebilmek için hesabınızın admin tarafından onaylanması gerekmektedir.');
+    }
+
+    // PLATFORM BYPASS PROTECTION: Basic check for phone numbers / emails in message
+    if (payload.message && containsContactInfo(payload.message)) {
+      throw new ValidationError('Teklif mesajında iletişim bilgisi (telefon, e-posta, link) paylaşılması güvenlik kurallarımız gereği yasaktır.');
+    }
+
     const offer = await this.offerRepository.create({
       shipmentId: payload.shipmentId,
       carrierId,
@@ -115,46 +131,56 @@ export class OfferService {
 
   async acceptOffer(customerId: string, offerId: string): Promise<Offer> {
     return await AppDataSource.manager.transaction(async (transactionalEntityManager) => {
-      // Peshimistic lock over the Offer entity
-      const offer = await transactionalEntityManager
-        .createQueryBuilder(Offer, 'offer')
-        .setLock('pessimistic_write')
-        .leftJoinAndSelect('offer.shipment', 'shipment')
-        .leftJoinAndSelect('offer.carrier', 'carrier')
-        .where('offer.id = :offerId', { offerId })
-        .getOne();
+      // First, get the offer to know which shipment it belongs to
+      const offerBase = await transactionalEntityManager.findOne(Offer, {
+        where: { id: offerId },
+        relations: ['shipment']
+      });
 
-      if (!offer) {
+      if (!offerBase) {
         throw new NotFoundError('Teklif bulunamadı.');
       }
 
-      if (offer.shipment?.customerId !== customerId) {
+      // POSSESS LOCK on the Shipment entity to prevent double matching
+      // All other attempts to accept ANY offer for this shipment will wait here
+      const shipment = await transactionalEntityManager
+        .createQueryBuilder(Shipment, 'shipment')
+        .setLock('pessimistic_write')
+        .where('shipment.id = :shipmentId', { shipmentId: offerBase.shipmentId })
+        .getOne();
+
+      if (!shipment) {
+        throw new NotFoundError('Taşıma talebi bulunamadı.');
+      }
+
+      if (shipment.customerId !== customerId) {
         throw new ForbiddenError('Bu teklifi kabul etme yetkiniz yok.');
       }
 
-      if (offer.status !== OfferStatus.PENDING) {
+      if (offerBase.status !== OfferStatus.PENDING) {
         throw new ValidationError('Sadece bekleyen teklifler kabul edilebilir.');
       }
 
-      if (offer.shipment.status !== ShipmentStatus.PENDING && offer.shipment.status !== ShipmentStatus.OFFER_RECEIVED) {
-        throw new ValidationError('Bu taşıma talebi artık teklif kabulüne açık değil.');
+      if (shipment.status !== ShipmentStatus.PENDING && shipment.status !== ShipmentStatus.OFFER_RECEIVED) {
+        throw new ValidationError('Bu taşıma talebi artık teklif kabulüne açık değil (Eşleşmiş veya İptal edilmiş olabilir).');
       }
 
-      await transactionalEntityManager.update(Offer, offer.id, { status: OfferStatus.ACCEPTED });
+      // Update the accepted offer
+      await transactionalEntityManager.update(Offer, offerId, { status: OfferStatus.ACCEPTED });
 
       await transactionalEntityManager
         .createQueryBuilder()
         .update(Offer)
         .set({ status: OfferStatus.REJECTED })
-        .where('shipmentId = :shipmentId', { shipmentId: offer.shipmentId })
-        .andWhere('id != :acceptedOfferId', { acceptedOfferId: offer.id })
+        .where('shipmentId = :shipmentId', { shipmentId: offerBase.shipmentId })
+        .andWhere('id != :acceptedOfferId', { acceptedOfferId: offerBase.id })
         .andWhere('status = :pendingStatus', { pendingStatus: OfferStatus.PENDING })
         .execute();
 
-      await transactionalEntityManager.update(Shipment, offer.shipmentId, {
+      await transactionalEntityManager.update(Shipment, offerBase.shipmentId, {
         status: ShipmentStatus.MATCHED,
-        carrierId: offer.carrierId,
-        price: offer.price
+        carrierId: offerBase.carrierId,
+        price: offerBase.price
       });
 
       const updatedOffer = await transactionalEntityManager
@@ -169,12 +195,12 @@ export class OfferService {
       }
 
       await this.notificationService.createNotification(
-        offer.carrierId,
+        offerBase.carrierId,
         'carrier',
         'OFFER_ACCEPTED',
         'Teklifiniz Kabul Edildi',
         'Müşteri teklifinizi kabul etti. Taşımaya hazırlanın.',
-        offer.shipmentId
+        offerBase.shipmentId
       );
 
       return this.sanitizeOffer(updatedOffer);

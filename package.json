@@ -22,7 +22,10 @@
     "test:customer": "jest --runInBand --testPathPattern=customer-flow",
     "test:carrier": "jest --runInBand --testPathPattern=carrier-flow",
     "test:admin": "jest --runInBand --testPathPattern=admin-flow",
-    "test:e2e": "jest --runInBand --testPathPattern=e2e-scenarios"
+    "test:e2e": "jest --runInBand --testPathPattern=e2e-scenarios",
+    "orchestrator:dev": "npm run --prefix orchestrator dev",
+    "orchestrator:build": "npm run --prefix orchestrator build",
+    "orchestrator:start": "npm run --prefix orchestrator start"
   },
   "keywords": [
     "nodejs",
