@@ -19,4 +19,11 @@ export class VehicleTypeRepository extends BaseRepository<VehicleType> {
       .where('vt.name IN (:...names)', { names })
       .getMany();
   }
+
+  async findAllActive(): Promise<VehicleType[]> {
+    return this.repository.find({
+      where: { status: 'ACTIVE' },
+      order: { sortOrder: 'ASC' }
+    });
+  }
 }

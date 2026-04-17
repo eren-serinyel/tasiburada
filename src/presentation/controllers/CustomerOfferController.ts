@@ -20,7 +20,7 @@ export class CustomerOfferController {
         success: true,
         data: offers
       });
-    } catch (error: any) {
+    } catch (error: any) { console.error(error); 
       res.status(500).json({
         success: false,
         message: error.message || 'Müşteri teklifleri alınırken hata oluştu.'

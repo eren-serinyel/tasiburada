@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { OfferService } from '../../application/services/OfferService';
+import { AppError } from '../../domain/errors/AppError';
 
 export class OfferController {
   private offerService = new OfferService();
@@ -15,16 +16,18 @@ export class OfferController {
         return;
       }
 
-      const offer = await this.offerService.createOffer(carrierId, req.body);
-      res.status(201).json({
+      const { offer, isNew, warnings } = await this.offerService.createOffer(carrierId, req.body);
+      res.status(isNew ? 201 : 200).json({
         success: true,
-        message: 'Teklif oluşturuldu.',
-        data: offer
+        message: isNew ? 'Teklif oluşturuldu.' : 'Mevcut teklif güncellendi.',
+        data: offer,
+        ...(warnings?.length ? { warnings } : {})
       });
     } catch (error: any) {
-      res.status(400).json({
+      res.status(error.statusCode ?? 400).json({
         success: false,
-        message: error.message || 'Teklif oluşturulurken hata oluştu.'
+        message: error.message || 'Teklif oluşturulurken hata oluştu.',
+        ...(error.code ? { code: error.code } : {})
       });
     }
   };
@@ -47,14 +50,7 @@ export class OfferController {
         data: offer
       });
     } catch (error: any) {
-      let statusCode = 400;
-      if (error.message?.includes('bulunamadı')) {
-        statusCode = 404;
-      } else if (error.message?.includes('yetkiniz yok')) {
-        statusCode = 403;
-      }
-
-      res.status(statusCode).json({
+      res.status(error.statusCode ?? 400).json({
         success: false,
         message: error.message || 'Teklif alınırken hata oluştu.'
       });
@@ -80,14 +76,7 @@ export class OfferController {
         data: offer
       });
     } catch (error: any) {
-      let statusCode = 400;
-      if (error.message?.includes('bulunamadı')) {
-        statusCode = 404;
-      } else if (error.message?.includes('yetkiniz yok')) {
-        statusCode = 403;
-      }
-
-      res.status(statusCode).json({
+      res.status(error.statusCode ?? 400).json({
         success: false,
         message: error.message || 'Teklif kabul edilirken hata oluştu.'
       });
@@ -113,14 +102,7 @@ export class OfferController {
         data: offer
       });
     } catch (error: any) {
-      let statusCode = 400;
-      if (error.message?.includes('bulunamadı')) {
-        statusCode = 404;
-      } else if (error.message?.includes('yetkiniz yok')) {
-        statusCode = 403;
-      }
-
-      res.status(statusCode).json({
+      res.status(error.statusCode ?? 400).json({
         success: false,
         message: error.message || 'Teklif reddedilirken hata oluştu.'
       });
@@ -167,11 +149,7 @@ export class OfferController {
         data: offer
       });
     } catch (error: any) {
-      let statusCode = 400;
-      if (error.message?.includes('bulunamadı')) statusCode = 404;
-      else if (error.message?.includes('yetkiniz yok')) statusCode = 403;
-
-      res.status(statusCode).json({
+      res.status(error.statusCode ?? 400).json({
         success: false,
         message: error.message || 'Teklif güncellenirken hata oluştu.'
       });
@@ -194,11 +172,7 @@ export class OfferController {
         data: offer
       });
     } catch (error: any) {
-      let statusCode = 400;
-      if (error.message?.includes('bulunamadı')) statusCode = 404;
-      else if (error.message?.includes('yetkiniz yok')) statusCode = 403;
-
-      res.status(statusCode).json({
+      res.status(error.statusCode ?? 400).json({
         success: false,
         message: error.message || 'Teklif geri çekilirken hata oluştu.'
       });

@@ -2,11 +2,17 @@ import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, CreateDa
 import { Shipment } from "./Shipment";
 import { Carrier } from "./Carrier";
 
+const decimalToNumberTransformer = {
+    to: (value: number | null | undefined) => value,
+    from: (value: string | number | null | undefined) => value == null ? value : Number(value)
+};
+
 export enum OfferStatus {
     PENDING = "pending",
     ACCEPTED = "accepted",
     REJECTED = "rejected",
-    WITHDRAWN = "withdrawn"
+    WITHDRAWN = "withdrawn",
+    CANCELLED = "cancelled"
 }
 
 @Entity("offers")
@@ -28,7 +34,7 @@ export class Offer {
     @JoinColumn({ name: "carrierId" })
     carrier: Carrier;
 
-    @Column({ type: "decimal", precision: 10, scale: 2 })
+    @Column({ type: "decimal", precision: 10, scale: 2, transformer: decimalToNumberTransformer })
     price: number;
 
     @Column({ type: 'text', nullable: true })
@@ -43,6 +49,9 @@ export class Offer {
         default: OfferStatus.PENDING
     })
     status: OfferStatus;
+
+    @Column({ name: 'has_suspicious_content', type: 'boolean', default: false })
+    hasSuspiciousContent: boolean;
 
     @CreateDateColumn()
     offeredAt: Date;

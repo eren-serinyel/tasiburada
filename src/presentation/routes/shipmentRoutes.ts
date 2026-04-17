@@ -9,7 +9,7 @@ const inviteController = new ShipmentInviteController();
 
 router.post('/', authenticateCustomer, shipmentController.create);
 router.get('/my-shipments', authenticateCustomer, shipmentController.getMyShipments);
-router.get('/search', shipmentController.searchShipments);
+router.get('/search', authenticateToken, shipmentController.searchShipments);
 router.get('/pending', authenticateCarrier, shipmentController.getPending);
 router.get('/:id', authenticateToken, shipmentController.getById);
 router.put('/:id', authenticateCustomer, shipmentController.update);

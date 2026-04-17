@@ -13,14 +13,14 @@ export class CarrierVehicleTypeService {
     await this.linkRepository.deleteByCarrierId(carrierId);
 
     if (!selections.length) {
-      await this.profileStatusService.syncVehiclesCompletion(carrierId);
+      await this.profileStatusService.updateProfileCompletion(carrierId);
       return;
     }
 
     const uniqueIds = Array.from(new Set(selections.map(item => item.vehicleTypeId)));
     const vehicleTypes = await this.vehicleTypeRepository.findByIds(uniqueIds);
     if (!vehicleTypes.length) {
-      await this.profileStatusService.syncVehiclesCompletion(carrierId);
+      await this.profileStatusService.updateProfileCompletion(carrierId);
       return;
     }
 
@@ -37,7 +37,7 @@ export class CarrierVehicleTypeService {
       await this.linkRepository.saveAll(payload);
     }
 
-    await this.profileStatusService.syncVehiclesCompletion(carrierId);
+    await this.profileStatusService.updateProfileCompletion(carrierId);
   }
 
   async listSelectedTypes(carrierId: string) {

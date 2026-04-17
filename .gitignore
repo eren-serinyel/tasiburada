@@ -71,3 +71,5 @@ store/
 
 
 check-schema.ts
+
+stashed-*.ts

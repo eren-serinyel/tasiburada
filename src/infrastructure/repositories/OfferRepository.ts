@@ -11,8 +11,12 @@ const SAFE_CARRIER_SELECT = [
   'carrier.pictureUrl',
   'carrier.rating',
   'carrier.completedShipments',
-  'carrier.profileCompletion',
-  'carrier.isActive'
+
+  'carrier.isActive',
+  'carrier.verifiedByAdmin',
+  'carrier.hasUploadedDocuments',
+  'carrier.foundedYear',
+  'carrier.activityCity',
 ];
 
 export class OfferRepository extends BaseRepository<Offer> {
@@ -25,6 +29,9 @@ export class OfferRepository extends BaseRepository<Offer> {
       .createQueryBuilder('offer')
       .innerJoinAndSelect('offer.shipment', 'shipment')
       .leftJoinAndSelect('offer.carrier', 'carrier')
+      .leftJoinAndSelect('carrier.vehicles', 'vehicles')
+      .leftJoinAndSelect('vehicles.vehicleType', 'vt')
+      .leftJoinAndSelect('carrier.extraServices', 'extraServices')
       .select([
         'offer.id',
         'offer.shipmentId',
@@ -39,14 +46,23 @@ export class OfferRepository extends BaseRepository<Offer> {
         'shipment.carrierId',
         'shipment.status',
         'shipment.price',
-        'shipment.origin',
-        'shipment.destination',
+        'shipment.originCity',
+        'shipment.originDistrict',
+        'shipment.destinationCity',
+        'shipment.destinationDistrict',
         'shipment.loadDetails',
         'shipment.weight',
         'shipment.shipmentDate',
         'shipment.createdAt',
         'shipment.updatedAt',
-        ...SAFE_CARRIER_SELECT
+        ...SAFE_CARRIER_SELECT,
+        'vehicles.id',
+        'vehicles.plateNumber',
+        'vehicles.brand',
+        'vehicles.model',
+        'vt.name',
+        'extraServices.id',
+        'extraServices.name',
       ])
       .where('shipment.customerId = :customerId', { customerId })
       .orderBy('offer.offeredAt', 'DESC')
@@ -66,6 +82,9 @@ export class OfferRepository extends BaseRepository<Offer> {
       .createQueryBuilder('offer')
       .leftJoinAndSelect('offer.shipment', 'shipment')
       .leftJoinAndSelect('offer.carrier', 'carrier')
+      .leftJoinAndSelect('carrier.vehicles', 'vehicles')
+      .leftJoinAndSelect('vehicles.vehicleType', 'vt')
+      .leftJoinAndSelect('carrier.extraServices', 'extraServices')
       .select([
         'offer.id',
         'offer.shipmentId',
@@ -80,14 +99,20 @@ export class OfferRepository extends BaseRepository<Offer> {
         'shipment.carrierId',
         'shipment.status',
         'shipment.price',
-        'shipment.origin',
-        'shipment.destination',
+        'shipment.originCity',
+        'shipment.originDistrict',
+        'shipment.destinationCity',
+        'shipment.destinationDistrict',
         'shipment.loadDetails',
         'shipment.weight',
         'shipment.shipmentDate',
         'shipment.createdAt',
         'shipment.updatedAt',
-        ...SAFE_CARRIER_SELECT
+        ...SAFE_CARRIER_SELECT,
+        'vehicles.id',
+        'vt.name',
+        'extraServices.id',
+        'extraServices.name',
       ])
       .where('offer.id = :offerId', { offerId })
       .getOne();
@@ -102,6 +127,17 @@ export class OfferRepository extends BaseRepository<Offer> {
     });
 
     return count > 0;
+  }
+
+  async findActiveByShipmentAndCarrier(shipmentId: string, carrierId: string): Promise<Offer | null> {
+    return await this.repository
+      .createQueryBuilder('offer')
+      .where('offer.shipmentId = :shipmentId', { shipmentId })
+      .andWhere('offer.carrierId = :carrierId', { carrierId })
+      .andWhere('offer.status NOT IN (:...statuses)', { 
+          statuses: [OfferStatus.WITHDRAWN, OfferStatus.REJECTED, OfferStatus.CANCELLED] 
+      })
+      .getOne();
   }
 
   async rejectOtherPendingOffers(shipmentId: string, acceptedOfferId: string): Promise<void> {

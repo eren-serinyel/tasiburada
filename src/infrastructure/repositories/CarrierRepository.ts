@@ -18,6 +18,10 @@ export interface CarrierSearchFilters {
   minCapacityKg?: number;
   searchText?: string;
   availableDate?: string;
+  scopeIds?: string[];
+  serviceTypeIds?: string[];
+  isVerified?: boolean;
+  hasDocuments?: boolean;
   sortBy?: CarrierSearchSort;
   limit: number;
   offset: number;

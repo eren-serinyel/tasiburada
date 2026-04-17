@@ -1,6 +1,8 @@
 import 'reflect-metadata';
-import { initializeDatabase, closeDatabase } from '../../infrastructure/database/data-source';
+import { AppDataSource, initializeDatabase, closeDatabase } from '../../infrastructure/database/data-source';
+import { ExtraService } from '../../domain/entities/ExtraService';
 import { clearDatabase } from './clearDatabase';
+import { EXTRA_SERVICES } from './data/constants';
 import { seedPlatformSettings } from './seeders/settingsSeeder';
 import { seedAdmins } from './seeders/adminSeeder';
 import { seedLookupTables } from './seeders/lookupSeeder';
@@ -30,6 +32,22 @@ async function main() {
     // 3. Lookup tablolar (VehicleType, ServiceType, ScopeOfWork)
     console.log('📋 Referans veriler oluşturuluyor...');
     const { vehicleTypeMap, serviceTypeMap, scopeMap } = await seedLookupTables();
+    const vehicleTypeIdMap = new Map(Object.entries(vehicleTypeMap).map(([name, vehicleType]) => [name, vehicleType.id]));
+    const extraRepo = AppDataSource.getRepository(ExtraService);
+    const extraServiceMap = new Map<string, string>();
+
+    for (const [index, name] of EXTRA_SERVICES.entries()) {
+      let existing = await extraRepo.findOne({ where: { name } });
+      if (!existing) {
+        existing = await extraRepo.save(extraRepo.create({
+          name,
+          description: null,
+          status: 'ACTIVE',
+          sortOrder: index + 1,
+        }));
+      }
+      extraServiceMap.set(name, existing.id);
+    }
 
     // 4. Admin kullanıcılar
     console.log('👤 Admin kullanıcılar oluşturuluyor...');
@@ -45,7 +63,7 @@ async function main() {
 
     // 7. Taşıma talepleri
     console.log('📦 Taşıma talepleri oluşturuluyor...');
-    const shipments = await seedShipments(customers, carriers);
+    const shipments = await seedShipments(customers, carriers, vehicleTypeIdMap, extraServiceMap);
 
     // 8. Teklifler
     console.log('💬 Teklifler oluşturuluyor...');

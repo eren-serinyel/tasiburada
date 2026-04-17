@@ -1,5 +1,5 @@
-import { IsString, IsOptional, Length, IsEnum, IsNumber, IsDateString, Min, IsBoolean, IsUUID } from 'class-validator';
-import { ShipmentStatus } from '../../domain/entities/Shipment';
+import { IsString, IsOptional, Length, IsEnum, IsNumber, IsDateString, Min, IsBoolean, IsUUID, IsArray } from 'class-validator';
+import { ShipmentStatus, PlaceType, LoadProfile, AccessDistance, DateFlexibility } from '../../domain/entities/Shipment';
 import { CargoType } from '../../domain/valueObjects/CargoType';
 
 export class CreateShipmentDto {
@@ -58,6 +58,39 @@ export class CreateShipmentDto {
   @IsOptional()
   @IsBoolean()
   isInsured?: boolean;
+
+  @IsOptional()
+  @IsEnum(LoadProfile)
+  loadProfile?: LoadProfile;
+
+  @IsOptional()
+  @IsEnum(PlaceType)
+  originPlaceType?: PlaceType;
+
+  @IsOptional()
+  @IsEnum(PlaceType)
+  destinationPlaceType?: PlaceType;
+
+  @IsOptional()
+  @IsEnum(AccessDistance)
+  originAccessDistance?: AccessDistance;
+
+  @IsOptional()
+  @IsEnum(AccessDistance)
+  destinationAccessDistance?: AccessDistance;
+
+  @IsOptional()
+  @IsEnum(DateFlexibility)
+  dateFlexibility?: DateFlexibility;
+
+  @IsOptional()
+  @IsString()
+  timePreference?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  extraServices?: string[];
 }
 
 export class UpdateShipmentDto {
@@ -126,6 +159,39 @@ export class UpdateShipmentDto {
   @IsOptional()
   @IsBoolean()
   isInsured?: boolean;
+
+  @IsOptional()
+  @IsEnum(LoadProfile)
+  loadProfile?: LoadProfile;
+
+  @IsOptional()
+  @IsEnum(PlaceType)
+  originPlaceType?: PlaceType;
+
+  @IsOptional()
+  @IsEnum(PlaceType)
+  destinationPlaceType?: PlaceType;
+
+  @IsOptional()
+  @IsEnum(AccessDistance)
+  originAccessDistance?: AccessDistance;
+
+  @IsOptional()
+  @IsEnum(AccessDistance)
+  destinationAccessDistance?: AccessDistance;
+
+  @IsOptional()
+  @IsEnum(DateFlexibility)
+  dateFlexibility?: DateFlexibility;
+
+  @IsOptional()
+  @IsString()
+  timePreference?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  extraServices?: string[];
 }
 
 export class ShipmentResponseDto {
@@ -133,9 +199,13 @@ export class ShipmentResponseDto {
   originCity: string;
   originDistrict: string;
   originAddress: string;
+  originAddressId?: number | null;
+  originAddressText?: string | null;
   destinationCity: string;
   destinationDistrict: string;
   destinationAddress: string;
+  destinationAddressId?: number | null;
+  destinationAddressText?: string | null;
   shipmentDate: Date;
   priceRangeMin: number;
   priceRangeMax: number;

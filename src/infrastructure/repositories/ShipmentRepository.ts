@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { BaseRepository } from './BaseRepository';
 import { Shipment } from '../../domain/entities/Shipment';
 import { ShipmentStatus } from '../../domain/entities/Shipment';
@@ -8,7 +9,12 @@ export class ShipmentRepository extends BaseRepository<Shipment> {
   }
 
   async createShipmentRecord(payload: Partial<Shipment>): Promise<Shipment> {
-    return await this.create(payload);
+    const entity = this.repository.create({
+      id: payload.id ?? randomUUID(),
+      ...payload,
+    });
+    await this.repository.save(entity, { reload: false });
+    return entity;
   }
 
   async findByCustomerId(customerId: string): Promise<Shipment[]> {
@@ -19,10 +25,26 @@ export class ShipmentRepository extends BaseRepository<Shipment> {
   }
 
   async findPendingShipments(): Promise<Shipment[]> {
-    return await this.repository.find({
-      where: { status: 'pending' as any },
-      order: { createdAt: 'DESC' }
-    });
+    // 1-H: Geçmiş tarihli ilanları gizle
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    return await this.repository
+      .createQueryBuilder('shipment')
+      .leftJoinAndSelect('shipment.extraServices', 'extraServices')
+      .where(
+        `(
+          (shipment.status = :pending AND shipment.shipmentDate >= :today)
+          OR shipment.status = :offerReceived
+        )`,
+        {
+          pending: ShipmentStatus.PENDING,
+          offerReceived: ShipmentStatus.OFFER_RECEIVED,
+          today: today.toISOString().split('T')[0],
+        }
+      )
+      .orderBy('shipment.createdAt', 'DESC')
+      .getMany();
   }
 
   async findByCustomerIdWithOfferCount(customerId: string): Promise<Array<Shipment & { offerCount: number }>> {
@@ -36,10 +58,11 @@ export class ShipmentRepository extends BaseRepository<Shipment> {
       .orderBy('shipment.createdAt', 'DESC')
       .getRawAndEntities();
 
-    return rows.entities.map((shipment, index) => ({
-      ...shipment,
-      offerCount: Number(rows.raw[index]?.offerCount ?? 0)
-    }));
+    return rows.entities.map((shipment, index) => {
+      const result = shipment as (Shipment & { offerCount: number });
+      result.offerCount = Number(rows.raw[index]?.offerCount ?? 0);
+      return result;
+    });
   }
 
   async findByIdWithOffers(shipmentId: string): Promise<Shipment | null> {
@@ -47,6 +70,7 @@ export class ShipmentRepository extends BaseRepository<Shipment> {
       .createQueryBuilder('shipment')
       .leftJoinAndSelect('shipment.carrier', 'carrier')
       .leftJoinAndSelect('shipment.customer', 'customer')
+      .leftJoinAndSelect('shipment.extraServices', 'extraServices')
       .leftJoinAndMapMany('shipment.offers', 'offers', 'offer', 'offer.shipmentId = shipment.id')
       .leftJoinAndSelect('offer.carrier', 'offerCarrier')
       .where('shipment.id = :shipmentId', { shipmentId })
@@ -72,6 +96,17 @@ export class ShipmentRepository extends BaseRepository<Shipment> {
     });
   }
 
+  async hasMatchedShipment(customerId: string, carrierId: string): Promise<boolean> {
+    const count = await this.repository.count({
+      where: [
+        { customerId, carrierId, status: ShipmentStatus.MATCHED },
+        { customerId, carrierId, status: ShipmentStatus.IN_TRANSIT },
+        { customerId, carrierId, status: ShipmentStatus.COMPLETED },
+      ]
+    });
+    return count > 0;
+  }
+
   async updateShipmentStatus(shipmentId: string, status: ShipmentStatus): Promise<void> {
     await this.repository.update(shipmentId, { status });
   }
@@ -86,5 +121,19 @@ export class ShipmentRepository extends BaseRepository<Shipment> {
       .execute();
 
     return (result.affected || 0) > 0;
+  }
+
+  async findDuplicateShipment(customerId: string, originCity: string, destinationCity: string): Promise<Shipment | null> {
+    const fortyEightHoursAgo = new Date();
+    fortyEightHoursAgo.setHours(fortyEightHoursAgo.getHours() - 48);
+
+    return await this.repository
+      .createQueryBuilder('shipment')
+      .where('shipment.customerId = :customerId', { customerId })
+      .andWhere('shipment.originCity = :originCity', { originCity })
+      .andWhere('shipment.destinationCity = :destinationCity', { destinationCity })
+      .andWhere('shipment.status IN (:...statuses)', { statuses: [ShipmentStatus.PENDING, ShipmentStatus.MATCHED] })
+      .andWhere('shipment.createdAt > :date', { date: fortyEightHoursAgo })
+      .getOne();
   }
 }

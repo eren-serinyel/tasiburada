@@ -1,6 +1,7 @@
 import { Entity, PrimaryGeneratedColumn, Column, OneToMany } from 'typeorm';
 import { Vehicle } from './Vehicle';
 import { CarrierVehicleType } from './CarrierVehicleType';
+import { CarrierVehicle } from './CarrierVehicle';
 
 @Entity('vehicle_types')
 export class VehicleType {
@@ -16,9 +17,21 @@ export class VehicleType {
   @Column({ type: 'int' })
   defaultCapacityM3: number;
 
+  @Column({ name: 'status', type: 'enum', enum: ['ACTIVE', 'INACTIVE'], default: 'ACTIVE' })
+  status: 'ACTIVE' | 'INACTIVE';
+
+  @Column({ name: 'sort_order', type: 'int', default: 0 })
+  sortOrder: number;
+
+  @Column({ name: 'capacity_kg', type: 'int', nullable: true })
+  capacityKg: number | null;
+
   @OneToMany(() => Vehicle, v => v.vehicleType)
   vehicles: Vehicle[];
 
   @OneToMany(() => CarrierVehicleType, link => link.vehicleType)
   carrierLinks: CarrierVehicleType[];
+
+  @OneToMany(() => CarrierVehicle, cv => cv.vehicleType)
+  carrierVehicles: CarrierVehicle[];
 }

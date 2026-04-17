@@ -22,7 +22,8 @@ export class ShipmentController {
         data: shipment
       });
     } catch (error: any) {
-      res.status(400).json({
+      const statusCode = error.statusCode || 400;
+      res.status(statusCode).json({
         success: false,
         message: error.message || 'Taşıma talebi oluşturulurken hata oluştu.'
       });
@@ -71,9 +72,7 @@ export class ShipmentController {
         data: shipment
       });
     } catch (error: any) {
-      let statusCode = 500;
-      if (error.message?.includes('bulunamadı')) statusCode = 404;
-      else if (error.message?.includes('yetkiniz yok') || error.message?.includes('Yetkisiz')) statusCode = 403;
+      const statusCode = error.statusCode || (error.message?.includes('bulunamadı') ? 404 : 500);
       res.status(statusCode).json({
         success: false,
         message: error.message || 'Taşıma talebi alınırken hata oluştu.'
@@ -100,7 +99,7 @@ export class ShipmentController {
         data: updatedShipment
       });
     } catch (error: any) {
-      const statusCode = error.message?.includes('bulunamadı') ? 404 : 400;
+      const statusCode = error.statusCode || (error.message?.includes('bulunamadı') ? 404 : 400);
       res.status(statusCode).json({
         success: false,
         message: error.message || 'Taşıma talebi güncellenirken hata oluştu.'
@@ -112,22 +111,21 @@ export class ShipmentController {
     try {
       const customerId = req.user?.customerId;
       if (!customerId) {
-        res.status(401).json({
-          success: false,
-          message: 'Yetkisiz erişim.'
-        });
+        res.status(401).json({ success: false, message: 'Yetkisiz erişim.' });
         return;
       }
 
       const { id } = req.params;
-      const cancelledShipment = await this.shipmentService.cancelShipment(customerId, id);
+      const { cancellation_reason, reason, note } = req.body;
+      const finalReason = reason || cancellation_reason;
+      const cancelledShipment = await this.shipmentService.cancel(customerId, id, finalReason, note);
       res.status(200).json({
         success: true,
         message: 'Taşıma talebi iptal edildi.',
         data: cancelledShipment
       });
     } catch (error: any) {
-      const statusCode = error.message?.includes('bulunamadı') ? 404 : 400;
+      const statusCode = error.statusCode || (error.message?.includes('bulunamadı') ? 404 : 400);
       res.status(statusCode).json({
         success: false,
         message: error.message || 'Taşıma talebi iptal edilirken hata oluştu.'
@@ -178,13 +176,7 @@ export class ShipmentController {
         data: startedShipment
       });
     } catch (error: any) {
-      let statusCode = 400;
-      if (error.message?.includes('bulunamadı')) {
-        statusCode = 404;
-      } else if (error.message?.includes('yetkiniz yok')) {
-        statusCode = 403;
-      }
-
+      const statusCode = error.statusCode || (error.message?.includes('bulunamadı') ? 404 : 400);
       res.status(statusCode).json({
         success: false,
         message: error.message || 'Taşıma başlatılırken hata oluştu.'
@@ -211,13 +203,7 @@ export class ShipmentController {
         data: completedShipment
       });
     } catch (error: any) {
-      let statusCode = 400;
-      if (error.message?.includes('bulunamadı')) {
-        statusCode = 404;
-      } else if (error.message?.includes('yetkiniz yok')) {
-        statusCode = 403;
-      }
-
+      const statusCode = error.statusCode || (error.message?.includes('bulunamadı') ? 404 : 400);
       res.status(statusCode).json({
         success: false,
         message: error.message || 'Taşıma tamamlanırken hata oluştu.'
