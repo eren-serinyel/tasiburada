@@ -30,10 +30,6 @@ export class CarrierCompanyInfoService {
       addressLine2: dto.addressLine2 ?? carrier.addressLine2,
       district: dto.district ?? carrier.district,
       activityCity: dto.activityCity ?? carrier.activityCity,
-      vehicleBrand: dto.vehicleBrand ?? carrier.vehicleBrand,
-      vehicleModel: dto.vehicleModel ?? carrier.vehicleModel,
-      vehicleYear: dto.vehicleYear ?? carrier.vehicleYear,
-      vehicleCapacityM3: dto.vehicleCapacityM3 ?? carrier.vehicleCapacityM3,
     });
 
     await this.profileStatusService.updateProfileCompletion(carrierId);

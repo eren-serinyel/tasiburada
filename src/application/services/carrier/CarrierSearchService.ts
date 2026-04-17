@@ -161,7 +161,7 @@ export class CarrierSearchService {
 			? carrier.activity?.serviceAreasJson ?? []
 			: [];
 		const experienceYears = this.computeExperience(carrier);
-		const profileCompletion = carrier.profileStatus?.overallPercentage ?? carrier.profileCompletion ?? null;
+		const profileCompletion = carrier.profileStatus?.overallPercentage ?? null;	
 		const vehicleSummary = this.buildVehicleSummary(carrier);
 		return {
 			id: carrier.id,

@@ -33,7 +33,6 @@ export class CarrierAuthService {
       foundedYear: dto.foundedYear,
       passwordHash,
       isActive: true,
-      profileCompletion: 0
     });
 
     await this.profileStatusService.createInitialStatus(carrier.id);

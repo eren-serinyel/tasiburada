@@ -50,9 +50,6 @@ export class Carrier {
   @Column({ type: 'boolean', default: true })
   isActive: boolean;
 
-  @Column({ type: 'int', default: 0 })
-  profileCompletion: number;
-
   @Column({ type: 'int', nullable: false })
   foundedYear: number;
 
@@ -82,18 +79,6 @@ export class Carrier {
 
   @Column({ type: 'float', default: 0 })
   successRate: number;
-
-  @Column({ type: 'varchar', length: 100, nullable: true })
-  vehicleBrand?: string;
-
-  @Column({ type: 'varchar', length: 100, nullable: true })
-  vehicleModel?: string;
-
-  @Column({ type: 'int', nullable: true })
-  vehicleYear?: number;
-
-  @Column({ type: 'float', nullable: true })
-  vehicleCapacityM3?: number;
 
   @Column({ type: 'text', nullable: true })
   availableDates?: string;

@@ -69,3 +69,5 @@ orchestrator/
 store/
 .continue/
 
+
+check-schema.ts

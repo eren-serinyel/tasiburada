@@ -11,9 +11,6 @@ export class CarrierProfileQueryService {
     const carrier = await this.carrierRepository.findPublicById(carrierId);
     const activity = await this.activityService.getActivityInfo(carrierId);
     const status = await this.profileStatusService.updateProfileCompletion(carrierId);
-    if (carrier) {
-      carrier.profileCompletion = status.overallPercentage;
-    }
     return { carrier, activity, status };
   }
 

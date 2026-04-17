@@ -117,8 +117,8 @@ export class CarrierDetailRepository extends BaseRepository<Carrier> {
       ? Math.max(0, new Date().getFullYear() - foundedYear)
       : null;
 
-    const profilePercentage = carrierEntity.profileStatus?.overallPercentage ?? carrierEntity.profileCompletion ?? 0;
-
+    const profilePercentage = carrierEntity.profileStatus?.overallPercentage ?? 0;  
+    
     return {
       id: carrierEntity.id,
       companyName: carrierEntity.companyName,
