@@ -1,6 +1,7 @@
 import { AppDataSource } from '../../../infrastructure/database/data-source';
 import { Carrier } from '../../../domain/entities/Carrier';
 import { Vehicle } from '../../../domain/entities/Vehicle';
+import { CarrierVehicle } from '../../../domain/entities/CarrierVehicle';
 import { CarrierVehicleType } from '../../../domain/entities/CarrierVehicleType';
 import { CarrierServiceType } from '../../../domain/entities/CarrierServiceType';
 import { CarrierScopeOfWork } from '../../../domain/entities/CarrierScopeOfWork';
@@ -25,6 +26,7 @@ export async function seedCarriers(
 ): Promise<Carrier[]> {
   const carrierRepo = AppDataSource.getRepository(Carrier);
   const vehicleRepo = AppDataSource.getRepository(Vehicle);
+  const carrierVehicleRepo = AppDataSource.getRepository(CarrierVehicle);
   const cvtRepo = AppDataSource.getRepository(CarrierVehicleType);
   const cstRepo = AppDataSource.getRepository(CarrierServiceType);
   const csowRepo = AppDataSource.getRepository(CarrierScopeOfWork);
@@ -73,20 +75,36 @@ export async function seedCarriers(
 
     // ── Vehicle kaydı ──
     try {
+      const plate = `${randomInt(1, 81)} ${randomFrom(['AB', 'CD', 'EF', 'GH'])} ${randomInt(100, 999)}`;
+      const brand = randomFrom(['Ford', 'Mercedes', 'Renault', 'Fiat', 'Isuzu', 'MAN', 'Volvo']);
+      const year = randomInt(2015, 2023);
+
       const vehicle = vehicleRepo.create({
         carrierId: saved.id,
         vehicleTypeId: vt.id,
         capacityKg: vt.defaultCapacityKg,
         capacityM3: vt.defaultCapacityM3,
-        licensePlate: `${randomInt(1, 81)} ${randomFrom(['AB', 'CD', 'EF', 'GH'])} ${randomInt(100, 999)}`,
-        brand: randomFrom(['Ford', 'Mercedes', 'Renault', 'Fiat', 'Isuzu', 'MAN', 'Volvo']),
+        licensePlate: plate,
+        brand,
         model: vtName,
-        year: randomInt(2015, 2023),
+        year,
         isActive: true,
         hasInsurance: isVerified,
         hasTrackingDevice: Math.random() > 0.5,
       });
       await vehicleRepo.save(vehicle);
+
+      await carrierVehicleRepo.save(carrierVehicleRepo.create({
+        carrierId: saved.id,
+        vehicleTypeId: vt.id,
+        capacityKg: vt.defaultCapacityKg,
+        capacityM3: vt.defaultCapacityM3,
+        plate,
+        brand,
+        model: vtName,
+        year,
+        isActive: true,
+      }));
     } catch (err: any) {
       console.warn(`  ⚠ Vehicle kaydı atlandı (${saved.companyName}): ${err.message}`);
     }
