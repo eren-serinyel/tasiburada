@@ -64,3 +64,8 @@ mysql_data/
 # GitHub Copilot: ignore real env and local SQL dumps
 .env
 *.sql
+
+orchestrator/
+store/
+.continue/
+
