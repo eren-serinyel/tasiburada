@@ -61,7 +61,6 @@ export class CarrierProfileStatusService {
       notificationsCompleted: false,
       overallPercentage: 0
     });
-    await this.carrierRepository.update(carrierId, { profileCompletion: status.overallPercentage } as any);
     return status;
   }
 
@@ -111,7 +110,6 @@ export class CarrierProfileStatusService {
     status.overallPercentage = this.calculatePercentage(status);
 
     await this.repository.save(status);
-    await this.carrierRepository.update(carrierId, { profileCompletion: status.overallPercentage } as any);
 
     return status;
   }
@@ -125,7 +123,6 @@ export class CarrierProfileStatusService {
     (status as any)[columnKey] = completed;
     status.overallPercentage = this.calculatePercentage(status);
     await this.repository.save(status);
-    await this.carrierRepository.update(carrierId, { profileCompletion: status.overallPercentage } as any);
     return status;
   }
 

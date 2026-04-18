@@ -50,7 +50,6 @@ export class CarrierRepository extends BaseRepository<Carrier> {
         'carrier.pictureUrl',
         'carrier.rating',
         'carrier.completedShipments',
-        'carrier.profileCompletion',
         'carrier.isActive'
       ])
       .where('carrier.id = :carrierId', { carrierId })
@@ -226,7 +225,7 @@ export class CarrierRepository extends BaseRepository<Carrier> {
 
     if (filters.minProfileCompletion !== undefined) {
       qb.andWhere(
-        '(COALESCE(profileStatus.overallPercentage, carrier.profileCompletion) >= :minProfileCompletion)',
+        '(COALESCE(profileStatus.overallPercentage, 0) >= :minProfileCompletion)',
         { minProfileCompletion: filters.minProfileCompletion }
       );
     }
@@ -275,7 +274,7 @@ export class CarrierRepository extends BaseRepository<Carrier> {
       qb.orderBy('carrier.foundedYear', 'ASC');
       qb.addOrderBy('carrier.rating', 'DESC');
     } else if (filters.sortBy === 'profile') {
-      qb.orderBy('COALESCE(profileStatus.overallPercentage, carrier.profileCompletion)', 'DESC');
+      qb.orderBy('COALESCE(profileStatus.overallPercentage, 0)', 'DESC');
     } else if (filters.sortBy === 'recent') {
       qb.orderBy('carrier.createdAt', 'DESC');
     } else {

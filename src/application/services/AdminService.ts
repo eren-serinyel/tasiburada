@@ -218,7 +218,15 @@ export class AdminService {
 
     if (search) {
       query.andWhere(
-        '(shipment.origin LIKE :s OR shipment.destination LIKE :s OR shipment.loadDetails LIKE :s OR customer.firstName LIKE :s OR customer.lastName LIKE :s)',
+        `(
+          shipment.originCity LIKE :s
+          OR shipment.originDistrict LIKE :s
+          OR shipment.destinationCity LIKE :s
+          OR shipment.destinationDistrict LIKE :s
+          OR shipment.loadDetails LIKE :s
+          OR customer.firstName LIKE :s
+          OR customer.lastName LIKE :s
+        )`,
         { s: `%${search}%` }
       );
     }
@@ -401,7 +409,13 @@ export class AdminService {
 
     if (search) {
       query.andWhere(
-        '(carrier.companyName LIKE :s OR shipment.origin LIKE :s OR shipment.destination LIKE :s)',
+        `(
+          carrier.companyName LIKE :s
+          OR shipment.originCity LIKE :s
+          OR shipment.originDistrict LIKE :s
+          OR shipment.destinationCity LIKE :s
+          OR shipment.destinationDistrict LIKE :s
+        )`,
         { s: `%${search}%` }
       );
     }
@@ -569,11 +583,11 @@ export class AdminService {
         .take(10).getMany(),
       // Top routes
       shipmentRepo.createQueryBuilder('s')
-        .select('s.origin', 'origin')
-        .addSelect('s.destination', 'destination')
+        .select('s.originCity', 'origin')
+        .addSelect('s.destinationCity', 'destination')
         .addSelect('COUNT(*)', 'count')
         .addSelect('ROUND(AVG(s.price), 0)', 'avgPrice')
-        .groupBy('s.origin').addGroupBy('s.destination')
+        .groupBy('s.originCity').addGroupBy('s.destinationCity')
         .orderBy('count', 'DESC')
         .take(10).getRawMany(),
     ]);
@@ -810,12 +824,12 @@ export class AdminService {
   async getPopularRoutes(limit: number = 10) {
     const shipmentRepo = AppDataSource.getRepository(Shipment);
     return shipmentRepo.createQueryBuilder('s')
-      .select('s.origin', 'origin')
-      .addSelect('s.destination', 'destination')
+      .select('s.originCity', 'origin')
+      .addSelect('s.destinationCity', 'destination')
       .addSelect('COUNT(*)', 'count')
       .addSelect('ROUND(AVG(s.price), 0)', 'avgPrice')
-      .groupBy('s.origin')
-      .addGroupBy('s.destination')
+      .groupBy('s.originCity')
+      .addGroupBy('s.destinationCity')
       .orderBy('count', 'DESC')
       .take(limit)
       .getRawMany();

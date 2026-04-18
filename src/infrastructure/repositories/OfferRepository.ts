@@ -31,7 +31,6 @@ export class OfferRepository extends BaseRepository<Offer> {
       .leftJoinAndSelect('offer.carrier', 'carrier')
       .leftJoinAndSelect('carrier.vehicles', 'vehicles')
       .leftJoinAndSelect('vehicles.vehicleType', 'vt')
-      .leftJoinAndSelect('carrier.extraServices', 'extraServices')
       .select([
         'offer.id',
         'offer.shipmentId',
@@ -57,12 +56,10 @@ export class OfferRepository extends BaseRepository<Offer> {
         'shipment.updatedAt',
         ...SAFE_CARRIER_SELECT,
         'vehicles.id',
-        'vehicles.plateNumber',
+        'vehicles.licensePlate',
         'vehicles.brand',
         'vehicles.model',
         'vt.name',
-        'extraServices.id',
-        'extraServices.name',
       ])
       .where('shipment.customerId = :customerId', { customerId })
       .orderBy('offer.offeredAt', 'DESC')
@@ -84,7 +81,6 @@ export class OfferRepository extends BaseRepository<Offer> {
       .leftJoinAndSelect('offer.carrier', 'carrier')
       .leftJoinAndSelect('carrier.vehicles', 'vehicles')
       .leftJoinAndSelect('vehicles.vehicleType', 'vt')
-      .leftJoinAndSelect('carrier.extraServices', 'extraServices')
       .select([
         'offer.id',
         'offer.shipmentId',
@@ -111,8 +107,6 @@ export class OfferRepository extends BaseRepository<Offer> {
         ...SAFE_CARRIER_SELECT,
         'vehicles.id',
         'vt.name',
-        'extraServices.id',
-        'extraServices.name',
       ])
       .where('offer.id = :offerId', { offerId })
       .getOne();
