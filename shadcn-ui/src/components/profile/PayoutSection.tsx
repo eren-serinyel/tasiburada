@@ -11,36 +11,35 @@ import { API_BASE } from './helpers';
 export default function PayoutSection({ user, refreshProfileStatus }: SectionProps) {
   const [payout, setPayout] = useState({ bank: '', iban: '', holder: '' });
 
-    useEffect(() => {
+  useEffect(() => {
     const fetchPayout = async () => {
+      let hydratedFromBackend = false;
+
       try {
-        const res = await fetch(`${import.meta.env.VITE_API_URL}/api/v1/carriers/${user.id}`, {
-          headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-        });
-        if (res.ok) {
-          const json = await res.json();
-          const earnings = json.data?.carrier?.earnings || json.data?.earnings;
+        const res = await apiClient(`${API_BASE}/carriers/${user.id}`);
+        const json = await res.json().catch(() => ({}));
+        if (res.ok && json?.success) {
+          const earnings = json.data?.carrier?.earnings ?? json.data?.earnings;
           if (earnings) {
             setPayout({
-              bank: earnings.bankName || '',
-              iban: earnings.iban || '',
-              holder: earnings.accountHolder || ''
+              bank: earnings.bankName ?? '',
+              iban: earnings.iban ?? '',
+              holder: earnings.accountHolder ?? '',
             });
-            return;
+            hydratedFromBackend = true;
           }
         }
-      } catch (error) {
-        console.error('Error fetching payout info:', error);
-      }
+      } catch {}
 
-      // Fallback to localStorage if fetch fails or no data
+      if (hydratedFromBackend) return;
+
       try {
         const pay = localStorage.getItem(`carrier_payout_${user.id}`);
         if (pay) setPayout(JSON.parse(pay));
       } catch {}
     };
 
-    fetchPayout();
+    void fetchPayout();
   }, [user.id]);
 
   const isValidIban = (v: string) => /^TR\d{24}$/i.test((v || '').replace(/\s+/g, ''));

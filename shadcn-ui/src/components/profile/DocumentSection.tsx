@@ -1,38 +1,44 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/components/ui/sonner';
 import { apiClient } from '@/lib/apiClient';
 import { Save, FileText } from 'lucide-react';
 import FileUpload from '@/components/ui/file-upload';
-import { useEffect } from 'react';
 import type { SectionProps } from './types';
 import { API_BASE } from './helpers';
+
+type BackendDocument = {
+  id?: string;
+  type: string;
+  status: string;
+  uploadedAt?: string;
+};
 
 export default function DocumentSection({ user, refreshProfileStatus }: SectionProps) {
   const [docs, setDocs] = useState({
     kYetki: [] as File[], src: [] as File[], ruhsat: [] as File[], vergi: [] as File[], sigorta: [] as File[],
   });
-  const [backendDocs, setBackendDocs] = useState<any[]>([]);
+  const [backendDocs, setBackendDocs] = useState<BackendDocument[]>([]);
 
   const fetchDocuments = async () => {
     try {
-      const response = await fetch(`${import.meta.env.VITE_API_URL}/api/v1/carriers/me/documents`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
-      if (response.ok) {
-        const json = await response.json();
-        setBackendDocs(json.data || []);
-      }
-    } catch (error) {
-      console.error('Error fetching documents:', error);
-    }
+      const response = await apiClient(`${API_BASE}/carriers/me/documents`);
+      const json = await response.json().catch(() => ({}));
+      if (!response.ok || !json?.success) return;
+
+      const docList = Array.isArray(json.data)
+        ? json.data
+        : Array.isArray(json.data?.documents)
+          ? json.data.documents
+          : [];
+
+      setBackendDocs(docList);
+    } catch {}
   };
 
   useEffect(() => {
-    fetchDocuments();
-  }, []);
+    void fetchDocuments();
+  }, [user.id]);
 
   const mockFilePath = (file?: File | null) => {
     if (!file?.name) return '';
@@ -82,7 +88,7 @@ export default function DocumentSection({ user, refreshProfileStatus }: SectionP
           <div className="grid grid-cols-1 gap-3">
             <h3 className="text-sm font-semibold text-slate-700">Mevcut Belgeler</h3>
             {backendDocs.map((doc, idx) => (
-              <div key={idx} className="flex items-center justify-between p-3 border rounded-lg">
+              <div key={doc.id || `${doc.type}-${idx}`} className="flex items-center justify-between p-3 border rounded-lg">
                 <div className="flex items-center gap-3">
                   <div className="p-2 bg-slate-50 rounded">
                     <FileText className="h-4 w-4 text-slate-500" />
@@ -96,7 +102,7 @@ export default function DocumentSection({ user, refreshProfileStatus }: SectionP
                        doc.type === 'INSURANCE_POLICY' ? 'Sigorta Poliçesi' : doc.type}
                     </p>
                     <p className="text-[10px] text-slate-400 capitalize">
-                      {doc.status.toLowerCase()} • {new Date(doc.uploadedAt).toLocaleDateString('tr-TR')}
+                      {String(doc.status || '').toLowerCase()} • {doc.uploadedAt ? new Date(doc.uploadedAt).toLocaleDateString('tr-TR') : 'Tarih yok'}
                     </p>
                   </div>
                 </div>

@@ -68,6 +68,14 @@ export default function CompanySection({ user, refreshProfileStatus, onCompanyNa
           return [];
         };
 
+        const resolveScopeNames = (): string[] => {
+          const fromTopLevel = Array.isArray(json.data?.scopeOfWorks) ? json.data.scopeOfWorks.map((item: any) => item?.scope?.name || item?.name).filter(Boolean) : null;
+          if (fromTopLevel?.length) return fromTopLevel;
+          const fromCarrier = Array.isArray(carrierData?.scopeLinks) ? carrierData.scopeLinks.map((link: any) => link?.scope?.name || link?.name).filter(Boolean) : null;
+          if (fromCarrier?.length) return fromCarrier;
+          return [];
+        };
+
         const vehicleSource = (() => {
           if (Array.isArray(json.data?.vehicleTypes) && json.data.vehicleTypes.length) return json.data.vehicleTypes;
           if (Array.isArray(carrierData?.vehicleTypeLinks) && carrierData.vehicleTypeLinks.length) return carrierData.vehicleTypeLinks;
@@ -93,7 +101,9 @@ export default function CompanySection({ user, refreshProfileStatus, onCompanyNa
             email: carrierData.email || prev.email,
             name: carrierData.companyName || prev.name,
             taxNumber: carrierData.taxNumber || prev.taxNumber,
+            year: carrierData.foundedYear ? String(carrierData.foundedYear) : prev.year,
             services: resolveServiceNames().length ? resolveServiceNames() : prev.services,
+            scopes: resolveScopeNames().length ? resolveScopeNames() : prev.scopes,
             vehicleType: vehicleNames.length ? vehicleNames[0] : prev.vehicleType,
             vehicleTypes: vehicleNames.length ? vehicleNames : prev.vehicleTypes,
             vehicleCapacities: vehicleNames.length ? { ...(prev.vehicleCapacities || {}), ...backendCaps } : prev.vehicleCapacities,
