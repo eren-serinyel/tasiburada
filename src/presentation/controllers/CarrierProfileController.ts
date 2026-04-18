@@ -199,20 +199,79 @@ export class CarrierProfileController {
       const payload = (req.body.vehicles || req.body.selectedVehicles || []).map((vehicle: any) => ({
         id: vehicle.id,
         vehicleTypeId: vehicle.vehicleTypeId,
-        licensePlate: vehicle.licensePlate,
+        licensePlate: vehicle.licensePlate ?? vehicle.plate,
         brand: vehicle.brand,
         model: vehicle.model,
         year: vehicle.year,
         capacityKg: vehicle.capacityKg ?? vehicle.customCapacity ?? vehicle.capacity ?? 0,
         capacityM3: vehicle.capacityM3,
-        hasInsurance: vehicle.hasInsurance,
-        hasTrackingDevice: vehicle.hasTrackingDevice
+        photos: vehicle.photos,
       }));
 
       const vehicles = await this.vehicleService.upsertVehicles(carrierId, payload);
-      res.status(200).json({ success: true, message: 'Araç bilgileri kaydedildi.', data: vehicles });
+      res.status(200).json({ success: true, message: 'Araç bilgileri kaydedildi.', data: this.formatVehicles(vehicles) });
     } catch (error: any) {
       res.status(400).json({ success: false, message: error.message || 'Araç bilgileri güncellenemedi.' });
+    }
+  };
+
+  createVehicle = async (req: Request, res: Response) => {
+    const carrierId = this.ensureCarrier(req, res);
+    if (!carrierId) return;
+    try {
+      const vehicle = await this.vehicleService.createVehicle(carrierId, req.body);
+      res.status(201).json({ success: true, message: 'Araç eklendi.', data: vehicle ? this.formatVehicles([vehicle])[0] : null });
+    } catch (error: any) {
+      res.status(400).json({ success: false, message: error.message || 'Araç eklenemedi.' });
+    }
+  };
+
+  updateVehicleById = async (req: Request, res: Response) => {
+    const carrierId = this.ensureCarrier(req, res);
+    if (!carrierId) return;
+    try {
+      const vehicle = await this.vehicleService.updateVehicle(carrierId, req.params.vehicleId, req.body);
+      res.status(200).json({ success: true, message: 'Araç güncellendi.', data: vehicle ? this.formatVehicles([vehicle])[0] : null });
+    } catch (error: any) {
+      res.status(400).json({ success: false, message: error.message || 'Araç güncellenemedi.' });
+    }
+  };
+
+  deleteVehicleById = async (req: Request, res: Response) => {
+    const carrierId = this.ensureCarrier(req, res);
+    if (!carrierId) return;
+    try {
+      await this.vehicleService.deleteVehicle(carrierId, req.params.vehicleId);
+      res.status(200).json({ success: true, message: 'Araç silindi.' });
+    } catch (error: any) {
+      res.status(400).json({ success: false, message: error.message || 'Araç silinemedi.' });
+    }
+  };
+
+  addVehiclePhotos = async (req: Request, res: Response) => {
+    const carrierId = this.ensureCarrier(req, res);
+    if (!carrierId) return;
+    try {
+      const files = Array.isArray(req.files) ? req.files : [];
+      if (!files.length) {
+        res.status(400).json({ success: false, message: 'En az bir fotoğraf seçmelisiniz.' });
+        return;
+      }
+      const vehicle = await this.vehicleService.addVehiclePhotos(carrierId, req.params.vehicleId, files.map((file: any) => file.filename));
+      res.status(200).json({ success: true, message: 'Araç fotoğrafları yüklendi.', data: vehicle ? this.formatVehicles([vehicle])[0] : null });
+    } catch (error: any) {
+      res.status(400).json({ success: false, message: error.message || 'Araç fotoğrafları yüklenemedi.' });
+    }
+  };
+
+  deleteVehiclePhoto = async (req: Request, res: Response) => {
+    const carrierId = this.ensureCarrier(req, res);
+    if (!carrierId) return;
+    try {
+      const vehicle = await this.vehicleService.deleteVehiclePhoto(carrierId, req.params.vehicleId, req.params.photoId);
+      res.status(200).json({ success: true, message: 'Araç fotoğrafı silindi.', data: vehicle ? this.formatVehicles([vehicle])[0] : null });
+    } catch (error: any) {
+      res.status(400).json({ success: false, message: error.message || 'Araç fotoğrafı silinemedi.' });
     }
   };
 
@@ -221,22 +280,7 @@ export class CarrierProfileController {
     if (!carrierId) return;
     try {
       const vehicles = await this.vehicleService.listVehicles(carrierId);
-      const formatted = vehicles.map(vehicle => ({
-        id: vehicle.id,
-        vehicleTypeId: vehicle.vehicleTypeId,
-        vehicleTypeName: vehicle.vehicleType?.name,
-        capacityKg: Number(vehicle.capacityKg),
-        capacityM3: vehicle.capacityM3 !== null && vehicle.capacityM3 !== undefined ? Number(vehicle.capacityM3) : null,
-        licensePlate: vehicle.licensePlate,
-        brand: vehicle.brand,
-        model: vehicle.model,
-        year: vehicle.year,
-        hasInsurance: vehicle.hasInsurance,
-        hasTrackingDevice: vehicle.hasTrackingDevice,
-        createdAt: vehicle.createdAt,
-        updatedAt: vehicle.updatedAt
-      }));
-      res.status(200).json({ success: true, data: formatted });
+      res.status(200).json({ success: true, data: this.formatVehicles(vehicles) });
     } catch (error: any) {
       res.status(400).json({ success: false, message: error.message || 'Araç listesi alınamadı.' });
     }
@@ -285,6 +329,24 @@ export class CarrierProfileController {
       res.status(400).json({ success: false, message: error.message || 'Bildirim tercihi güncellenemedi.' });
     }
   };
+
+  private formatVehicles(vehicles: any[]) {
+    return vehicles.map(vehicle => ({
+      id: vehicle.id,
+      vehicleTypeId: vehicle.vehicleTypeId,
+      vehicleTypeName: vehicle.vehicleType?.name,
+      capacityKg: vehicle.capacityKg !== null && vehicle.capacityKg !== undefined ? Number(vehicle.capacityKg) : null,
+      capacityM3: vehicle.capacityM3 !== null && vehicle.capacityM3 !== undefined ? Number(vehicle.capacityM3) : null,
+      licensePlate: vehicle.plate ?? vehicle.licensePlate ?? null,
+      plate: vehicle.plate ?? vehicle.licensePlate ?? null,
+      brand: vehicle.brand ?? null,
+      model: vehicle.model ?? null,
+      year: vehicle.year ?? null,
+      photoUrls: Array.isArray(vehicle.photos) ? vehicle.photos : [],
+      createdAt: vehicle.createdAt,
+      updatedAt: vehicle.updatedAt
+    }));
+  }
 
   private extractStringArray(...candidates: any[]): string[] | null {
     const source = candidates.find(candidate => Array.isArray(candidate));

@@ -39,6 +39,9 @@ export class CarrierVehicle {
   @Column({ name: 'capacity_m3', type: 'decimal', precision: 5, scale: 1, nullable: true })
   capacityM3: number | null;
 
+  @Column({ name: 'photo_urls', type: 'json', nullable: true })
+  photos: string[] | null;
+
   @Column({ name: 'is_active', type: 'boolean', default: true })
   isActive: boolean;
 
