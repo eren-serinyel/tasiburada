@@ -89,9 +89,9 @@ async function main() {
     console.log(`   Teklif: ${offers.length}`);
     console.log('');
     console.log('🔑 Giriş bilgileri:');
-    console.log('   Admin:     superadmin@tasiburada.com / Admin1234!');
-    console.log('   Nakliyeci: info@silenakliyat.com / Nakliye123!');
-    console.log('   Müşteri:   ahmet.yilmaz0@gmail.com / Musteri123!');
+    console.log('   Admin:     superadmin@tasiburada.com / Maviface2141');
+    console.log('   Nakliyeci: info@silenakliyat.com / Maviface2141');
+    console.log('   Müşteri:   ahmet.yilmaz0@gmail.com / Maviface2141');
 
   } catch (error) {
     console.error('\n❌ Seed hatası:', error);

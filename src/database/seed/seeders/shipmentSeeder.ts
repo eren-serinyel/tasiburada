@@ -1,16 +1,26 @@
 import { randomUUID } from 'crypto';
 import { In } from 'typeorm';
 import { AppDataSource } from '../../../infrastructure/database/data-source';
-import { Shipment, ShipmentStatus, ShipmentCategory, PlaceType, InsuranceType } from '../../../domain/entities/Shipment';
+import {
+  Shipment,
+  ShipmentStatus,
+  ShipmentCategory,
+  PlaceType,
+  InsuranceType,
+} from '../../../domain/entities/Shipment';
 import { Customer } from '../../../domain/entities/Customer';
 import { Carrier } from '../../../domain/entities/Carrier';
 import { VehicleType } from '../../../domain/entities/VehicleType';
 import { ExtraService } from '../../../domain/entities/ExtraService';
 import { LOAD_TYPES, CITIES } from '../data/constants';
 import {
-  randomFrom, randomInt, randomFloat,
-  randomPastDate, randomFutureDate,
-  pickRandom, generatePhone,
+  randomFrom,
+  randomInt,
+  randomFloat,
+  randomPastDate,
+  randomFutureDate,
+  pickRandom,
+  generatePhone,
   randomDistrict,
 } from '../helpers/seedHelpers';
 
@@ -44,11 +54,11 @@ export async function seedShipments(
   const insuranceTypes = Object.values(InsuranceType);
 
   const vehicleTypes = await vtRepo.findBy({ id: In(Array.from(vehicleTypeMap.values())) });
-  const activeVehicleTypes = vehicleTypes.filter(vt => vt.status === 'ACTIVE');
+  const activeVehicleTypes = vehicleTypes.filter((vt) => vt.status === 'ACTIVE');
   const extraServiceEntities = await extraRepo.findBy({ id: In(Array.from(extraServiceMap.values())) });
 
   if (activeVehicleTypes.length === 0) {
-    throw new Error('Shipment seeding durduruldu: aktif araç tipi bulunamadı.');
+    throw new Error('Shipment seeding durduruldu: aktif arac tipi bulunamadi.');
   }
 
   const scenarios = [
@@ -60,17 +70,49 @@ export async function seedShipments(
     { status: ShipmentStatus.CANCELLED, count: 10, useFutureDate: false, assigned: false, daysWindow: 30 },
   ];
 
-  const usableCarriers = carriers.filter(c => c.verifiedByAdmin && c.isActive);
+  const usableCarriers = carriers.filter((c) => c.verifiedByAdmin && c.isActive);
   if (usableCarriers.length < 2) {
-    throw new Error('Shipment seeding durduruldu: kullanılabilir carrier sayısı yetersiz.');
+    throw new Error('Shipment seeding durduruldu: kullanilabilir carrier sayisi yetersiz.');
   }
+
+  // Keep a few routes free so tests can create fresh shipments without hitting the duplicate rule.
+  const reservedActiveRoutesByCustomerEmail = new Map<string, Set<string>>([
+    ['ahmet.yilmaz0@gmail.com', new Set(['İstanbul|İstanbul'])],
+    ['merve.aydin9@gmail.com', new Set(['İstanbul|Ankara'])],
+  ]);
+  const uniqueActiveStatuses = new Set<ShipmentStatus>([
+    ShipmentStatus.PENDING,
+    ShipmentStatus.MATCHED,
+  ]);
+  const activeRouteKeysByCustomer = new Map<string, Set<string>>();
 
   for (const scenario of scenarios) {
     for (let i = 0; i < scenario.count; i++) {
       const customer = randomFrom(customers);
-      const originCity = Math.random() < 0.5 ? 'İstanbul' : randomFrom(CITIES);
-      const destinationCity = randomFrom(CITIES);
       const assignedCarrier = scenario.assigned ? randomFrom(usableCarriers) : null;
+      const reservedRoutes = reservedActiveRoutesByCustomerEmail.get(customer.email) ?? new Set<string>();
+      const existingActiveRoutes = activeRouteKeysByCustomer.get(customer.id) ?? new Set<string>();
+
+      let originCity = 'İstanbul';
+      let destinationCity = 'İstanbul';
+      let routeKey = '';
+      let attempts = 0;
+
+      do {
+        originCity = Math.random() < 0.5 ? 'İstanbul' : randomFrom(CITIES);
+        destinationCity = randomFrom(CITIES);
+        routeKey = `${originCity}|${destinationCity}`;
+        attempts += 1;
+      } while (
+        attempts < 50 &&
+        uniqueActiveStatuses.has(scenario.status) &&
+        (reservedRoutes.has(routeKey) || existingActiveRoutes.has(routeKey))
+      );
+
+      if (uniqueActiveStatuses.has(scenario.status)) {
+        existingActiveRoutes.add(routeKey);
+        activeRouteKeysByCustomer.set(customer.id, existingActiveRoutes);
+      }
 
       const shipment = repo.create({
         id: randomUUID(),
@@ -91,31 +133,40 @@ export async function seedShipments(
         destinationHasElevator: Math.random() > 0.6,
         loadDetails: randomFrom(LOAD_TYPES),
         insuranceType: randomFrom(insuranceTypes),
-        timePreference: randomFrom(['Sabah', 'Öğlen', 'Akşam']),
+        timePreference: randomFrom(['Sabah', 'Oglen', 'Aksam']),
         weight: randomFloat(100, 3000),
         estimatedWeight: Math.random() < 0.4 ? randomInt(500, 5000) : null,
-        shipmentDate: scenario.useFutureDate ? randomFutureDate(scenario.daysWindow) : randomPastDate(scenario.daysWindow),
+        shipmentDate: scenario.useFutureDate
+          ? randomFutureDate(scenario.daysWindow)
+          : randomPastDate(scenario.daysWindow),
         photoUrls: [],
-        note: scenario.status === ShipmentStatus.CANCELLED ? 'Müşteri plan değişikliği nedeniyle iptal etti.' : 'Seed ile oluşturulan tutarlı talep.',
+        note:
+          scenario.status === ShipmentStatus.CANCELLED
+            ? 'Musteri plan degisikligi nedeniyle iptal etti.'
+            : 'Seed ile olusturulan tutarli talep.',
         vehicleTypePreferenceId: randomFrom(activeVehicleTypes).id,
         contactPhone: customer.phone ?? generatePhone(),
-        cancellationReason: scenario.status === ShipmentStatus.CANCELLED ? 'Müşteri iptal etti' : null,
+        cancellationReason:
+          scenario.status === ShipmentStatus.CANCELLED ? 'Musteri iptal etti' : null,
       });
 
       const saved = await repo.save(shipment, { reload: false });
 
-      const selectedExtras = pickRandom(extraServiceEntities, Math.min(extraServiceEntities.length, randomInt(1, 3)));
+      const selectedExtras = pickRandom(
+        extraServiceEntities,
+        Math.min(extraServiceEntities.length, randomInt(1, 3)),
+      );
       if (selectedExtras.length > 0) {
         await AppDataSource.createQueryBuilder()
           .relation(Shipment, 'extraServices')
           .of(shipment.id)
-          .add(selectedExtras.map(extra => extra.id));
+          .add(selectedExtras.map((extra) => extra.id));
       }
 
       created.push(saved);
     }
   }
 
-  console.log(`  ✓ ${created.length} taşıma talebi oluşturuldu`);
+  console.log(`  ✓ ${created.length} tasima talebi olusturuldu`);
   return created;
 }

@@ -7,6 +7,7 @@ import { CarrierServiceType } from '../../../domain/entities/CarrierServiceType'
 import { CarrierScopeOfWork } from '../../../domain/entities/CarrierScopeOfWork';
 import { CarrierProfileStatus } from '../../../domain/entities/CarrierProfileStatus';
 import { CarrierActivity } from '../../../domain/entities/CarrierActivity';
+import { CarrierDocument, CarrierDocumentStatus, CarrierDocumentType } from '../../../domain/entities/CarrierDocument';
 import { CarrierStats } from '../../../domain/entities/CarrierStats';
 import { VehicleType } from '../../../domain/entities/VehicleType';
 import { ServiceType } from '../../../domain/entities/ServiceType';
@@ -16,7 +17,7 @@ import {
   hashPassword, randomInt, randomFrom,
   randomFloat, generateTaxNumber,
   generatePhone, pickRandom,
-  turkishToAscii,
+  randomDistrict, turkishToAscii,
 } from '../helpers/seedHelpers';
 
 export async function seedCarriers(
@@ -32,6 +33,7 @@ export async function seedCarriers(
   const csowRepo = AppDataSource.getRepository(CarrierScopeOfWork);
   const profileStatusRepo = AppDataSource.getRepository(CarrierProfileStatus);
   const activityRepo = AppDataSource.getRepository(CarrierActivity);
+  const documentRepo = AppDataSource.getRepository(CarrierDocument);
   const statsRepo = AppDataSource.getRepository(CarrierStats);
 
   const vehicleTypeNames = Object.keys(vehicleTypeMap);
@@ -44,6 +46,7 @@ export async function seedCarriers(
     const company = CARRIER_COMPANIES[i];
     const vtName = vehicleTypeNames[i % vehicleTypeNames.length];
     const vt = vehicleTypeMap[vtName];
+    const district = randomDistrict(company.city);
     const isVerified = i < 9; // İlk 9 onaylı, 3 beklemede
 
     const emailSlug = turkishToAscii(
@@ -56,9 +59,9 @@ export async function seedCarriers(
       contactName: `Yetkili ${company.companyName.split(' ')[0]}`,
       phone: generatePhone(),
       email: `info@${emailSlug}.com`,
-      passwordHash: await hashPassword('Nakliye123!'),
+      passwordHash: await hashPassword('Maviface2141'),
       addressLine1: `${randomFrom(['Atatürk Cad.', 'İnönü Sok.', 'Cumhuriyet Bul.'])} No:${randomInt(1, 100)}`,
-      district: randomFrom(['Merkez', 'Yeni Mahalle']),
+      district,
       activityCity: company.city,
       foundedYear: randomInt(2005, 2020),
       rating: isVerified ? randomFloat(3.5, 5.0) : 0,
@@ -66,6 +69,8 @@ export async function seedCarriers(
       cancelledShipments: isVerified ? randomInt(0, 5) : 0,
       totalOffers: isVerified ? randomInt(20, 200) : 0,
       successRate: isVerified ? randomFloat(70, 98) : 0,
+      hasUploadedDocuments: isVerified,
+      documentCount: isVerified ? 4 : 0,
       verifiedByAdmin: isVerified,
       isActive: true,
       balance: isVerified ? randomFloat(0, 5000) : 0,
@@ -168,13 +173,40 @@ export async function seedCarriers(
       await activityRepo.save(activityRepo.create({
         carrierId: saved.id,
         city: company.city,
-        district: randomFrom(['Merkez', 'Yeni Mahalle']),
+        district,
+        serviceAreasJson: [company.city, district],
       }));
     } catch (err: any) {
       console.warn(`  ⚠ CarrierActivity atlandı: ${err.message}`);
     }
 
     // ── CarrierStats ──
+    if (isVerified) {
+      try {
+        const requiredDocuments: CarrierDocumentType[] = [
+          CarrierDocumentType.AUTHORIZATION_CERT,
+          CarrierDocumentType.SRC_CERT,
+          CarrierDocumentType.VEHICLE_LICENSE,
+          CarrierDocumentType.TAX_PLATE,
+        ];
+
+        for (const type of requiredDocuments) {
+          await documentRepo.save(documentRepo.create({
+            carrierId: saved.id,
+            type,
+            fileUrl: `/uploads/documents/${saved.id}-${type.toLowerCase()}.pdf`,
+            isRequired: true,
+            status: CarrierDocumentStatus.APPROVED,
+            isApproved: true,
+            uploadedAt: new Date(),
+            verifiedAt: new Date(),
+          }));
+        }
+      } catch (err: any) {
+        console.warn(`  âš  CarrierDocument atlandÄ±: ${err.message}`);
+      }
+    }
+
     try {
       await statsRepo.save(statsRepo.create({
         carrierId: saved.id,
@@ -192,6 +224,6 @@ export async function seedCarriers(
   }
 
   console.log(`  ✓ ${created.length} nakliyeci (${created.filter(c => c.verifiedByAdmin).length} onaylı)`);
-  console.log('  🔑 Şifre: Nakliye123! (hepsi)');
+  console.log('  🔑 Şifre: Maviface2141 (hepsi)');
   return created;
 }

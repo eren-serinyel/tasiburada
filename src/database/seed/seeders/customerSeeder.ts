@@ -29,7 +29,7 @@ export async function seedCustomers(): Promise<Customer[]> {
       lastName: name.lastName,
       email: `${firstName}.${lastName}${i}@gmail.com`,
       phone: generatePhone(),
-      passwordHash: await hashPassword('Musteri123!'),
+      passwordHash: await hashPassword('Maviface2141'),
       city,
       district,
       addressLine1,
@@ -39,7 +39,6 @@ export async function seedCustomers(): Promise<Customer[]> {
 
     const savedCustomer = await customerRepo.save(customer);
 
-    // Kayıtlı adres ekle
     const address = addressRepo.create({
       customerId: savedCustomer.id,
       label: 'Ev',
@@ -50,7 +49,6 @@ export async function seedCustomers(): Promise<Customer[]> {
     });
     await addressRepo.save(address);
 
-    // %40 ihtimalle ikinci bir iş adresi ekle
     if (Math.random() > 0.6) {
       const workCity = randomFrom(CITIES);
       const workAddress = addressRepo.create({
@@ -68,6 +66,6 @@ export async function seedCustomers(): Promise<Customer[]> {
   }
 
   console.log(`  ✓ ${created.length} müşteri`);
-  console.log('  🔑 Şifre: Musteri123! (hepsi)');
+  console.log('  🔑 Şifre: Maviface2141 (hepsi)');
   return created;
 }

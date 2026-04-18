@@ -8,14 +8,14 @@ export async function seedAdmins(): Promise<Admin[]> {
   const admins = [
     {
       email: 'superadmin@tasiburada.com',
-      password: 'Admin1234!',
+      password: 'Maviface2141',
       role: 'superadmin' as const,
       firstName: 'Süper',
       lastName: 'Admin',
     },
     {
       email: 'admin@tasiburada.com',
-      password: 'Admin1234!',
+      password: 'Maviface2141',
       role: 'admin' as const,
       firstName: 'Platform',
       lastName: 'Yöneticisi',
@@ -37,7 +37,7 @@ export async function seedAdmins(): Promise<Admin[]> {
   }
 
   console.log(`  ✓ ${created.length} admin`);
-  console.log('  📧 superadmin@tasiburada.com / Admin1234!');
-  console.log('  📧 admin@tasiburada.com / Admin1234!');
+  console.log('  📧 superadmin@tasiburada.com / Maviface2141');
+  console.log('  📧 admin@tasiburada.com / Maviface2141');
   return created;
 }
