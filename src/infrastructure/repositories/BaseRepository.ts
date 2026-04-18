@@ -2,10 +2,14 @@ import { Repository, FindOptionsWhere, FindManyOptions, FindOneOptions, ObjectLi
 import { AppDataSource } from '../database/data-source';
 
 export abstract class BaseRepository<T extends ObjectLiteral> {
-  protected repository: Repository<T>;
+  private readonly entity: new () => T;
 
   constructor(entity: new () => T) {
-    this.repository = AppDataSource.getRepository(entity);
+    this.entity = entity;
+  }
+
+  protected get repository(): Repository<T> {
+    return AppDataSource.getRepository(this.entity);
   }
 
   async findAll(options?: FindManyOptions<T>): Promise<T[]> {
