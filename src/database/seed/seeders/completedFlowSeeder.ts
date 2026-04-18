@@ -1,6 +1,6 @@
 import { AppDataSource } from '../../../infrastructure/database/data-source';
 import { Review } from '../../../domain/entities/Review';
-import { Payment, PaymentStatus, PaymentMethod } from '../../../domain/entities/Payment';
+import { Payment, PaymentMethod, PaymentStatus } from '../../../domain/entities/Payment';
 import { CarrierEarningsLog } from '../../../domain/entities/CarrierEarningsLog';
 import { CustomerCarrierRelation } from '../../../domain/entities/CustomerCarrierRelation';
 import { Shipment, ShipmentStatus } from '../../../domain/entities/Shipment';
@@ -8,8 +8,35 @@ import { Offer } from '../../../domain/entities/Offer';
 import { Carrier } from '../../../domain/entities/Carrier';
 import { CarrierStats } from '../../../domain/entities/CarrierStats';
 import { Customer } from '../../../domain/entities/Customer';
-import { randomInt, randomFrom, randomPastDate, calcAvgRating } from '../helpers/seedHelpers';
+import {
+  calcAvgRating,
+  chance,
+  randomFrom,
+  randomInt,
+  randomPastDateBetween,
+  randomWeightedFrom,
+} from '../helpers/seedHelpers';
 import { REVIEW_COMMENTS } from '../data/constants';
+
+const PAYMENT_METHOD_WEIGHTS = [
+  { method: PaymentMethod.BANK_TRANSFER, weight: 60 },
+  { method: PaymentMethod.CREDIT_CARD, weight: 30 },
+  { method: PaymentMethod.CASH, weight: 10 },
+] as const;
+
+const PAYMENT_STATUS_WEIGHTS = [
+  { status: PaymentStatus.COMPLETED, weight: 95 },
+  { status: PaymentStatus.PENDING, weight: 3 },
+  { status: PaymentStatus.FAILED, weight: 2 },
+] as const;
+
+const REVIEW_RATING_WEIGHTS = [
+  { rating: 1, weight: 3 },
+  { rating: 2, weight: 5 },
+  { rating: 3, weight: 12 },
+  { rating: 4, weight: 35 },
+  { rating: 5, weight: 45 },
+] as const;
 
 export async function seedCompletedFlow(
   shipments: Shipment[],
@@ -25,127 +52,137 @@ export async function seedCompletedFlow(
   const statsRepo = AppDataSource.getRepository(CarrierStats);
 
   const completedShipments = shipments.filter(
-    s => s.status === ShipmentStatus.COMPLETED
+    (shipment) => shipment.status === ShipmentStatus.COMPLETED,
   );
-
-  // Nakliyeci bazlı rating takibi
   const carrierRatings: Record<string, number[]> = {};
+  const completedShipmentCounts: Record<string, number> = {};
+  const earnedAmounts: Record<string, number> = {};
   let reviewCount = 0;
   let paymentCount = 0;
   let relationCount = 0;
 
   for (const shipment of completedShipments) {
-    if (!shipment.carrierId || !shipment.customerId) continue;
+    if (!shipment.carrierId || !shipment.customerId) {
+      continue;
+    }
 
-    // ── 1. Yorum oluştur (%80 ihtimalle) ──
-    if (Math.random() > 0.2) {
-      const rating = randomInt(3, 5) as 3 | 4 | 5;
+    completedShipmentCounts[shipment.carrierId] = (completedShipmentCounts[shipment.carrierId] ?? 0) + 1;
+
+    if (chance(0.8)) {
+      const rating = randomWeightedFrom(
+        REVIEW_RATING_WEIGHTS,
+        (item) => item.weight,
+      ).rating;
       const comments = REVIEW_COMMENTS[rating];
 
-      const review = reviewRepo.create({
+      await reviewRepo.save(reviewRepo.create({
         shipmentId: shipment.id,
         carrierId: shipment.carrierId,
         customerId: shipment.customerId,
         rating,
         comment: randomFrom(comments),
-      });
-      await reviewRepo.save(review);
-      reviewCount++;
+      }));
+      reviewCount += 1;
 
-      // Rating takip et
       if (!carrierRatings[shipment.carrierId]) {
         carrierRatings[shipment.carrierId] = [];
       }
       carrierRatings[shipment.carrierId].push(rating);
     }
 
-    // ── 2. Ödeme kaydı oluştur ──
-    const price = shipment.price ?? randomInt(500, 3000);
-    const completedAt = randomPastDate(30);
+    const price = Number(shipment.price ?? randomInt(1500, 9000));
+    const paymentStatus = randomWeightedFrom(
+      PAYMENT_STATUS_WEIGHTS,
+      (item) => item.weight,
+    ).status;
+    const paymentMethod = randomWeightedFrom(
+      PAYMENT_METHOD_WEIGHTS,
+      (item) => item.weight,
+    ).method;
+    const completedAt = paymentStatus === PaymentStatus.COMPLETED
+      ? randomPastDateBetween(0, 20)
+      : null;
 
-    const payment = paymentRepo.create({
+    await paymentRepo.save(paymentRepo.create({
       shipmentId: shipment.id,
       customerId: shipment.customerId,
       amount: price,
-      method: randomFrom([
-        PaymentMethod.CREDIT_CARD,
-        PaymentMethod.BANK_TRANSFER,
-        PaymentMethod.CASH,
-      ]),
-      status: PaymentStatus.COMPLETED,
-      transactionId: `TXN-${Date.now()}-${randomInt(1000, 9999)}`,
-      completedAt,
-    });
-    await paymentRepo.save(payment);
-    paymentCount++;
+      method: paymentMethod,
+      status: paymentStatus,
+      transactionId: `TXN-${Date.now()}-${randomInt(1000, 9999)}-${paymentCount + 1}`,
+      note: paymentStatus === PaymentStatus.FAILED
+        ? 'İşlem banka provizyonundan dönmedi.'
+        : paymentStatus === PaymentStatus.PENDING
+          ? 'İşlem onay bekliyor.'
+          : 'Tahsilat başarıyla tamamlandı.',
+      completedAt: completedAt ?? undefined,
+    }));
+    paymentCount += 1;
 
-    // ── 3. Kazanç kaydı oluştur ──
-    // CarrierEarningsLog entity'sinde sadece amount var (commission yok),
-    // bu yüzden komisyon düşülmüş net tutarı kaydediyoruz.
-    const commission = Math.round(Number(price) * 0.1);
-    const netEarnings = Number(price) - commission;
+    if (paymentStatus === PaymentStatus.COMPLETED) {
+      const netEarnings = Number((price * 0.9).toFixed(2));
+      earnedAmounts[shipment.carrierId] = (earnedAmounts[shipment.carrierId] ?? 0) + netEarnings;
 
-    try {
-      const log = earningsRepo.create({
-        carrierId: shipment.carrierId,
-        shipmentId: shipment.id,
-        amount: netEarnings,
-      });
-      await earningsRepo.save(log);
-    } catch {
-      // Entity yoksa veya tablo yoksa atla
+      try {
+        await earningsRepo.save(earningsRepo.create({
+          carrierId: shipment.carrierId,
+          shipmentId: shipment.id,
+          amount: netEarnings,
+        }));
+      } catch {
+        // Ignore if entity constraints differ.
+      }
     }
 
-    // ── 4. CustomerCarrierRelation güncelle ──
     try {
-      const existing = await relationRepo.findOne({
+      const existingRelation = await relationRepo.findOne({
         where: {
           customerId: shipment.customerId,
           carrierId: shipment.carrierId,
-        }
+        },
       });
 
-      if (existing) {
-        existing.completedJobsCount += 1;
-        existing.lastShipmentId = shipment.id;
-        await relationRepo.save(existing);
+      if (existingRelation) {
+        existingRelation.completedJobsCount += 1;
+        existingRelation.lastShipmentId = shipment.id;
+        await relationRepo.save(existingRelation);
       } else {
-        const relation = relationRepo.create({
+        await relationRepo.save(relationRepo.create({
           customerId: shipment.customerId,
           carrierId: shipment.carrierId,
           firstShipmentId: shipment.id,
           lastShipmentId: shipment.id,
           completedJobsCount: 1,
-          isSaved: Math.random() > 0.7,
+          isSaved: chance(0.32),
           canInviteAgain: true,
-        });
-        await relationRepo.save(relation);
-        relationCount++;
+        }));
+        relationCount += 1;
       }
-    } catch (err: any) {
-      console.warn(`  ⚠ CustomerCarrierRelation atlandı: ${err.message}`);
+    } catch {
+      // Ignore optional relation issues.
     }
   }
 
-  // ── 5. Nakliyeci puanlarını yorumlara göre güncelle ──
-  for (const [carrierId, ratings] of Object.entries(carrierRatings)) {
-    const avgRating = calcAvgRating(ratings);
-    await carrierRepo.update(carrierId, {
-      rating: avgRating,
-      completedShipments: ratings.length,
+  for (const carrier of carriers) {
+    const completedJobs = completedShipmentCounts[carrier.id] ?? 0;
+    const ratings = carrierRatings[carrier.id] ?? [];
+    const averageRating = ratings.length > 0 ? calcAvgRating(ratings) : carrier.rating;
+
+    await carrierRepo.update(carrier.id, {
+      rating: averageRating,
+      completedShipments: completedJobs,
+      balance: Number(carrier.balance ?? 0) + Number((earnedAmounts[carrier.id] ?? 0).toFixed(2)),
     });
 
-    // CarrierStats'ı da güncelle
-    try {
-      const stats = await statsRepo.findOne({ where: { carrierId } });
-      if (stats) {
-        stats.averageRating = avgRating;
-        stats.totalReviews = ratings.length;
-        stats.totalJobs = ratings.length;
-        await statsRepo.save(stats);
-      }
-    } catch {
-      // Stats entity yoksa atla
+    const stats = await statsRepo.findOne({ where: { carrierId: carrier.id } });
+    if (stats) {
+      stats.averageRating = averageRating;
+      stats.totalReviews = ratings.length;
+      stats.totalJobs = completedJobs;
+      stats.totalEarnings = Number(
+        Number(earnedAmounts[carrier.id] ?? stats.totalEarnings ?? 0).toFixed(2),
+      );
+      await statsRepo.save(stats);
     }
   }
 

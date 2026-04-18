@@ -1,10 +1,17 @@
 import { AppDataSource } from '../../../infrastructure/database/data-source';
 import { Customer } from '../../../domain/entities/Customer';
 import { CustomerAddress } from '../../../domain/entities/CustomerAddress';
-import { CUSTOMER_NAMES, CITIES } from '../data/constants';
+import { CUSTOMER_NAMES } from '../data/constants';
 import {
-  hashPassword, randomFrom, randomInt,
-  generatePhone, randomDistrict, turkishToAscii,
+  chance,
+  generatePhone,
+  hashPassword,
+  randomDistrict,
+  randomFrom,
+  randomInt,
+  randomPastDateBetween,
+  randomWeightedCity,
+  turkishToAscii,
 } from '../helpers/seedHelpers';
 
 export async function seedCustomers(): Promise<Customer[]> {
@@ -12,56 +19,75 @@ export async function seedCustomers(): Promise<Customer[]> {
   const addressRepo = AppDataSource.getRepository(CustomerAddress);
   const created: Customer[] = [];
 
-  for (let i = 0; i < CUSTOMER_NAMES.length; i++) {
-    const name = CUSTOMER_NAMES[i];
-    const city = randomFrom(CITIES);
+  const activeTarget = Math.round(CUSTOMER_NAMES.length * 0.7);
+  const verifiedTarget = Math.round(CUSTOMER_NAMES.length * 0.85);
+
+  for (let index = 0; index < CUSTOMER_NAMES.length; index += 1) {
+    const name = CUSTOMER_NAMES[index];
+    const city = randomWeightedCity();
     const district = randomDistrict(city);
     const addressLine1 = `${randomFrom([
-      'Atatürk Cad.', 'Cumhuriyet Sok.',
-      'Bağlar Mah.', 'Yıldız Sok.',
-    ])} No:${randomInt(1, 200)}`;
-
+      'Atatürk Cad.',
+      'Cumhuriyet Sok.',
+      'Bağlar Mah.',
+      'Yıldız Sok.',
+      'İnönü Cad.',
+      'Mimar Sinan Bulvarı',
+    ])} No:${randomInt(1, 220)}`;
     const firstName = turkishToAscii(name.firstName.toLowerCase());
     const lastName = turkishToAscii(name.lastName.toLowerCase());
+    const isFixtureCustomer = index < 20;
+    const isActive = isFixtureCustomer || index < activeTarget;
+    const isVerified = isFixtureCustomer || index < verifiedTarget;
 
     const customer = customerRepo.create({
       firstName: name.firstName,
       lastName: name.lastName,
-      email: `${firstName}.${lastName}${i}@gmail.com`,
+      email: `${firstName}.${lastName}${index}@gmail.com`,
       phone: generatePhone(),
       passwordHash: await hashPassword('Maviface2141'),
       city,
       district,
       addressLine1,
-      isVerified: true,
-      isActive: true,
+      isVerified,
+      isActive,
     });
 
     const savedCustomer = await customerRepo.save(customer);
+    const createdAt = randomPastDateBetween(1, 365);
+    await customerRepo.createQueryBuilder()
+      .update(Customer)
+      .set({ createdAt, updatedAt: createdAt })
+      .where('id = :id', { id: savedCustomer.id })
+      .execute();
 
-    const address = addressRepo.create({
-      customerId: savedCustomer.id,
-      label: 'Ev',
-      addressLine1,
-      city,
-      district,
-      isDefault: true,
-    });
-    await addressRepo.save(address);
-
-    if (Math.random() > 0.6) {
-      const workCity = randomFrom(CITIES);
-      const workAddress = addressRepo.create({
+    if (isFixtureCustomer || chance(0.4)) {
+      await addressRepo.save(addressRepo.create({
         customerId: savedCustomer.id,
-        label: 'İş',
-        addressLine1: `${randomFrom(['İnönü Cad.', 'Mehmet Akif Sok.'])} No:${randomInt(1, 50)}`,
-        city: workCity,
-        district: randomDistrict(workCity),
-        isDefault: false,
-      });
-      await addressRepo.save(workAddress);
+        label: 'Ev',
+        addressLine1,
+        city,
+        district,
+        isDefault: true,
+      }));
+
+      if (chance(isFixtureCustomer ? 0.65 : 0.3)) {
+        const secondaryCity = chance(0.7) ? city : randomWeightedCity();
+        await addressRepo.save(addressRepo.create({
+          customerId: savedCustomer.id,
+          label: chance(0.5) ? 'İş' : 'Yazlık',
+          addressLine1: `${randomFrom(['Mehmet Akif Sok.', 'Barış Cad.', 'Lale Sok.', 'Orkide Apt.'])} No:${randomInt(1, 90)}`,
+          city: secondaryCity,
+          district: randomDistrict(secondaryCity),
+          isDefault: false,
+        }));
+      }
     }
 
+    savedCustomer.createdAt = createdAt;
+    savedCustomer.updatedAt = createdAt;
+    savedCustomer.isActive = isActive;
+    savedCustomer.isVerified = isVerified;
     created.push(savedCustomer);
   }
 

@@ -7,18 +7,50 @@ import { CarrierServiceType } from '../../../domain/entities/CarrierServiceType'
 import { CarrierScopeOfWork } from '../../../domain/entities/CarrierScopeOfWork';
 import { CarrierProfileStatus } from '../../../domain/entities/CarrierProfileStatus';
 import { CarrierActivity } from '../../../domain/entities/CarrierActivity';
-import { CarrierDocument, CarrierDocumentStatus, CarrierDocumentType } from '../../../domain/entities/CarrierDocument';
+import {
+  CarrierDocument,
+  CarrierDocumentStatus,
+  CarrierDocumentType,
+} from '../../../domain/entities/CarrierDocument';
 import { CarrierStats } from '../../../domain/entities/CarrierStats';
+import { CarrierEarnings } from '../../../domain/entities/CarrierEarnings';
 import { VehicleType } from '../../../domain/entities/VehicleType';
 import { ServiceType } from '../../../domain/entities/ServiceType';
 import { ScopeOfWork } from '../../../domain/entities/ScopeOfWork';
 import { CARRIER_COMPANIES } from '../data/constants';
 import {
-  hashPassword, randomInt, randomFrom,
-  randomFloat, generateTaxNumber,
-  generatePhone, pickRandom,
-  randomDistrict, turkishToAscii,
+  CarrierTierProfile,
+  chance,
+  generatePhone,
+  generateTaxNumber,
+  hashPassword,
+  pickRandom,
+  randomDistrict,
+  randomFloat,
+  randomFrom,
+  randomInt,
+  resolveCarrierTier,
+  turkishToAscii,
 } from '../helpers/seedHelpers';
+
+const VEHICLE_TYPE_SEQUENCE = [
+  ...Array.from({ length: 40 }, () => 'Kamyonet'),
+  ...Array.from({ length: 25 }, () => 'Panel Van'),
+  ...Array.from({ length: 25 }, () => 'Kamyon'),
+  ...Array.from({ length: 10 }, () => 'Tır'),
+];
+
+const DOCUMENT_REQUIREMENTS: CarrierDocumentType[] = [
+  CarrierDocumentType.AUTHORIZATION_CERT,
+  CarrierDocumentType.SRC_CERT,
+  CarrierDocumentType.VEHICLE_LICENSE,
+  CarrierDocumentType.TAX_PLATE,
+];
+
+const EMAIL_SLUG_OVERRIDES: Record<string, string> = {
+  'Şile Nakliyat': 'silenakliyat',
+  'Ankara Ekspres Taşımacılık': 'ankaraekspres',
+};
 
 export async function seedCarriers(
   vehicleTypeMap: Record<string, VehicleType>,
@@ -35,23 +67,55 @@ export async function seedCarriers(
   const activityRepo = AppDataSource.getRepository(CarrierActivity);
   const documentRepo = AppDataSource.getRepository(CarrierDocument);
   const statsRepo = AppDataSource.getRepository(CarrierStats);
+  const earningsRepo = AppDataSource.getRepository(CarrierEarnings);
 
-  const vehicleTypeNames = Object.keys(vehicleTypeMap);
   const serviceTypeNames = Object.keys(serviceTypeMap);
   const scopeNames = Object.keys(scopeMap);
-
+  const allVehicleTypeNames = Object.keys(vehicleTypeMap);
   const created: Carrier[] = [];
 
-  for (let i = 0; i < CARRIER_COMPANIES.length; i++) {
-    const company = CARRIER_COMPANIES[i];
-    const vtName = vehicleTypeNames[i % vehicleTypeNames.length];
-    const vt = vehicleTypeMap[vtName];
+  for (let index = 0; index < CARRIER_COMPANIES.length; index += 1) {
+    const company = CARRIER_COMPANIES[index];
+    const tierProfile = resolveCarrierTier(index, CARRIER_COMPANIES.length);
     const district = randomDistrict(company.city);
-    const isVerified = i < 9; // İlk 9 onaylı, 3 beklemede
-
-    const emailSlug = turkishToAscii(
-      company.companyName.toLowerCase().replace(/\s+/g, '')
+    const primaryVehicleTypeName = VEHICLE_TYPE_SEQUENCE[index % VEHICLE_TYPE_SEQUENCE.length];
+    const vehicleCount = randomInt(
+      tierProfile.vehicleCountRange[0],
+      tierProfile.vehicleCountRange[1],
     );
+    const selectedVehicleTypeNames = vehicleCount > 0
+      ? [
+        primaryVehicleTypeName,
+        ...pickRandom(
+          allVehicleTypeNames.filter((name) => name !== primaryVehicleTypeName),
+          Math.max(0, vehicleCount - 1),
+        ),
+      ]
+      : [];
+    const serviceCount = randomInt(
+      tierProfile.serviceCountRange[0],
+      tierProfile.serviceCountRange[1],
+    );
+    const scopeCount = randomInt(
+      tierProfile.scopeCountRange[0],
+      tierProfile.scopeCountRange[1],
+    );
+    const serviceNames = pickRandom(serviceTypeNames, serviceCount);
+    const scopeSelection = pickRandom(scopeNames, scopeCount);
+    const hasActivitySection = tierProfile.tier !== 'onboarding' || chance(0.35);
+    const hasEarningsSection = tierProfile.tier === 'elite'
+      || tierProfile.tier === 'established'
+      || (tierProfile.tier === 'growing' && chance(0.45))
+      || (tierProfile.tier === 'new' && chance(0.2));
+    const completedShipments = randomInt(
+      tierProfile.completedShipmentRange[0],
+      tierProfile.completedShipmentRange[1],
+    );
+    const rating = tierProfile.ratingRange[0] === 0 && tierProfile.ratingRange[1] === 0
+      ? 0
+      : randomFloat(tierProfile.ratingRange[0], tierProfile.ratingRange[1]);
+    const emailSlug = EMAIL_SLUG_OVERRIDES[company.companyName]
+      ?? turkishToAscii(company.companyName.toLowerCase().replace(/\s+/g, ''));
 
     const carrier = carrierRepo.create({
       companyName: company.companyName,
@@ -60,170 +124,219 @@ export async function seedCarriers(
       phone: generatePhone(),
       email: `info@${emailSlug}.com`,
       passwordHash: await hashPassword('Maviface2141'),
-      addressLine1: `${randomFrom(['Atatürk Cad.', 'İnönü Sok.', 'Cumhuriyet Bul.'])} No:${randomInt(1, 100)}`,
+      addressLine1: `${randomFrom(['Atatürk Cad.', 'İnönü Sok.', 'Cumhuriyet Blv.', 'İstasyon Cad.'])} No:${randomInt(1, 180)}`,
       district,
       activityCity: company.city,
-      foundedYear: randomInt(2005, 2020),
-      rating: isVerified ? randomFloat(3.5, 5.0) : 0,
-      completedShipments: isVerified ? randomInt(10, 150) : 0,
-      cancelledShipments: isVerified ? randomInt(0, 5) : 0,
-      totalOffers: isVerified ? randomInt(20, 200) : 0,
-      successRate: isVerified ? randomFloat(70, 98) : 0,
-      hasUploadedDocuments: isVerified,
-      documentCount: isVerified ? 4 : 0,
-      verifiedByAdmin: isVerified,
+      foundedYear: randomInt(2004, 2024),
+      rating,
+      completedShipments,
+      cancelledShipments: completedShipments > 0 ? randomInt(0, 12) : 0,
+      totalOffers: 0,
+      successRate: completedShipments > 0 ? randomFloat(72, 99) : 0,
+      hasUploadedDocuments: tierProfile.documentMode !== 'pending' || chance(0.5),
+      documentCount: 0,
+      verifiedByAdmin: tierProfile.verifiedByAdmin,
       isActive: true,
-      balance: isVerified ? randomFloat(0, 5000) : 0,
+      balance: tierProfile.verifiedByAdmin ? randomFloat(0, 18000) : 0,
     });
 
-    const saved = await carrierRepo.save(carrier);
+    const savedCarrier = await carrierRepo.save(carrier);
 
-    // ── Vehicle kaydı ──
-    try {
-      const plate = `${randomInt(1, 81)} ${randomFrom(['AB', 'CD', 'EF', 'GH'])} ${randomInt(100, 999)}`;
+    for (const [vehicleIndex, vehicleTypeName] of selectedVehicleTypeNames.entries()) {
+      const vehicleType = vehicleTypeMap[vehicleTypeName];
+      const plate = `${randomInt(1, 81)} ${randomFrom(['AB', 'CD', 'EF', 'GH', 'JK'])} ${randomInt(100, 999)}`;
       const brand = randomFrom(['Ford', 'Mercedes', 'Renault', 'Fiat', 'Isuzu', 'MAN', 'Volvo']);
-      const year = randomInt(2015, 2023);
+      const year = randomInt(2015, 2024);
 
-      const vehicle = vehicleRepo.create({
-        carrierId: saved.id,
-        vehicleTypeId: vt.id,
-        capacityKg: vt.defaultCapacityKg,
-        capacityM3: vt.defaultCapacityM3,
+      await vehicleRepo.save(vehicleRepo.create({
+        carrierId: savedCarrier.id,
+        vehicleTypeId: vehicleType.id,
+        capacityKg: vehicleType.defaultCapacityKg,
+        capacityM3: vehicleType.defaultCapacityM3,
         licensePlate: plate,
         brand,
-        model: vtName,
+        model: vehicleIndex === 0 ? vehicleTypeName : `${vehicleTypeName} Plus`,
         year,
         isActive: true,
-        hasInsurance: isVerified,
-        hasTrackingDevice: Math.random() > 0.5,
-      });
-      await vehicleRepo.save(vehicle);
+        hasInsurance: tierProfile.verifiedByAdmin || chance(0.4),
+        hasTrackingDevice: tierProfile.tier === 'elite' || chance(0.55),
+      }));
 
       await carrierVehicleRepo.save(carrierVehicleRepo.create({
-        carrierId: saved.id,
-        vehicleTypeId: vt.id,
-        capacityKg: vt.defaultCapacityKg,
-        capacityM3: vt.defaultCapacityM3,
+        carrierId: savedCarrier.id,
+        vehicleTypeId: vehicleType.id,
+        capacityKg: vehicleType.defaultCapacityKg,
+        capacityM3: vehicleType.defaultCapacityM3,
         plate,
         brand,
-        model: vtName,
+        model: vehicleIndex === 0 ? vehicleTypeName : `${vehicleTypeName} Plus`,
         year,
         isActive: true,
       }));
-    } catch (err: any) {
-      console.warn(`  ⚠ Vehicle kaydı atlandı (${saved.companyName}): ${err.message}`);
-    }
 
-    // ── CarrierVehicleType bağlantısı ──
-    try {
       await cvtRepo.save(cvtRepo.create({
-        carrierId: saved.id,
-        vehicleTypeId: vt.id,
-        capacityKg: vt.defaultCapacityKg,
+        carrierId: savedCarrier.id,
+        vehicleTypeId: vehicleType.id,
+        capacityKg: vehicleType.defaultCapacityKg,
       }));
-    } catch (err: any) {
-      console.warn(`  ⚠ CarrierVehicleType atlandı: ${err.message}`);
     }
 
-    // ── CarrierServiceType bağlantıları (2-4 hizmet) ──
-    try {
-      const selectedServices = pickRandom(serviceTypeNames, randomInt(2, 4));
-      for (const stName of selectedServices) {
-        await cstRepo.save(cstRepo.create({
-          carrierId: saved.id,
-          serviceTypeId: serviceTypeMap[stName].id,
-        }));
-      }
-    } catch (err: any) {
-      console.warn(`  ⚠ CarrierServiceType atlandı: ${err.message}`);
-    }
-
-    // ── CarrierScopeOfWork bağlantıları (1-3 alan) ──
-    try {
-      const selectedScopes = pickRandom(scopeNames, randomInt(1, 3));
-      for (const sName of selectedScopes) {
-        await csowRepo.save(csowRepo.create({
-          carrierId: saved.id,
-          scopeId: scopeMap[sName].id,
-        }));
-      }
-    } catch (err: any) {
-      console.warn(`  ⚠ CarrierScopeOfWork atlandı: ${err.message}`);
-    }
-
-    // ── CarrierProfileStatus ──
-    try {
-      await profileStatusRepo.save(profileStatusRepo.create({
-        carrierId: saved.id,
-        companyInfoCompleted: true,
-        activityInfoCompleted: isVerified,
-        vehiclesCompleted: isVerified,
-        documentsCompleted: isVerified,
-        earningsCompleted: false,
-        securityCompleted: false,
-        notificationsCompleted: false,
-        overallPercentage: isVerified ? randomInt(60, 100) : randomInt(20, 50),
+    for (const serviceName of serviceNames) {
+      await cstRepo.save(cstRepo.create({
+        carrierId: savedCarrier.id,
+        serviceTypeId: serviceTypeMap[serviceName].id,
       }));
-    } catch (err: any) {
-      console.warn(`  ⚠ CarrierProfileStatus atlandı: ${err.message}`);
     }
 
-    // ── CarrierActivity ──
-    try {
+    for (const scopeName of scopeSelection) {
+      await csowRepo.save(csowRepo.create({
+        carrierId: savedCarrier.id,
+        scopeId: scopeMap[scopeName].id,
+      }));
+    }
+
+    if (hasActivitySection) {
+      const serviceAreas = [
+        company.city,
+        district,
+        randomDistrict(company.city),
+      ].filter((value, position, list) => list.indexOf(value) === position);
+
       await activityRepo.save(activityRepo.create({
-        carrierId: saved.id,
+        carrierId: savedCarrier.id,
         city: company.city,
         district,
-        serviceAreasJson: [company.city, district],
+        address: `${district} ${randomFrom(['Lojistik Merkezi', 'Depo Bölgesi', 'Sanayi Sitesi'])}`,
+        serviceAreasJson: serviceAreas,
+        availableDates: JSON.stringify({
+          weekdays: ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma'],
+          weekend: chance(0.35),
+        }),
       }));
-    } catch (err: any) {
-      console.warn(`  ⚠ CarrierActivity atlandı: ${err.message}`);
     }
 
-    // ── CarrierStats ──
-    if (isVerified) {
-      try {
-        const requiredDocuments: CarrierDocumentType[] = [
-          CarrierDocumentType.AUTHORIZATION_CERT,
-          CarrierDocumentType.SRC_CERT,
-          CarrierDocumentType.VEHICLE_LICENSE,
-          CarrierDocumentType.TAX_PLATE,
-        ];
+    let approvedDocumentCount = 0;
+    let totalDocumentCount = 0;
+    const documentPlan = getDocumentPlan(tierProfile.documentMode);
 
-        for (const type of requiredDocuments) {
-          await documentRepo.save(documentRepo.create({
-            carrierId: saved.id,
-            type,
-            fileUrl: `/uploads/documents/${saved.id}-${type.toLowerCase()}.pdf`,
-            isRequired: true,
-            status: CarrierDocumentStatus.APPROVED,
-            isApproved: true,
-            uploadedAt: new Date(),
-            verifiedAt: new Date(),
-          }));
-        }
-      } catch (err: any) {
-        console.warn(`  âš  CarrierDocument atlandÄ±: ${err.message}`);
+    for (const type of documentPlan) {
+      const isApproved = type.status === CarrierDocumentStatus.APPROVED;
+      await documentRepo.save(documentRepo.create({
+        carrierId: savedCarrier.id,
+        type: type.type,
+        fileUrl: `/uploads/documents/${savedCarrier.id}-${type.type.toLowerCase()}.pdf`,
+        isRequired: DOCUMENT_REQUIREMENTS.includes(type.type),
+        status: type.status,
+        isApproved,
+        uploadedAt: new Date(),
+        verifiedAt: isApproved ? new Date() : undefined,
+      }));
+      totalDocumentCount += 1;
+      if (isApproved) {
+        approvedDocumentCount += 1;
       }
     }
 
-    try {
-      await statsRepo.save(statsRepo.create({
-        carrierId: saved.id,
-        totalEarnings: isVerified ? randomFloat(5000, 80000) : 0,
-        totalJobs: saved.completedShipments,
-        activeJobs: isVerified ? randomInt(0, 3) : 0,
-        averageRating: saved.rating,
-        totalReviews: isVerified ? randomInt(5, 40) : 0,
+    if (hasEarningsSection) {
+      await earningsRepo.save(earningsRepo.create({
+        carrierId: savedCarrier.id,
+        bankName: randomFrom(['Ziraat Bankası', 'İş Bankası', 'Garanti BBVA', 'Yapı Kredi']),
+        iban: `TR${Array.from({ length: 24 }, () => randomInt(0, 9)).join('')}`,
+        accountHolder: company.companyName,
       }));
-    } catch (err: any) {
-      console.warn(`  ⚠ CarrierStats atlandı: ${err.message}`);
     }
 
-    created.push(saved);
+    const coreCompletionCount = Number(true)
+      + Number(hasActivitySection)
+      + Number(approvedDocumentCount >= DOCUMENT_REQUIREMENTS.length)
+      + Number(hasEarningsSection);
+
+    await profileStatusRepo.save(profileStatusRepo.create({
+      carrierId: savedCarrier.id,
+      companyInfoCompleted: true,
+      activityInfoCompleted: hasActivitySection,
+      vehiclesCompleted: selectedVehicleTypeNames.length > 0 && serviceNames.length > 0,
+      documentsCompleted: approvedDocumentCount >= DOCUMENT_REQUIREMENTS.length,
+      earningsCompleted: hasEarningsSection,
+      securityCompleted: tierProfile.tier === 'elite' || tierProfile.tier === 'established',
+      notificationsCompleted: tierProfile.verifiedByAdmin,
+      overallPercentage: Math.max(
+        coreCompletionCount * 25,
+        randomInt(
+          tierProfile.profileCompletionRange[0],
+          tierProfile.profileCompletionRange[1],
+        ),
+      ),
+    }));
+
+    await carrierRepo.update(savedCarrier.id, {
+      hasUploadedDocuments: totalDocumentCount > 0,
+      documentCount: totalDocumentCount,
+    });
+
+    await statsRepo.save(statsRepo.create({
+      carrierId: savedCarrier.id,
+      totalEarnings: completedShipments > 0 ? randomFloat(8000, 280000) : 0,
+      totalJobs: completedShipments,
+      activeJobs: tierProfile.verifiedByAdmin ? randomInt(0, 6) : 0,
+      averageRating: rating,
+      totalReviews: completedShipments > 0 ? randomInt(0, Math.max(1, completedShipments)) : 0,
+    }));
+
+    created.push({
+      ...savedCarrier,
+      hasUploadedDocuments: totalDocumentCount > 0,
+      documentCount: totalDocumentCount,
+    });
   }
 
-  console.log(`  ✓ ${created.length} nakliyeci (${created.filter(c => c.verifiedByAdmin).length} onaylı)`);
+  console.log(
+    `  ✓ ${created.length} nakliyeci (${created.filter((carrier) => carrier.verifiedByAdmin).length} onaylı)`,
+  );
   console.log('  🔑 Şifre: Maviface2141 (hepsi)');
   return created;
+}
+
+function getDocumentPlan(mode: CarrierTierProfile['documentMode']): Array<{
+  status: CarrierDocumentStatus;
+  type: CarrierDocumentType;
+}> {
+  if (mode === 'full') {
+    return [
+      ...DOCUMENT_REQUIREMENTS.map((type) => ({
+        type,
+        status: CarrierDocumentStatus.APPROVED,
+      })),
+      {
+        type: CarrierDocumentType.INSURANCE_POLICY,
+        status: CarrierDocumentStatus.APPROVED,
+      },
+    ];
+  }
+
+  if (mode === 'mostly_full') {
+    return DOCUMENT_REQUIREMENTS.map((type, index) => ({
+      type,
+      status: index === DOCUMENT_REQUIREMENTS.length - 1 && chance(0.35)
+        ? CarrierDocumentStatus.PENDING
+        : CarrierDocumentStatus.APPROVED,
+    }));
+  }
+
+  if (mode === 'mixed') {
+    return DOCUMENT_REQUIREMENTS.map((type, index) => ({
+      type,
+      status: index < 2 || chance(0.35)
+        ? CarrierDocumentStatus.APPROVED
+        : CarrierDocumentStatus.PENDING,
+    }));
+  }
+
+  return pickRandom(
+    [...DOCUMENT_REQUIREMENTS, CarrierDocumentType.INSURANCE_POLICY],
+    randomInt(0, 2),
+  ).map((type) => ({
+    type,
+    status: CarrierDocumentStatus.PENDING,
+  }));
 }
