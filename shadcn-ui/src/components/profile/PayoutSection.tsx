@@ -11,11 +11,36 @@ import { API_BASE } from './helpers';
 export default function PayoutSection({ user, refreshProfileStatus }: SectionProps) {
   const [payout, setPayout] = useState({ bank: '', iban: '', holder: '' });
 
-  useEffect(() => {
-    try {
-      const pay = localStorage.getItem(`carrier_payout_${user.id}`);
-      if (pay) setPayout(JSON.parse(pay));
-    } catch {}
+    useEffect(() => {
+    const fetchPayout = async () => {
+      try {
+        const res = await fetch(`${import.meta.env.VITE_API_URL}/api/v1/carriers/${user.id}`, {
+          headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+        });
+        if (res.ok) {
+          const json = await res.json();
+          const earnings = json.data?.carrier?.earnings || json.data?.earnings;
+          if (earnings) {
+            setPayout({
+              bank: earnings.bankName || '',
+              iban: earnings.iban || '',
+              holder: earnings.accountHolder || ''
+            });
+            return;
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching payout info:', error);
+      }
+
+      // Fallback to localStorage if fetch fails or no data
+      try {
+        const pay = localStorage.getItem(`carrier_payout_${user.id}`);
+        if (pay) setPayout(JSON.parse(pay));
+      } catch {}
+    };
+
+    fetchPayout();
   }, [user.id]);
 
   const isValidIban = (v: string) => /^TR\d{24}$/i.test((v || '').replace(/\s+/g, ''));

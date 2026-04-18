@@ -14,6 +14,7 @@ import {
 } from '../../../domain/entities/CarrierDocument';
 import { CarrierStats } from '../../../domain/entities/CarrierStats';
 import { CarrierEarnings } from '../../../domain/entities/CarrierEarnings';
+import { CarrierSecuritySettings } from '../../../domain/entities/CarrierSecuritySettings';
 import { VehicleType } from '../../../domain/entities/VehicleType';
 import { ServiceType } from '../../../domain/entities/ServiceType';
 import { ScopeOfWork } from '../../../domain/entities/ScopeOfWork';
@@ -68,6 +69,7 @@ export async function seedCarriers(
   const documentRepo = AppDataSource.getRepository(CarrierDocument);
   const statsRepo = AppDataSource.getRepository(CarrierStats);
   const earningsRepo = AppDataSource.getRepository(CarrierEarnings);
+  const securityRepo = AppDataSource.getRepository(CarrierSecuritySettings);
 
   const serviceTypeNames = Object.keys(serviceTypeMap);
   const scopeNames = Object.keys(scopeMap);
@@ -142,6 +144,16 @@ export async function seedCarriers(
 
     const savedCarrier = await carrierRepo.save(carrier);
 
+    // Security Settings Guarantee (Adım 6)
+    await securityRepo.save(securityRepo.create({
+      carrierId: savedCarrier.id,
+      twoFactorEnabled: false,
+      suspiciousLoginAlertsEnabled: true,
+      loginNotifications: true,
+      emailNotifications: true,
+      smsNotifications: false
+    }));
+
     for (const [vehicleIndex, vehicleTypeName] of selectedVehicleTypeNames.entries()) {
       const vehicleType = vehicleTypeMap[vehicleTypeName];
       const plate = `${randomInt(1, 81)} ${randomFrom(['AB', 'CD', 'EF', 'GH', 'JK'])} ${randomInt(100, 999)}`;
@@ -195,25 +207,24 @@ export async function seedCarriers(
       }));
     }
 
-    if (hasActivitySection) {
-      const serviceAreas = [
-        company.city,
-        district,
-        randomDistrict(company.city),
-      ].filter((value, position, list) => list.indexOf(value) === position);
+    // Carrier Activity Guarantee (Adım 6 - 150/150)
+    const serviceAreas = [
+      company.city,
+      district,
+      randomDistrict(company.city),
+    ].filter((value, position, list) => list.indexOf(value) === position);
 
-      await activityRepo.save(activityRepo.create({
-        carrierId: savedCarrier.id,
-        city: company.city,
-        district,
-        address: `${district} ${randomFrom(['Lojistik Merkezi', 'Depo Bölgesi', 'Sanayi Sitesi'])}`,
-        serviceAreasJson: serviceAreas,
-        availableDates: JSON.stringify({
-          weekdays: ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma'],
-          weekend: chance(0.35),
-        }),
-      }));
-    }
+    await activityRepo.save(activityRepo.create({
+      carrierId: savedCarrier.id,
+      city: company.city,
+      district,
+      address: `${district} ${randomFrom(['Lojistik Merkezi', 'Depo Bölgesi', 'Sanayi Sitesi'])}`,
+      serviceAreasJson: serviceAreas,
+      availableDates: JSON.stringify({
+        weekdays: ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma'],
+        weekend: chance(0.35),
+      }),
+    }));
 
     let approvedDocumentCount = 0;
     let totalDocumentCount = 0;
@@ -237,11 +248,12 @@ export async function seedCarriers(
       }
     }
 
-    if (hasEarningsSection) {
+        // Carrier Earnings Guarantee (Adım 6 - All Verified)
+    if (tierProfile.verifiedByAdmin) {
       await earningsRepo.save(earningsRepo.create({
         carrierId: savedCarrier.id,
         bankName: randomFrom(['Ziraat Bankası', 'İş Bankası', 'Garanti BBVA', 'Yapı Kredi']),
-        iban: `TR${Array.from({ length: 24 }, () => randomInt(0, 9)).join('')}`,
+        iban: `TR76${Array.from({ length: 22 }, () => randomInt(0, 9)).join('')}`,
         accountHolder: company.companyName,
       }));
     }

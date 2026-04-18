@@ -70,6 +70,10 @@ export class CarrierProfileController {
     }
     try {
       const overview = await this.profileQueryService.getCarrierOverview(carrierId);
+      if (!overview) {
+        res.status(404).json({ success: false, message: 'Nakliyeci bulunamadı.' });
+        return;
+      }
       res.status(200).json({ success: true, data: overview });
     } catch (error: any) {
       res.status(400).json({ success: false, message: error.message || 'Profil bilgileri alınamadı.' });

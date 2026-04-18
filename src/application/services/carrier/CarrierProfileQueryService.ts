@@ -1,17 +1,27 @@
 import { CarrierRepository } from '../../../infrastructure/repositories/CarrierRepository';
 import { CarrierProfileStatusService } from './CarrierProfileStatusService';
-import { CarrierActivityService } from './CarrierActivityService';
 
 export class CarrierProfileQueryService {
   private carrierRepository = new CarrierRepository();
   private profileStatusService = new CarrierProfileStatusService();
-  private activityService = new CarrierActivityService();
 
   async getCarrierOverview(carrierId: string) {
-    const carrier = await this.carrierRepository.findPublicById(carrierId);
-    const activity = await this.activityService.getActivityInfo(carrierId);
+    const carrier = await this.carrierRepository.findFullById(carrierId);
+    if (!carrier) return null;
+
     const status = await this.profileStatusService.updateProfileCompletion(carrierId);
-    return { carrier, activity, status };
+
+    return {
+      carrier,
+      activity: carrier.activity ?? null,
+      status,
+      earnings: carrier.earnings ?? null,
+      documents: carrier.documents ?? [],
+      securitySettings: carrier.securitySettings ?? null,
+      serviceTypes: carrier.serviceTypeLinks ?? [],
+      vehicleTypes: carrier.vehicleTypeLinks ?? [],
+      scopeOfWorks: carrier.scopeLinks ?? [],
+    };
   }
 
   async getProfileStatus(carrierId: string) {

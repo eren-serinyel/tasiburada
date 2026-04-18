@@ -38,6 +38,25 @@ export class CarrierRepository extends BaseRepository<Carrier> {
     super(Carrier);
   }
 
+    async findFullById(id: string): Promise<Carrier | null> {
+    return await this.repository.findOne({
+      where: { id },
+      relations: [
+        'activity',
+        'earnings',
+        'serviceTypeLinks',
+        'serviceTypeLinks.serviceType',
+        'vehicleTypeLinks',
+        'vehicleTypeLinks.vehicleType',
+        'scopeLinks',
+        'scopeLinks.scope',
+        'documents',
+        'securitySettings',
+        'profileStatus'
+      ]
+    });
+  }
+
   async findPublicById(carrierId: string): Promise<Carrier | null> {
     return await this.repository
       .createQueryBuilder('carrier')
