@@ -120,6 +120,7 @@ export async function seedCarriers(
     const scopeSelection = pickRandom(scopeNames, scopeCount);
     const hasActivitySection = true;
     const hasEarningsSection = tierProfile.verifiedByAdmin;
+    const availableDates = generateAvailabilityDatesForTier(tierProfile);
     const completedShipments = randomInt(
       tierProfile.completedShipmentRange[0],
       tierProfile.completedShipmentRange[1],
@@ -228,10 +229,7 @@ export async function seedCarriers(
       district,
       address: `${district} ${randomFrom(['Lojistik Merkezi', 'Depo Bölgesi', 'Sanayi Sitesi'])}`,
       serviceAreasJson: serviceAreas,
-      availableDates: JSON.stringify({
-        weekdays: ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma'],
-        weekend: chance(0.35),
-      }),
+      availableDates: JSON.stringify(availableDates),
     }));
 
     let approvedDocumentCount = 0;
@@ -364,4 +362,38 @@ function getDocumentPlan(mode: CarrierTierProfile['documentMode']): Array<{
     type,
     status: CarrierDocumentStatus.PENDING,
   }));
+}
+
+function generateAvailabilityDatesForTier(tierProfile: CarrierTierProfile): string[] {
+  const rangeByTier: Record<CarrierTierProfile['tier'], [number, number]> = {
+    elite: [30, 45],
+    established: [25, 40],
+    growing: [15, 30],
+    new: [10, 20],
+    onboarding: [0, 0],
+  };
+
+  const [minDays, maxDays] = rangeByTier[tierProfile.tier];
+  if (maxDays === 0) {
+    return [];
+  }
+
+  const desiredCount = randomInt(minDays, maxDays);
+  const selectedDates = new Set<string>();
+
+  while (selectedDates.size < desiredCount) {
+    const date = new Date();
+    date.setHours(12, 0, 0, 0);
+    date.setDate(date.getDate() - randomInt(0, 89));
+    selectedDates.add(formatDateOnly(date));
+  }
+
+  return [...selectedDates].sort();
+}
+
+function formatDateOnly(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
