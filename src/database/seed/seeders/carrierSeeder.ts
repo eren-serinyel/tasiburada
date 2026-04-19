@@ -1,4 +1,5 @@
 import { AppDataSource } from '../../../infrastructure/database/data-source';
+import fs from 'node:fs';
 import { Carrier } from '../../../domain/entities/Carrier';
 import { Vehicle } from '../../../domain/entities/Vehicle';
 import { CarrierVehicle } from '../../../domain/entities/CarrierVehicle';
@@ -19,6 +20,11 @@ import { VehicleType } from '../../../domain/entities/VehicleType';
 import { ServiceType } from '../../../domain/entities/ServiceType';
 import { ScopeOfWork } from '../../../domain/entities/ScopeOfWork';
 import { CARRIER_COMPANIES } from '../data/constants';
+import {
+  ensureSeedDocumentsDirectory,
+  generateMinimalPdf,
+  resolveSeedDocumentPath,
+} from '../helpers/pdfHelper';
 import {
   CarrierTierProfile,
   chance,
@@ -70,6 +76,7 @@ export async function seedCarriers(
   const statsRepo = AppDataSource.getRepository(CarrierStats);
   const earningsRepo = AppDataSource.getRepository(CarrierEarnings);
   const securityRepo = AppDataSource.getRepository(CarrierSecuritySettings);
+  ensureSeedDocumentsDirectory();
 
   const serviceTypeNames = Object.keys(serviceTypeMap);
   const scopeNames = Object.keys(scopeMap);
@@ -233,16 +240,21 @@ export async function seedCarriers(
 
     for (const type of documentPlan) {
       const isApproved = type.status === CarrierDocumentStatus.APPROVED;
+      const fileUrl = `/uploads/documents/${savedCarrier.id}-${type.type.toLowerCase()}.pdf`;
       await documentRepo.save(documentRepo.create({
         carrierId: savedCarrier.id,
         type: type.type,
-        fileUrl: `/uploads/documents/${savedCarrier.id}-${type.type.toLowerCase()}.pdf`,
+        fileUrl,
         isRequired: DOCUMENT_REQUIREMENTS.includes(type.type),
         status: type.status,
         isApproved,
         uploadedAt: new Date(),
         verifiedAt: isApproved ? new Date() : undefined,
       }));
+      fs.writeFileSync(
+        resolveSeedDocumentPath(fileUrl),
+        generateMinimalPdf(`TASIBURADA DEMO BELGE - ${type.type} - ${company.companyName}`),
+      );
       totalDocumentCount += 1;
       if (isApproved) {
         approvedDocumentCount += 1;

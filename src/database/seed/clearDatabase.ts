@@ -1,10 +1,14 @@
 import { AppDataSource } from '../../infrastructure/database/data-source';
+import { cleanupSeededDocumentFiles } from './helpers/pdfHelper';
 
 export async function clearDatabase(): Promise<void> {
   const queryRunner = AppDataSource.createQueryRunner();
   await queryRunner.connect();
 
   try {
+    const removedSeedFiles = cleanupSeededDocumentFiles();
+    console.log(`  ✓ ${removedSeedFiles} seeded document file(s) removed`);
+
     await queryRunner.query('SET FOREIGN_KEY_CHECKS = 0');
 
     // Tüm tabloları sırayla temizle (migrations tablosuna dokunma)
