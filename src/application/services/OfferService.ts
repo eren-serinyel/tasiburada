@@ -80,9 +80,9 @@ export class OfferService {
 
     // BR11 — Araç Uygunluk Soft Warning:
     const warnings: any[] = [];
-    const carrierWithVehicles = await this.carrierRepository.findById(carrierId, { relations: ['vehicles'] } as any);
-    if (shipment.estimatedWeight && carrierWithVehicles?.vehicles?.length) {
-      const maxCapacity = Math.max(...carrierWithVehicles.vehicles.map(v => Number(v.capacityKg || 0)));
+    const carrierWithVehicles = await this.carrierRepository.findById(carrierId, { relations: ['carrierVehicles'] } as any);
+    if (shipment.estimatedWeight && carrierWithVehicles?.carrierVehicles?.length) {
+      const maxCapacity = Math.max(...carrierWithVehicles.carrierVehicles.map(v => Number(v.capacityKg || 0)));
       if (maxCapacity < shipment.estimatedWeight) {
         warnings.push({
           code: 'CAPACITY_MISMATCH',

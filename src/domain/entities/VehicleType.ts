@@ -1,5 +1,4 @@
 import { Entity, PrimaryGeneratedColumn, Column, OneToMany } from 'typeorm';
-import { Vehicle } from './Vehicle';
 import { CarrierVehicleType } from './CarrierVehicleType';
 import { CarrierVehicle } from './CarrierVehicle';
 
@@ -25,9 +24,6 @@ export class VehicleType {
 
   @Column({ name: 'capacity_kg', type: 'int', nullable: true })
   capacityKg: number | null;
-
-  @OneToMany(() => Vehicle, v => v.vehicleType)
-  vehicles: Vehicle[];
 
   @OneToMany(() => CarrierVehicleType, link => link.vehicleType)
   carrierLinks: CarrierVehicleType[];

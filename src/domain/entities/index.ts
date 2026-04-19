@@ -1,6 +1,5 @@
 export { Carrier } from './Carrier';
 export { Customer } from './Customer';
-export { Vehicle } from './Vehicle';
 export { VehicleType } from './VehicleType';
 export { CarrierDocument } from './CarrierDocument';
 export { CarrierEarnings } from './CarrierEarnings';

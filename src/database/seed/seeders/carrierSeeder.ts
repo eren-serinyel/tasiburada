@@ -1,7 +1,6 @@
 import { AppDataSource } from '../../../infrastructure/database/data-source';
 import fs from 'node:fs';
 import { Carrier } from '../../../domain/entities/Carrier';
-import { Vehicle } from '../../../domain/entities/Vehicle';
 import { CarrierVehicle } from '../../../domain/entities/CarrierVehicle';
 import { CarrierVehicleType } from '../../../domain/entities/CarrierVehicleType';
 import { CarrierServiceType } from '../../../domain/entities/CarrierServiceType';
@@ -65,7 +64,6 @@ export async function seedCarriers(
   scopeMap: Record<string, ScopeOfWork>,
 ): Promise<Carrier[]> {
   const carrierRepo = AppDataSource.getRepository(Carrier);
-  const vehicleRepo = AppDataSource.getRepository(Vehicle);
   const carrierVehicleRepo = AppDataSource.getRepository(CarrierVehicle);
   const cvtRepo = AppDataSource.getRepository(CarrierVehicleType);
   const cstRepo = AppDataSource.getRepository(CarrierServiceType);
@@ -168,20 +166,6 @@ export async function seedCarriers(
       const plate = `${randomInt(1, 81)} ${randomFrom(['AB', 'CD', 'EF', 'GH', 'JK'])} ${randomInt(100, 999)}`;
       const brand = randomFrom(['Ford', 'Mercedes', 'Renault', 'Fiat', 'Isuzu', 'MAN', 'Volvo']);
       const year = randomInt(2015, 2024);
-
-      await vehicleRepo.save(vehicleRepo.create({
-        carrierId: savedCarrier.id,
-        vehicleTypeId: vehicleType.id,
-        capacityKg: vehicleType.defaultCapacityKg,
-        capacityM3: vehicleType.defaultCapacityM3,
-        licensePlate: plate,
-        brand,
-        model: vehicleIndex === 0 ? vehicleTypeName : `${vehicleTypeName} Plus`,
-        year,
-        isActive: true,
-        hasInsurance: tierProfile.verifiedByAdmin || chance(0.4),
-        hasTrackingDevice: tierProfile.tier === 'elite' || chance(0.55),
-      }));
 
       await carrierVehicleRepo.save(carrierVehicleRepo.create({
         carrierId: savedCarrier.id,

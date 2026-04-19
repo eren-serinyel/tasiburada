@@ -5,7 +5,6 @@ export { CustomerRepository } from './CustomerRepository';
 export { ShipmentRepository } from './ShipmentRepository';
 export { OfferRepository } from './OfferRepository';
 export { ReviewRepository } from './ReviewRepository';
-export { VehicleRepository } from './VehicleRepository';
 export { VehicleTypeRepository } from './VehicleTypeRepository';
 export { CarrierProfileStatusRepository } from './CarrierProfileStatusRepository';
 export { CarrierActivityRepository } from './CarrierActivityRepository';

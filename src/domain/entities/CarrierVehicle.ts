@@ -10,7 +10,7 @@ export class CarrierVehicle {
   @Column({ name: 'carrier_id', type: 'varchar', length: 36 })
   carrierId: string;
 
-  @ManyToOne(() => Carrier, carrier => carrier.vehicles, { onDelete: 'CASCADE' })
+  @ManyToOne(() => Carrier, carrier => carrier.carrierVehicles, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'carrier_id' })
   carrier: Carrier;
 

@@ -29,7 +29,7 @@ export class OfferRepository extends BaseRepository<Offer> {
       .createQueryBuilder('offer')
       .innerJoinAndSelect('offer.shipment', 'shipment')
       .leftJoinAndSelect('offer.carrier', 'carrier')
-      .leftJoinAndSelect('carrier.vehicles', 'vehicles')
+      .leftJoinAndSelect('carrier.carrierVehicles', 'vehicles')
       .leftJoinAndSelect('vehicles.vehicleType', 'vt')
       .select([
         'offer.id',
@@ -56,7 +56,7 @@ export class OfferRepository extends BaseRepository<Offer> {
         'shipment.updatedAt',
         ...SAFE_CARRIER_SELECT,
         'vehicles.id',
-        'vehicles.licensePlate',
+        'vehicles.plate',
         'vehicles.brand',
         'vehicles.model',
         'vt.name',
@@ -79,7 +79,7 @@ export class OfferRepository extends BaseRepository<Offer> {
       .createQueryBuilder('offer')
       .leftJoinAndSelect('offer.shipment', 'shipment')
       .leftJoinAndSelect('offer.carrier', 'carrier')
-      .leftJoinAndSelect('carrier.vehicles', 'vehicles')
+      .leftJoinAndSelect('carrier.carrierVehicles', 'vehicles')
       .leftJoinAndSelect('vehicles.vehicleType', 'vt')
       .select([
         'offer.id',

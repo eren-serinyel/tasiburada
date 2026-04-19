@@ -116,7 +116,7 @@ export class AdminService {
     const carrierRepo = AppDataSource.getRepository(Carrier);
     const carrier = await carrierRepo.findOne({
       where: { id: carrierId },
-      relations: ['documents', 'vehicles'],
+      relations: ['documents', 'carrierVehicles'],
     });
     if (!carrier) throw new Error('Nakliyeci bulunamadı.');
     const { passwordHash, resetToken, verificationToken, ...safeCarrier } = carrier as any;

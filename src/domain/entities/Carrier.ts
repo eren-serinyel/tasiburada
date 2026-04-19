@@ -1,7 +1,7 @@
 import { Entity, PrimaryGeneratedColumn, Column, OneToMany, CreateDateColumn, UpdateDateColumn, OneToOne } from 'typeorm';
-import { Vehicle } from './Vehicle';
 import { CarrierDocument } from './CarrierDocument';
 import { CarrierEarnings } from './CarrierEarnings';
+import { CarrierVehicle } from './CarrierVehicle';
 import { CarrierVehicleType } from './CarrierVehicleType';
 import { CarrierProfileStatus } from './CarrierProfileStatus';
 import { CarrierActivity } from './CarrierActivity';
@@ -102,11 +102,11 @@ export class Carrier {
   verificationToken?: string | null;
 
   // İlişkiler
-  @OneToMany(() => Vehicle, vehicle => vehicle.carrier)
-  vehicles: Vehicle[];
-
   @OneToMany(() => CarrierVehicleType, link => link.carrier)
   vehicleTypeLinks: CarrierVehicleType[];
+
+  @OneToMany(() => CarrierVehicle, vehicle => vehicle.carrier)
+  carrierVehicles: CarrierVehicle[];
 
   @OneToMany(() => CarrierServiceType, link => link.carrier)
   serviceTypeLinks: CarrierServiceType[];

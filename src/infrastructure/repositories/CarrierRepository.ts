@@ -78,7 +78,7 @@ export class CarrierRepository extends BaseRepository<Carrier> {
   async findByEmail(email: string): Promise<Carrier | null> {
     return await this.repository.findOne({
       where: { email },
-      relations: ['vehicles']
+      relations: ['carrierVehicles']
     });
   }
 
@@ -92,7 +92,7 @@ export class CarrierRepository extends BaseRepository<Carrier> {
     return this.repository
       .createQueryBuilder('carrier')
       .innerJoinAndSelect('carrier.activity', 'activity')
-      .leftJoinAndSelect('carrier.vehicles', 'vehicles')
+      .leftJoinAndSelect('carrier.carrierVehicles', 'vehicles')
       .where('activity.city = :city', { city })
       .andWhere('carrier.isActive = :isActive', { isActive: true })
       .orderBy('carrier.rating', 'DESC')
@@ -103,7 +103,7 @@ export class CarrierRepository extends BaseRepository<Carrier> {
   async findByVehicleType(vehicleTypeId: string): Promise<Carrier[]> {
     return await this.repository
       .createQueryBuilder('carrier')
-      .leftJoinAndSelect('carrier.vehicles', 'vehicles')
+      .leftJoinAndSelect('carrier.carrierVehicles', 'vehicles')
       .where('vehicles.vehicleTypeId = :vehicleTypeId', { vehicleTypeId })
       .andWhere('carrier.isActive = :isActive', { isActive: true })
       .orderBy('carrier.rating', 'DESC')
@@ -115,7 +115,7 @@ export class CarrierRepository extends BaseRepository<Carrier> {
     const queryBuilder = this.repository
       .createQueryBuilder('carrier')
       .innerJoinAndSelect('carrier.activity', 'activity')
-      .leftJoinAndSelect('carrier.vehicles', 'vehicles', 'vehicles.isActive = :vehicleActive', { vehicleActive: true })
+      .leftJoinAndSelect('carrier.carrierVehicles', 'vehicles', 'vehicles.isActive = :vehicleActive', { vehicleActive: true })
       .where('activity.city = :city', { city })
       .andWhere('carrier.isActive = :isActive', { isActive: true });
 
@@ -190,7 +190,7 @@ export class CarrierRepository extends BaseRepository<Carrier> {
         completedShipments: 'DESC'
       },
       take: limit,
-      relations: ['vehicles']
+      relations: ['carrierVehicles']
     });
   }
 
