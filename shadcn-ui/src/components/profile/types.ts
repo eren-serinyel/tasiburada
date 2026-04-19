@@ -1,6 +1,6 @@
 import { User } from '@/lib/types';
 
-export type SidebarKey = 'account' | 'addresses' | 'payments' | 'security' | 'notifications' | 'company' | 'operations' | 'documents' | 'payouts';
+export type SidebarKey = 'account' | 'addresses' | 'payments' | 'security' | 'notifications' | 'company' | 'operations' | 'documents' | 'vehicles' | 'payouts';
 
 export type Address = { id: string; title: string; line1: string; line2?: string; district?: string; city?: string; postalCode?: string; notes?: string };
 export type CardItem = { id: string; holder: string; number: string; expiry: string };
@@ -19,7 +19,7 @@ export type NotifState = {
   };
 };
 
-export type VehicleType = { id: number; name: string; defaultCapacityKg: number; defaultCapacityM3: number };
+export type VehicleType = { id: string; name: string; defaultCapacityKg: number; defaultCapacityM3: number };
 
 export interface SectionProps {
   user: User;

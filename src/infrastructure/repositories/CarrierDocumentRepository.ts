@@ -45,6 +45,17 @@ export class CarrierDocumentRepository extends BaseRepository<CarrierDocument> {
     return this.repository.save(entity);
   }
 
+  async findOwnedById(carrierId: string, documentId: string): Promise<CarrierDocument | null> {
+    return this.repository.findOne({ where: { id: documentId, carrierId } });
+  }
+
+  async deleteOwnedById(carrierId: string, documentId: string): Promise<CarrierDocument | null> {
+    const existing = await this.findOwnedById(carrierId, documentId);
+    if (!existing) return null;
+    await this.repository.remove(existing);
+    return existing;
+  }
+
   async findRequiredDocumentTypesStatus(carrierId: string, requiredTypes: string[]): Promise<Record<string, boolean>> {
     const normalized = (requiredTypes || []).filter(Boolean);
     const statusMap: Record<string, boolean> = {};

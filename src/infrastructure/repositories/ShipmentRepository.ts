@@ -123,17 +123,39 @@ export class ShipmentRepository extends BaseRepository<Shipment> {
     return (result.affected || 0) > 0;
   }
 
-  async findDuplicateShipment(customerId: string, originCity: string, destinationCity: string): Promise<Shipment | null> {
+  async findDuplicateShipment(
+    customerId: string,
+    originCity: string,
+    destinationCity: string,
+    originDistrict: string | null,
+    destinationDistrict: string | null,
+    shipmentDate: Date,
+  ): Promise<Shipment | null> {
     const fortyEightHoursAgo = new Date();
     fortyEightHoursAgo.setHours(fortyEightHoursAgo.getHours() - 48);
+    const normalizedShipmentDate = shipmentDate.toISOString().split('T')[0];
 
-    return await this.repository
+    const qb = this.repository
       .createQueryBuilder('shipment')
       .where('shipment.customerId = :customerId', { customerId })
       .andWhere('shipment.originCity = :originCity', { originCity })
       .andWhere('shipment.destinationCity = :destinationCity', { destinationCity })
+      .andWhere('DATE(shipment.shipmentDate) = :shipmentDate', { shipmentDate: normalizedShipmentDate })
       .andWhere('shipment.status IN (:...statuses)', { statuses: [ShipmentStatus.PENDING, ShipmentStatus.MATCHED] })
-      .andWhere('shipment.createdAt > :date', { date: fortyEightHoursAgo })
-      .getOne();
+      .andWhere('shipment.createdAt > :date', { date: fortyEightHoursAgo });
+
+    if (originDistrict) {
+      qb.andWhere('shipment.originDistrict = :originDistrict', { originDistrict });
+    } else {
+      qb.andWhere('(shipment.originDistrict IS NULL OR shipment.originDistrict = \'\')');
+    }
+
+    if (destinationDistrict) {
+      qb.andWhere('shipment.destinationDistrict = :destinationDistrict', { destinationDistrict });
+    } else {
+      qb.andWhere('(shipment.destinationDistrict IS NULL OR shipment.destinationDistrict = \'\')');
+    }
+
+    return await qb.getOne();
   }
 }

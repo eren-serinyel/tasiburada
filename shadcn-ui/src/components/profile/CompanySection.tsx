@@ -21,8 +21,6 @@ export default function CompanySection({ user, refreshProfileStatus, onCompanyNa
     services: [] as string[], scopes: [] as string[],
     vehicleType: '', vehicleTypes: [] as string[],
     vehicleCapacities: {} as Record<string, string>,
-    vehicleBrand: '', vehicleModel: '', vehicleYear: '' as number | '',
-    vehicleCapacityM3: '' as number | '',
   });
   const [vehicleTypesList, setVehicleTypesList] = useState<VehicleType[]>([]);
   const [serviceTypeOptions, setServiceTypeOptions] = useState<{ id: string; name: string }[]>([]);
@@ -107,10 +105,6 @@ export default function CompanySection({ user, refreshProfileStatus, onCompanyNa
             vehicleType: vehicleNames.length ? vehicleNames[0] : prev.vehicleType,
             vehicleTypes: vehicleNames.length ? vehicleNames : prev.vehicleTypes,
             vehicleCapacities: vehicleNames.length ? { ...(prev.vehicleCapacities || {}), ...backendCaps } : prev.vehicleCapacities,
-            vehicleBrand: carrierData.vehicleBrand || prev.vehicleBrand,
-            vehicleModel: carrierData.vehicleModel || prev.vehicleModel,
-            vehicleYear: carrierData.vehicleYear || prev.vehicleYear,
-            vehicleCapacityM3: carrierData.vehicleCapacityM3 || prev.vehicleCapacityM3,
           };
           onCompanyNameChange?.(next.name);
           try { localStorage.setItem(`carrier_company_${user.id}`, JSON.stringify(next)); } catch {}
@@ -169,10 +163,6 @@ export default function CompanySection({ user, refreshProfileStatus, onCompanyNa
           email: company.email || undefined, foundedYear: company.year ? Number(company.year) : undefined,
           vehicleTypeNames: company.vehicleTypes || [], vehicleTypeCapacities: Object.keys(capacityOverrides).length ? capacityOverrides : undefined,
           serviceTypeNames: company.services || [], scopeOfWorkNames: company.scopes || [],
-          vehicleBrand: company.vehicleBrand || undefined,
-          vehicleModel: company.vehicleModel || undefined,
-          vehicleYear: company.vehicleYear || undefined,
-          vehicleCapacityM3: company.vehicleCapacityM3 || undefined,
         }),
       });
       if (selectedVehicles.length > 0) {
@@ -241,49 +231,6 @@ export default function CompanySection({ user, refreshProfileStatus, onCompanyNa
               ))}
             </div>
           )}
-        </div>
-        {/* Araç detay alanları */}
-        <div>
-          <Label>Araç Markası</Label>
-          <Input
-            className="mt-1"
-            placeholder="Mercedes, Ford, MAN..."
-            value={company.vehicleBrand}
-            onChange={(e) => setCompany({ ...company, vehicleBrand: e.target.value })}
-          />
-        </div>
-        <div>
-          <Label>Model</Label>
-          <Input
-            className="mt-1"
-            placeholder="Sprinter, Transit, TGX..."
-            value={company.vehicleModel}
-            onChange={(e) => setCompany({ ...company, vehicleModel: e.target.value })}
-          />
-        </div>
-        <div>
-          <Label>Model Yılı</Label>
-          <Input
-            type="number"
-            className="mt-1"
-            placeholder="2020"
-            min={1990}
-            max={new Date().getFullYear()}
-            value={company.vehicleYear}
-            onChange={(e) => setCompany({ ...company, vehicleYear: e.target.value ? parseInt(e.target.value) : '' })}
-          />
-        </div>
-        <div>
-          <Label>Kapasite (m³)</Label>
-          <Input
-            type="number"
-            className="mt-1"
-            placeholder="20"
-            min={1}
-            max={200}
-            value={company.vehicleCapacityM3}
-            onChange={(e) => setCompany({ ...company, vehicleCapacityM3: e.target.value ? parseFloat(e.target.value) : '' })}
-          />
         </div>
       </div>
       <div className="mt-6 flex justify-end">

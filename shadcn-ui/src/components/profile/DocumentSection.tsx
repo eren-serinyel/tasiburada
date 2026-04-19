@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { toast } from '@/components/ui/sonner';
 import { apiClient } from '@/lib/apiClient';
-import { Save, FileText } from 'lucide-react';
+import { Download, Eye, Save, FileText, Trash2 } from 'lucide-react';
 import FileUpload from '@/components/ui/file-upload';
 import type { SectionProps } from './types';
 import { API_BASE } from './helpers';
@@ -12,6 +12,7 @@ type BackendDocument = {
   type: string;
   status: string;
   uploadedAt?: string;
+  fileUrl?: string;
 };
 
 export default function DocumentSection({ user, refreshProfileStatus }: SectionProps) {
@@ -19,6 +20,12 @@ export default function DocumentSection({ user, refreshProfileStatus }: SectionP
     kYetki: [] as File[], src: [] as File[], ruhsat: [] as File[], vergi: [] as File[], sigorta: [] as File[],
   });
   const [backendDocs, setBackendDocs] = useState<BackendDocument[]>([]);
+
+  const apiOrigin = useMemo(() => {
+    const raw = String(import.meta.env.VITE_API_URL || '').trim();
+    if (!raw) return 'http://localhost:3001';
+    return raw.replace(/\/api\/v1\/?$/, '');
+  }, []);
 
   const fetchDocuments = async () => {
     try {
@@ -34,6 +41,53 @@ export default function DocumentSection({ user, refreshProfileStatus }: SectionP
 
       setBackendDocs(docList);
     } catch {}
+  };
+
+  const openDocument = async (doc: BackendDocument, download = false) => {
+    if (!doc.id) return;
+    try {
+      const response = await apiClient(`${API_BASE}/carriers/me/documents/${doc.id}/download`);
+      if (!response.ok) {
+        const json = await response.json().catch(() => ({}));
+        throw new Error(json?.message || 'Belge açılamadı.');
+      }
+
+      const blob = await response.blob();
+      const objectUrl = window.URL.createObjectURL(blob);
+      const extension = (doc.fileUrl || '').split('.').pop() || 'pdf';
+      const fileName = `${doc.type.toLowerCase()}.${extension}`;
+
+      if (download) {
+        const link = document.createElement('a');
+        link.href = objectUrl;
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      } else {
+        window.open(objectUrl, '_blank', 'noopener,noreferrer');
+      }
+
+      setTimeout(() => window.URL.revokeObjectURL(objectUrl), 1000);
+    } catch (error: any) {
+      toast.error(error?.message || 'Belge açılamadı.');
+    }
+  };
+
+  const deleteDocument = async (doc: BackendDocument) => {
+    if (!doc.id) return;
+    if (!window.confirm('Bu belgeyi silmek istediğinize emin misiniz?')) return;
+
+    try {
+      const response = await apiClient(`${API_BASE}/carriers/me/documents/${doc.id}`, { method: 'DELETE' });
+      const json = await response.json().catch(() => ({}));
+      if (!response.ok || !json?.success) throw new Error(json?.message || 'Belge silinemedi.');
+      toast.success('Belge silindi.');
+      await fetchDocuments();
+      await refreshProfileStatus?.();
+    } catch (error: any) {
+      toast.error(error?.message || 'Belge silinemedi.');
+    }
   };
 
   useEffect(() => {
@@ -106,7 +160,7 @@ export default function DocumentSection({ user, refreshProfileStatus }: SectionP
                     </p>
                   </div>
                 </div>
-                <div>
+                <div className="flex items-center gap-2 flex-wrap justify-end">
                   <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
                     doc.status === 'APPROVED' ? 'bg-green-100 text-green-700' : 
                     doc.status === 'PENDING' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'
@@ -114,6 +168,15 @@ export default function DocumentSection({ user, refreshProfileStatus }: SectionP
                     {doc.status === 'APPROVED' ? 'Onaylandı' : 
                      doc.status === 'PENDING' ? 'Beklemede' : 'Reddedildi'}
                   </span>
+                  <Button type="button" variant="outline" size="sm" onClick={() => openDocument(doc, false)}>
+                    <Eye className="h-3.5 w-3.5 mr-1" /> Görüntüle
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" onClick={() => openDocument(doc, true)}>
+                    <Download className="h-3.5 w-3.5 mr-1" /> İndir
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" className="text-red-600 border-red-200 hover:bg-red-50" onClick={() => deleteDocument(doc)}>
+                    <Trash2 className="h-3.5 w-3.5 mr-1" /> Sil
+                  </Button>
                 </div>
               </div>
             ))}

@@ -51,6 +51,8 @@ router.delete('/me/vehicles/:vehicleId', authCarrier, profileController.deleteVe
 router.post('/me/vehicles/:vehicleId/photos', authCarrier, pictureUpload.array('photos', 8), profileController.addVehiclePhotos);
 router.delete('/me/vehicles/:vehicleId/photos/:photoId', authCarrier, profileController.deleteVehiclePhoto);
 router.get('/me/documents', authCarrier, documentController.getDocuments);
+router.get('/me/documents/:documentId/download', authCarrier, documentController.downloadDocument);
+router.delete('/me/documents/:documentId', authCarrier, documentController.deleteDocument);
 router.put('/me/documents', authCarrier, documentUpload.single('file'), documentController.updateDocuments);
 router.put('/me/earnings', authCarrier, profileController.updateEarnings);
 router.put('/me/profile-picture', authCarrier, pictureUpload.single('picture'), profileController.updateProfilePicture);
@@ -68,6 +70,8 @@ router.get('/:carrierId/vehicles', authCarrier, profileController.listVehicles);
 router.put('/:carrierId/vehicles', authCarrier, profileController.upsertVehicles);
 router.put('/:carrierId/service-types', authCarrier, profileController.updateServiceTypes);
 router.get('/:carrierId/documents', authCarrier, documentController.getDocuments);
+router.get('/:carrierId/documents/:documentId/download', authCarrier, documentController.downloadDocument);
+router.delete('/:carrierId/documents/:documentId', authCarrier, documentController.deleteDocument);
 router.put('/:carrierId/documents', authCarrier, documentUpload.single('file'), documentController.updateDocuments);
 router.put('/:carrierId/profile-picture', authCarrier, pictureUpload.single('picture'), profileController.updateProfilePicture);
 router.put('/:carrierId/security', authCarrier, profileController.updateSecurity);

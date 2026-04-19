@@ -9,11 +9,11 @@ import { User as UserType } from '@/lib/types';
 import { getSessionUser, setSessionUser } from '@/lib/storage';
 import { apiClient } from '@/lib/apiClient';
 import { cn } from '@/lib/utils';
-import { User, Bell, Lock, Save, Image as ImageIcon, Building2, MapPin, FileBadge, Wallet2, Send } from 'lucide-react';
+import { User, Bell, Lock, Save, Image as ImageIcon, Building2, MapPin, FileBadge, Wallet2, Send, Truck } from 'lucide-react';
 
 import {
   AccountSection, SecuritySection, CompanySection, OperationsSection,
-  DocumentSection, PayoutSection, AddressSection, PaymentSection,
+  DocumentSection, VehiclesSection, PayoutSection, AddressSection, PaymentSection,
   NotificationSection, Section, gradientBg, useInitials,
 } from '@/components/profile';
 import type { SidebarKey } from '@/components/profile';
@@ -262,6 +262,7 @@ export default function Profile() {
                     <Item id="company" label="Firma Bilgileri" icon={Building2} />
                     <Item id="operations" label="Faaliyet Bilgileri" icon={MapPin} />
                     <Item id="documents" label="Belgeler" icon={FileBadge} />
+                    <Item id="vehicles" label="Araçlarım" icon={Truck} />
                     <Item id="payouts" label="Kazanç Bilgileri" icon={Wallet2} />
                     <Item id="security" label="Güvenlik" icon={Lock} />
                     <Item id="notifications" label="Bildirimler" icon={Bell} />
@@ -294,6 +295,7 @@ export default function Profile() {
               {isCarrier && active === 'company' && <Section key="company"><CompanySection user={user} refreshProfileStatus={refreshProfileStatus} onCompanyNameChange={setCompanyName} /></Section>}
               {isCarrier && active === 'operations' && <Section key="operations"><OperationsSection user={user} refreshProfileStatus={refreshProfileStatus} /></Section>}
               {isCarrier && active === 'documents' && <Section key="documents"><DocumentSection user={user} refreshProfileStatus={refreshProfileStatus} /></Section>}
+              {isCarrier && active === 'vehicles' && <Section key="vehicles"><VehiclesSection user={user} refreshProfileStatus={refreshProfileStatus} /></Section>}
               {isCarrier && active === 'payouts' && <Section key="payouts"><PayoutSection user={user} refreshProfileStatus={refreshProfileStatus} /></Section>}
               {active === 'account' && <Section key="account"><AccountSection user={user} onUserUpdate={handleUserUpdate} /></Section>}
               {active === 'addresses' && <Section key="addresses"><AddressSection user={user} /></Section>}

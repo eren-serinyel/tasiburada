@@ -81,34 +81,38 @@ export async function seedCarriers(
     const tierProfile = resolveCarrierTier(index, CARRIER_COMPANIES.length);
     const district = randomDistrict(company.city);
     const primaryVehicleTypeName = VEHICLE_TYPE_SEQUENCE[index % VEHICLE_TYPE_SEQUENCE.length];
-    const vehicleCount = randomInt(
-      tierProfile.vehicleCountRange[0],
-      tierProfile.vehicleCountRange[1],
+    const vehicleCount = Math.max(
+      1,
+      randomInt(
+        tierProfile.vehicleCountRange[0],
+        tierProfile.vehicleCountRange[1],
+      ),
     );
-    const selectedVehicleTypeNames = vehicleCount > 0
-      ? [
-        primaryVehicleTypeName,
-        ...pickRandom(
-          allVehicleTypeNames.filter((name) => name !== primaryVehicleTypeName),
-          Math.max(0, vehicleCount - 1),
-        ),
-      ]
-      : [];
-    const serviceCount = randomInt(
-      tierProfile.serviceCountRange[0],
-      tierProfile.serviceCountRange[1],
+    const selectedVehicleTypeNames = [
+      primaryVehicleTypeName,
+      ...pickRandom(
+        allVehicleTypeNames.filter((name) => name !== primaryVehicleTypeName),
+        Math.max(0, vehicleCount - 1),
+      ),
+    ].filter((name, position, list) => list.indexOf(name) === position);
+    const serviceCount = Math.max(
+      1,
+      randomInt(
+        tierProfile.serviceCountRange[0],
+        tierProfile.serviceCountRange[1],
+      ),
     );
-    const scopeCount = randomInt(
-      tierProfile.scopeCountRange[0],
-      tierProfile.scopeCountRange[1],
+    const scopeCount = Math.max(
+      1,
+      randomInt(
+        tierProfile.scopeCountRange[0],
+        tierProfile.scopeCountRange[1],
+      ),
     );
     const serviceNames = pickRandom(serviceTypeNames, serviceCount);
     const scopeSelection = pickRandom(scopeNames, scopeCount);
-    const hasActivitySection = tierProfile.tier !== 'onboarding' || chance(0.35);
-    const hasEarningsSection = tierProfile.tier === 'elite'
-      || tierProfile.tier === 'established'
-      || (tierProfile.tier === 'growing' && chance(0.45))
-      || (tierProfile.tier === 'new' && chance(0.2));
+    const hasActivitySection = true;
+    const hasEarningsSection = tierProfile.verifiedByAdmin;
     const completedShipments = randomInt(
       tierProfile.completedShipmentRange[0],
       tierProfile.completedShipmentRange[1],
@@ -148,10 +152,7 @@ export async function seedCarriers(
     await securityRepo.save(securityRepo.create({
       carrierId: savedCarrier.id,
       twoFactorEnabled: false,
-      suspiciousLoginAlertsEnabled: true,
-      loginNotifications: true,
-      emailNotifications: true,
-      smsNotifications: false
+      suspiciousLoginAlertsEnabled: true
     }));
 
     for (const [vehicleIndex, vehicleTypeName] of selectedVehicleTypeNames.entries()) {
@@ -270,7 +271,7 @@ export async function seedCarriers(
       vehiclesCompleted: selectedVehicleTypeNames.length > 0 && serviceNames.length > 0,
       documentsCompleted: approvedDocumentCount >= DOCUMENT_REQUIREMENTS.length,
       earningsCompleted: hasEarningsSection,
-      securityCompleted: tierProfile.tier === 'elite' || tierProfile.tier === 'established',
+      securityCompleted: true,
       notificationsCompleted: tierProfile.verifiedByAdmin,
       overallPercentage: Math.max(
         coreCompletionCount * 25,

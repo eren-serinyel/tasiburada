@@ -61,4 +61,22 @@ export class CarrierDocumentService {
 
     return { documents: docs, grouped };
   }
+
+  async getDocumentById(carrierId: string, documentId: string) {
+    const doc = await this.carrierDocumentRepo.findOwnedById(carrierId, documentId);
+    if (!doc) {
+      throw new Error('Belge bulunamadı.');
+    }
+    return doc;
+  }
+
+  async deleteDocument(carrierId: string, documentId: string) {
+    const deleted = await this.carrierDocumentRepo.deleteOwnedById(carrierId, documentId);
+    if (!deleted) {
+      throw new Error('Belge bulunamadı.');
+    }
+
+    await this.profileStatusService.updateProfileCompletion(carrierId);
+    return deleted;
+  }
 }

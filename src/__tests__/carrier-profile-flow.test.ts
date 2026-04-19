@@ -222,4 +222,55 @@ describe('CarrierProfileController', () => {
     expect(res.status).toBe(400);
     expect(res.body.success).toBe(false);
   });
+
+  test('25. Carrier belge indirebilmeli', async () => {
+    if (skipDB() || !carrierToken) return;
+
+    const uploadRes = await request(testApp)
+      .put('/api/v1/carriers/me/documents')
+      .set('Authorization', `Bearer ${carrierToken}`)
+      .field('type', 'VEHICLE_LICENSE')
+      .attach('file', Buffer.from('temporary download document'), 'temp-download-license.pdf');
+
+    expect(uploadRes.status).toBe(200);
+
+    const listRes = await request(testApp)
+      .get('/api/v1/carriers/me/documents')
+      .set('Authorization', `Bearer ${carrierToken}`);
+
+    const createdDoc = (listRes.body?.data?.documents || []).find((doc: any) => String(doc.fileUrl || '').includes('temp-download-license'));
+    expect(createdDoc?.id).toBeDefined();
+
+    const downloadRes = await request(testApp)
+      .get(`/api/v1/carriers/me/documents/${createdDoc.id}/download`)
+      .set('Authorization', `Bearer ${carrierToken}`);
+
+    expect(downloadRes.status).toBe(200);
+  });
+
+  test('26. Carrier belge silebilmeli', async () => {
+    if (skipDB() || !carrierToken) return;
+
+    const uploadRes = await request(testApp)
+      .put('/api/v1/carriers/me/documents')
+      .set('Authorization', `Bearer ${carrierToken}`)
+      .field('type', 'VEHICLE_LICENSE')
+      .attach('file', Buffer.from('temporary test document'), 'temp-delete-license.pdf');
+
+    expect(uploadRes.status).toBe(200);
+
+    const listRes = await request(testApp)
+      .get('/api/v1/carriers/me/documents')
+      .set('Authorization', `Bearer ${carrierToken}`);
+
+    const createdDoc = (listRes.body?.data?.documents || []).find((doc: any) => String(doc.fileUrl || '').includes('temp-delete-license'));
+    expect(createdDoc?.id).toBeDefined();
+
+    const deleteRes = await request(testApp)
+      .delete(`/api/v1/carriers/me/documents/${createdDoc.id}`)
+      .set('Authorization', `Bearer ${carrierToken}`);
+
+    expect(deleteRes.status).toBe(200);
+    expect(deleteRes.body.success).toBe(true);
+  });
 });

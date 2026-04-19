@@ -131,6 +131,11 @@ export class ShipmentService {
     return address.split(',')[0].trim();
   }
 
+  private extractDistrict(address: string): string | null {
+    const parts = address.split(',').map(part => part.trim()).filter(Boolean);
+    return parts.length > 1 ? parts.slice(1).join(', ') : null;
+  }
+
   private normalizePlaceType(value?: string): PlaceType | null {
     if (!value) return null;
 
@@ -293,8 +298,10 @@ export class ShipmentService {
     // BR3 — Çift İlan Engeli:
         const originCity = payload.originCity ?? (origin ? this.extractCity(origin) : '');
     const destinationCity = payload.destinationCity ?? (destination ? this.extractCity(destination) : '');
+    const originDistrict = payload.originDistrict ?? this.extractDistrict(origin);
+    const destinationDistrict = payload.destinationDistrict ?? this.extractDistrict(destination);
 
-    const duplicate = await this.shipmentRepository.findDuplicateShipment(customerId, originCity, destinationCity);
+    const duplicate = await this.shipmentRepository.findDuplicateShipment(customerId, originCity, destinationCity, originDistrict, destinationDistrict, shipmentDate);
     if (duplicate) {
       throw new ConflictError('Bu rota için aktif ilanınız bulunuyor');
     }

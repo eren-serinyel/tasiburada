@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { Request, Response } from 'express';
 import { CarrierDocumentService } from '../../application/services/carrier/CarrierDocumentService';
 
@@ -56,4 +58,55 @@ export class CarrierDocumentController {
       res.status(400).json({ success: false, message: error.message || 'Belgeler güncellenemedi.' });
     }
   };
+
+  downloadDocument = async (req: Request, res: Response) => {
+    const carrierId = this.ensureCarrier(req, res);
+    if (!carrierId) return;
+    try {
+      const doc = await this.documentService.getDocumentById(carrierId, req.params.documentId);
+      const filePath = this.resolveDocumentPath(doc.fileUrl);
+      if (!filePath || !fs.existsSync(filePath)) {
+        res.status(404).json({ success: false, message: 'Belge dosyası bulunamadı.' });
+        return;
+      }
+
+      res.download(filePath, path.basename(filePath));
+    } catch (error: any) {
+      res.status(400).json({ success: false, message: error.message || 'Belge indirilemedi.' });
+    }
+  };
+
+  deleteDocument = async (req: Request, res: Response) => {
+    const carrierId = this.ensureCarrier(req, res);
+    if (!carrierId) return;
+    try {
+      const deleted = await this.documentService.deleteDocument(carrierId, req.params.documentId);
+      const filePath = this.resolveDocumentPath(deleted.fileUrl);
+      if (filePath && fs.existsSync(filePath)) {
+        try {
+          fs.unlinkSync(filePath);
+        } catch {
+          // no-op: DB delete is the source of truth
+        }
+      }
+      res.status(200).json({ success: true, message: 'Belge silindi.' });
+    } catch (error: any) {
+      res.status(400).json({ success: false, message: error.message || 'Belge silinemedi.' });
+    }
+  };
+
+  private resolveDocumentPath(fileUrl?: string): string | null {
+    const filename = String(fileUrl || '').split('/').pop() || '';
+    if (!filename || filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+      return null;
+    }
+
+    const baseDir = path.resolve(process.cwd(), 'uploads', 'documents');
+    const resolved = path.resolve(baseDir, filename);
+    if (!resolved.startsWith(baseDir + path.sep) && resolved !== path.join(baseDir, filename)) {
+      return null;
+    }
+
+    return resolved;
+  }
 }
