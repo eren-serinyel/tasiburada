@@ -7,6 +7,27 @@ import { Carrier } from '@/lib/types';
 import { toast } from '@/components/ui/sonner';
 import { apiClient } from '@/lib/apiClient';
 
+function formatDateKey(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function normalizeAvailableDates(dates: unknown): string[] {
+  if (!Array.isArray(dates)) {
+    return [];
+  }
+
+  return Array.from(
+    new Set(
+      dates
+        .map((date) => String(date).trim())
+        .filter((date) => /^\d{4}-\d{2}-\d{2}$/.test(date)),
+    ),
+  ).sort();
+}
+
 interface CalendarDay {
   date: Date;
   isAvailable: boolean;
@@ -59,7 +80,7 @@ export default function CarrierCalendar() {
         const json = await res.json();
         if (res.ok && json?.success) {
           const activity = json.data ?? {};
-          const dates: string[] = Array.isArray(activity.availableDates) ? activity.availableDates : [];
+          const dates = normalizeAvailableDates(activity.availableDates);
           setAvailableDates(dates);
           setInitialDates(dates);
           setExistingActivity(activity);
@@ -99,7 +120,7 @@ export default function CarrierCalendar() {
       const date = new Date(startDate);
       date.setDate(startDate.getDate() + i);
 
-      const dateString = date.toISOString().split('T')[0];
+      const dateString = formatDateKey(date);
       const isCurrentMonth = date.getMonth() === month;
       const isToday = date.getTime() === today.getTime();
       const isPast = date < today;
@@ -119,12 +140,12 @@ export default function CarrierCalendar() {
   const toggleDateAvailability = (day: CalendarDay) => {
     if (!user || day.isPast) return;
 
-    const dateString = day.date.toISOString().split('T')[0];
+    const dateString = formatDateKey(day.date);
     const newAvailableDates = availableDates.includes(dateString)
       ? availableDates.filter((d) => d !== dateString)
       : [...availableDates, dateString];
 
-    setAvailableDates(newAvailableDates);
+    setAvailableDates(normalizeAvailableDates(newAvailableDates));
   };
 
   const handleSave = async () => {
@@ -136,7 +157,7 @@ export default function CarrierCalendar() {
         district: existingActivity?.district,
         address: existingActivity?.address,
         serviceAreas: (existingActivity?.serviceAreas as string[]) ?? [],
-        availableDates,
+        availableDates: normalizeAvailableDates(availableDates),
       };
       const res = await apiClient('/api/v1/carriers/me/activity', {
         method: 'PUT',
@@ -148,7 +169,12 @@ export default function CarrierCalendar() {
         toast.error((json as { message?: string }).message ?? 'Kayıt başarısız.');
         return;
       }
-      setInitialDates([...availableDates]);
+      const json = await res.json().catch(() => ({}));
+      const savedActivity = json?.data ?? body;
+      const savedDates = normalizeAvailableDates(savedActivity.availableDates);
+      setAvailableDates(savedDates);
+      setInitialDates(savedDates);
+      setExistingActivity(savedActivity);
       toast.success('Müsaitlik takvimi kaydedildi.');
     } catch {
       toast.error('Kayıt sırasında bir hata oluştu.');
