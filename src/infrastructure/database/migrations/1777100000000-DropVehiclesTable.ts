@@ -2,7 +2,6 @@ import { MigrationInterface, QueryRunner } from "typeorm";
 
 export class DropVehiclesTable1777100000000 implements MigrationInterface {
     name = 'DropVehiclesTable1777100000000'
-    transaction = true
 
     public async up(queryRunner: QueryRunner): Promise<void> {
         const hasTable = await queryRunner.hasTable('vehicles');

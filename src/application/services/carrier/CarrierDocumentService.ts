@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { CarrierDocumentRepository } from '../../../infrastructure/repositories/CarrierDocumentRepository';
 import { CarrierDocument, CarrierDocumentType } from '../../../domain/entities/CarrierDocument';
 import { CarrierProfileStatusService } from './CarrierProfileStatusService';
@@ -23,6 +25,21 @@ export class CarrierDocumentService {
       : null;
   }
 
+  private resolveStoredUpload(fileUrl?: string): { fileUrl: string; filePath: string } | null {
+    const normalizedUrl = `/${String(fileUrl || '').trim().replace(/^\/+/, '').replace(/\\/g, '/')}`;
+    if (!normalizedUrl.startsWith('/uploads/')) {
+      return null;
+    }
+
+    const uploadsRoot = path.resolve(process.cwd(), 'uploads');
+    const resolvedPath = path.resolve(process.cwd(), normalizedUrl.replace(/^\//, ''));
+    if (!resolvedPath.startsWith(uploadsRoot + path.sep) && resolvedPath !== uploadsRoot) {
+      return null;
+    }
+
+    return { fileUrl: normalizedUrl, filePath: resolvedPath };
+  }
+
   async saveDocumentsDraft(carrierId: string, docs: DocumentInput[]) {
     const entries = Array.isArray(docs) ? docs : [];
 
@@ -31,11 +48,16 @@ export class CarrierDocumentService {
       const fileUrl = doc.fileUrl?.trim();
       if (!type || !fileUrl) continue;
 
+      const storedUpload = this.resolveStoredUpload(fileUrl);
+      if (!storedUpload || !fs.existsSync(storedUpload.filePath)) {
+        throw new Error('Geçersiz belge dosyası. Lütfen dosyayı yeniden yükleyin.');
+      }
+
       if (type === CarrierDocumentType.VEHICLE_LICENSE) {
-        await this.carrierDocumentRepo.addVehicleLicenseDocument(carrierId, fileUrl);
+        await this.carrierDocumentRepo.addVehicleLicenseDocument(carrierId, storedUpload.fileUrl);
       } else {
         const isRequired = this.REQUIRED_TYPES.includes(type);
-        await this.carrierDocumentRepo.upsertSingleRequired(carrierId, type, fileUrl, isRequired);
+        await this.carrierDocumentRepo.upsertSingleRequired(carrierId, type, storedUpload.fileUrl, isRequired);
       }
     }
 

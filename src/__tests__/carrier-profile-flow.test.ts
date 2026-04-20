@@ -223,7 +223,23 @@ describe('CarrierProfileController', () => {
     expect(res.body.success).toBe(false);
   });
 
-  test('25. Carrier belge indirebilmeli', async () => {
+  test('25. Sahte belge yolu JSON ile kaydedilememeli', async () => {
+    if (skipDB() || !carrierToken) return;
+
+    const res = await request(testApp)
+      .put('/api/v1/carriers/me/documents')
+      .set('Authorization', `Bearer ${carrierToken}`)
+      .send({
+        documents: [
+          { type: 'SRC_CERT', fileUrl: '/uploads/nonexistent-debug-file.png' }
+        ]
+      });
+
+    expect(res.status).toBe(400);
+    expect(res.body.success).toBe(false);
+  });
+
+  test('26. Carrier belge indirebilmeli', async () => {
     if (skipDB() || !carrierToken) return;
 
     const uploadRes = await request(testApp)

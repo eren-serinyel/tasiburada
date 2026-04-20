@@ -94,41 +94,58 @@ export default function DocumentSection({ user, refreshProfileStatus }: SectionP
     void fetchDocuments();
   }, [user.id]);
 
-  const mockFilePath = (file?: File | null) => {
-    if (!file?.name) return '';
-    return `/uploads/${file.name.replace(/\s+/g, '_')}`;
-  };
-
-  const buildPayload = () => {
-    const payload: { type: string; fileUrl: string }[] = [];
+  const buildUploadQueue = () => {
+    const payload: { type: string; file: File }[] = [];
     const pushSingle = (type: string, files?: File[]) => {
-      if (!files?.length) return;
-      const url = mockFilePath(files[0]);
-      if (url) payload.push({ type, fileUrl: url });
+      if (files?.[0]) payload.push({ type, file: files[0] });
     };
+
     pushSingle('AUTHORIZATION_CERT', docs.kYetki);
     pushSingle('SRC_CERT', docs.src);
     pushSingle('TAX_PLATE', docs.vergi);
     pushSingle('INSURANCE_POLICY', docs.sigorta);
+
     if (docs.ruhsat?.length) {
-      docs.ruhsat.forEach(file => { const url = mockFilePath(file); if (url) payload.push({ type: 'VEHICLE_LICENSE', fileUrl: url }); });
+      docs.ruhsat.forEach(file => payload.push({ type: 'VEHICLE_LICENSE', file }));
     }
+
     return payload;
   };
 
-    const save = async () => {
+  const save = async () => {
+    const uploads = buildUploadQueue();
+    if (!uploads.length) {
+      toast.error('Lütfen en az bir belge seçin.');
+      return;
+    }
+
     try {
-      const res = await apiClient(`${API_BASE}/carriers/${user.id}/documents`, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ documents: buildPayload() }),
-      });
-      const json = await res.json();
-      if (!res.ok || !json?.success) throw new Error(json?.message || 'Belge kaydı başarısız');
-      toast.success(json?.allRequiredHaveDoc ? 'Tüm belgeler kaydedildi.' : 'Belgeler taslak olarak kaydedildi.');
+      let allRequiredHaveDoc = false;
+
+      for (const upload of uploads) {
+        const formData = new FormData();
+        formData.append('type', upload.type);
+        formData.append('file', upload.file);
+
+        const res = await apiClient(`${API_BASE}/carriers/me/documents`, {
+          method: 'PUT',
+          body: formData,
+        });
+
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok || !json?.success) {
+          throw new Error(json?.message || 'Belge kaydı başarısız');
+        }
+
+        allRequiredHaveDoc = Boolean(json?.allRequiredHaveDoc);
+      }
+
+      toast.success(allRequiredHaveDoc ? 'Tüm belgeler kaydedildi.' : 'Belgeler taslak olarak kaydedildi.');
+      setDocs({ kYetki: [], src: [], ruhsat: [], vergi: [], sigorta: [] });
       await fetchDocuments();
       await refreshProfileStatus?.();
-    } catch {
-      toast.error('Belgeler kaydedilemedi.');
+    } catch (error: any) {
+      toast.error(error?.message || 'Belgeler kaydedilemedi.');
     }
   };
 

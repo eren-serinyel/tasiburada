@@ -96,14 +96,14 @@ export class CarrierDocumentController {
   };
 
   private resolveDocumentPath(fileUrl?: string): string | null {
-    const filename = String(fileUrl || '').split('/').pop() || '';
-    if (!filename || filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+    const normalizedUrl = `/${String(fileUrl || '').trim().replace(/^\/+/, '').replace(/\\/g, '/')}`;
+    if (!normalizedUrl.startsWith('/uploads/')) {
       return null;
     }
 
-    const baseDir = path.resolve(process.cwd(), 'uploads', 'documents');
-    const resolved = path.resolve(baseDir, filename);
-    if (!resolved.startsWith(baseDir + path.sep) && resolved !== path.join(baseDir, filename)) {
+    const uploadsRoot = path.resolve(process.cwd(), 'uploads');
+    const resolved = path.resolve(process.cwd(), normalizedUrl.replace(/^\//, ''));
+    if (!resolved.startsWith(uploadsRoot + path.sep) && resolved !== uploadsRoot) {
       return null;
     }
 
