@@ -101,6 +101,19 @@ const EXTRA_SERVICE_ALIASES: Record<string, string> = {
   'Koli/Ambalaj Malzemesi': 'Koli/Ambalaj Malzemesi',
 };
 
+interface PendingShipmentListItem {
+  id: string;
+  status: ShipmentStatus;
+  price: number | null;
+  weight: number | null;
+  shipmentDate: Date;
+  createdAt: Date;
+  origin: string;
+  destination: string;
+  loadDetails: string;
+  customerDisplayName: string;
+}
+
 export class ShipmentService {
   private shipmentRepository = new ShipmentRepository();
   private carrierRepository = new CarrierRepository();
@@ -192,6 +205,28 @@ export class ShipmentService {
     return shipment;
   }
 
+  private buildLocationLabel(city?: string | null, district?: string | null): string {
+    const safeCity = city?.trim() ?? '';
+    const safeDistrict = district?.trim() ?? '';
+
+    if (safeCity && safeDistrict) {
+      return `${safeCity}, ${safeDistrict}`;
+    }
+
+    return safeCity || safeDistrict || '';
+  }
+
+  private buildDisplayName(firstName?: string | null, lastName?: string | null): string {
+    const safeFirstName = firstName?.trim() ?? '';
+    const safeLastName = lastName?.trim() ?? '';
+
+    if (!safeFirstName && !safeLastName) return 'Müşteri';
+    if (!safeLastName) return safeFirstName;
+
+    const last = safeLastName.split(/\s+/)[0] ?? '';
+    return `${safeFirstName} ${last.charAt(0).toUpperCase()}.`;
+  }
+
   private maskOpenAddressForCarrier<T extends Shipment>(shipment: T, canViewOpenAddress: boolean): T {
     if (!canViewOpenAddress) {
       shipment.originAddressText = null as any;
@@ -246,7 +281,7 @@ export class ShipmentService {
       .addAndRemove(targetIds.filter(id => !currentIds.includes(id)), currentIds.filter(id => !targetIds.includes(id)));
   }
 
-  async getPendingShipmentsForCarrier(_carrierId: string): Promise<Shipment[]> {
+  async getPendingShipmentsForCarrier(_carrierId: string): Promise<PendingShipmentListItem[]> {
     // TODO: Filter by carrier activity/service areas.
     const shipments = await this.shipmentRepository.findPendingShipments();
 
@@ -255,16 +290,19 @@ export class ShipmentService {
     return shipments.map(s => {
       s.contactPhone = null as any;
       this.maskOpenAddressForCarrier(s, false);
-      if (s.customer) {
-        s.customer = {
-          ...s.customer,
-          lastName: (s.customer.lastName?.[0] ?? '') + '***',
-          phone: undefined,
-          email: undefined,
-          id: undefined,
-        } as any;
-      }
-      return this.flattenExtraServices(s);
+      this.flattenExtraServices(s);
+      return {
+        id: s.id,
+        status: s.status,
+        price: s.price,
+        weight: s.weight,
+        shipmentDate: s.shipmentDate,
+        createdAt: s.createdAt,
+        origin: this.buildLocationLabel(s.originCity, s.originDistrict),
+        destination: this.buildLocationLabel(s.destinationCity, s.destinationDistrict),
+        loadDetails: s.loadDetails,
+        customerDisplayName: this.buildDisplayName(s.customer?.firstName, s.customer?.lastName),
+      };
     });
   }
 

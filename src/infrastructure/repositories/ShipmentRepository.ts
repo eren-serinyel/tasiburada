@@ -31,6 +31,7 @@ export class ShipmentRepository extends BaseRepository<Shipment> {
 
     return await this.repository
       .createQueryBuilder('shipment')
+      .leftJoinAndSelect('shipment.customer', 'customer')
       .leftJoinAndSelect('shipment.extraServices', 'extraServices')
       .where(
         `(
