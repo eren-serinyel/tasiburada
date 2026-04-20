@@ -20,6 +20,7 @@ type BackendShipment = {
   origin?: string;
   destination?: string;
   loadDetails?: string;
+  customerDisplayName?: string;
   transportType?: string;
   weight?: number | string | null;
   shipmentDate?: string;
@@ -27,6 +28,15 @@ type BackendShipment = {
   status?: string;
   price?: number | string | null;
   offerCount?: number;
+};
+
+type ShipmentListItem = Shipment & {
+  customerDisplayName: string;
+};
+
+const formatLoadSummary = (loadDetails?: string, weight?: number) => {
+  const safeLoadDetails = loadDetails?.trim() || 'Yük bilgisi yok';
+  return weight && weight > 0 ? `${safeLoadDetails}, ${weight} kg` : safeLoadDetails;
 };
 
 const normalizeStatus = (status?: string): Shipment['status'] => {
@@ -46,7 +56,7 @@ const normalizeStatus = (status?: string): Shipment['status'] => {
   }
 };
 
-const toUiShipment = (shipment: BackendShipment): Shipment => {
+const toUiShipment = (shipment: BackendShipment): ShipmentListItem => {
   const originText = shipment.origin || '';
   const destinationText = shipment.destination || '';
 
@@ -73,7 +83,8 @@ const toUiShipment = (shipment: BackendShipment): Shipment => {
     description: shipment.loadDetails || '',
     status: normalizeStatus(shipment.status),
     price: Number(shipment.price || 0),
-    createdAt: shipment.createdAt ? new Date(shipment.createdAt) : new Date()
+    createdAt: shipment.createdAt ? new Date(shipment.createdAt) : new Date(),
+    customerDisplayName: shipment.customerDisplayName || 'Müşteri'
   };
 };
 
@@ -109,8 +120,8 @@ const detectUserType = (sessionUser: User | null): 'customer' | 'carrier' => {
 
 export default function ShipmentList() {
   const [user, setUser] = useState<User | null>(null);
-  const [shipments, setShipments] = useState<Shipment[]>([]);
-  const [filteredShipments, setFilteredShipments] = useState<Shipment[]>([]);
+  const [shipments, setShipments] = useState<ShipmentListItem[]>([]);
+  const [filteredShipments, setFilteredShipments] = useState<ShipmentListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCity, setSelectedCity] = useState(ALL_FILTER_VALUE);
@@ -333,7 +344,10 @@ export default function ShipmentList() {
                           {getStatusText(shipment.status)}
                         </Badge>
                       </div>
-                      <CardTitle className="text-lg">{shipment.description}</CardTitle>
+                      <CardDescription className="mt-1">
+                        Müşteri: {shipment.customerDisplayName}
+                      </CardDescription>
+                      <CardTitle className="mt-2 text-lg">{shipment.description}</CardTitle>
                       <CardDescription className="mt-1">
                         {LOAD_TYPES[shipment.loadType]} • {shipment.weight}kg • {shipment.distance}km
                       </CardDescription>
@@ -358,6 +372,10 @@ export default function ShipmentList() {
                       <div>
                         <span className="text-sm font-medium text-gray-700">Varış:</span>
                         <p className="text-sm text-gray-600">{shipment.destination.address}</p>
+                      </div>
+                      <div>
+                        <span className="text-sm font-medium text-gray-700">Yük:</span>
+                        <p className="text-sm text-gray-600">{formatLoadSummary(shipment.description, shipment.weight)}</p>
                       </div>
                     </div>
                     

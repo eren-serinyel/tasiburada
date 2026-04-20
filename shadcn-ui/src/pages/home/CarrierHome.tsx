@@ -30,16 +30,26 @@ type PendingShipmentApi = {
   origin?: string;
   destination?: string;
   loadDetails?: string;
+  customerDisplayName?: string;
   weight?: number | string;
   price?: number | string;
   shipmentDate?: string;
   status?: string;
 };
 
+type PendingJob = Shipment & {
+  customerDisplayName: string;
+};
+
+const formatLoadSummary = (loadDetails?: string, weight?: number) => {
+  const safeLoadDetails = loadDetails?.trim() || 'Yük bilgisi yok';
+  return weight && weight > 0 ? `${safeLoadDetails}, ${weight} kg` : safeLoadDetails;
+};
+
 export default function CarrierHome() {
   const [user, setUser] = useState<User | null>(null);
   const [profileCompletion, setProfileCompletion] = useState<number | null>(null);
-  const [pendingJobs, setPendingJobs] = useState<Shipment[]>([]);
+  const [pendingJobs, setPendingJobs] = useState<PendingJob[]>([]);
   const [pendingLoading, setPendingLoading] = useState(true);
   const navigate = useNavigate();
   const API_BASE_URL = '/api/v1';
@@ -123,7 +133,7 @@ export default function CarrierHome() {
         const json = await res.json();
 
         if (res.ok && json?.success && Array.isArray(json.data)) {
-          const mapped: Shipment[] = (json.data as PendingShipmentApi[]).map(item => ({
+          const mapped: PendingJob[] = (json.data as PendingShipmentApi[]).map(item => ({
             id: item.id,
             customerId: '',
             origin: {
@@ -146,7 +156,8 @@ export default function CarrierHome() {
             distance: 0,
             status: 'pending',
             price: Number(item.price || 0),
-            createdAt: new Date()
+            createdAt: new Date(),
+            customerDisplayName: item.customerDisplayName || 'Müşteri'
           }));
           setPendingJobs(mapped.slice(0, 5));
         } else {
@@ -289,6 +300,7 @@ export default function CarrierHome() {
                           </div>
                           <span className="font-bold text-lg text-gray-900">₺{Number(job.price || 0).toLocaleString('tr-TR')}</span>
                         </div>
+                        <p className="mb-4 text-sm font-medium text-gray-700">Müşteri: {job.customerDisplayName}</p>
                         <div className="grid md:grid-cols-2 gap-6">
                           <div className="space-y-2">
                             <p className="text-sm text-gray-500">Nereden</p>
@@ -298,7 +310,7 @@ export default function CarrierHome() {
                           </div>
                           <div className="space-y-2">
                             <p className="text-sm text-gray-500">Yük</p>
-                            <p className="font-medium text-gray-900">{job.weight} kg</p>
+                            <p className="font-medium text-gray-900">{formatLoadSummary(job.description, job.weight)}</p>
                           </div>
                         </div>
                       </div>
