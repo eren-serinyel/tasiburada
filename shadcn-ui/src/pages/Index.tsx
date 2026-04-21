@@ -325,18 +325,18 @@ export default function Index() {
           <div className="mt-12 sm:mt-16 grid grid-cols-1 sm:grid-cols-3 gap-6 sm:gap-8 max-w-2xl mx-auto">
             <div className="text-center bg-white/10 backdrop-blur-sm rounded-2xl p-4 sm:p-6 hover:bg-white/15 transition-all duration-300">
               <Award className="h-8 w-8 sm:h-10 sm:w-10 text-cyan-300 mx-auto mb-2" />
-              <div className="text-lg sm:text-xl font-bold text-white">Güvenilir</div>
-              <div className="text-xs sm:text-sm text-blue-200">SSL Şifreli</div>
+              <div className="text-lg sm:text-xl font-bold text-white">150+</div>
+              <div className="text-xs sm:text-sm text-blue-200">Nakliyeci profili</div>
             </div>
             <div className="text-center bg-white/10 backdrop-blur-sm rounded-2xl p-4 sm:p-6 hover:bg-white/15 transition-all duration-300">
               <Target className="h-8 w-8 sm:h-10 sm:w-10 text-blue-300 mx-auto mb-2" />
-              <div className="text-lg sm:text-xl font-bold text-white">Hızlı</div>
-              <div className="text-xs sm:text-sm text-blue-200">Anında Eşleşme</div>
+              <div className="text-lg sm:text-xl font-bold text-white">400+</div>
+              <div className="text-xs sm:text-sm text-blue-200">Müşteri kaydı</div>
             </div>
             <div className="text-center bg-white/10 backdrop-blur-sm rounded-2xl p-4 sm:p-6 hover:bg-white/15 transition-all duration-300 sm:col-span-3 md:col-span-1">
               <CheckCircle className="h-8 w-8 sm:h-10 sm:w-10 text-sky-300 mx-auto mb-2" />
-              <div className="text-lg sm:text-xl font-bold text-white">Kolay</div>
-              <div className="text-xs sm:text-sm text-blue-200">Kullanıcı Dostu</div>
+              <div className="text-lg sm:text-xl font-bold text-white">2.000+</div>
+              <div className="text-xs sm:text-sm text-blue-200">Taşıma kaydı</div>
             </div>
           </div>
         </div>
@@ -368,7 +368,7 @@ export default function Index() {
                 <CardDescription>İletişime geçin ya da destek seçeneklerini keşfedin</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
-                <Link to="/support" className="block">
+                <Link to="/yardim" className="block">
                   <Button variant="secondary" className="w-full justify-start gap-2">
                     <MessageCircle className="h-4 w-4" /> Canlı Destek / Destek Formu
                   </Button>

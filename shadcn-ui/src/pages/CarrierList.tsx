@@ -349,7 +349,7 @@ function InlineCarrierCard({ carrier, navigate }: { carrier: CarrierSearchItem; 
 					
 					{isVerified && (
 						<div className="mt-1">
-							<Badge className="bg-emerald-50 text-emerald-600 border-none px-3 py-1 font-black text-[10px] tracking-widest uppercase flex items-center gap-1 hover:bg-emerald-100 transition-colors">
+							<Badge title="Profil ve evrak bilgileri kontrol edilmiş nakliyeci" className="bg-emerald-50 text-emerald-600 border-none px-3 py-1 font-black text-[10px] tracking-widest uppercase flex items-center gap-1 hover:bg-emerald-100 transition-colors">
 								<CheckCircle2 className="w-3 h-3" /> P-ONAYLI
 							</Badge>
 						</div>
@@ -446,4 +446,3 @@ function SkeletonCard() {
 		</div>
 	);
 }
-

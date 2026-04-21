@@ -1,10 +1,7 @@
 import { useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { AnimatePresence, motion } from 'framer-motion';
 import CarrierFilters from '@/components/carriers/CarrierFilters';
 import CarrierCard from '@/components/carriers/CarrierCard';
 import CarrierCardSkeleton from '@/components/carriers/CarrierCardSkeleton';
@@ -15,7 +12,7 @@ import {
 	fetchCarrierSearch,
 	type CarrierSearchResponse
 } from '@/lib/carrierSearch';
-import { ArrowLeft, ChevronLeft, ChevronRight, Target } from 'lucide-react';
+import { ArrowLeft, ChevronLeft, ChevronRight, SearchX, SlidersHorizontal } from 'lucide-react';
 
 const PAGE_SIZE = 12;
 
@@ -48,6 +45,7 @@ export default function CarrierDirectory() {
 		const params = filtersToParams(filters);
 		params.set('page', String(nextPage));
 		setSearchParams(params, { replace: true });
+		window.scrollTo({ top: 0, behavior: 'smooth' });
 	};
 
 	const total = data?.total ?? 0;
@@ -58,83 +56,144 @@ export default function CarrierDirectory() {
 	const canNext = page < totalPages;
 
 	return (
-		<div className="container mx-auto py-8 space-y-6">
-			<div className="flex items-center gap-3">
-				<Button variant="ghost" size="sm" className="gap-2" onClick={() => navigate('/nakliyeciler')}>
-					<ArrowLeft className="h-4 w-4" />
-					Geri
-				</Button>
-				<Badge variant="outline" className="text-sky-700 border-sky-200 bg-sky-50 gap-2">
-					<Target className="h-4 w-4" />
-					Detaylı nakliyeci araması
-				</Badge>
-			</div>
+		<div className="bg-[#F8FAFC] min-h-screen pb-24 font-['Plus_Jakarta_Sans',_sans-serif]">
 
-			<section className="grid gap-6 lg:grid-cols-[320px,1fr]">
-				<Card className="h-fit shadow-sm">
-					<CardHeader>
-						<CardTitle className="text-lg">Filtreler</CardTitle>
-						<CardDescription>Konumu, araç tipini ve bütçeni seç</CardDescription>
-					</CardHeader>
-					<CardContent>
-						<CarrierFilters filters={filters} onChange={handleFilterChange} hideHeader />
-					</CardContent>
-				</Card>
+			{/* ─── HEADER STRIP ─── */}
+			<div className="bg-white border-b border-slate-100 sticky top-0 z-20 shadow-sm">
+				<div className="max-w-[1400px] mx-auto px-6 h-16 flex items-center justify-between gap-4">
+					<button
+						onClick={() => navigate('/nakliyeciler')}
+						className="inline-flex items-center gap-2 text-sm font-bold text-slate-500 hover:text-blue-600 transition-colors"
+					>
+						<ArrowLeft className="h-4 w-4" />
+						Geri
+					</button>
 
-				<div className="space-y-4">
-					<Card className="border-dashed">
-						<CardContent className="py-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-							<div>
-								<p className="text-sm text-slate-500">Toplam sonuç</p>
-								<p className="text-2xl font-semibold text-slate-900">{isFetching ? '...' : `${total} nakliyeci`}</p>
-							</div>
-							<div className="text-sm text-slate-600">
-								Sayfa {page} / {totalPages}
-							</div>
-						</CardContent>
-					</Card>
-
-					{isError && (
-						<Alert variant="destructive">
-							<AlertTitle>Liste alınamadı</AlertTitle>
-							<AlertDescription>{(error as Error)?.message || 'Beklenmeyen bir hata oluştu.'}</AlertDescription>
-						</Alert>
-					)}
-
-					<div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-						{isLoading
-							? Array.from({ length: 6 }).map((_, idx) => <CarrierCardSkeleton key={idx} />)
-							: hasResults
-								? carriers.map(carrier => (
-									<CarrierCard key={carrier.id} carrier={carrier} />
-								))
-								: (
-									<Card>
-										<CardContent className="py-14 text-center text-slate-600">
-											Kriterlerinize uygun nakliyeci bulunamadı. Filtreleri gevşetmeyi deneyin.
-										</CardContent>
-									</Card>
-								)
-						}
+					<div className="flex items-center gap-2">
+						<SlidersHorizontal className="h-4 w-4 text-blue-500" />
+						<span className="text-sm font-black text-slate-700 uppercase tracking-widest">Detaylı Arama</span>
 					</div>
 
-					<div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 pt-4">
-						<p className="text-sm text-slate-500">
-							Gösterilen {carriers.length} nakliyeci · Toplam {total} sonuç
-						</p>
-						<div className="flex gap-2 justify-end">
-							<Button variant="outline" className="gap-2" disabled={!canPrev} onClick={() => handlePageChange(page - 1)}>
-								<ChevronLeft className="h-4 w-4" />
-								Önceki
-							</Button>
-							<Button variant="outline" className="gap-2" disabled={!canNext} onClick={() => handlePageChange(page + 1)}>
-								Sonraki
-								<ChevronRight className="h-4 w-4" />
-							</Button>
-						</div>
+					<div className="text-sm font-bold text-slate-400">
+						{isFetching ? (
+							<span className="inline-block w-20 h-4 bg-slate-100 animate-pulse rounded" />
+						) : (
+							<span>{total.toLocaleString()} nakliyeci</span>
+						)}
 					</div>
 				</div>
-			</section>
+			</div>
+
+			{/* ─── MAIN CONTENT GRID ─── */}
+			<div className="max-w-[1400px] mx-auto px-6 pt-8 flex flex-col lg:flex-row gap-8">
+
+				{/* LEFT: Filter Panel */}
+				<aside className="w-full lg:w-[320px] shrink-0">
+					<div className="sticky top-24 max-h-[calc(100vh-120px)] overflow-y-auto rounded-[32px] border border-white/50 bg-white/70 backdrop-blur-xl shadow-[0_20px_50px_rgba(0,0,0,0.03)] scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent">
+						<CarrierFilters filters={filters} onChange={handleFilterChange} />
+					</div>
+				</aside>
+
+				{/* RIGHT: Results */}
+				<main className="flex-1 min-w-0">
+
+					{/* Error */}
+					{isError && (
+						<div className="bg-red-50 border border-red-100 rounded-[24px] p-5 mb-6 flex items-center gap-4 text-sm text-red-700 shadow-sm">
+							<div className="w-10 h-10 bg-red-100 rounded-xl flex items-center justify-center text-red-600 shrink-0">
+								<SearchX className="w-5 h-5" />
+							</div>
+							<div>
+								<p className="font-bold text-red-900 mb-0.5">Liste alınamadı</p>
+								<p className="text-red-600">{(error as Error)?.message || 'Beklenmeyen bir hata oluştu.'}</p>
+							</div>
+						</div>
+					)}
+
+					{/* Grid */}
+					<AnimatePresence mode="wait">
+						{isLoading ? (
+							<motion.div
+								key="loading"
+								initial={{ opacity: 0 }}
+								animate={{ opacity: 1 }}
+								exit={{ opacity: 0 }}
+								className="grid gap-5 md:grid-cols-2 xl:grid-cols-3"
+							>
+								{Array.from({ length: 6 }).map((_, i) => <CarrierCardSkeleton key={i} />)}
+							</motion.div>
+						) : hasResults ? (
+							<motion.div
+								key="results"
+								initial="hidden"
+								animate="visible"
+								variants={{ visible: { transition: { staggerChildren: 0.07 } } }}
+								className="grid gap-5 md:grid-cols-2 xl:grid-cols-3"
+							>
+								{carriers.map(carrier => (
+									<motion.div
+										key={carrier.id}
+										variants={{
+											hidden: { opacity: 0, y: 16 },
+											visible: { opacity: 1, y: 0 }
+										}}
+									>
+										<CarrierCard carrier={carrier} />
+									</motion.div>
+								))}
+							</motion.div>
+						) : (
+							<motion.div
+								key="empty"
+								initial={{ opacity: 0, scale: 0.96 }}
+								animate={{ opacity: 1, scale: 1 }}
+								className="text-center py-24 px-8 bg-white border border-slate-100 rounded-[40px] shadow-sm"
+							>
+								<div className="w-16 h-16 bg-slate-50 flex items-center justify-center rounded-[28px] mx-auto mb-5 shadow-inner">
+									<SearchX className="w-8 h-8 text-slate-300" />
+								</div>
+								<h3 className="text-xl font-extrabold text-slate-900 mb-2 tracking-tight">Eşleşme Bulunamadı</h3>
+								<p className="text-slate-500 mb-7 max-w-sm mx-auto leading-relaxed text-sm">
+									Filtreleme kriterlerinizi genişleterek daha fazla sonuç elde edebilirsiniz.
+								</p>
+								<button
+									onClick={() => handleFilterChange({ serviceAreas: [], vehicleTypeIds: [] })}
+									className="inline-flex items-center h-11 px-7 rounded-2xl font-bold text-sm bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+								>
+									Tüm Filtreleri Temizle
+								</button>
+							</motion.div>
+						)}
+					</AnimatePresence>
+
+					{/* Pagination */}
+					{hasResults && totalPages > 1 && (
+						<div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-10 pt-8 border-t border-slate-100">
+							<p className="text-sm text-slate-400 font-medium">
+								{carriers.length} nakliyeci gösteriliyor · Toplam <span className="font-bold text-slate-600">{total}</span> sonuç · Sayfa <span className="font-bold text-slate-600">{page} / {totalPages}</span>
+							</p>
+							<div className="flex items-center gap-2">
+								<button
+									disabled={!canPrev}
+									onClick={() => handlePageChange(page - 1)}
+									className="h-10 px-5 rounded-2xl font-bold text-sm border border-slate-200 bg-white text-slate-600 hover:border-blue-400 hover:text-blue-600 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-2 shadow-sm"
+								>
+									<ChevronLeft className="h-4 w-4" />
+									Önceki
+								</button>
+								<button
+									disabled={!canNext}
+									onClick={() => handlePageChange(page + 1)}
+									className="h-10 px-5 rounded-2xl font-bold text-sm border border-slate-200 bg-white text-slate-600 hover:border-blue-400 hover:text-blue-600 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-2 shadow-sm"
+								>
+									Sonraki
+									<ChevronRight className="h-4 w-4" />
+								</button>
+							</div>
+						</div>
+					)}
+				</main>
+			</div>
 		</div>
 	);
 }

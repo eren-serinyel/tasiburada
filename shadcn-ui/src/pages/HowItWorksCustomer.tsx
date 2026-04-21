@@ -107,10 +107,10 @@ export default function HowItWorksCustomer() {
       {/* Müşteri sayfasında, giriş yapan kullanıcı nakliyeci ise CTA'lar gizlenir */}
       {user?.type !== 'carrier' && (
         <div className="mt-8 flex flex-wrap items-center gap-3">
-          <Link to="/create-shipment">
+          <Link to="/teklif-talebi">
             <Button className="bg-blue-600 hover:bg-blue-700">Hemen Talep Oluştur</Button>
           </Link>
-          <Link to="/ilanlar">
+          <Link to="/tekliflerim">
             <Button variant="outline">Taleplerimi Gör</Button>
           </Link>
         </div>

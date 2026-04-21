@@ -231,6 +231,41 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
   const canNextFrom1 = form.originCity && form.originDistrict && form.destinationCity && form.destinationDistrict && form.date && !isDateTooFar;
   const isCityFlow = form.scope === 'sehirici' || form.scope === 'sehirlerarasi';
   const canNextFrom2 = !!form.scope && !!form.transportType && (isCityFlow ? true : !!form.placeType);
+  const previewEstimate = useMemo(() => {
+    if (!(canNextFrom1 && canNextFrom2)) return null;
+
+    const base = form.scope === 'sehirlerarasi' ? 4000 : 1500;
+    const transportMultiplier: Record<string, number> = {
+      'evden-eve': 1.45,
+      'ofis-tasima': 1.65,
+      parca: 0.85,
+      depolama: 1.2,
+    };
+    const serviceGroup = SERVICE_GROUP_BY_TRANSPORT_TYPE[form.transportType] || '';
+    const selectedServices = serviceGroup ? (form.serviceOptions?.[serviceGroup] || []) : [];
+    const floorFee = Number(form.floor || 0) > 2 && !form.hasElevator ? 450 : 0;
+    const insuranceFee = form.insurance === 'premium' ? 700 : form.insurance === 'basic' ? 350 : 0;
+    const extrasFee = selectedServices.length * 250;
+    const midpoint = Math.round((base * (transportMultiplier[form.transportType] || 1)) + floorFee + insuranceFee + extrasFee);
+    const min = Math.max(750, Math.round(midpoint * 0.85));
+    const max = Math.round(midpoint * 1.25);
+    const format = (value: number) => new Intl.NumberFormat('tr-TR', { maximumFractionDigits: 0 }).format(value);
+
+    return {
+      range: `${format(min)} - ${format(max)} TL`,
+      carrierCount: availabilitySummary?.available,
+    };
+  }, [
+    availabilitySummary?.available,
+    canNextFrom1,
+    canNextFrom2,
+    form.floor,
+    form.hasElevator,
+    form.insurance,
+    form.scope,
+    form.serviceOptions,
+    form.transportType,
+  ]);
 
   const TEMPLATE_WEIGHTS: Record<string, number> = {
     '1+1 ev': 800,
@@ -929,6 +964,17 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
                 />
               </div>
 
+              {previewEstimate && (
+                <div style={{ marginBottom: '24px', padding: '16px', border: '1px solid #BFDBFE', borderRadius: '12px', background: '#EFF6FF' }}>
+                  <div style={{ fontSize: '13px', fontWeight: 600, color: '#1D4ED8', marginBottom: '6px' }}>Tahmini fiyat önizlemesi</div>
+                  <div style={{ fontSize: '22px', fontWeight: 700, color: '#0F172A' }}>{previewEstimate.range}</div>
+                  <p style={{ fontSize: '13px', color: '#475569', marginTop: '6px' }}>
+                    Bu aralık rota, yük tipi ve seçtiğiniz ek hizmetlere göre bilgilendirme amaçlıdır.
+                    {typeof previewEstimate.carrierCount === 'number' && ` Bu tarihte ${previewEstimate.carrierCount} aktif nakliyeci görünüyor.`}
+                  </p>
+                </div>
+              )}
+
               {/* Action bar */}
               <div className="flex justify-between items-center" style={{ paddingTop: '24px', borderTop: '1px solid #F1F5F9' }}>
                 <button
@@ -1231,7 +1277,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
               <p className="text-sm text-gray-600 mt-2">Teklif isteyebilmek ve nakliyecilerle iletişime geçebilmek için giriş yapın veya ücretsiz kayıt olun.</p>
               <div className="mt-6 flex justify-center gap-4">
                 <Button onClick={() => navigate('/giris')}>Giriş Yap</Button>
-                <Button variant="outline" onClick={() => navigate('/register')}>Üye Ol</Button>
+                <Button variant="outline" onClick={() => navigate('/musteri-kayit')}>Üye Ol</Button>
               </div>
             </motion.div>
           </motion.div>

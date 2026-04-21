@@ -1,6 +1,8 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Link } from 'react-router-dom';
 
 export default function Pricing() {
   return (
@@ -78,6 +80,14 @@ export default function Pricing() {
             </TableBody>
           </Table>
           <p className="text-xs text-gray-500 mt-4">Not: Bu rakamlar örnek amaçlıdır. En doğru fiyatı almak için talep oluşturun ve teklifleri karşılaştırın.</p>
+          <div className="mt-6 flex flex-wrap gap-3">
+            <Button asChild>
+              <Link to="/teklif-talebi">Talep oluştur</Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link to="/nakliyeciler">Nakliyecileri incele</Link>
+            </Button>
+          </div>
         </CardContent>
       </Card>
     </section>

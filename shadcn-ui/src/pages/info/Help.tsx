@@ -33,9 +33,9 @@ export default function Help() {
               <CardTitle className="text-lg">Yardım Merkezi</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              <button className="w-full justify-start gap-2 inline-flex items-center rounded-md border bg-gray-50 hover:bg-white px-3 py-2 text-sm">
+              <a href="mailto:support@tasiburada.com" className="w-full justify-start gap-2 inline-flex items-center rounded-md border bg-gray-50 hover:bg-white px-3 py-2 text-sm">
                 <MessageCircle className="h-4 w-4" /> Canlı Destek / Destek Formu
-              </button>
+              </a>
               <a href="mailto:support@tasiburada.com" className="w-full justify-start gap-2 inline-flex items-center rounded-md border bg-gray-50 hover:bg-white px-3 py-2 text-sm">
                 <Mail className="h-4 w-4" /> support@tasiburada.com
               </a>
@@ -76,15 +76,24 @@ export default function Help() {
               {/* Destek Talebi Formu */}
               <div className="mt-8">
                 <h3 className="text-base font-semibold text-blue-700 mb-3">Destek Talebi Oluştur</h3>
-                <form className="grid grid-cols-1 gap-4">
+                <form
+                  className="grid grid-cols-1 gap-4"
+                  onSubmit={(event) => {
+                    event.preventDefault();
+                    window.location.href = 'mailto:support@tasiburada.com?subject=Destek%20Talebi';
+                  }}
+                >
                   <input type="text" placeholder="Konu" className="w-full rounded-md border border-gray-200 bg-white/70 px-3 py-2 text-sm outline-none focus:border-blue-400" />
                   <textarea placeholder="Açıklama" rows={4} className="w-full rounded-md border border-gray-200 bg-white/70 px-3 py-2 text-sm outline-none focus:border-blue-400" />
                   <label className="inline-flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
                     <Paperclip className="h-4 w-4" /> Dosya ekle (opsiyonel)
                     <input type="file" className="hidden" />
                   </label>
+                  <p className="text-xs text-gray-500">
+                    Form bilgileri e-posta uygulamanızda destek ekibine iletilmek üzere açılır.
+                  </p>
                   <button type="submit" className="inline-flex items-center justify-center rounded-md bg-blue-600 text-white text-sm font-medium px-4 py-2 hover:bg-blue-700 transition">
-                    Talep Gönder
+                    E-posta ile Gönder
                   </button>
                 </form>
               </div>

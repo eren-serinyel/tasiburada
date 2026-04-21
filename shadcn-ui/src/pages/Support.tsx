@@ -171,7 +171,7 @@ export default function Support() {
             title: 'Nasıl Çalışır?',
             description: 'Platform kullanım rehberi',
             action: 'Rehberi İncele',
-            href: '/nasil-calisir',
+            href: '/nasil-calisir-musteri',
             color: 'text-purple-600',
             bg: 'bg-purple-50',
           },

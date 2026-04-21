@@ -1,4 +1,5 @@
 import { Button } from '@/components/ui/button';
+import { Link } from 'react-router-dom';
 
 export default function NotFoundPage() {
   return (
@@ -6,16 +7,19 @@ export default function NotFoundPage() {
       <div className="space-y-6 max-w-md">
         <div className="space-y-3">
           <h1 className="text-8xl font-bold text-blue-600">404</h1>
-          <h2 className="text-2xl font-semibold text-gray-800">Page Not Found</h2>
-          <p className="text-muted-foreground">The page you're looking for doesn't exist or may have been moved.</p>
+          <h2 className="text-2xl font-semibold text-gray-800">Sayfa bulunamadı</h2>
+          <p className="text-muted-foreground">Aradığınız sayfa taşınmış veya artık yayında olmayabilir.</p>
         </div>
 
         <div className="flex flex-col sm:flex-row gap-3 justify-center">
           <Button asChild>
-            <a href="/">Return Home</a>
+            <Link to="/">Ana sayfa</Link>
           </Button>
-          <Button variant="outline" onClick={() => window.history.back()}>
-            Go Back
+          <Button asChild variant="outline">
+            <Link to="/nakliyeciler">Nakliyecileri incele</Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link to="/fiyatlandirma">Fiyatlandırma</Link>
           </Button>
         </div>
       </div>

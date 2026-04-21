@@ -78,7 +78,7 @@ const CarrierCard = ({ carrier, onInspect }: CarrierCardProps) => {
 								</AvatarFallback>
 							</Avatar>
 							{isVerified && (
-								<div className="absolute -bottom-1 -right-1 bg-blue-500 rounded-full p-0.5 border-2 border-white" title="Onaylı Nakliyeci">
+								<div className="absolute -bottom-1 -right-1 bg-blue-500 rounded-full p-0.5 border-2 border-white" title="Profil ve evrak bilgileri kontrol edilmiş nakliyeci">
 									<ShieldCheck className="h-3 w-3 text-white" />
 								</div>
 							)}
@@ -149,14 +149,14 @@ const CarrierCard = ({ carrier, onInspect }: CarrierCardProps) => {
 						<p className="text-lg font-bold text-slate-900">{priceLabel}</p>
 					</div>
 					<div className="text-right">
-						<Badge variant="outline" className="border-blue-100 bg-blue-50 text-blue-700 font-medium">
+						<Badge variant="outline" className="border-blue-100 bg-blue-50 text-blue-700 font-medium" title="Deneyim bilgisi firma profilinden gelir">
 							{experienceText}
 						</Badge>
 					</div>
 				</div>
 
 				<Button className="w-full bg-slate-900 hover:bg-slate-800 text-white shadow-md group-hover:shadow-lg transition-all" onClick={handleInspect}>
-					İncele & Teklif Al
+					İncele
 					<ChevronRight className="h-4 w-4 ml-1 opacity-70 group-hover:translate-x-0.5 transition-transform" />
 				</Button>
 			</CardFooter>
