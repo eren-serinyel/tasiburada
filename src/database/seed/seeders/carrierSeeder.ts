@@ -93,7 +93,9 @@ export async function seedCarriers(
         tierProfile.vehicleCountRange[1],
       ),
     );
-    const selectedVehicleTypeNames = [
+    const selectedVehicleTypeNames = index === 0
+      ? allVehicleTypeNames
+      : [
       primaryVehicleTypeName,
       ...pickRandom(
         allVehicleTypeNames.filter((name) => name !== primaryVehicleTypeName),
@@ -115,10 +117,12 @@ export async function seedCarriers(
       ),
     );
     const serviceNames = pickRandom(serviceTypeNames, serviceCount);
-    const scopeSelection = pickRandom(scopeNames, scopeCount);
+    const scopeSelection = index === 0 ? scopeNames : pickRandom(scopeNames, scopeCount);
     const hasActivitySection = true;
     const hasEarningsSection = tierProfile.verifiedByAdmin;
-    const availableDates = generateAvailabilityDatesForTier(tierProfile);
+    const availableDates = index === 0
+      ? generateWideAvailabilityDates()
+      : generateAvailabilityDatesForTier(tierProfile);
     const completedShipments = randomInt(
       tierProfile.completedShipmentRange[0],
       tierProfile.completedShipmentRange[1],
@@ -368,11 +372,25 @@ function generateAvailabilityDatesForTier(tierProfile: CarrierTierProfile): stri
   while (selectedDates.size < desiredCount) {
     const date = new Date();
     date.setHours(12, 0, 0, 0);
-    date.setDate(date.getDate() - randomInt(0, 89));
+    date.setDate(date.getDate() + randomInt(0, 89));
     selectedDates.add(formatDateOnly(date));
   }
 
   return [...selectedDates].sort();
+}
+
+function generateWideAvailabilityDates(): string[] {
+  const dates: string[] = [];
+  const start = new Date();
+  start.setHours(12, 0, 0, 0);
+
+  for (let offset = 0; offset <= 120; offset += 1) {
+    const date = new Date(start);
+    date.setDate(start.getDate() + offset);
+    dates.push(formatDateOnly(date));
+  }
+
+  return dates;
 }
 
 function formatDateOnly(date: Date): string {

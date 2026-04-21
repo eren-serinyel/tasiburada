@@ -13,6 +13,8 @@ import { seedOffers } from './seeders/offerSeeder';
 import { seedCompletedFlow } from './seeders/completedFlowSeeder';
 import { seedNotifications } from './seeders/notificationSeeder';
 import { seedAuditLogs } from './seeders/auditLogSeeder';
+import { MatchingService } from '../../application/services/MatchingService';
+import { ShipmentRepository } from '../../infrastructure/repositories/ShipmentRepository';
 
 async function main() {
   console.log('🚀 TaşıBurada Seed Başlıyor...\n');
@@ -87,11 +89,22 @@ async function main() {
     console.log(`   Müşteri: ${customers.length}`);
     console.log(`   Taşıma: ${shipments.length}`);
     console.log(`   Teklif: ${offers.length}`);
+    const matchingService = new MatchingService();
+    const shipmentRepository = new ShipmentRepository();
+    const eliteCarrier = carriers.find(carrier => carrier.email === 'info@silenakliyat.com');
+    if (eliteCarrier) {
+      const carrierForMatching = await matchingService.getCarrierForMatching(eliteCarrier.id);
+      const candidates = await shipmentRepository.findPendingShipmentsForCarrier(eliteCarrier.id);
+      const matchingCount = candidates.filter(shipment =>
+        matchingService.isShipmentMatchingCarrier(shipment, carrierForMatching)
+      ).length;
+      console.log(`   Elite matching pending: ${matchingCount}`);
+    }
     console.log('');
     console.log('🔑 Giriş bilgileri:');
-    console.log('   Admin:     superadmin@tasiburada.com / Maviface2141');
-    console.log('   Nakliyeci: info@silenakliyat.com / Maviface2141');
-    console.log('   Müşteri:   ahmet.yilmaz0@gmail.com / Maviface2141');
+    console.log('   Admin:     superadmin@tasiburada.com / [seed şifresi]');
+    console.log('   Nakliyeci: info@silenakliyat.com / [seed şifresi]');
+    console.log('   Müşteri:   ahmet.yilmaz0@gmail.com / [seed şifresi]');
 
   } catch (error) {
     console.error('\n❌ Seed hatası:', error);

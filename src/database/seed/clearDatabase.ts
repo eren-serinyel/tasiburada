@@ -34,6 +34,10 @@ export async function clearDatabase(): Promise<void> {
       'carrier_notification_preferences',
       'carrier_stats',
       'vehicles',
+      'shipment_extra_services',
+      'extra_services',
+      'contact_filter_logs',
+      'match_cooldowns',
       'shipments',
       'admins',
       'customers',
@@ -54,7 +58,7 @@ export async function clearDatabase(): Promise<void> {
         if (err.message?.includes('ER_NO_SUCH_TABLE') || err.errno === 1146) {
           console.warn(`  ⚠ ${table} atlandı (tablo yok)`);
         } else {
-          console.warn(`  ⚠ ${table} atlandı: ${err.message}`);
+          throw new Error(`clearDatabase: ${table} temizlenemedi — ${err.message}`);
         }
       }
     }

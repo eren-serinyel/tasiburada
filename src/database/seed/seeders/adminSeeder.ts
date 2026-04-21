@@ -24,6 +24,8 @@ export async function seedAdmins(): Promise<Admin[]> {
 
   const created: Admin[] = [];
   for (const a of admins) {
+    const existing = await repo.findOne({ where: { email: a.email } });
+    if (existing) { created.push(existing); continue; }
     const admin = repo.create({
       email: a.email,
       passwordHash: await hashPassword(a.password),
