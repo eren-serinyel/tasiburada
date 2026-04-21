@@ -1,0 +1,267 @@
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
+import {
+  BadgeCheck,
+  Bookmark,
+  CheckCircle2,
+  Clock3,
+  Eye,
+  PackageCheck,
+  ShieldCheck,
+  Star,
+  Truck,
+  XCircle,
+} from 'lucide-react';
+
+export interface CustomerOfferCarrier {
+  id: string;
+  displayName?: string | null;
+  companyName?: string | null;
+  contactName?: string | null;
+  rating?: number;
+  ratingCount?: number;
+  completedShipments?: number;
+  isVerified?: boolean;
+  verifiedByAdmin?: boolean;
+  hasInsurance?: boolean;
+  pictureUrl?: string | null;
+  vehicleType?: string | null;
+  vehicleBrand?: string | null;
+  vehicleModel?: string | null;
+  vehicleCapacityKg?: number | null;
+  vehicleCapacityM3?: number | null;
+  averageResponseTimeMin?: number | null;
+  localnessLabel?: string | null;
+  latestReview?: { comment: string; rating: number } | null;
+  latestPositiveReview?: { comment: string; rating: number } | null;
+  activityCity?: string | null;
+}
+
+export interface CustomerOfferShipment {
+  id: string;
+  origin?: string;
+  destination?: string;
+  loadDetails?: string;
+  weight?: number;
+  shipmentDate?: string;
+  status?: string;
+}
+
+export interface CustomerOffer {
+  id: string;
+  shipmentId: string;
+  carrierId: string;
+  carrier?: CustomerOfferCarrier | null;
+  shipment?: CustomerOfferShipment;
+  price: number;
+  currency?: 'TRY' | string;
+  message?: string;
+  estimatedDuration?: number;
+  status: 'pending' | 'accepted' | 'rejected' | 'withdrawn' | 'cancelled';
+  offeredAt: string;
+  isLowestPrice?: boolean;
+  isHighestRating?: boolean;
+  isRecommended?: boolean;
+}
+
+interface CustomerOfferCardProps {
+  offer: CustomerOffer;
+  bookmarked?: boolean;
+  disabled?: boolean;
+  compact?: boolean;
+  onAccept?: (offer: CustomerOffer) => void;
+  onReject?: (offer: CustomerOffer) => void;
+  onDetails?: (offer: CustomerOffer) => void;
+  onBookmark?: (offer: CustomerOffer) => void;
+}
+
+const fmtPrice = (n: number) =>
+  new Intl.NumberFormat('tr-TR', { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(n);
+
+const initials = (name?: string | null): string =>
+  (name || 'N')
+    .split(' ')
+    .filter(Boolean)
+    .map(part => part[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 2) || 'N';
+
+const responseLabel = (minutes?: number | null): string => {
+  if (!minutes) return 'Yeni tasiyici';
+  if (minutes < 60) return `${minutes} dk yanit`;
+  return `${Math.round(minutes / 60)} saat yanit`;
+};
+
+const durationLabel = (hours?: number): string => {
+  if (!hours) return 'Sure belirtilmedi';
+  if (hours < 24) return `${hours} saat`;
+  const days = Math.ceil(hours / 24);
+  return `${days} gun`;
+};
+
+const statusLabel: Record<string, string> = {
+  pending: 'Yeni',
+  accepted: 'Kabul Edildi',
+  rejected: 'Reddedildi',
+  withdrawn: 'Geri Cekildi',
+  cancelled: 'Iptal',
+};
+
+export function CustomerOfferCard({
+  offer,
+  bookmarked = false,
+  disabled = false,
+  compact = false,
+  onAccept,
+  onReject,
+  onDetails,
+  onBookmark,
+}: CustomerOfferCardProps) {
+  const carrier = offer.carrier;
+  const carrierName = carrier?.displayName || carrier?.companyName || carrier?.contactName || 'Nakliyeci';
+  const rating = Number(carrier?.rating || 0);
+  const review = carrier?.latestPositiveReview || carrier?.latestReview;
+  const vehicleTitle = [carrier?.vehicleBrand, carrier?.vehicleModel].filter(Boolean).join(' ') || carrier?.vehicleType || 'Arac belirtilmedi';
+  const capacityText = carrier?.vehicleCapacityKg
+    ? `${Math.round(Number(carrier.vehicleCapacityKg) / 100) / 10} ton`
+    : carrier?.vehicleCapacityM3
+      ? `${carrier.vehicleCapacityM3} m3`
+      : 'Kapasite yok';
+
+  return (
+    <article
+      className={cn(
+        'relative rounded-lg border bg-white p-4 shadow-sm transition hover:border-slate-300 hover:shadow-md',
+        offer.isRecommended && offer.status === 'pending' ? 'border-blue-300 ring-1 ring-blue-100' : 'border-slate-200',
+        offer.status !== 'pending' && 'opacity-80'
+      )}
+    >
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
+          {carrier?.pictureUrl ? (
+            <img src={carrier.pictureUrl} alt="" className="h-11 w-11 shrink-0 rounded-lg object-cover" />
+          ) : (
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-slate-900 text-sm font-semibold text-white">
+              {initials(carrierName)}
+            </div>
+          )}
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5">
+              <h3 className="truncate text-sm font-semibold text-slate-950">{carrierName}</h3>
+              {carrier?.isVerified && <BadgeCheck className="h-4 w-4 shrink-0 text-blue-600" />}
+            </div>
+            <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-500">
+              <span className="inline-flex items-center gap-1">
+                <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
+                {rating > 0 ? rating.toFixed(1) : 'Yeni'}
+                {carrier?.ratingCount ? ` (${carrier.ratingCount})` : ''}
+              </span>
+              <span>{carrier?.completedShipments ?? 0} is</span>
+              {carrier?.localnessLabel && <span>{carrier.localnessLabel}</span>}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex shrink-0 items-center gap-1.5">
+          {onBookmark && (
+            <button
+              type="button"
+              onClick={() => onBookmark(offer)}
+              className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+              aria-label={bookmarked ? 'Kaydedildi' : 'Kaydet'}
+            >
+              <Bookmark className={cn('h-4 w-4', bookmarked && 'fill-blue-600 text-blue-600')} />
+            </button>
+          )}
+          <Badge variant={offer.status === 'pending' ? 'secondary' : 'outline'} className="text-[11px]">
+            {statusLabel[offer.status] || offer.status}
+          </Badge>
+        </div>
+      </div>
+
+      <div className="mb-3 flex flex-wrap gap-1.5">
+        {offer.isRecommended && offer.status === 'pending' && (
+          <Badge className="bg-blue-50 text-blue-700 hover:bg-blue-50">Onerilen</Badge>
+        )}
+        {offer.isLowestPrice && offer.status === 'pending' && (
+          <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700">En uygun</Badge>
+        )}
+        {offer.isHighestRating && offer.status === 'pending' && (
+          <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700">En yuksek puan</Badge>
+        )}
+        {carrier?.isVerified && (
+          <Badge variant="outline" className="gap-1"><ShieldCheck className="h-3 w-3" /> Onayli</Badge>
+        )}
+        {carrier?.hasInsurance && (
+          <Badge variant="outline" className="gap-1"><PackageCheck className="h-3 w-3" /> Sigortali</Badge>
+        )}
+      </div>
+
+      <div className={cn('grid gap-2', compact ? 'grid-cols-1' : 'grid-cols-2')}>
+        <div className="rounded-lg bg-slate-50 p-3">
+          <p className="text-xs text-slate-500">Teklif</p>
+          <p className="mt-1 text-2xl font-bold text-slate-950">₺{fmtPrice(Number(offer.price))}</p>
+        </div>
+        <div className="rounded-lg bg-slate-50 p-3">
+          <p className="text-xs text-slate-500">Arac</p>
+          <p className="mt-1 truncate text-sm font-semibold text-slate-900">{vehicleTitle}</p>
+          <p className="text-xs text-slate-500">{capacityText}</p>
+        </div>
+      </div>
+
+      {offer.message && (
+        <p className="mt-3 line-clamp-2 rounded-md border-l-2 border-slate-200 pl-3 text-sm leading-6 text-slate-600">
+          {offer.message}
+        </p>
+      )}
+
+      <div className="mt-3 grid gap-2 text-xs text-slate-500 sm:grid-cols-2">
+        <span className="inline-flex items-center gap-1.5">
+          <Clock3 className="h-3.5 w-3.5" />
+          Teslim: {durationLabel(offer.estimatedDuration)}
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <Truck className="h-3.5 w-3.5" />
+          {responseLabel(carrier?.averageResponseTimeMin)}
+        </span>
+      </div>
+
+      {review?.comment && (
+        <div className="mt-3 rounded-lg border border-slate-100 bg-slate-50 p-3">
+          <div className="mb-1 flex items-center gap-1 text-amber-500">
+            {Array.from({ length: Math.max(1, Math.min(5, review.rating)) }).map((_, index) => (
+              <Star key={index} className="h-3 w-3 fill-current" />
+            ))}
+          </div>
+          <p className="line-clamp-2 text-xs leading-5 text-slate-600">"{review.comment}"</p>
+        </div>
+      )}
+
+      <div className="mt-4 flex gap-2">
+        <Button variant="outline" className="flex-1" onClick={() => onDetails?.(offer)}>
+          <Eye className="mr-1.5 h-4 w-4" />
+          Detay
+        </Button>
+        {offer.status === 'pending' ? (
+          <>
+            <Button
+              variant="outline"
+              className="flex-1 border-red-200 text-red-600 hover:bg-red-50"
+              disabled={disabled}
+              onClick={() => onReject?.(offer)}
+            >
+              <XCircle className="mr-1.5 h-4 w-4" />
+              Reddet
+            </Button>
+            <Button className="flex-1 bg-blue-600 text-white hover:bg-blue-700" disabled={disabled} onClick={() => onAccept?.(offer)}>
+              <CheckCircle2 className="mr-1.5 h-4 w-4" />
+              Kabul
+            </Button>
+          </>
+        ) : null}
+      </div>
+    </article>
+  );
+}
