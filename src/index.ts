@@ -17,6 +17,11 @@ import { authenticateToken } from './presentation/middleware/auth';
 // .env dosyasını yükle
 config();
 
+if (!process.env.JWT_SECRET) {
+  console.error('FATAL: JWT_SECRET environment variable is not set. Exiting.');
+  process.exit(1);
+}
+
 const app = express();
 const DEFAULT_PORT = 3001;
 

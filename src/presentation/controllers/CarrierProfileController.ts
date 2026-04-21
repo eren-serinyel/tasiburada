@@ -10,6 +10,7 @@ import { CarrierProfileQueryService } from '../../application/services/carrier/C
 import { CarrierServiceTypeService } from '../../application/services/carrier/CarrierServiceTypeService';
 import { CarrierProfileStatusService } from '../../application/services/carrier/CarrierProfileStatusService';
 import { CarrierScopeOfWorkService } from '../../application/services/carrier/CarrierScopeOfWorkService';
+import { CarrierRepository } from '../../infrastructure/repositories/CarrierRepository';
 
 export class CarrierProfileController {
   private companyInfoService = new CarrierCompanyInfoService();
@@ -23,6 +24,7 @@ export class CarrierProfileController {
   private notificationService = new NotificationPreferenceService();
   private profileQueryService = new CarrierProfileQueryService();
   private profileStatusService = new CarrierProfileStatusService();
+  private carrierRepository = new CarrierRepository();
 
   private ensureCarrier(req: Request, res: Response): string | null {
     if (!req.carrierId) {
@@ -43,10 +45,16 @@ export class CarrierProfileController {
     const carrierId = this.ensureCarrier(req, res);
     if (!carrierId) return;
     try {
+      console.log('Getting profile status for carrierId:', carrierId);
       const summary = await this.profileQueryService.getProfileStatus(carrierId);
       res.status(200).json({ success: true, data: summary });
     } catch (error: any) {
-      res.status(400).json({ success: false, message: error.message || 'Profil durumu alınamadı.' });
+      console.error('Profile status error:', error);
+      res.status(500).json({ 
+        success: false, 
+        message: 'Profil durumu alınamadı: ' + error.message,
+        error: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      });
     }
   };
 
@@ -54,11 +62,17 @@ export class CarrierProfileController {
     const carrierId = this.ensureCarrier(req, res);
     if (!carrierId) return;
     try {
+      console.log('Refreshing profile status for carrierId:', carrierId);
       await this.profileStatusService.updateProfileCompletion(carrierId);
       const summary = await this.profileQueryService.getProfileStatus(carrierId);
       res.status(200).json({ success: true, data: summary });
     } catch (error: any) {
-      res.status(400).json({ success: false, message: error.message || 'Profil durumu güncellenemedi.' });
+      console.error('Profile status refresh error:', error);
+      res.status(500).json({ 
+        success: false, 
+        message: 'Profil durumu güncellenemedi: ' + error.message,
+        error: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      });
     }
   };
 
@@ -142,7 +156,7 @@ export class CarrierProfileController {
     try {
       const pictureUrl = `/uploads/pictures/${req.file.filename}`;
       const updatedCarrier = await this.companyInfoService.updateProfilePicture(carrierId, pictureUrl ?? null);
-      res.status(200).json({ success: true, pictureUrl: updatedCarrier?.pictureUrl ?? null });
+      res.status(200).json({ success: true, data: { pictureUrl: updatedCarrier?.pictureUrl ?? null } });
     } catch (error: any) {
       res.status(400).json({ success: false, message: error.message || 'Profil fotoğrafı güncellenemedi.' });
     }
@@ -368,4 +382,30 @@ export class CarrierProfileController {
     if (!entries.length) return undefined;
     return Object.fromEntries(entries);
   }
+
+  submitForApproval = async (req: Request, res: Response) => {
+    const carrierId = this.ensureCarrier(req, res);
+    if (!carrierId) return;
+    try {
+      const status = await this.profileStatusService.updateProfileCompletion(carrierId);
+      if (status.overallPercentage < 100) {
+        res.status(400).json({ success: false, message: 'Tüm profil bölümlerini tamamlamanız gerekiyor.' });
+        return;
+      }
+      const carrier = await this.carrierRepository.findFullById(carrierId);
+      if (!carrier) {
+        res.status(404).json({ success: false, message: 'Nakliyeci bulunamadı.' });
+        return;
+      }
+      if (carrier.verifiedByAdmin) {
+        res.status(400).json({ success: false, message: 'Profiliniz zaten onaylı.' });
+        return;
+      }
+      carrier.pendingApproval = true;
+      await this.carrierRepository['repository'].save(carrier);
+      res.status(200).json({ success: true, message: 'Profiliniz incelemeye alındı.', data: { pendingApproval: true } });
+    } catch (error: any) {
+      res.status(500).json({ success: false, message: 'Onay talebi gönderilemedi: ' + error.message });
+    }
+  };
 }

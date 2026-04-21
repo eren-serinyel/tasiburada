@@ -26,3 +26,5 @@ export { Review } from './Review';
 export { Notification } from './Notification';
 export { Admin } from './Admin';
 export { AuditLog } from './AuditLog';
+export { ContactFilterLog, ContactFilterAction, ContactFilterSurface } from './ContactFilterLog';
+export { MatchCooldown, MatchCooldownStatus } from './MatchCooldown';

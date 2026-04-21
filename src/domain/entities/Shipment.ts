@@ -205,6 +205,9 @@ export class Shipment {
     @Column({ name: 'cancellation_reason', type: 'varchar', length: 255, nullable: true })
     cancellationReason: string | null;
 
+    @Column({ name: 'matched_at', type: 'datetime', nullable: true })
+    matchedAt: Date | null;
+
     @ManyToMany(() => ExtraService)
     @JoinTable({
         name: 'shipment_extra_services',
@@ -225,5 +228,13 @@ export class Shipment {
 
     get destination(): string {
         return this.destinationDistrict ? `${this.destinationCity}, ${this.destinationDistrict}` : (this.destinationCity || '');
+    }
+
+    toJSON() {
+        return {
+            ...this,
+            origin: this.origin,
+            destination: this.destination,
+        };
     }
 }

@@ -46,7 +46,27 @@ export class CarrierProfileStatusService {
   async getOrCreate(carrierId: string): Promise<CarrierProfileStatus> {
     const existing = await this.repository.findByCarrierId(carrierId);
     if (existing) return existing;
-    return this.createInitialStatus(carrierId);
+    try {
+      return await this.createInitialStatus(carrierId);
+    } catch (err: any) {
+      // FK constraint or insert error — return in-memory default without saving
+      console.error('createInitialStatus failed (FK constraint?):', err.message);
+      return this.buildDefaultStatus(carrierId);
+    }
+  }
+
+  private buildDefaultStatus(carrierId: string): CarrierProfileStatus {
+    const s = new CarrierProfileStatus();
+    s.carrierId = carrierId;
+    s.companyInfoCompleted = false;
+    s.activityInfoCompleted = false;
+    s.documentsCompleted = false;
+    s.earningsCompleted = false;
+    s.vehiclesCompleted = false;
+    s.securityCompleted = false;
+    s.notificationsCompleted = false;
+    s.overallPercentage = 0;
+    return s;
   }
 
   async createInitialStatus(carrierId: string): Promise<CarrierProfileStatus> {
@@ -71,33 +91,50 @@ export class CarrierProfileStatusService {
   async updateProfileCompletion(carrierId: string): Promise<CarrierProfileStatus> {
     const status = await this.getOrCreate(carrierId);
 
-    const [carrier, activity, earnings, requiredDocStatus] = await Promise.all([
-      this.carrierRepository.findById(carrierId, { relations: [] } as any),
-      this.activityRepository.findByCarrierId(carrierId),
-      this.earningsRepository.findByCarrierId(carrierId),
-      this.documentRepository.findRequiredDocumentTypesStatus(carrierId, this.REQUIRED_DOCUMENT_TYPES)
-    ]);
+    try {
+      console.log('Getting profile data for carrierId:', carrierId);
+      
+      const [carrier, activity, earnings, requiredDocStatus] = await Promise.all([
+        this.carrierRepository.findFullById(carrierId).catch(err => {
+          console.error('Carrier repository error:', err);
+          throw new Error(`Nakliyeci bilgileri alınamadı: ${err.message}`);
+        }),
+        this.activityRepository.findByCarrierId(carrierId).catch(err => {
+          console.error('Activity repository error:', err);
+          return null; // Activity yoksa null dön
+        }),
+        this.earningsRepository.findByCarrierId(carrierId).catch(err => {
+          console.error('Earnings repository error:', err);
+          return null; // Earnings yoksa null dön
+        }),
+        this.documentRepository.findRequiredDocumentTypesStatus(carrierId, this.REQUIRED_DOCUMENT_TYPES).catch(err => {
+          console.error('Documents repository error:', err);
+          return {}; // Belgeler yoksa boş obje dön
+        })
+      ]);
 
-    if (!carrier) {
-      throw new Error('Nakliyeci bulunamadı.');
-    }
+      if (!carrier) {
+        throw new Error('Nakliyeci bulunamadı.');
+      }
 
-    // 1) Firma Bilgileri tamam → companyName, taxNumber, foundedYear doluysa
-    const companyInfoCompleted =
-      this.hasText(carrier.companyName) &&
-      this.hasText(carrier.taxNumber) &&
-      Number.isFinite(Number(carrier.foundedYear)) &&
-      Number(carrier.foundedYear) > 0;
+      console.log('Profile data loaded successfully');
 
-    // 2) Faaliyet Bilgileri tamam → activityCity, activityDistrict, serviceAreas doluysa
-    const serviceAreas = this.parseStringArray((activity as any)?.serviceAreasJson);
-    const activityInfoCompleted =
-      this.hasText(activity?.city) &&
-      this.hasText(activity?.district) &&
-      serviceAreas.length > 0;
+      // 1) Firma Bilgileri tamam → companyName, taxNumber, foundedYear doluysa
+      const companyInfoCompleted =
+        this.hasText(carrier.companyName) &&
+        this.hasText(carrier.taxNumber) &&
+        Number.isFinite(Number(carrier.foundedYear)) &&
+        Number(carrier.foundedYear) > 0;
 
-    // 3) Belgeler tamam → zorunlu belgeler (K1/K2, SRC, Ruhsat, Vergi Levhası) yüklenmişse
-    const documentsCompleted = this.REQUIRED_DOCUMENT_TYPES.every(type => requiredDocStatus[type] === true);
+      // 2) Faaliyet Bilgileri tamam → activityCity, activityDistrict, serviceAreas doluysa
+      const serviceAreas = this.parseStringArray((activity as any)?.serviceAreasJson);
+      const activityInfoCompleted =
+        this.hasText(activity?.city) &&
+        this.hasText(activity?.district) &&
+        serviceAreas.length > 0;
+
+      // 3) Belgeler tamam → zorunlu belgeler (K1/K2, SRC, Ruhsat, Vergi Levhası) yüklenmişse
+      const documentsCompleted = this.REQUIRED_DOCUMENT_TYPES.every(type => requiredDocStatus[type] === true);
 
     // 4) Kazanç Bilgileri tamam → bankName, iban doluysa
     const earningsCompleted = this.hasText((earnings as any)?.bankName) && this.hasText((earnings as any)?.iban);
@@ -109,9 +146,18 @@ export class CarrierProfileStatusService {
 
     status.overallPercentage = this.calculatePercentage(status);
 
-    await this.repository.save(status);
+    try {
+      await this.repository.save(status);
+    } catch (saveErr: any) {
+      // FK constraint or save error — return in-memory status without persisting
+      console.error('Profile status save failed (FK constraint?):', saveErr.message);
+    }
 
     return status;
+    } catch (error: any) {
+      console.error('Profile completion update failed:', error);
+      throw new Error(`Profil tamamlanma durumu güncellenemedi: ${error.message}`);
+    }
   }
 
   async updateSectionCompleted(carrierId: string, section: CoreCarrierProfileSection, completed: boolean = true): Promise<CarrierProfileStatus> {

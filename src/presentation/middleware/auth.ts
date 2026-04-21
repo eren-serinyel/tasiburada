@@ -88,7 +88,6 @@ export const authenticateCarrier = (req: Request, res: Response, next: NextFunct
   });
 };
 
-export const authCarrier = authenticateCarrier;
 
 export const authenticateAdmin = (req: Request, res: Response, next: NextFunction): void => {
   const authHeader = req.headers['authorization'];

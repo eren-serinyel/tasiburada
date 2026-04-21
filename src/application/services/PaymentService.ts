@@ -1,6 +1,7 @@
 import { AppDataSource } from '../../infrastructure/database/data-source';
 import { Payment, PaymentStatus, PaymentMethod } from '../../domain/entities/Payment';
 import { Shipment } from '../../domain/entities/Shipment';
+import { NotFoundError, ConflictError } from '../../domain/errors/AppError';
 
 export class PaymentService {
   private paymentRepo = AppDataSource.getRepository(Payment);
@@ -19,7 +20,7 @@ export class PaymentService {
       });
 
       if (!shipment) {
-        throw new Error('Taşıma bulunamadı');
+        throw new NotFoundError('Taşıma bulunamadı.');
       }
 
       const existingPayment = await transactionalEntityManager.findOne(Payment, {
@@ -27,7 +28,7 @@ export class PaymentService {
       });
 
       if (existingPayment) {
-        throw new Error('Bu taşıma için zaten ödeme yapılmış.');
+        throw new ConflictError('Bu taşıma için zaten ödeme yapılmış.');
       }
 
       const payment = transactionalEntityManager.create(Payment, {

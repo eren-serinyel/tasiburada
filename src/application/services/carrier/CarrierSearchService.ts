@@ -128,6 +128,23 @@ export class CarrierSearchService {
 		);
 		const offset = Math.max(toInt((query as any).offset) ?? 0, 0);
 
+		const parseScopeIds = (value: unknown): string[] | undefined => {
+			if (typeof value === 'string' && value.trim()) {
+				return value.split(',').map(s => s.trim()).filter(Boolean);
+			}
+			if (Array.isArray(value)) {
+				return (value as string[]).map(s => String(s).trim()).filter(Boolean);
+			}
+			return undefined;
+		};
+
+		const scopeIds = parseScopeIds((query as any).scopes ?? (query as any).scopeIds);
+
+		const isVerifiedRaw = (query as any).isVerified;
+		const isVerified = isVerifiedRaw === true || isVerifiedRaw === '1' || isVerifiedRaw === 'true'
+			? true
+			: undefined;
+
 		return {
 			city: baseCity,
 			serviceCity,
@@ -140,8 +157,11 @@ export class CarrierSearchService {
 			minExperienceYears: toInt((query as any).minExperienceYears),
 			minProfileCompletion: toInt((query as any).minProfileCompletion),
 			minCapacityKg: toInt((query as any).minCapacityKg),
+			maxCapacityKg: toInt((query as any).maxCapacityKg),
 			searchText: toText((query as any).searchText),
 			availableDate: toText((query as any).availableDate),
+			scopeIds,
+			isVerified,
 			sortBy: this.parseSort((query as any).sortBy),
 			limit,
 			offset

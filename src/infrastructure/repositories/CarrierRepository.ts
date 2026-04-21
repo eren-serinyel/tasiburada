@@ -16,6 +16,7 @@ export interface CarrierSearchFilters {
   minExperienceYears?: number;
   minProfileCompletion?: number;
   minCapacityKg?: number;
+  maxCapacityKg?: number;
   searchText?: string;
   availableDate?: string;
   scopeIds?: string[];
@@ -287,6 +288,25 @@ export class CarrierRepository extends BaseRepository<Carrier> {
         "(activity.availableDates IS NOT NULL AND JSON_SEARCH(activity.availableDates, 'one', :availDate) IS NOT NULL)",
         { availDate: filters.availableDate }
       );
+    }
+
+    if (filters.isVerified) {
+      qb.andWhere('carrier.verifiedByAdmin = :verified', { verified: true });
+    }
+
+    if (filters.maxCapacityKg !== undefined) {
+      qb.andWhere(
+        `(
+          (vehicleLink.capacityKg IS NOT NULL AND vehicleLink.capacityKg <= :maxCapacityKg)
+          OR (vehicleLink.capacityKg IS NULL AND vehicleType.defaultCapacityKg <= :maxCapacityKg)
+        )`,
+        { maxCapacityKg: filters.maxCapacityKg }
+      );
+    }
+
+    if (filters.scopeIds && filters.scopeIds.length > 0) {
+      qb.leftJoin('carrier.scopeLinks', 'scopeLink')
+        .andWhere('scopeLink.scopeId IN (:...scopeIds)', { scopeIds: filters.scopeIds });
     }
 
     if (filters.sortBy === 'experience') {

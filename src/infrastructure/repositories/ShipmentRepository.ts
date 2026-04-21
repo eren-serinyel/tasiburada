@@ -3,6 +3,17 @@ import { BaseRepository } from './BaseRepository';
 import { Shipment } from '../../domain/entities/Shipment';
 import { ShipmentStatus } from '../../domain/entities/Shipment';
 
+const TURKEY_TIME_ZONE = 'Europe/Istanbul';
+
+function formatTodayForShipmentDate(): string {
+  return new Intl.DateTimeFormat('sv-SE', {
+    timeZone: TURKEY_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+}
+
 export class ShipmentRepository extends BaseRepository<Shipment> {
   constructor() {
     super(Shipment);
@@ -26,8 +37,7 @@ export class ShipmentRepository extends BaseRepository<Shipment> {
 
   async findPendingShipments(): Promise<Shipment[]> {
     // 1-H: Geçmiş tarihli ilanları gizle
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    const today = formatTodayForShipmentDate();
 
     return await this.repository
       .createQueryBuilder('shipment')
@@ -41,10 +51,28 @@ export class ShipmentRepository extends BaseRepository<Shipment> {
         {
           pending: ShipmentStatus.PENDING,
           offerReceived: ShipmentStatus.OFFER_RECEIVED,
-          today: today.toISOString().split('T')[0],
+          today,
         }
       )
       .orderBy('shipment.createdAt', 'DESC')
+      .getMany();
+  }
+
+  async findPendingShipmentsForCarrier(carrierId: string): Promise<Shipment[]> {
+    const today = formatTodayForShipmentDate();
+
+    return await this.repository
+      .createQueryBuilder('shipment')
+      .leftJoinAndSelect('shipment.customer', 'customer')
+      .leftJoinAndSelect('shipment.extraServices', 'extraServices')
+      .leftJoin('carriers', 'matchingCarrier', 'matchingCarrier.id = :carrierId', { carrierId })
+      .leftJoin('carrier_stats', 'carrierStats', 'carrierStats.carrierId = matchingCarrier.id')
+      .where('shipment.status = :pending', { pending: ShipmentStatus.PENDING })
+      .andWhere('shipment.shipmentDate >= :today', { today })
+      .orderBy('carrierStats.averageRating', 'DESC')
+      .addOrderBy('carrierStats.totalJobs', 'DESC')
+      .addOrderBy('matchingCarrier.createdAt', 'ASC')
+      .addOrderBy('shipment.createdAt', 'DESC')
       .getMany();
   }
 

@@ -6,11 +6,10 @@ const SAFE_CARRIER_SELECT = [
   'carrier.id',
   'carrier.companyName',
   'carrier.contactName',
-  'carrier.phone',
-  'carrier.email',
   'carrier.pictureUrl',
   'carrier.rating',
   'carrier.completedShipments',
+  'carrier.totalOffers',
 
   'carrier.isActive',
   'carrier.verifiedByAdmin',

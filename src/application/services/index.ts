@@ -11,5 +11,6 @@ export { CarrierEarningsService } from './carrier/CarrierEarningsService';
 export { CarrierSecurityService } from './carrier/CarrierSecurityService';
 export { NotificationPreferenceService } from './carrier/NotificationPreferenceService';
 export { NotificationService } from './NotificationService';
+export { AiService } from './AiService';
 export { CarrierProfileStatusService } from './carrier/CarrierProfileStatusService';
 export { CarrierProfileQueryService } from './carrier/CarrierProfileQueryService';

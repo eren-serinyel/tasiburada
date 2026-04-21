@@ -10,11 +10,13 @@ import { AppDataSource } from '../../infrastructure/database/data-source';
 import { CarrierEarningsLog } from '../../domain/entities/CarrierEarningsLog';
 import { PlatformSetting } from '../../domain/entities/PlatformSetting';
 import { CustomerCarrierRelationRepository } from '../../infrastructure/repositories/CustomerCarrierRelationRepository';
-import { containsContactInfo } from '../../utils/security';
 import { ScopeOfWorkRepository } from '../../infrastructure/repositories/ScopeOfWorkRepository';
 import { ServiceTypeRepository } from '../../infrastructure/repositories/ServiceTypeRepository';
 import { CustomerPreference } from '../../domain/entities/CustomerPreference';
 import { CustomerAddress } from '../../domain/entities/CustomerAddress';
+import { PlatformPolicyService } from './PlatformPolicyService';
+import { ContactFilterSurface } from '../../domain/entities';
+import { MatchingService } from './MatchingService';
 
 interface CreateShipmentPayload {
   origin: string;
@@ -122,6 +124,8 @@ export class ShipmentService {
   private earningsLogRepo = AppDataSource.getRepository(CarrierEarningsLog);
   private scopeOfWorkRepository = new ScopeOfWorkRepository();
   private serviceTypeRepository = new ServiceTypeRepository();
+  private platformPolicy = new PlatformPolicyService();
+  private matchingService = new MatchingService();
 
   private ensureStatusTransition(current: ShipmentStatus, next: ShipmentStatus): void {
     const validTransitions: Record<ShipmentStatus, ShipmentStatus[]> = {
@@ -235,6 +239,22 @@ export class ShipmentService {
     return shipment;
   }
 
+  private maskCarrierDirectContact(carrier: any): void {
+    if (!carrier) return;
+    delete carrier.phone;
+    delete carrier.email;
+  }
+
+  private maskOfferCarriers(shipment: any): void {
+    if (!Array.isArray(shipment?.offers)) return;
+    shipment.offers = shipment.offers.map((offer: any) => {
+      if (offer?.carrier) {
+        this.maskCarrierDirectContact(offer.carrier);
+      }
+      return offer;
+    });
+  }
+
   private async setShipmentExtraServices(shipmentId: string, extraServices?: string[]): Promise<void> {
     const normalizedNames = this.normalizeExtraServiceNames(extraServices);
     const repo = AppDataSource.getRepository(ExtraService);
@@ -281,13 +301,16 @@ export class ShipmentService {
       .addAndRemove(targetIds.filter(id => !currentIds.includes(id)), currentIds.filter(id => !targetIds.includes(id)));
   }
 
-  async getPendingShipmentsForCarrier(_carrierId: string): Promise<PendingShipmentListItem[]> {
-    // TODO: Filter by carrier activity/service areas.
-    const shipments = await this.shipmentRepository.findPendingShipments();
+  async getPendingShipmentsForCarrier(carrierId: string): Promise<PendingShipmentListItem[]> {
+    const carrier = await this.matchingService.getCarrierForMatching(carrierId);
+    const shipments = await this.shipmentRepository.findPendingShipmentsForCarrier(carrierId);
+    const matchingShipments = shipments.filter(shipment =>
+      this.matchingService.isShipmentMatchingCarrier(shipment, carrier)
+    );
 
     // ANTI-DISINTERMEDIATION: contactPhone ve müşteri PII maskeleme
     // Bekleyen talepleri listelerken carrier iletişim bilgisi göremez
-    return shipments.map(s => {
+    return matchingShipments.map(s => {
       s.contactPhone = null as any;
       this.maskOpenAddressForCarrier(s, false);
       this.flattenExtraServices(s);
@@ -328,10 +351,18 @@ export class ShipmentService {
       throw new ValidationError('Taşıma tarihi geçmiş bir tarih olamaz.');
     }
 
-    // PLATFORM BYPASS PROTECTION
-    if (containsContactInfo(payload.loadDetails) || (payload.note && containsContactInfo(payload.note))) {
-      throw new ValidationError('İlan detaylarında veya not kısmında iletişim bilgisi (telefon, e-posta, link) paylaşılması güvenlik kurallarımız gereği yasaktır.');
-    }
+    await this.platformPolicy.enforceNoContactInfo({
+      actorType: 'customer',
+      actorId: customerId,
+      surface: ContactFilterSurface.SHIPMENT_LOAD_DETAILS,
+      text: payload.loadDetails,
+    });
+    await this.platformPolicy.enforceNoContactInfo({
+      actorType: 'customer',
+      actorId: customerId,
+      surface: ContactFilterSurface.SHIPMENT_NOTE,
+      text: payload.note,
+    });
 
     // BR3 — Çift İlan Engeli:
         const originCity = payload.originCity ?? (origin ? this.extractCity(origin) : '');
@@ -475,15 +506,24 @@ export class ShipmentService {
       if (shipment.customerId !== requestingUserId) {
         throw new ForbiddenError('Bu gönderiye erişim yetkiniz yok.');
       }
+      const canViewCarrierContact = this.platformPolicy.shouldRevealDirectContact(shipment, 'customer', requestingUserId);
+      this.maskOfferCarriers(shipment);
+      if (shipment.carrier) {
+        delete (shipment.carrier as any).email;
+        if (!canViewCarrierContact) {
+          delete (shipment.carrier as any).phone;
+        }
+      }
+      if (!canViewCarrierContact) {
+        shipment.contactPhone = null as any;
+      }
       return shipment;
     }
 
     // A) ShipmentService.getById() — requester tipine göre maskeleme:
     if (requestingUserType === 'carrier') {
       const isAssigned = shipment.carrierId === requestingUserId;
-      const isMatchedPlus = [ShipmentStatus.MATCHED, ShipmentStatus.IN_TRANSIT, ShipmentStatus.COMPLETED].includes(shipment.status);
-
-      const canViewDetails = isAssigned && isMatchedPlus;
+      const canViewDetails = isAssigned && this.platformPolicy.shouldRevealDirectContact(shipment, 'carrier', requestingUserId);
 
       if (shipment.customer) {
         shipment.customer = {
@@ -509,6 +549,10 @@ export class ShipmentService {
         shipment.contactPhone = null as any;
       }
       this.maskOpenAddressForCarrier(shipment, canViewDetails);
+      this.maskOfferCarriers(shipment);
+      if (shipment.carrier) {
+        this.maskCarrierDirectContact(shipment.carrier);
+      }
 
       return shipment;
     }
@@ -526,13 +570,20 @@ export class ShipmentService {
       throw new ValidationError('Sadece bekleyen taşıma talepleri güncellenebilir.');
     }
 
-    // PLATFORM BYPASS PROTECTION
-    if (
-      (payload.loadDetails && containsContactInfo(payload.loadDetails)) ||
-      (payload.note && containsContactInfo(payload.note))
-    ) {
-      throw new ValidationError('İlan detaylarında veya not kısmında iletişim bilgisi (telefon, e-posta, link) paylaşılması yasaktır.');
-    }
+    await this.platformPolicy.enforceNoContactInfo({
+      actorType: 'customer',
+      actorId: customerId,
+      surface: ContactFilterSurface.SHIPMENT_LOAD_DETAILS,
+      text: payload.loadDetails,
+      shipmentId,
+    });
+    await this.platformPolicy.enforceNoContactInfo({
+      actorType: 'customer',
+      actorId: customerId,
+      surface: ContactFilterSurface.SHIPMENT_NOTE,
+      text: payload.note,
+      shipmentId,
+    });
 
     const updatedShipment = await this.shipmentRepository.update(shipmentId, {
       originCity: payload.originCity,
@@ -586,6 +637,7 @@ export class ShipmentService {
     this.ensureStatusTransition(shipment.status, ShipmentStatus.CANCELLED);
 
     const fullReason = note ? `${reason} (${note})` : reason;
+    const shouldCreateCooldown = this.platformPolicy.shouldCreateCancellationCooldown(shipment, fullReason);
 
     // D) ShipmentService.cancel():
     // MATCHED → offer CANCELLED + carrier notification
@@ -619,6 +671,10 @@ export class ShipmentService {
 
     if (!cancelledShipment) {
       throw new ValidationError('Taşıma talebi iptal edilemedi.');
+    }
+
+    if (shouldCreateCooldown) {
+      await this.platformPolicy.createCancellationCooldown(shipment, fullReason);
     }
 
     return cancelledShipment;
@@ -813,9 +869,12 @@ export class ShipmentService {
       throw new ForbiddenError('Bu gönderiye nakliyeci atama yetkiniz yok.');
     }
 
+    await this.platformPolicy.assertNoActiveCooldown(requestingCustomerId, carrierId);
+
     const updated = await this.shipmentRepository.update(shipmentId, {
       carrierId,
-      status: ShipmentStatus.MATCHED
+      status: ShipmentStatus.MATCHED,
+      matchedAt: new Date()
     });
 
     if (!updated) throw new Error('Taşıma güncellenemedi');

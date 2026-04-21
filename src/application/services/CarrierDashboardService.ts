@@ -19,45 +19,73 @@ export class CarrierDashboardService {
      * but for this design, we will try to read from CarrierStats first.
      */
     async getDashboardStats(carrierId: string) {
-        let stats = await this.statsRepo.findOne({ where: { carrierId } });
+        try {
+            console.log('Getting dashboard stats for carrierId:', carrierId);
+            
+            let stats = await this.statsRepo.findOne({ where: { carrierId } }).catch(err => {
+                console.error('Stats repository error:', err);
+                return null;
+            });
 
-        if (!stats) {
-            // If no stats record exists, create one from scratch by aggregating data
-            stats = await this.recalculateStats(carrierId);
+            if (!stats) {
+                console.log('No existing stats found, recalculating for carrierId:', carrierId);
+                // If no stats record exists, create one from scratch by aggregating data
+                stats = await this.recalculateStats(carrierId);
+            }
+
+            // We also want to know "Active Jobs" count dynamically because it changes often
+            const activeJobsCount = await this.shipmentRepo.count({
+                where: [
+                    { carrierId, status: ShipmentStatus.MATCHED },
+                    { carrierId, status: ShipmentStatus.IN_TRANSIT }
+                ]
+            }).catch(err => {
+                console.error('Active jobs count error:', err);
+                return stats?.activeJobs || 0;
+            });
+            
+            // Update the cached value just in case
+            if (stats.activeJobs !== activeJobsCount) {
+                stats.activeJobs = activeJobsCount;
+                await this.statsRepo.save(stats).catch(err => {
+                    console.error('Failed to update active jobs count:', err);
+                });
+            }
+
+            return {
+                totalEarnings: stats.totalEarnings || 0,
+                activeJobs: stats.activeJobs || 0,
+                completedJobs: stats.totalJobs || 0,
+                rating: stats.averageRating || 0,
+                totalReviews: stats.totalReviews || 0
+            };
+        } catch (error: any) {
+            console.error('Dashboard stats service error:', error);
+            throw new Error(`Dashboard istatistikleri alınamadı: ${error.message}`);
         }
-
-        // We also want to know "Active Jobs" count dynamically because it changes often
-        // stats.activeJobs might be eventually consistent, let's query it fresh to be sure
-        const activeJobsCount = await this.offerRepo.count({
-            where: {
-                carrierId,
-                status: OfferStatus.ACCEPTED,
-                shipment: {
-                    status: ShipmentStatus.MATCHED // Or IN_TRANSIT
-                }
-            },
-            relations: ["shipment"]
-        });
-        
-        // Update the cached value just in case
-        if (stats.activeJobs !== activeJobsCount) {
-             stats.activeJobs = activeJobsCount;
-             await this.statsRepo.save(stats);
-        }
-
-        return {
-            totalEarnings: stats.totalEarnings,
-            activeJobs: stats.activeJobs,
-            completedJobs: stats.totalJobs,
-            rating: stats.averageRating,
-            totalReviews: stats.totalReviews
-        };
     }
 
     /**
      * Recalculates all stats from ledger/history tables and saves to CarrierStats.
      */
     async recalculateStats(carrierId: string): Promise<CarrierStats> {
+        // First verify the carrier exists to avoid FK constraint violation
+        const carrierExists = await AppDataSource.getRepository(Carrier)
+            .findOne({ where: { id: carrierId }, select: ['id'] });
+
+        if (!carrierExists) {
+            console.error(`recalculateStats: Carrier ${carrierId} not found in carriers table`);
+            // Return a default in-memory stats object without saving
+            const empty = new CarrierStats();
+            empty.carrierId = carrierId;
+            empty.totalEarnings = 0;
+            empty.totalJobs = 0;
+            empty.activeJobs = 0;
+            empty.averageRating = 0;
+            empty.totalReviews = 0;
+            return empty;
+        }
+
         // 1. Calculate Total Earnings from Earnings Log (completed jobs)
         const { sum } = await this.earningsRepo
             .createQueryBuilder("earnings")
@@ -76,7 +104,6 @@ export class CarrierDashboardService {
         });
 
         // 3. Count Active Jobs (Matched/In-Transit)
-        // Active means: Shipment is not pending, not completed, not cancelled, and assigned to this carrier
         const activeJobs = await this.shipmentRepo.count({
             where: [
                 { carrierId, status: ShipmentStatus.MATCHED },

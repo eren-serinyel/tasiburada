@@ -6,7 +6,7 @@ export class CarrierStats {
     @PrimaryGeneratedColumn("uuid")
     id: string;
 
-    @Column({ type: 'char', length: 36, charset: 'utf8mb4', collation: 'utf8mb4_unicode_ci' })
+    @Column({ type: 'varchar', length: 36 })
     carrierId: string;
 
     @OneToOne(() => Carrier)

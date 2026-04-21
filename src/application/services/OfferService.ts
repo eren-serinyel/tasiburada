@@ -5,9 +5,11 @@ import { OfferRepository } from '../../infrastructure/repositories/OfferReposito
 import { ShipmentRepository } from '../../infrastructure/repositories/ShipmentRepository';
 import { NotificationService } from './NotificationService';
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from '../../domain/errors/AppError';
-import { containsContactInfo } from '../../utils/security';
+import { analyzeContactInfo } from '../../utils/security';
 import { AppDataSource } from '../../infrastructure/database/data-source';
 import { PlatformSetting } from '../../domain/entities/PlatformSetting';
+import { PlatformPolicyService } from './PlatformPolicyService';
+import { ContactFilterSurface } from '../../domain/entities';
 
 interface CreateOfferPayload {
   shipmentId: string;
@@ -27,6 +29,7 @@ export class OfferService {
   private shipmentRepository = new ShipmentRepository();
   private carrierRepository = new CarrierRepository();
   private notificationService = new NotificationService();
+  private platformPolicy = new PlatformPolicyService();
 
   private sanitizeOffer(offer: Offer): Offer {
     if (!offer?.carrier) {
@@ -37,11 +40,24 @@ export class OfferService {
     delete carrierWithoutPassword.passwordHash;
     delete carrierWithoutPassword.resetToken;
     delete carrierWithoutPassword.verificationToken;
+    delete carrierWithoutPassword.phone;
+    delete carrierWithoutPassword.email;
 
-    return {
+    const sanitized = {
       ...offer,
       carrier: carrierWithoutPassword
     };
+
+    if ((sanitized as any).shipment) {
+      (sanitized as any).shipment = {
+        ...(sanitized as any).shipment,
+        contactPhone: null,
+        originAddressText: null,
+        destinationAddressText: null,
+      };
+    }
+
+    return sanitized;
   }
 
   async createOffer(carrierId: string, payload: CreateOfferPayload): Promise<{ offer: Offer, isNew: boolean, warnings?: any[] }> {
@@ -75,7 +91,14 @@ export class OfferService {
       throw new ValidationError('Sadece teklif almaya açık taşıma taleplerine teklif verilebilir.');
     }
 
-    // C) OfferService.createOffer() içinde mesaj regex kontrolü:
+    await this.platformPolicy.enforceNoContactInfo({
+      actorType: 'carrier',
+      actorId: carrierId,
+      surface: ContactFilterSurface.OFFER_MESSAGE,
+      text: payload.message,
+      shipmentId: shipment.id,
+    });
+
     const hasSuspiciousContent = payload.message ? this.checkSuspiciousContent(payload.message) : false;
 
     // BR11 — Araç Uygunluk Soft Warning:
@@ -208,6 +231,8 @@ export class OfferService {
         throw new ConflictError('Bu taşıma talebi artık teklif kabulüne açık değil.');
       }
 
+      await this.platformPolicy.assertNoActiveCooldown(shipment.customerId, offer.carrierId);
+
       // offer.status = ACCEPTED
       offer.status = OfferStatus.ACCEPTED;
       await transactionalEntityManager.save(Offer, offer);
@@ -226,6 +251,7 @@ export class OfferService {
       shipment.status = ShipmentStatus.MATCHED;
       shipment.carrierId = offer.carrierId;
       shipment.price = offer.price;
+      shipment.matchedAt = new Date();
       await transactionalEntityManager.save(Shipment, shipment);
 
       const finalOffer = await transactionalEntityManager.findOne(Offer, {
@@ -311,6 +337,14 @@ export class OfferService {
       updateData.price = updates.price;
     }
     if (updates.message !== undefined) {
+      await this.platformPolicy.enforceNoContactInfo({
+        actorType: 'carrier',
+        actorId: carrierId,
+        surface: ContactFilterSurface.OFFER_MESSAGE,
+        text: updates.message,
+        shipmentId: offer.shipmentId,
+        offerId,
+      });
       updateData.message = updates.message;
       updateData.hasSuspiciousContent = this.checkSuspiciousContent(updates.message);
     }
@@ -415,10 +449,6 @@ export class OfferService {
   }
 
   private checkSuspiciousContent(message: string): boolean {
-    const phoneRegex = /(\+90|0)?\s*[\(]?\d{3}[\)]?\s*\d{3}\s*\d{2}\s*\d{2}/;
-    const emailRegex = /\S+@\S+\.\S+/;
-    const keywordsRegex = /whatsapp|telegram|@/i;
-
-    return phoneRegex.test(message) || emailRegex.test(message) || keywordsRegex.test(message);
+    return analyzeContactInfo(message).hasContactInfo;
   }
 }

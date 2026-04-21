@@ -3,7 +3,8 @@ import { CustomerController } from '../controllers/CustomerController';
 import { CustomerOfferController } from '../controllers/CustomerOfferController';
 import { CustomerAddressController } from '../controllers/CustomerAddressController';
 import { FavoriteCarrierController } from '../controllers/FavoriteCarrierController';
-import { authenticateCustomer } from '../middleware/auth';
+import { authenticateCustomer, authenticateAdmin } from '../middleware/auth';
+import { authLimiter } from '../middleware/rateLimiter';
 import { pictureUpload } from '../../infrastructure/upload/uploadMiddleware';
 import { CustomerCarrierRelationRepository } from '../../infrastructure/repositories/CustomerCarrierRelationRepository';
 
@@ -14,8 +15,8 @@ const customerAddressController = new CustomerAddressController();
 const favoriteCarrierController = new FavoriteCarrierController();
 
 // Public routes
-router.post('/register', customerController.register);
-router.post('/login', customerController.login);
+router.post('/register', authLimiter, customerController.register);
+router.post('/login', authLimiter, customerController.login);
 
 // Protected routes (Customer only)
 router.get('/profile', authenticateCustomer, customerController.getProfile);
@@ -26,7 +27,7 @@ router.get('/shipments', authenticateCustomer, customerController.getShipments);
 router.get('/offers', authenticateCustomer, customerOfferController.getMyOffers);
 
 // Admin routes
-router.get('/search', authenticateCustomer, customerController.searchCustomers);
+router.get('/search', authenticateAdmin, customerController.searchCustomers);
 
 // Address routes
 router.get('/me/addresses', authenticateCustomer, customerAddressController.getAddresses);
@@ -46,7 +47,8 @@ router.get('/me/previous-carriers', authenticateCustomer, async (req, res) => {
     const customerId = req.user!.customerId!;
     const relations = await CustomerCarrierRelationRepository.findPreviousCarriers(customerId);
     res.json({ success: true, data: relations });
-  } catch {
+  } catch (error) {
+    console.error('[CustomerCarrierRelation] Previous carriers fetch error:', error);
     res.status(500).json({ success: false, message: 'Sunucu hatası' });
   }
 });

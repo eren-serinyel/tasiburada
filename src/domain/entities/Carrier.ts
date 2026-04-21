@@ -59,6 +59,9 @@ export class Carrier {
   @Column({ type: 'boolean', default: false })
   verifiedByAdmin: boolean;
 
+  @Column({ name: 'pending_approval', type: 'boolean', default: false })
+  pendingApproval: boolean;
+
   @Column({ type: 'int', default: 0 })
   documentCount: number;
 
