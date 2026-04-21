@@ -53,7 +53,6 @@ import RoleHome from './pages/RoleHome';
 import OfferRequest from './pages/OfferRequest';
 import History from './pages/History';
 import Campaigns from './pages/Campaigns';
-import Support from './pages/Support';
 import Loyalty from './pages/Loyalty';
 import Pricing from '@/pages/info/Pricing';
 import CarrierInfo from '@/pages/info/CarrierInfo';
@@ -74,7 +73,12 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <Toaster />
-      <BrowserRouter>
+      <BrowserRouter
+        future={{
+          v7_startTransition: true,
+          v7_relativeSplatPath: true
+        }}
+      >
         <ScrollToTop />
         <Routes>
           {/* ─── Admin Routes (no Layout) ─────────────────────────── */}
@@ -134,16 +138,28 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
-            <Route path="/ilanlar" element={<ShipmentList />} />
-            <Route path="/ilanlarim" element={<ShipmentList />} />
-            <Route path="/ilan/:id" element={<ShipmentDetail />} />
+            <Route path="/ilanlar" element={
+              <ProtectedRoute>
+                <ShipmentList />
+              </ProtectedRoute>
+            } />
+            <Route path="/ilanlarim" element={
+              <ProtectedRoute>
+                <ShipmentList />
+              </ProtectedRoute>
+            } />
+            <Route path="/ilan/:id" element={
+              <ProtectedRoute>
+                <ShipmentDetail />
+              </ProtectedRoute>
+            } />
             <Route path="/gecmis" element={
               <ProtectedRoute requiredRole="customer">
                 <History />
               </ProtectedRoute>
             } />
             <Route path="/campaigns" element={<Campaigns />} />
-            <Route path="/destek" element={<Support />} />
+            <Route path="/destek" element={<Navigate to="/yardim" replace />} />
             <Route path="/loyalty" element={<Loyalty />} />
             {/* Turkish slugs and info pages */}
             <Route
@@ -160,7 +176,11 @@ const App = () => (
             <Route path="/cerez-politikasi" element={<CookiesPolicy />} />
             <Route path="/yardim" element={<Help />} />
             <Route path="/nakliyeci-bilgi" element={<CarrierInfo />} />
-            <Route path="/teklifler/:shipmentId" element={<OfferComparison />} />
+            <Route path="/teklifler/:shipmentId" element={
+              <ProtectedRoute requiredRole="customer">
+                <OfferComparison />
+              </ProtectedRoute>
+            } />
             {/** send-offer rotası kaldırıldı */}
             {/* Yeni akış rotaları */}
             <Route

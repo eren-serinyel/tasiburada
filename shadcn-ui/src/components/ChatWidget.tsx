@@ -43,7 +43,7 @@ export default function Navbar() {
                 
                 {user.type === 'customer' ? (
                   <>
-                    <Link to="/create-shipment" className="text-gray-700 hover:text-blue-600 transition-colors">
+                    <Link to="/teklif-talebi" className="text-gray-700 hover:text-blue-600 transition-colors">
                       Yeni Talep
                     </Link>
                     <Link to="/ilanlar" className="text-gray-700 hover:text-blue-600 transition-colors">
@@ -123,7 +123,7 @@ export default function Navbar() {
                   {user.type === 'customer' ? (
                     <>
                       <Link 
-                        to="/create-shipment" 
+                        to="/teklif-talebi" 
                         className="text-gray-700 hover:text-blue-600 transition-colors"
                         onClick={() => setIsMenuOpen(false)}
                       >

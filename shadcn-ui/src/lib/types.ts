@@ -2,9 +2,7 @@ export interface User {
   id: string;
   name: string;
   surname: string;
-  /** API returns firstName for customers (mapped from DB) */
   firstName?: string;
-  /** API returns lastName for customers (mapped from DB) */
   lastName?: string;
   /** Set for carrier accounts */
   companyName?: string;
@@ -16,6 +14,8 @@ export interface User {
   type: 'customer' | 'carrier';
   createdAt: Date;
   profileCompletion?: number;
+  pendingApproval?: boolean;
+  verifiedByAdmin?: boolean;
 }
 
 export interface Vehicle {
@@ -174,7 +174,7 @@ export interface Offer {
   price: number;
   message?: string;
   estimatedDuration?: number;
-  status: 'pending' | 'accepted' | 'rejected';
+  status: 'pending' | 'accepted' | 'rejected' | 'withdrawn' | 'cancelled';
   createdAt: Date;
   validUntil?: Date;
 }
