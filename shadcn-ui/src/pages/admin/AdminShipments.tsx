@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { adminApiClient } from '@/lib/adminAuth';
 import { toast } from '@/components/ui/sonner';
 import { Button } from '@/components/ui/button';
@@ -37,9 +38,11 @@ interface Shipment {
 }
 
 export default function AdminShipments() {
+  const [searchParams] = useSearchParams();
+  const initialSearch = searchParams.get('search') ?? '';
   const [status, setStatus] = useState<ShipmentStatus>('all');
-  const [searchInput, setSearchInput] = useState('');
-  const [search, setSearch] = useState('');
+  const [searchInput, setSearchInput] = useState(initialSearch);
+  const [search, setSearch] = useState(initialSearch);
   const [page, setPage] = useState(1);
   const [shipments, setShipments] = useState<Shipment[]>([]);
   const [total, setTotal] = useState(0);

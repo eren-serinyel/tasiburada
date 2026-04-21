@@ -11,6 +11,7 @@ import {
   AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { ErrorState } from '@/components/admin/shared';
+import { getAdminRole } from '@/lib/adminAuth';
 import { cn } from '@/lib/utils';
 import type { LucideIcon } from 'lucide-react';
 import {
@@ -75,6 +76,7 @@ const DEFAULT_SECURITY: SecuritySettings = {
 
 export default function AdminSettings() {
   const navigate = useNavigate();
+  const isSuperAdmin = getAdminRole() === 'superadmin';
 
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState(false);
@@ -257,7 +259,13 @@ export default function AdminSettings() {
           <h1 className="text-2xl font-semibold text-slate-900">Platform Ayarları</h1>
           <p className="text-muted-foreground text-sm mt-1">Genel platform yapılandırması</p>
         </div>
-        {lastSaved && (
+        {!isSuperAdmin && (
+          <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-700">
+            <AlertTriangle className="h-4 w-4 shrink-0" />
+            <span>Ayarları düzenlemek için superadmin yetkisi gereklidir.</span>
+          </div>
+        )}
+        {lastSaved && isSuperAdmin && (
           <div className="text-right shrink-0">
             <p className="text-xs text-muted-foreground">Son kayıt</p>
             <p className="text-sm font-medium text-slate-700">

@@ -20,6 +20,7 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Separator } from '@/components/ui/separator';
+import { getAdminRole } from '@/lib/adminAuth';
 
 interface SidebarProps {
   collapsed: boolean;
@@ -124,7 +125,20 @@ function SidebarLink({ item, collapsed }: { item: NavItem; collapsed: boolean })
 }
 
 export function AdminSidebar({ collapsed, onToggle, pendingCount = 0 }: SidebarProps) {
-  const groups = navGroups(pendingCount);
+  const role = getAdminRole();
+  const isSuperAdmin = role === 'superadmin';
+  const groups = navGroups(pendingCount).map((group) => {
+    if (group.title === 'Sistem') {
+      return {
+        ...group,
+        items: group.items.filter((item) => {
+          if (item.to === '/admin/yonetim') return isSuperAdmin;
+          return true;
+        }),
+      };
+    }
+    return group;
+  });
 
   return (
     <aside

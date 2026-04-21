@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { adminApiClient } from '@/lib/adminAuth';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -8,7 +8,7 @@ import {
   ArrowRight, AlertTriangle, BarChart3,
 } from 'lucide-react';
 import { toast } from '@/components/ui/sonner';
-import { PageHeader, StatCard, EmptyState } from '@/components/admin/shared';
+import { PageHeader, StatCard, EmptyState, ErrorState } from '@/components/admin/shared';
 import { formatDistanceToNow } from 'date-fns';
 import { tr } from 'date-fns/locale';
 import {
@@ -62,37 +62,42 @@ export default function AdminDashboard() {
   const [trendData, setTrendData] = useState<{ date: string; shipments: number; offers: number; completed: number }[]>([]);
   const [trendLoading, setTrendLoading] = useState(true);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
 
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const [statsRes, carriersRes, reviewsRes] = await Promise.all([
-          adminApiClient('/admin/stats').then((r) => r.json()),
-          adminApiClient('/admin/carriers?status=pending&limit=5').then((r) => r.json()),
-          adminApiClient('/admin/reviews?limit=5').then((r) => r.json()),
-        ]);
-        if (statsRes.success) setStats(statsRes.data);
-        if (carriersRes.success) setPendingCarriers(carriersRes.data?.carriers ?? []);
-        if (reviewsRes.success) setRecentReviews(reviewsRes.data?.reviews ?? []);
-      } catch {
-        toast.error('Dashboard verileri yüklenemedi.');
-      } finally {
-        setLoading(false);
-      }
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(false);
+    try {
+      const [statsRes, carriersRes, reviewsRes] = await Promise.all([
+        adminApiClient('/admin/stats').then((r) => r.json()),
+        adminApiClient('/admin/carriers?status=pending&limit=5').then((r) => r.json()),
+        adminApiClient('/admin/reviews?limit=5').then((r) => r.json()),
+      ]);
+      if (statsRes.success) setStats(statsRes.data);
+      else setError(true);
+      if (carriersRes.success) setPendingCarriers(carriersRes.data?.carriers ?? []);
+      if (reviewsRes.success) setRecentReviews(reviewsRes.data?.reviews ?? []);
+    } catch {
+      toast.error('Dashboard verileri yüklenemedi.');
+      setError(true);
+    } finally {
+      setLoading(false);
+    }
 
-      try {
-        const trendsRes = await adminApiClient('/admin/stats/trends?days=30').then((r) => r.json());
-        if (trendsRes.success) {
-          setTrendData(trendsRes.data?.trends ?? []);
+    try {
+      setTrendLoading(true);
+      const trendsRes = await adminApiClient('/admin/stats/trends?days=30').then((r) => r.json());
+      if (trendsRes.success) {
+        setTrendData(trendsRes.data?.trends ?? []);
         }
       } catch {
         // Trend error handled by empty trendData
       } finally {
         setTrendLoading(false);
       }
-    };
-    load();
   }, []);
+
+  useEffect(() => { load(); }, [load]);
 
   if (loading) {
     return (
@@ -111,10 +116,10 @@ export default function AdminDashboard() {
     );
   }
 
-  if (!stats) {
+  if (error || !stats) {
     return (
       <div className="p-6 lg:p-8">
-        <EmptyState title="Veriler yüklenemedi" description="Sunucuya bağlanılamadı." />
+        <ErrorState onRetry={load} />
       </div>
     );
   }

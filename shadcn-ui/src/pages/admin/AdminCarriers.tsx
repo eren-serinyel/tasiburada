@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { adminApiClient } from '@/lib/adminAuth';
 import { toast } from '@/components/ui/sonner';
 import { Button } from '@/components/ui/button';
@@ -43,7 +43,9 @@ const statusTabs: { value: CarrierStatus; label: string }[] = [
 
 export default function AdminCarriers() {
   const navigate = useNavigate();
-  const [status, setStatus] = useState<CarrierStatus>('all');
+  const [searchParams] = useSearchParams();
+  const initialStatus = (searchParams.get('tab') === 'bekleyen' ? 'pending' : 'all') as CarrierStatus;
+  const [status, setStatus] = useState<CarrierStatus>(initialStatus);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [carriers, setCarriers] = useState<Carrier[]>([]);
