@@ -13,6 +13,7 @@ import { apiClient } from '@/lib/apiClient';
 import { ChevronLeft, Send } from 'lucide-react';
 
 const API_BASE_URL = '/api/v1';
+const MESSAGING_ENABLED = false;
 
 type MessageDto = {
   id: string;
@@ -116,6 +117,20 @@ export default function Messages() {
             { label: 'Kapat', onClick: () => setAuthOpen(false), variant: 'outline' }
           ]}
         />
+      </div>
+    );
+  }
+
+  if (!MESSAGING_ENABLED) {
+    return (
+      <div className="max-w-3xl mx-auto px-4 py-8">
+        <Alert>
+          <AlertTitle>Mesajlaşma henüz aktif değil</AlertTitle>
+          <AlertDescription>Platform içi güvenli iletişim backend servisi hazır olduğunda bu alan açılacak.</AlertDescription>
+        </Alert>
+        <Button className="mt-6" variant="outline" onClick={() => navigate(-1)}>
+          Geri dön
+        </Button>
       </div>
     );
   }

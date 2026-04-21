@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils';
 import {
   Plus, Package, MessageSquare, Truck, CheckCircle2,
   MapPin, RotateCcw, Home, Building2, ChevronRight,
-  Star, Phone, UserCheck, FileEdit, Headphones,
+  Star, Phone, UserCheck, Headphones,
   Heart, History, Settings, HeadphonesIcon
 } from 'lucide-react';
 import { Shipment } from '@/lib/types';
@@ -141,6 +141,7 @@ export default function CustomerHome() {
   const [profile,      setProfile]      = useState<CustomerProfile | null>(null);
   const [loading,      setLoading]      = useState(true);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   /* ── session user (for first name while profile loads) ── */
   const sessionUser = useMemo(() => getSessionUser(), []);
@@ -150,6 +151,7 @@ export default function CustomerHome() {
     (async () => {
       if (!sessionUser) { navigate('/giris'); return; }
       setLoading(true);
+      setLoadError(null);
       try {
         const [shipRes, offRes, profRes] = await Promise.allSettled([
           apiClient('/api/v1/customers/shipments'),
@@ -160,12 +162,17 @@ export default function CustomerHome() {
         if (shipRes.status === 'fulfilled') {
           const j = await shipRes.value.json();
           if (j?.success && Array.isArray(j.data)) setAllShipments(j.data.map(toUi));
+          else setLoadError('Taşıma verileri alınamadı.');
+        } else {
+          setLoadError('Taşıma verileri alınamadı.');
         }
         if (offRes.status === 'fulfilled') {
           const j = await offRes.value.json();
           const arr = Array.isArray(j?.data) ? j.data
                     : Array.isArray(j?.data?.data) ? j.data.data : [];
           setAllOffers(arr);
+        } else {
+          setLoadError((prev) => prev || 'Teklif verileri alınamadı.');
         }
         if (profRes.status === 'fulfilled') {
           const j = await profRes.value.json();
@@ -314,13 +321,15 @@ export default function CustomerHome() {
               <RotateCcw className="h-3 w-3 mr-1" />
               Son Talebi Tekrar Oluştur
             </Button>
-            <Button variant="outline" size="sm" onClick={() => navigate('/teklif-talebi?draft=true')}>
-              <FileEdit className="h-3 w-3 mr-1" />
-              Taslak Talebe Devam Et
-            </Button>
           </div>
         )}
       </div>
+
+      {loadError && (
+        <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          {loadError} Sayfadaki bazı özetler eksik görünebilir.
+        </div>
+      )}
 
       {/* ══════════════════════════════════
           BLOK 2 — KPI Kartları

@@ -195,7 +195,7 @@ const CarrierDetailPage = () => {
   const { data: eligibility } = useQuery({
     queryKey: ['carrier-eligibility', carrierId],
     queryFn: ({ signal }) => fetchEligibility(carrierId!, signal),
-    enabled: Boolean(carrierId && isLoggedIn && isCustomer)
+    enabled: false
   });
 
   /* ─── Rating distribution (computed from reviews) ─── */
@@ -303,13 +303,7 @@ const CarrierDetailPage = () => {
   };
 
   const canMessage = Boolean(eligibility?.canMessage);
-  const messageDisabledReason = !isLoggedIn
-    ? 'Giriş yaptıktan sonra kullanılabilir.'
-    : !isCustomer
-      ? 'Sadece müşteri hesabı mesajlaşabilir.'
-      : canMessage
-        ? ''
-        : 'Teklif oluşturduktan sonra aktif olur.';
+  const messageDisabledReason = 'Platform içi mesajlaşma backend servisi hazır olduğunda aktif olacak.';
 
   const handleMessage = async () => {
     if (!isLoggedIn) {

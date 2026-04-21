@@ -75,11 +75,13 @@ function dayGroup(dateStr: string): string {
 export default function Notifications() {
   const [notifs, setNotifs] = useState<ApiNotification[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<FilterTab>('all');
   const navigate = useNavigate();
 
   const fetchNotifications = async () => {
     setLoading(true);
+    setError(null);
     try {
       const res = await apiClient('/notifications');
       const json = await res.json();
@@ -87,9 +89,11 @@ export default function Notifications() {
         setNotifs(Array.isArray(json.data) ? json.data : []);
       } else {
         setNotifs([]);
+        setError(json?.message || 'Bildirimler alınamadı.');
       }
     } catch {
       setNotifs([]);
+      setError('Bildirimler yüklenirken bağlantı hatası oluştu.');
     } finally {
       setLoading(false);
     }
@@ -186,7 +190,15 @@ export default function Notifications() {
       )}
 
       {/* ── Empty state ── */}
-      {!loading && filtered.length === 0 && (
+      {!loading && error && (
+        <div className="py-16 text-center">
+          <Bell className="h-12 w-12 text-gray-300 mx-auto mb-3" />
+          <p className="text-[15px] font-medium text-gray-500">Bildirimler yüklenemedi</p>
+          <p className="mt-1 text-sm text-gray-400">{error}</p>
+        </div>
+      )}
+
+      {!loading && !error && filtered.length === 0 && (
         <div className="py-16 text-center">
           <Bell className="h-12 w-12 text-gray-300 mx-auto mb-3" />
           <p className="text-[15px] font-medium text-gray-500">
@@ -196,7 +208,7 @@ export default function Notifications() {
       )}
 
       {/* ── Notification list ── */}
-      {!loading &&
+      {!loading && !error &&
         grouped.map(([group, items]) => (
           <div key={group}>
             {/* Group header */}

@@ -25,6 +25,7 @@ interface FavoriteCarrierItem {
 export default function FavoriteCarriers() {
   const [favorites, setFavorites] = useState<FavoriteCarrierItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchFavorites();
@@ -33,13 +34,16 @@ export default function FavoriteCarriers() {
   const fetchFavorites = async () => {
     try {
       setLoading(true);
+      setError(null);
       const res = await apiClient('/customers/me/favorites');
       const json = await res.json();
       if (json.success) {
         setFavorites(json.data);
+      } else {
+        setError(json?.message || 'Kayıtlı firmalar alınamadı.');
       }
     } catch {
-      // silent
+      setError('Kayıtlı firmalar yüklenirken bağlantı hatası oluştu.');
     } finally {
       setLoading(false);
     }
@@ -61,7 +65,13 @@ export default function FavoriteCarriers() {
         <span className="text-sm text-slate-500">({favorites.length})</span>
       </div>
 
-      {favorites.length === 0 ? (
+      {error ? (
+        <div className="text-center py-20">
+          <Heart className="h-16 w-16 text-slate-300 mx-auto mb-4" />
+          <h2 className="text-xl font-semibold text-slate-700 mb-2">Firmalar yüklenemedi</h2>
+          <p className="text-slate-500">{error}</p>
+        </div>
+      ) : favorites.length === 0 ? (
         <div className="text-center py-20">
           <Heart className="h-16 w-16 text-slate-300 mx-auto mb-4" />
           <h2 className="text-xl font-semibold text-slate-700 mb-2">Henüz favori nakliyeciniz yok</h2>

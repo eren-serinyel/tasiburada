@@ -38,8 +38,14 @@ interface BackendShipment {
   destination: string;
   loadDetails: string;
   transportType?: string;
+  originPlaceType?: string;
+  destinationPlaceType?: string;
   placeType?: string;
+  originHasElevator?: boolean;
+  destinationHasElevator?: boolean;
   hasElevator?: boolean;
+  originFloor?: number;
+  destinationFloor?: number;
   floor?: number;
   insuranceType?: string;
   timePreference?: string;
@@ -58,6 +64,7 @@ interface BackendShipment {
     phone?: string;
   };
   customer?: { firstName: string; lastName: string; phone?: string; email?: string };
+  contactPhone?: string | null;
   extraServices?: string[];
   offers?: BackendOffer[];
 }
@@ -293,6 +300,12 @@ export default function ShipmentDetail() {
   const offerPrices = offers.map(o => Number(o.price)).filter(p => p > 0);
   const minOfferPrice = offerPrices.length > 0 ? Math.min(...offerPrices) : null;
   const maxOfferPrice = offerPrices.length > 0 ? Math.max(...offerPrices) : null;
+  const directPhone = userType === 'customer'
+    ? shipment.carrier?.phone
+    : userType === 'carrier'
+      ? (shipment.customer?.phone || shipment.contactPhone)
+      : shipment.carrier?.phone || shipment.customer?.phone || shipment.contactPhone;
+  const showContactGate = ['matched', 'in_transit'].includes(shipment.status);
 
   /* ── Timeline steps ── */
   const isCancelled = shipment.status === 'cancelled';
@@ -315,9 +328,9 @@ export default function ShipmentDetail() {
       transportType: shipment.transportType,
       loadDetails: shipment.loadDetails,
       weight: shipment.weight,
-      placeType: shipment.placeType,
-      floor: shipment.floor,
-      hasElevator: shipment.hasElevator,
+      placeType: shipment.originPlaceType ?? shipment.placeType,
+      floor: shipment.originFloor ?? shipment.floor,
+      hasElevator: shipment.originHasElevator ?? shipment.hasElevator,
       insuranceType: shipment.insuranceType,
       extraServices: shipment.extraServices,
     }));
@@ -332,9 +345,9 @@ export default function ShipmentDetail() {
       transportType: shipment.transportType,
       loadDetails: shipment.loadDetails,
       weight: shipment.weight,
-      placeType: shipment.placeType,
-      floor: shipment.floor,
-      hasElevator: shipment.hasElevator,
+      placeType: shipment.originPlaceType ?? shipment.placeType,
+      floor: shipment.originFloor ?? shipment.floor,
+      hasElevator: shipment.originHasElevator ?? shipment.hasElevator,
       insuranceType: shipment.insuranceType,
       extraServices: shipment.extraServices,
       inviteCarrierId: shipment.carrierId,
@@ -350,8 +363,8 @@ export default function ShipmentDetail() {
     { label: 'TARİH', value: fmtDate(shipment.shipmentDate) },
     { label: 'YÜK', value: shipment.loadDetails },
     { label: 'AĞIRLIK', value: shipment.weight ? `${shipment.weight} kg` : '—' },
-    { label: 'YER', value: `${shipment.placeType || '—'}${shipment.floor ? ` — ${shipment.floor}. Kat` : ''}` },
-    { label: 'ASANSÖR', value: shipment.hasElevator
+    { label: 'YER', value: `${(shipment.originPlaceType ?? shipment.placeType) || '—'}${(shipment.originFloor ?? shipment.floor) ? ` — ${(shipment.originFloor ?? shipment.floor)}. Kat` : ''}` },
+    { label: 'ASANSÖR', value: (shipment.originHasElevator ?? shipment.hasElevator)
       ? <span style={{ background: '#F0FDF4', color: '#15803D', borderRadius: '5px', padding: '1px 8px', fontSize: '11px', fontWeight: 500 }}>Var ✓</span>
       : <span style={{ background: '#FEF2F2', color: '#B91C1C', borderRadius: '5px', padding: '1px 8px', fontSize: '11px', fontWeight: 500 }}>Yok</span>
     },
@@ -467,6 +480,18 @@ export default function ShipmentDetail() {
               </div>
             ))}
 
+            {showContactGate && (
+              <div style={{ marginTop: '12px', padding: '10px 12px', border: '0.5px solid #E2E8F0', borderRadius: '8px', background: directPhone ? '#F0FDF4' : '#F8FAFC', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Phone style={{ width: '14px', height: '14px', color: directPhone ? '#15803D' : '#64748B', flexShrink: 0 }} />
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: '11px', color: '#64748B' }}>Ä°letiÅŸim</div>
+                  <div style={{ fontSize: '13px', fontWeight: 600, color: directPhone ? '#15803D' : '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {directPhone || 'Platform iÃ§i mesajlaÅŸma'}
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Action buttons */}
             <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '0.5px solid #F1F5F9', display: 'flex', flexDirection: 'column', gap: '6px' }}>
               {/* CUSTOMER — pending / offer_received */}
@@ -477,9 +502,6 @@ export default function ShipmentDetail() {
                       Teklif Karşılaştır
                     </button>
                   )}
-                  <button onClick={() => navigate(`/ilan-duzenle/${shipment.id}`)} style={{ width: '100%', height: '36px', background: 'white', color: '#374151', border: '0.5px solid #E2E8F0', borderRadius: '8px', fontSize: '13px', fontWeight: 500, cursor: 'pointer' }}>
-                    İlanı Düzenle
-                  </button>
                   <button disabled={updating} onClick={() => setCancelDialogOpen(true)} style={{ width: '100%', height: '36px', background: 'white', color: '#DC2626', border: '0.5px solid #FECACA', borderRadius: '8px', fontSize: '13px', fontWeight: 500, cursor: 'pointer' }}>
                     İptal Et
                   </button>

@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { MapPin, Package, Clock, Search, Filter, Send, Star } from 'lucide-react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Shipment, User, Carrier, LOAD_TYPES } from '@/lib/types';
 import { getCarrierProfileTasks } from '@/lib/utils';
 import { getSessionUser } from '@/lib/storage';
@@ -32,6 +32,7 @@ type BackendShipment = {
 
 type ShipmentListItem = Shipment & {
   customerDisplayName: string;
+  rawStatus: string;
 };
 
 const formatLoadSummary = (loadDetails?: string, weight?: number) => {
@@ -82,6 +83,7 @@ const toUiShipment = (shipment: BackendShipment): ShipmentListItem => {
     distance: 0,
     description: shipment.loadDetails || '',
     status: normalizeStatus(shipment.status),
+    rawStatus: shipment.status || 'pending',
     price: Number(shipment.price || 0),
     createdAt: shipment.createdAt ? new Date(shipment.createdAt) : new Date(),
     customerDisplayName: shipment.customerDisplayName || 'Müşteri'
@@ -123,10 +125,12 @@ export default function ShipmentList() {
   const [shipments, setShipments] = useState<ShipmentListItem[]>([]);
   const [filteredShipments, setFilteredShipments] = useState<ShipmentListItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCity, setSelectedCity] = useState(ALL_FILTER_VALUE);
   const [selectedLoadType, setSelectedLoadType] = useState(ALL_FILTER_VALUE);
-  const [statusFilter, setStatusFilter] = useState(ALL_FILTER_VALUE);
+  const [searchParams] = useSearchParams();
+  const [statusFilter, setStatusFilter] = useState(() => searchParams.get('status') || ALL_FILTER_VALUE);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -139,6 +143,7 @@ export default function ShipmentList() {
 
       setUser(u);
       setLoading(true);
+      setError(null);
 
       try {
         const userType = detectUserType(u);
@@ -153,9 +158,11 @@ export default function ShipmentList() {
           setShipments((json.data as BackendShipment[]).map(toUiShipment));
         } else {
           setShipments([]);
+          setError(json?.message || 'Taşıma talepleri alınamadı.');
         }
       } catch {
         setShipments([]);
+        setError('Taşıma talepleri yüklenirken bağlantı hatası oluştu.');
       } finally {
         setLoading(false);
       }
@@ -171,7 +178,7 @@ export default function ShipmentList() {
                            shipment.destination.city.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesCity = selectedCity === ALL_FILTER_VALUE || shipment.origin.city === selectedCity || shipment.destination.city === selectedCity;
       const matchesLoadType = selectedLoadType === ALL_FILTER_VALUE || shipment.loadType === selectedLoadType;
-      const matchesStatus = statusFilter === ALL_FILTER_VALUE || shipment.status === statusFilter;
+      const matchesStatus = statusFilter === ALL_FILTER_VALUE || shipment.status === statusFilter || shipment.rawStatus === statusFilter;
       
       return matchesSearch && matchesCity && matchesLoadType && matchesStatus;
     });
@@ -234,7 +241,7 @@ export default function ShipmentList() {
       {/* Quick Actions */}
       <div className="mb-6">
         {user.type === 'customer' ? (
-          <Link to="/create-shipment">
+          <Link to="/teklif-talebi">
             <Button size="lg">
               <Package className="h-4 w-4 mr-2" />
               Yeni Taşıma Talebi
@@ -301,7 +308,9 @@ export default function ShipmentList() {
                 <SelectContent>
                   <SelectItem value={ALL_FILTER_VALUE}>Tüm durumlar</SelectItem>
                   <SelectItem value="pending">Bekliyor</SelectItem>
+                  <SelectItem value="offer_received">Teklif Geldi</SelectItem>
                   <SelectItem value="matched">Eşleşti</SelectItem>
+                  <SelectItem value="in_transit">Taşınıyor</SelectItem>
                   <SelectItem value="delivered">Teslim Edildi</SelectItem>
                   <SelectItem value="cancelled">İptal Edildi</SelectItem>
                 </SelectContent>
@@ -318,13 +327,26 @@ export default function ShipmentList() {
         </p>
       </div>
 
-      {filteredShipments.length === 0 ? (
+      {error ? (
+        <Card>
+          <CardContent className="text-center py-12">
+            <h3 className="text-lg font-medium text-gray-900 mb-2">Talepler yüklenemedi</h3>
+            <p className="text-sm text-gray-600 mb-4">{error}</p>
+            <Button variant="outline" onClick={() => window.location.reload()}>Tekrar Dene</Button>
+          </CardContent>
+        </Card>
+      ) : filteredShipments.length === 0 ? (
         <Card>
           <CardContent className="text-center py-12">
             <Search className="h-12 w-12 text-gray-400 mx-auto mb-4" />
             <h3 className="text-lg font-medium text-gray-900 mb-2">
               Henüz ilan yok
             </h3>
+            {user.type === 'customer' && (
+              <Link to="/teklif-talebi">
+                <Button variant="outline">İlk talebinizi oluşturun</Button>
+              </Link>
+            )}
           </CardContent>
         </Card>
       ) : (
