@@ -255,7 +255,7 @@ export default function History() {
           <Clock className="h-12 w-12 text-gray-300 mx-auto mb-3" />
           <p className="text-[15px] font-medium text-gray-600">Henüz tamamlanmış taşıma yok</p>
           <Link
-            to="/ilan-olustur"
+            to="/teklif-talebi"
             className="inline-block mt-3 text-sm text-blue-600 font-medium hover:underline"
           >
             İlanınızı oluşturun →

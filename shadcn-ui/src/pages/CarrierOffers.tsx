@@ -42,18 +42,25 @@ const statusColor: Record<string, string> = {
 export default function CarrierOffers() {
   const [offers, setOffers] = useState<BackendOffer[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [edit, setEdit] = useState<{ id: string; price: string; message: string; estimatedDuration: string } | null>(null);
   const [confirm, setConfirm] = useState<{ id: string } | null>(null);
   const navigate = useNavigate();
 
   const fetchOffers = async () => {
     try {
+      setError(null);
       const res = await apiClient(`${API_BASE_URL}/carriers/me/offers`);
       const json = await res.json();
       if (res.ok && json?.success) {
         setOffers(json.data || []);
+      } else {
+        setOffers([]);
+        setError(json?.message || 'Teklifler alınamadı.');
       }
     } catch {
+      setOffers([]);
+      setError('Teklifler yüklenirken bağlantı hatası oluştu.');
       toast.error('Teklifler yüklenirken hata oluştu.');
     } finally {
       setLoading(false);
@@ -117,7 +124,15 @@ export default function CarrierOffers() {
         <p className="text-gray-600">Verdiğiniz teklifleri görüntüleyin.</p>
       </div>
 
-      {offers.length === 0 ? (
+      {error ? (
+        <Card>
+          <CardContent className="py-10 text-center text-gray-600">
+            <p className="font-medium text-gray-900">Teklifler yüklenemedi</p>
+            <p className="mt-1 text-sm">{error}</p>
+            <Button className="mt-4" variant="outline" onClick={fetchOffers}>Tekrar Dene</Button>
+          </CardContent>
+        </Card>
+      ) : offers.length === 0 ? (
         <Card>
           <CardContent className="py-10 text-center text-gray-600">Henüz teklif vermediniz.</CardContent>
         </Card>

@@ -695,7 +695,7 @@ export default function Dashboard() {
             <CardContent className="py-5 px-5">
               <p className="font-medium text-gray-800 mb-1">Destek</p>
               <p className="text-xs text-gray-500 mb-2">Sorun mu var? Yardımcı olalım.</p>
-              <Link to="/support" className="text-blue-600 text-sm font-medium">Destek Merkezi →</Link>
+              <Link to="/yardim" className="text-blue-600 text-sm font-medium">Destek Merkezi →</Link>
             </CardContent>
           </Card>
         </div>

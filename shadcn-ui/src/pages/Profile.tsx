@@ -97,7 +97,7 @@ export default function Profile() {
     if (!user || user.type !== 'carrier') return;
     (async () => {
       try {
-        const res = await apiClient(`${API_BASE_URL}/carriers/${user.id}`);
+        const res = await apiClient(`${API_BASE_URL}/carriers/me`);
         const json = await res.json();
         if (!res.ok || !json?.success || !json?.data?.carrier) return;
         const c = json.data.carrier;
@@ -166,7 +166,7 @@ export default function Profile() {
       let finalUrl = savedUrl;
       if (!finalUrl) {
         try {
-          const profileEndpoint = isCarrier ? `${API_BASE_URL}/carriers/${user.id}` : `${API_BASE_URL}/customers/profile`;
+          const profileEndpoint = isCarrier ? `${API_BASE_URL}/carriers/me` : `${API_BASE_URL}/customers/profile`;
           const pRes = await apiClient(profileEndpoint);
           const pJson = await pRes.json().catch(() => ({}));
           finalUrl = isCarrier
@@ -190,12 +190,19 @@ export default function Profile() {
   };
 
   // Approval
-  const submitForApproval = () => {
+  const submitForApproval = async () => {
     if (!user) return;
     if (profileCompletion < 100) { toast.error('Lütfen tüm bölümleri tamamlayın.'); return; }
-    try { localStorage.setItem(`carrier_approval_${user.id}`, 'pending'); setApprovalStatus('pending'); } catch {}
-    try { localStorage.removeItem(`fastRegPending_${user.id}`); localStorage.removeItem('profileCompletion'); } catch {}
-    toast.success('Profiliniz onaya gönderildi.');
+    try {
+      const res = await apiClient(`${API_BASE_URL}/carriers/me/submit-for-approval`, { method: 'POST' });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) { toast.error(json?.message || 'Onay talebi gönderilemedi.'); return; }
+      setApprovalStatus('pending');
+      try { localStorage.setItem(`carrier_approval_${user.id}`, 'pending'); } catch {}
+      toast.success('Profiliniz incelemeye alındı.');
+    } catch {
+      toast.error('Sunucuya bağlanılamadı.');
+    }
   };
 
   const handleUserUpdate = (u: UserType) => {

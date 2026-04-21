@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { DollarSign, Briefcase } from 'lucide-react';
 import { apiClient } from '@/lib/apiClient';
 import {
@@ -122,7 +123,13 @@ export default function Earnings() {
   if (error) {
     return (
       <div className="max-w-5xl mx-auto px-4 py-8">
-        <div className="text-center py-20 text-red-500">{error}</div>
+        <div className="text-center py-20">
+          <p className="font-medium text-red-600">Kazançlar yüklenemedi</p>
+          <p className="mt-1 text-sm text-gray-500">{error}</p>
+          <Button className="mt-4" variant="outline" onClick={() => window.location.reload()}>
+            Tekrar Dene
+          </Button>
+        </div>
       </div>
     );
   }

@@ -34,6 +34,7 @@ export default function CarrierRespond() {
   const [note, setNote] = useState('');
   const [priceError, setPriceError] = useState('');
   const [minOfferPrice, setMinOfferPrice] = useState(100);
+  const [offerBlocked, setOfferBlocked] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -51,12 +52,28 @@ export default function CarrierRespond() {
     if (!requestId) return;
     (async () => {
       try {
-        const res = await apiClient(`${API_BASE_URL}/shipments/${requestId}`);
+        const [res, statusRes, carrierRes] = await Promise.all([
+          apiClient(`${API_BASE_URL}/shipments/${requestId}`),
+          apiClient(`${API_BASE_URL}/carriers/me/profile-status`),
+          apiClient(`${API_BASE_URL}/carriers/me`),
+        ]);
         const json = await res.json();
         if (res.ok && json?.success && json.data) {
           setShipment(json.data);
         } else {
           toast.error('Taşıma talebi bulunamadı.');
+        }
+        const statusJson = await statusRes.json().catch(() => ({}));
+        const carrierJson = await carrierRes.json().catch(() => ({}));
+        const carrier = carrierJson?.data?.carrier ?? carrierJson?.data;
+        const profilePercent = Number(statusJson?.data?.overallPercentage ?? 0);
+        const adminApproved = Boolean(carrier?.verifiedByAdmin || carrier?.verificationStatus === 'verified');
+        if (profilePercent < 75) {
+          setOfferBlocked('Teklif verebilmek için profilinizin en az %75 tamamlanması gerekiyor.');
+        } else if (!adminApproved) {
+          setOfferBlocked('Teklif verebilmek için hesabınızın admin tarafından onaylanması gerekiyor.');
+        } else {
+          setOfferBlocked(null);
         }
       } catch {
         toast.error('Veri yüklenirken hata oluştu.');
@@ -135,6 +152,14 @@ export default function CarrierRespond() {
         </CardContent>
       </Card>
 
+      {offerBlocked && (
+        <Card className="border-amber-200 bg-amber-50">
+          <CardContent className="py-4 text-sm text-amber-800">
+            {offerBlocked}
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle>Teklif Oluştur</CardTitle>
@@ -166,7 +191,7 @@ export default function CarrierRespond() {
           </div>
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => navigate(-1)}>İptal</Button>
-            <Button onClick={submitOffer} disabled={submitting || !price || !!priceError}>
+            <Button onClick={submitOffer} disabled={submitting || !price || !!priceError || Boolean(offerBlocked)}>
               {submitting ? 'Gönderiliyor...' : 'Gönder'}
             </Button>
           </div>

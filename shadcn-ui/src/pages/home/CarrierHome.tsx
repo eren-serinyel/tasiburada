@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+﻿import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -22,7 +22,6 @@ import {
 import { getCarrierProfileTasks } from '@/lib/utils';
 import { Shipment, User } from '@/lib/types';
 import { getSessionUser, setSessionUser } from '@/lib/storage';
-import { Separator } from '@/components/ui/separator';
 import { apiClient } from '@/lib/apiClient';
 
 type PendingShipmentApi = {
@@ -41,15 +40,32 @@ type PendingJob = Shipment & {
   customerDisplayName: string;
 };
 
+type ActiveOffer = {
+  id: string;
+  shipmentId: string;
+  price: number;
+  status: string;
+  offeredAt: string;
+  shipment?: {
+    id: string;
+    origin?: string;
+    destination?: string;
+    loadDetails?: string;
+    shipmentDate?: string;
+  };
+};
+
 const formatLoadSummary = (loadDetails?: string, weight?: number) => {
-  const safeLoadDetails = loadDetails?.trim() || 'Yük bilgisi yok';
+  const safeLoadDetails = loadDetails?.trim() || 'YÃ¼k bilgisi yok';
   return weight && weight > 0 ? `${safeLoadDetails}, ${weight} kg` : safeLoadDetails;
 };
 
 export default function CarrierHome() {
   const [user, setUser] = useState<User | null>(null);
   const [profileCompletion, setProfileCompletion] = useState<number | null>(null);
+  const [adminApproved, setAdminApproved] = useState(false);
   const [pendingJobs, setPendingJobs] = useState<PendingJob[]>([]);
+  const [activeOffers, setActiveOffers] = useState<ActiveOffer[]>([]);
   const [pendingLoading, setPendingLoading] = useState(true);
   const navigate = useNavigate();
   const API_BASE_URL = '/api/v1';
@@ -94,6 +110,21 @@ export default function CarrierHome() {
     };
   }, [user?.id, user?.type]);
 
+  useEffect(() => {
+    if (!user || user.type !== 'carrier') return;
+    const fetchCarrierApproval = async () => {
+      try {
+        const res = await apiClient(`${API_BASE_URL}/carriers/me`);
+        const json = await res.json();
+        const carrier = json?.data?.carrier ?? json?.data;
+        setAdminApproved(Boolean(carrier?.verifiedByAdmin || carrier?.verificationStatus === 'verified'));
+      } catch {
+        setAdminApproved(false);
+      }
+    };
+    fetchCarrierApproval();
+  }, [user?.id, user?.type]);
+
   const [stats, setStats] = useState({
     totalEarnings: 0,
     activeJobs: 0,
@@ -121,6 +152,31 @@ export default function CarrierHome() {
     };
     
     fetchStats();
+  }, [user]);
+
+  useEffect(() => {
+    if (!user || user.type !== 'carrier') return;
+
+    const fetchOffers = async () => {
+      try {
+        const res = await apiClient(`${API_BASE_URL}/carriers/me/offers`);
+        const json = await res.json();
+        if (res.ok && json?.success) {
+          const offers = Array.isArray(json.data)
+            ? json.data
+            : Array.isArray(json.data?.data)
+              ? json.data.data
+              : [];
+          setActiveOffers((offers as ActiveOffer[]).filter((offer) => offer.status === 'accepted'));
+        } else {
+          setActiveOffers([]);
+        }
+      } catch {
+        setActiveOffers([]);
+      }
+    };
+
+    fetchOffers();
   }, [user]);
 
   useEffect(() => {
@@ -157,7 +213,7 @@ export default function CarrierHome() {
             status: 'pending',
             price: Number(item.price || 0),
             createdAt: new Date(),
-            customerDisplayName: item.customerDisplayName || 'Müşteri'
+            customerDisplayName: item.customerDisplayName || 'MÃ¼ÅŸteri'
           }));
           setPendingJobs(mapped.slice(0, 5));
         } else {
@@ -185,6 +241,7 @@ export default function CarrierHome() {
   const profileReady = typeof percentFromDb === 'number'
     ? percent >= 100
     : fallbackProgress.isComplete;
+  const canOffer = profileReady && adminApproved;
 
   return (
     <div className="min-h-screen bg-gray-50/50 pb-10">
@@ -193,9 +250,9 @@ export default function CarrierHome() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold tracking-tight text-gray-900">
-              Merhaba, {user?.name || 'Nakliyeci'} 👋
+              Merhaba, {user?.name || 'Nakliyeci'} ğŸ‘‹
             </h1>
-            <p className="text-sm text-gray-500">İşlerini yönet ve yeni fırsatları keşfet.</p>
+            <p className="text-sm text-gray-500">Ä°ÅŸlerini yÃ¶net ve yeni fÄ±rsatlarÄ± keÅŸfet.</p>
           </div>
           <div className="flex items-center gap-3">
             <Button variant="outline" size="sm" className="hidden sm:flex" asChild>
@@ -207,7 +264,7 @@ export default function CarrierHome() {
             <Button variant="default" size="sm" className="bg-blue-600 hover:bg-blue-700" asChild>
               <Link to="/ilanlar">
                 <Search className="mr-2 h-4 w-4" />
-                Yük Ara
+                YÃ¼k Ara
               </Link>
             </Button>
           </div>
@@ -219,28 +276,27 @@ export default function CarrierHome() {
         {/* Stats Grid */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <StatsCard 
-            title="Toplam Kazanç" 
-            value={`₺${totalEarnings.toLocaleString('tr-TR')}`} 
-            description="+₺2,500 geçen aydan" 
+            title="Toplam KazanÃ§" 
+            value={`â‚º${totalEarnings.toLocaleString('tr-TR')}`} 
+            description="Tamamlanan işlerden"
             icon={DollarSign}
-            trend="up"
           />
           <StatsCard 
-            title="Aktif İşler" 
-            value={pendingJobs.length.toString()} 
-            description="3 teslimat yolda" 
+            title="Aktif Ä°ÅŸler" 
+            value={String(activeOffers.length || stats.activeJobs)}
+            description="Kabul edilen teklifler"
             icon={Truck}
           />
           <StatsCard 
             title="Tamamlanan" 
             value={completedJobsCount.toString()} 
-            description="Bu yıl toplam" 
+            description="Bu yÄ±l toplam" 
             icon={CheckCircle2}
           />
           <StatsCard 
-            title="Mağaza Puanı" 
+            title="MaÄŸaza PuanÄ±" 
             value={rating.toString()} 
-            description="5 üzerinden" 
+            description="5 Ã¼zerinden" 
             icon={Star}
             highlight
           />
@@ -252,17 +308,17 @@ export default function CarrierHome() {
           <div className="md:col-span-4 lg:col-span-5 space-y-6">
             
             {/* Action Banner if Profile/Docs Incomplete */}
-            {!profileReady && (
+            {!canOffer && (
               <Card className="bg-gradient-to-r from-amber-50 to-orange-50 border-amber-100 shadow-sm">
                 <CardContent className="p-6 flex items-start gap-4">
                   <div className="p-3 bg-amber-100 rounded-full text-amber-600 shrink-0">
                     <AlertCircle className="h-6 w-6" />
                   </div>
                   <div>
-                    <h3 className="font-semibold text-amber-900 text-lg">Hesap Onayı Bekleniyor</h3>
+                    <h3 className="font-semibold text-amber-900 text-lg">Hesap OnayÄ± Bekleniyor</h3>
                     <p className="text-amber-700 mt-1">
-                      Teklif vermeye başlamak için profilini tamamlaman ve gerekli belgeleri yüklemen gerekiyor.
-                      Şu an profilin %{percent} tamamlandı.
+                      Teklif vermeye baÅŸlamak iÃ§in profilini tamamlaman ve gerekli belgeleri yÃ¼klemen gerekiyor.
+                      Åu an profilin %{percent} tamamlandÄ±.
                     </p>
                     <Button variant="outline" className="mt-4 border-amber-200 text-amber-800 hover:bg-amber-100" asChild>
                       <Link to="/profilim">Profili Tamamla</Link>
@@ -275,11 +331,11 @@ export default function CarrierHome() {
             <Tabs defaultValue="available" className="w-full">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-4">
                 <TabsList className="grid w-full sm:w-[400px] grid-cols-2">
-                  <TabsTrigger value="available">Sizin İçin Önerilenler</TabsTrigger>
-                  <TabsTrigger value="active">Aktif İşlerim</TabsTrigger>
+                  <TabsTrigger value="available">Sizin Ä°Ã§in Ã–nerilenler</TabsTrigger>
+                  <TabsTrigger value="active">Aktif Ä°ÅŸlerim</TabsTrigger>
                 </TabsList>
                 <Link to="/ilanlar" className="text-sm text-blue-600 hover:underline flex items-center font-medium">
-                  Tüm İlanları Gör <ArrowRight className="ml-1 h-3 w-3" />
+                  TÃ¼m Ä°lanlarÄ± GÃ¶r <ArrowRight className="ml-1 h-3 w-3" />
                 </Link>
               </div>
 
@@ -289,7 +345,7 @@ export default function CarrierHome() {
                     <div className="h-8 w-8 rounded-full border-2 border-gray-300 border-t-gray-700 animate-spin" />
                   </Card>
                 ) : pendingJobs.length === 0 ? (
-                  <Card className="flex items-center justify-center py-10 text-gray-500">Henüz ilan yok</Card>
+                  <Card className="flex items-center justify-center py-10 text-gray-500">HenÃ¼z ilan yok</Card>
                 ) : (
                   pendingJobs.map((job) => (
                     <Card key={job.id} className="overflow-hidden hover:shadow-md transition-shadow cursor-pointer" onClick={() => navigate(`/ilan/${job.id}`)}>                      <div className="p-6">
@@ -298,9 +354,9 @@ export default function CarrierHome() {
                             <Badge variant="secondary">Bekliyor</Badge>
                             <span className="text-xs text-gray-500 font-mono">#{job.id.substring(0,8)}</span>
                           </div>
-                          <span className="font-bold text-lg text-gray-900">₺{Number(job.price || 0).toLocaleString('tr-TR')}</span>
+                          <span className="font-bold text-lg text-gray-900">â‚º{Number(job.price || 0).toLocaleString('tr-TR')}</span>
                         </div>
-                        <p className="mb-4 text-sm font-medium text-gray-700">Müşteri: {job.customerDisplayName}</p>
+                        <p className="mb-4 text-sm font-medium text-gray-700">MÃ¼ÅŸteri: {job.customerDisplayName}</p>
                         <div className="grid md:grid-cols-2 gap-6">
                           <div className="space-y-2">
                             <p className="text-sm text-gray-500">Nereden</p>
@@ -309,7 +365,7 @@ export default function CarrierHome() {
                             <p className="font-medium text-gray-900">{job.destination.city || job.destination.address}</p>
                           </div>
                           <div className="space-y-2">
-                            <p className="text-sm text-gray-500">Yük</p>
+                            <p className="text-sm text-gray-500">YÃ¼k</p>
                             <p className="font-medium text-gray-900">{formatLoadSummary(job.description, job.weight)}</p>
                           </div>
                         </div>
@@ -320,27 +376,27 @@ export default function CarrierHome() {
               </TabsContent>
               
               <TabsContent value="active" className="space-y-4">
-                {pendingJobs.length === 0 ? (
+                {activeOffers.length === 0 ? (
                   <Card className="flex flex-col items-center justify-center py-12 text-center border-dashed">
                     <Package className="h-12 w-12 text-gray-300 mb-4" />
-                    <p className="text-lg font-medium text-gray-900">Aktif iş bulunamadı</p>
-                    <p className="text-sm text-gray-500 max-w-sm mt-1 mx-auto">Şu anda üzerinde çalıştığınız bir taşıma işi yok. Fırsatları inceleyip teklif verin.</p>
+                    <p className="text-lg font-medium text-gray-900">Aktif iÅŸ bulunamadÄ±</p>
+                    <p className="text-sm text-gray-500 max-w-sm mt-1 mx-auto">Åu anda Ã¼zerinde Ã§alÄ±ÅŸtÄ±ÄŸÄ±nÄ±z bir taÅŸÄ±ma iÅŸi yok. FÄ±rsatlarÄ± inceleyip teklif verin.</p>
                     <Button className="mt-6" asChild>
-                       <Link to="/ilanlar">İş Ara</Link>
+                       <Link to="/ilanlar">Ä°ÅŸ Ara</Link>
                     </Button>
                   </Card>
                 ) : (
-                  pendingJobs.map((job) => (
-                    <Card key={job.id} className="overflow-hidden hover:shadow-md transition-shadow">
+                  activeOffers.map((offer) => (
+                    <Card key={offer.id} className="overflow-hidden hover:shadow-md transition-shadow">
                       <div className="p-6">
                         <div className="flex items-center justify-between mb-4">
                           <div className="flex items-center gap-2">
-                            <Badge variant={job.status === 'matched' ? 'default' : 'secondary'} className={job.status === 'matched' ? 'bg-green-600' : ''}>
-                              {job.status === 'matched' ? 'Onaylandı' : 'Teklif Verildi'}
+                            <Badge variant="default" className="bg-green-600">
+                              Kabul Edildi
                             </Badge>
-                            <span className="text-xs text-gray-500 font-mono">#{job.id.substring(0,8)}</span>
+                            <span className="text-xs text-gray-500 font-mono">#{offer.shipmentId.substring(0,8)}</span>
                           </div>
-                          <span className="font-bold text-lg text-gray-900">₺{job.price.toLocaleString()}</span>
+                          <span className="font-bold text-lg text-gray-900">â‚º{Number(offer.price || 0).toLocaleString('tr-TR')}</span>
                         </div>
                         
                         <div className="grid md:grid-cols-2 gap-6">
@@ -351,7 +407,7 @@ export default function CarrierHome() {
                                     </div>
                                     <div>
                                         <p className="text-xs text-gray-500 uppercase font-medium">Nereden</p>
-                                        <p className="font-medium text-gray-900">{job.origin.city || job.origin.address}</p>
+                                        <p className="font-medium text-gray-900">{offer.shipment?.origin || '-'}</p>
                                     </div>
                                 </div>
                                 <div className="flex items-start gap-3">
@@ -360,25 +416,25 @@ export default function CarrierHome() {
                                     </div>
                                     <div>
                                         <p className="text-xs text-gray-500 uppercase font-medium">Nereye</p>
-                                        <p className="font-medium text-gray-900">{job.destination.city || job.destination.address}</p>
+                                        <p className="font-medium text-gray-900">{offer.shipment?.destination || '-'}</p>
                                     </div>
                                 </div>
                             </div>
                             <div className="flex flex-col justify-center space-y-2 pl-0 md:pl-4 border-l-0 md:border-l border-gray-100">
                                 <div className="flex items-center gap-2 text-sm text-gray-600">
                                     <Calendar className="h-4 w-4 opacity-70" />
-                                    <span>Teslimat: {new Date(job.requestedDate || job.date).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long' })}</span>
+                                    <span>Teslimat: {offer.shipment?.shipmentDate ? new Date(offer.shipment.shipmentDate).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long' }) : '-'}</span>
                                 </div>
                                 <div className="flex items-center gap-2 text-sm text-gray-600">
                                     <Package className="h-4 w-4 opacity-70" />
-                                    <span>{job.weight} kg Yük</span>
+                                    <span>{offer.shipment?.loadDetails || 'Yük bilgisi yok'}</span>
                                 </div>
                             </div>
                         </div>
                       </div>
                       <div className="bg-gray-50 px-6 py-3 border-t flex justify-end">
-                          <Button variant="ghost" size="sm" className="text-blue-600 hover:text-blue-700 hover:bg-blue-50" onClick={(e) => { e.stopPropagation(); navigate(`/ilan/${job.id}`); }}>
-                              Detayları Gör <ArrowRight className="ml-2 h-4 w-4" />
+                          <Button variant="ghost" size="sm" className="text-blue-600 hover:text-blue-700 hover:bg-blue-50" onClick={(e) => { e.stopPropagation(); navigate(`/ilan/${offer.shipmentId}`); }}>
+                              DetaylarÄ± GÃ¶r <ArrowRight className="ml-2 h-4 w-4" />
                           </Button>
                       </div>
                     </Card>
@@ -395,29 +451,30 @@ export default function CarrierHome() {
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-base">Profil Durumu</CardTitle>
-                <CardDescription>Hesap onayı ve güvenilirlik</CardDescription>
+                <CardDescription>Hesap onayÄ± ve gÃ¼venilirlik</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
                     <div className="flex items-end justify-between">
                         <span className="text-3xl font-bold text-gray-900">%{percent}</span>
                         <span className={`text-sm font-medium ${percent >= 100 ? 'text-green-600' : 'text-amber-600'}`}>
-                            {percent >= 100 ? 'Tamamlandı' : 'Eksikler var'}
+                            {percent >= 100 ? 'TamamlandÄ±' : 'Eksikler var'}
                         </span>
                     </div>
                     <Progress value={percent} className="h-2" />
                     
                     <div className="space-y-2 pt-2">
                         <CheckItem label="Firma Bilgileri" checked={true} />
-                        <CheckItem label="Vergi Levhası" checked={user?.verificationStatus === 'verified'} />
+                        <CheckItem label="Vergi LevhasÄ±" checked={user?.verificationStatus === 'verified'} />
                         <CheckItem label="K3 Yetki Belgesi" checked={false} />
-                        <CheckItem label="Araç Fotoğrafları" checked={false} />
+                        <CheckItem label="AraÃ§ FotoÄŸraflarÄ±" checked={false} />
+                        <CheckItem label="Admin onayı" checked={adminApproved} />
                     </div>
                 </div>
               </CardContent>
               <CardFooter className="bg-gray-50 border-t p-4">
                   <Button variant="outline" className="w-full text-xs h-8" asChild>
-                    <Link to="/profilim">Profili Düzenle</Link>
+                    <Link to="/profilim">Profili DÃ¼zenle</Link>
                   </Button>
               </CardFooter>
             </Card>
@@ -425,33 +482,16 @@ export default function CarrierHome() {
             {/* Recent Notifications / Activity */}
             <Card>
                 <CardHeader className="pb-3">
-                    <CardTitle className="text-base flex items-center justify-between">
+                    <CardTitle className="text-base flex items-center gap-2">
+                        <Bell className="h-4 w-4 text-blue-600" />
                         Bildirimler
-                        <Badge variant="secondary" className="bg-blue-100 text-blue-700 hover:bg-blue-100">2 Yeni</Badge>
                     </CardTitle>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                     <div className="flex gap-3 items-start">
-                         <div className="bg-blue-100 p-2 rounded-full text-blue-600 mt-0.5">
-                             <Bell className="h-3 w-3" />
-                         </div>
-                         <div>
-                             <p className="text-sm font-medium text-gray-900">Yeni İş Fırsatı</p>
-                             <p className="text-xs text-gray-500 mt-0.5">Bölgendeki "İstanbul - İzmir" rotasında yeni bir ilan var.</p>
-                             <p className="text-[10px] text-gray-400 mt-1">10 dk önce</p>
-                         </div>
-                     </div>
-                     <Separator />
-                     <div className="flex gap-3 items-start">
-                         <div className="bg-green-100 p-2 rounded-full text-green-600 mt-0.5">
-                             <DollarSign className="h-3 w-3" />
-                         </div>
-                         <div>
-                             <p className="text-sm font-medium text-gray-900">Ödeme Alındı</p>
-                             <p className="text-xs text-gray-500 mt-0.5">#TR8823 nolu taşıma için ödeme hesabına geçti.</p>
-                             <p className="text-[10px] text-gray-400 mt-1">2 saat önce</p>
-                         </div>
-                     </div>
+                <CardContent className="space-y-3">
+                    <p className="text-sm text-gray-500">Güncel teklif, iş ve ödeme bildirimlerini bildirim merkezinden takip edin.</p>
+                    <Button variant="outline" size="sm" className="w-full" asChild>
+                      <Link to="/bildirimler">Bildirimleri Aç</Link>
+                    </Button>
                 </CardContent>
             </Card>
 
@@ -461,10 +501,10 @@ export default function CarrierHome() {
                     <div className="mb-4 bg-white/20 w-10 h-10 rounded-lg flex items-center justify-center backdrop-blur">
                         <TrendingUp className="h-6 w-6 text-white" />
                     </div>
-                    <h3 className="font-bold text-lg mb-1">Kazancını Arttır</h3>
-                    <p className="text-indigo-100 text-sm mb-4">Premium üye olarak komisyon oranlarını düşürebilirsin.</p>
+                    <h3 className="font-bold text-lg mb-1">KazancÄ±nÄ± ArttÄ±r</h3>
+                    <p className="text-indigo-100 text-sm mb-4">Premium Ã¼ye olarak komisyon oranlarÄ±nÄ± dÃ¼ÅŸÃ¼rebilirsin.</p>
                     <Button size="sm" className="w-full bg-white text-indigo-600 hover:bg-slate-100 border-none font-semibold">
-                        Premium'a Geç
+                        Premium'a GeÃ§
                     </Button>
                 </CardContent>
             </Card>
@@ -549,3 +589,4 @@ function CheckItem({ label, checked }: { label: string, checked: boolean }) {
         </div>
     )
 }
+
