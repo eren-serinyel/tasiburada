@@ -1,668 +1,519 @@
-﻿import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
-import { Check, Star, Phone, ChevronRight, User, RotateCcw, Copy } from 'lucide-react';
+import { 
+  ArrowRight,
+  Calendar,
+  ChevronRight, 
+  Clock3,
+  Package,
+  Building2,
+  CircleCheck,
+  CircleDashed,
+  UserRound,
+} from 'lucide-react';
 import { apiClient } from '@/lib/apiClient';
-import { toast } from '@/components/ui/sonner';
-import { getUserType, getUserId } from '@/lib/auth';
-import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel,
-  AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
-  AlertDialogHeader, AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
+import { getUserType } from '@/lib/auth';
+import { cn } from '@/lib/utils';
 
-const API_BASE_URL = '/api/v1';
+type ShipmentStatus = 'pending' | 'offer_received' | 'matched' | 'in_transit' | 'completed' | 'cancelled';
 
-interface BackendOffer {
+type ShipmentConverterSummary = {
+  converterSessionId: string | null;
+  converterAppliedAt: string | null;
+  converterEstimatedVolumeMin: number | null;
+  converterEstimatedVolumeMax: number | null;
+  converterRecommendedVehicleCode: string | null;
+  converterLastAppliedBy: string | null;
+} | null;
+
+type BackendShipment = {
   id: string;
-  shipmentId: string;
-  carrierId: string;
-  carrier?: {
-    id: string;
-    companyName?: string | null;
-    rating?: number;
-    pictureUrl?: string | null;
-    phone?: string;
-  };
-  price: number;
-  message?: string;
-  estimatedDuration?: number;
-  status: string;
-  offeredAt: string;
-}
-
-interface BackendShipment {
-  id: string;
-  origin: string;
-  destination: string;
-  loadDetails: string;
-  transportType?: string;
-  originPlaceType?: string;
-  destinationPlaceType?: string;
-  placeType?: string;
-  originHasElevator?: boolean;
-  destinationHasElevator?: boolean;
-  hasElevator?: boolean;
-  originFloor?: number;
-  destinationFloor?: number;
-  floor?: number;
-  insuranceType?: string;
-  timePreference?: string;
-  weight?: number;
-  status: string;
-  price?: number;
-  shipmentDate: string;
-  createdAt: string;
-  customerId: string;
-  carrierId?: string | null;
-  carrier?: {
-    id: string;
-    companyName?: string | null;
-    rating?: number;
-    pictureUrl?: string | null;
-    phone?: string;
-  };
-  customer?: { firstName: string; lastName: string; phone?: string; email?: string };
-  contactPhone?: string | null;
+  status: ShipmentStatus;
+  origin?: string;
+  destination?: string;
+  loadDetails?: string;
+  weight?: number | null;
+  shipmentDate?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  price?: number | null;
+  transportType?: string | null;
+  insuranceType?: string | null;
+  originFloor?: number | null;
+  destinationFloor?: number | null;
+  hasElevator?: boolean | null;
+  originHasElevator?: boolean | null;
+  destinationHasElevator?: boolean | null;
   extraServices?: string[];
-  offers?: BackendOffer[];
-}
-
-/* ── Status helpers ── */
-const statusConfig: Record<string, { label: string; bg: string; text: string }> = {
-  pending:        { label: 'Teklif Bekleniyor', bg: 'bg-amber-50',  text: 'text-amber-700' },
-  offer_received: { label: 'Teklif Geldi',      bg: 'bg-amber-50',  text: 'text-amber-700' },
-  matched:        { label: 'Nakliyeci Seçildi',  bg: 'bg-blue-50',   text: 'text-blue-700' },
-  in_transit:     { label: 'Taşınıyor',          bg: 'bg-orange-50', text: 'text-orange-700' },
-  completed:      { label: 'Tamamlandı',         bg: 'bg-green-50',  text: 'text-green-700' },
-  cancelled:      { label: 'İptal Edildi',        bg: 'bg-gray-100',  text: 'text-gray-500' },
+  offerCount?: number;
+  offers?: Array<{ id: string; status?: string; price?: number; offeredAt?: string }>;
+  customer?: {
+    firstName?: string;
+    lastName?: string;
+  };
+  converter?: ShipmentConverterSummary;
 };
 
-const getStatus = (st: string) => statusConfig[st] || { label: st, bg: 'bg-gray-100', text: 'text-gray-600' };
-
-const insuranceLabel: Record<string, string> = {
-  none: 'Sigortasız',
-  basic: 'Temel Sigorta',
-  full: 'Tam Sigorta',
+const statusConfigs: Record<ShipmentStatus, { label: string; className: string }> = {
+  pending: { label: 'Teklif Bekleniyor', className: 'bg-amber-50 text-amber-700 border-amber-200' },
+  offer_received: { label: 'Teklif Geldi', className: 'bg-blue-50 text-blue-700 border-blue-200' },
+  matched: { label: 'Eşleşti', className: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  in_transit: { label: 'Taşıma Başladı', className: 'bg-indigo-50 text-indigo-700 border-indigo-200' },
+  completed: { label: 'Tamamlandı', className: 'bg-green-50 text-green-700 border-green-200' },
+  cancelled: { label: 'İptal', className: 'bg-gray-100 text-gray-600 border-gray-200' },
 };
-
-const fmtDate = (d: string) =>
-  new Date(d).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' });
-
-const fmtPrice = (n: number) =>
-  new Intl.NumberFormat('tr-TR', { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(n);
 
 export default function ShipmentDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const userType = getUserType();
-  const userId = getUserId();
   const [shipment, setShipment] = useState<BackendShipment | null>(null);
   const [loading, setLoading] = useState(true);
-  const [updating, setUpdating] = useState(false);
-  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const fetchShipment = useCallback(async () => {
+  useEffect(() => {
     if (!id) return;
-    setLoading(true);
-    try {
-      const res = await apiClient(`${API_BASE_URL}/shipments/${id}`);
-      const json = await res.json();
-      if (res.ok && json?.success && json.data) {
-        setShipment(json.data);
-      } else {
-        setShipment(null);
-      }
-    } catch {
-      setShipment(null);
-    } finally {
+
+    apiClient(`/api/v1/shipments/${id}`).then(r => r.json()).then(j => {
+        if (j.success) {
+          setShipment(j.data as BackendShipment);
+          setError(null);
+        } else {
+          setError('İlan detayı alınamadı.');
+        }
+        setLoading(false);
+    }).catch(() => {
+      setError('İlan detayı yüklenirken bağlantı hatası oluştu.');
       setLoading(false);
-    }
+    });
   }, [id]);
 
-  useEffect(() => { fetchShipment(); }, [fetchShipment]);
+  const offerCount = useMemo(() => {
+    if (typeof shipment?.offerCount === 'number') return shipment.offerCount;
+    if (Array.isArray(shipment?.offers)) return shipment.offers.length;
+    if (shipment?.status === 'offer_received') return 1;
+    return 0;
+  }, [shipment]);
 
-  const handleStart = async () => {
-    if (!shipment) return;
-    setUpdating(true);
-    try {
-      const res = await apiClient(`${API_BASE_URL}/shipments/${shipment.id}/start`, { method: 'PUT' });
-      const json = await res.json();
-      if (res.ok && json?.success) {
-        toast.success('Taşıma başlatıldı!');
-        await fetchShipment();
-      } else {
-        toast.error(json?.message || 'İşlem başarısız.');
-      }
-    } catch {
-      toast.error('İşlem başarısız.');
-    } finally {
-      setUpdating(false);
-    }
-  };
-
-  const handleComplete = async () => {
-    if (!shipment) return;
-    setUpdating(true);
-    try {
-      const res = await apiClient(`${API_BASE_URL}/shipments/${shipment.id}/complete`, { method: 'PUT' });
-      const json = await res.json();
-      if (res.ok && json?.success) {
-        toast.success('Taşıma tamamlandı!');
-        await fetchShipment();
-      } else {
-        toast.error(json?.message || 'İşlem başarısız.');
-      }
-    } catch {
-      toast.error('İşlem başarısız.');
-    } finally {
-      setUpdating(false);
-    }
-  };
-
-  const handleCancel = async () => {
-    if (!shipment) return;
-    setCancelDialogOpen(false);
-    setUpdating(true);
-    try {
-      const res = await apiClient(`${API_BASE_URL}/shipments/${shipment.id}/cancel`, { method: 'PUT' });
-      const json = await res.json();
-      if (res.ok && json?.success) {
-        toast.success('Taşıma iptal edildi.');
-        navigate('/ilanlarim');
-      } else {
-        toast.error(json?.message || 'İşlem başarısız.');
-      }
-    } catch {
-      toast.error('İşlem başarısız.');
-    } finally {
-      setUpdating(false);
-    }
-  };
-
-  const handleAcceptOffer = async (offerId: string) => {
-    setUpdating(true);
-    try {
-      const res = await apiClient(`${API_BASE_URL}/offers/${offerId}/accept`, { method: 'PUT' });
-      const json = await res.json();
-      if (res.ok && json?.success) {
-        toast.success('Teklif kabul edildi!');
-        await fetchShipment();
-      } else {
-        toast.error(json?.message || 'İşlem başarısız.');
-      }
-    } catch {
-      toast.error('İşlem başarısız.');
-    } finally {
-      setUpdating(false);
-    }
-  };
-
-  const handleRejectOffer = async (offerId: string) => {
-    setUpdating(true);
-    try {
-      const res = await apiClient(`${API_BASE_URL}/offers/${offerId}/reject`, { method: 'PUT' });
-      const json = await res.json();
-      if (res.ok && json?.success) {
-        toast.success('Teklif reddedildi.');
-        await fetchShipment();
-      } else {
-        toast.error(json?.message || 'İşlem başarısız.');
-      }
-    } catch {
-      toast.error('İşlem başarısız.');
-    } finally {
-      setUpdating(false);
-    }
-  };
-
-  /* ── Status badge config ── */
-  const STATUS_MAP: Record<string, { label: string; bg: string; color: string; border: string; dot?: boolean }> = {
-    pending:        { label: 'Teklif Bekleniyor', bg: '#FFF7ED', color: '#C2410C', border: '#FED7AA', dot: true },
-    offer_received: { label: 'Teklif Geldi',      bg: '#EFF6FF', color: '#1D4ED8', border: '#BFDBFE', dot: true },
-    matched:        { label: 'Nakliyeci Seçildi',  bg: '#F0FDF4', color: '#15803D', border: '#BBF7D0', dot: true },
-    in_transit:     { label: 'Taşınıyor',          bg: '#FFF7ED', color: '#C2410C', border: '#FED7AA' },
-    completed:      { label: 'Tamamlandı',         bg: '#F0FDF4', color: '#15803D', border: 'transparent' },
-    cancelled:      { label: 'İptal Edildi',        bg: '#F8FAFC', color: '#64748B', border: '#E2E8F0' },
-  };
-
-  const StatusBadge = ({ status, size = 'normal' }: { status: string; size?: 'normal' | 'small' }) => {
-    const cfg = STATUS_MAP[status] || STATUS_MAP.cancelled;
-    const pad = size === 'small' ? '2px 8px' : '4px 12px';
-    return (
-      <span style={{ background: cfg.bg, color: cfg.color, border: `0.5px solid ${cfg.border}`, borderRadius: '9999px', padding: pad, fontSize: '11px', fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: '5px', whiteSpace: 'nowrap' }}>
-        {cfg.dot && <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: cfg.color, animation: 'pulse 2s infinite' }} />}
-        {cfg.label}
-      </span>
-    );
-  };
-
-  /* ── Loading state ── */
   if (loading) {
+    return <div className="p-16 text-center text-sm text-gray-500">Yükleniyor...</div>;
+  }
+
+  if (!shipment || error) {
     return (
-      <div style={{ background: '#F8FAFC', minHeight: '100vh' }}>
-        <div style={{ maxWidth: '1020px', margin: '0 auto', padding: '20px 24px' }}>
-          <div className="animate-pulse" style={{ height: '14px', width: '140px', background: '#E2E8F0', borderRadius: '4px', marginBottom: '14px' }} />
-          <div className="animate-pulse" style={{ height: '22px', width: '320px', background: '#E2E8F0', borderRadius: '6px', marginBottom: '20px' }} />
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '14px', marginBottom: '14px' }}>
-            {[1,2,3].map(i => (
-              <div key={i} style={{ background: 'white', border: '0.5px solid #E2E8F0', borderRadius: '12px', padding: '18px' }}>
-                <div className="animate-pulse" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  <div style={{ height: '14px', width: '40%', background: '#E2E8F0', borderRadius: '4px' }} />
-                  <div style={{ height: '12px', width: '100%', background: '#F1F5F9', borderRadius: '4px' }} />
-                  <div style={{ height: '12px', width: '80%', background: '#F1F5F9', borderRadius: '4px' }} />
-                  <div style={{ height: '12px', width: '100%', background: '#F1F5F9', borderRadius: '4px' }} />
-                  <div style={{ height: '12px', width: '60%', background: '#F1F5F9', borderRadius: '4px' }} />
-                  <div style={{ height: '12px', width: '90%', background: '#F1F5F9', borderRadius: '4px' }} />
-                </div>
-              </div>
-            ))}
-          </div>
-          <div style={{ background: 'white', border: '0.5px solid #E2E8F0', borderRadius: '12px', padding: '18px' }}>
-            <div className="animate-pulse" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '12px' }}>
-              {[1,2,3].map(i => (
-                <div key={i} style={{ border: '0.5px solid #E2E8F0', borderRadius: '10px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-                    <div style={{ width: '42px', height: '42px', borderRadius: '10px', background: '#F1F5F9', flexShrink: 0 }} />
-                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      <div style={{ height: '12px', width: '70%', background: '#F1F5F9', borderRadius: '4px' }} />
-                      <div style={{ height: '10px', width: '40%', background: '#F1F5F9', borderRadius: '4px' }} />
-                    </div>
-                  </div>
-                  <div style={{ height: '28px', width: '50%', background: '#F1F5F9', borderRadius: '4px' }} />
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
+      <div className="max-w-3xl mx-auto px-4 py-16">
+        <Card className="border border-gray-200 shadow-sm">
+          <CardContent className="p-8 text-center space-y-4">
+            <p className="text-base font-medium text-gray-900">İlan detayı şu an görüntülenemiyor.</p>
+            <p className="text-sm text-gray-500">{error || 'Bilinmeyen bir hata oluştu.'}</p>
+            <Button variant="outline" asChild>
+              <Link to="/ilanlar">İlanlara Dön</Link>
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
-  if (!shipment) {
-    return (
-      <div style={{ background: '#F8FAFC', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ textAlign: 'center', padding: '80px 0' }}>
-          <div style={{ fontSize: '16px', fontWeight: 600, color: '#0F172A', marginBottom: '12px' }}>İlan bulunamadı</div>
-          <Link to="/" style={{ color: '#2563EB', fontSize: '14px', fontWeight: 500, textDecoration: 'none' }}>Ana Sayfaya Dön</Link>
-        </div>
-      </div>
-    );
-  }
-
-  /* ── Computed ── */
-  const shortId = shipment.id.slice(0, 8).toUpperCase();
-  const offers = shipment.offers || [];
-  const pendingOffers = offers.filter(o => o.status === 'pending');
-  const lowestPrice = offers.length > 0 ? Math.min(...offers.map(o => Number(o.price))) : null;
-  const isCarrierOwner = userType === 'carrier' && shipment.carrierId === userId;
-  const offerPrices = offers.map(o => Number(o.price)).filter(p => p > 0);
-  const minOfferPrice = offerPrices.length > 0 ? Math.min(...offerPrices) : null;
-  const maxOfferPrice = offerPrices.length > 0 ? Math.max(...offerPrices) : null;
-  const directPhone = userType === 'customer'
-    ? shipment.carrier?.phone
-    : userType === 'carrier'
-      ? (shipment.customer?.phone || shipment.contactPhone)
-      : shipment.carrier?.phone || shipment.customer?.phone || shipment.contactPhone;
-  const showContactGate = ['matched', 'in_transit'].includes(shipment.status);
-
-  /* ── Timeline steps ── */
-  const isCancelled = shipment.status === 'cancelled';
-  const timelineSteps = [
-    { label: 'İlan Oluşturuldu', desc: '', date: shipment.createdAt, done: true },
-    { label: 'Teklifler Alındı', desc: offers.length > 0 ? `${offers.length} teklif geldi` : 'Nakliyeciler teklif veriyor', date: offers[0]?.offeredAt || null, done: !isCancelled && ['offer_received','matched','in_transit','completed'].includes(shipment.status) },
-    { label: 'Nakliyeci Seçildi', desc: shipment.carrier?.companyName || '', date: null as string|null, done: !isCancelled && ['matched','in_transit','completed'].includes(shipment.status) },
-    { label: 'Taşıma Başladı', desc: '', date: null as string|null, done: !isCancelled && ['in_transit','completed'].includes(shipment.status) },
-    { label: 'Teslim Edildi', desc: '', date: null as string|null, done: !isCancelled && shipment.status === 'completed' },
-  ];
-  const lastDoneIdx = timelineSteps.reduce((last, s, i) => (s.done ? i : last), -1);
-  const activeIdx = isCancelled ? -1 : (lastDoneIdx + 1 < timelineSteps.length ? lastDoneIdx + 1 : -1);
-
-  /* ── Repeat helpers ── */
-  const handleRepeatShipment = () => {
-    if (!shipment) return;
-    sessionStorage.setItem('repeatShipment', JSON.stringify({
-      origin: shipment.origin,
-      destination: shipment.destination,
-      transportType: shipment.transportType,
-      loadDetails: shipment.loadDetails,
-      weight: shipment.weight,
-      placeType: shipment.originPlaceType ?? shipment.placeType,
-      floor: shipment.originFloor ?? shipment.floor,
-      hasElevator: shipment.originHasElevator ?? shipment.hasElevator,
-      insuranceType: shipment.insuranceType,
-      extraServices: shipment.extraServices,
-    }));
-    navigate('/teklif-talebi?repeat=true');
-  };
-
-  const handleRepeatWithCarrier = () => {
-    if (!shipment || !shipment.carrierId) return;
-    sessionStorage.setItem('repeatShipment', JSON.stringify({
-      origin: shipment.origin,
-      destination: shipment.destination,
-      transportType: shipment.transportType,
-      loadDetails: shipment.loadDetails,
-      weight: shipment.weight,
-      placeType: shipment.originPlaceType ?? shipment.placeType,
-      floor: shipment.originFloor ?? shipment.floor,
-      hasElevator: shipment.originHasElevator ?? shipment.hasElevator,
-      insuranceType: shipment.insuranceType,
-      extraServices: shipment.extraServices,
-      inviteCarrierId: shipment.carrierId,
-      inviteCarrierName: shipment.carrier?.companyName,
-    }));
-    navigate('/teklif-talebi?repeat=true&invite=true');
-  };
-
-  /* ── Detail rows ── */
-  const detailRows: { label: string; value: React.ReactNode }[] = [
-    { label: 'ÇIKIŞ', value: shipment.origin },
-    { label: 'VARIŞ', value: shipment.destination },
-    { label: 'TARİH', value: fmtDate(shipment.shipmentDate) },
-    { label: 'YÜK', value: shipment.loadDetails },
-    { label: 'AĞIRLIK', value: shipment.weight ? `${shipment.weight} kg` : '—' },
-    { label: 'YER', value: `${(shipment.originPlaceType ?? shipment.placeType) || '—'}${(shipment.originFloor ?? shipment.floor) ? ` — ${(shipment.originFloor ?? shipment.floor)}. Kat` : ''}` },
-    { label: 'ASANSÖR', value: (shipment.originHasElevator ?? shipment.hasElevator)
-      ? <span style={{ background: '#F0FDF4', color: '#15803D', borderRadius: '5px', padding: '1px 8px', fontSize: '11px', fontWeight: 500 }}>Var ✓</span>
-      : <span style={{ background: '#FEF2F2', color: '#B91C1C', borderRadius: '5px', padding: '1px 8px', fontSize: '11px', fontWeight: 500 }}>Yok</span>
-    },
-    { label: 'SİGORTA', value: insuranceLabel[shipment.insuranceType || 'none'] || shipment.insuranceType || '—' },
-    { label: 'EKLER', value: shipment.extraServices && shipment.extraServices.length > 0
-      ? <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', justifyContent: 'flex-end' }}>{shipment.extraServices.map((s, i) => <span key={i} style={{ background: '#F1F5F9', borderRadius: '5px', padding: '2px 8px', fontSize: '11px' }}>{s}</span>)}</div>
-      : '—'
-    },
-  ];
-
-  /* ── Summary rows ── */
-  const priceDisplay = minOfferPrice != null && maxOfferPrice != null && minOfferPrice !== maxOfferPrice
-    ? `₺${fmtPrice(minOfferPrice)} – ₺${fmtPrice(maxOfferPrice)}`
-    : minOfferPrice != null ? `₺${fmtPrice(minOfferPrice)}`
-    : shipment.price ? `₺${fmtPrice(Number(shipment.price))}`
-    : '—';
-
-  const summaryRows: { label: string; value: React.ReactNode }[] = [
-    { label: 'Fiyat Aralığı', value: priceDisplay },
-    { label: 'Tarih', value: fmtDate(shipment.shipmentDate) },
-    { label: 'Durum', value: <StatusBadge status={shipment.status} size="small" /> },
-    { label: 'Teklif Sayısı', value: <span style={{ color: offers.length > 0 ? '#1D4ED8' : '#94A3B8', fontWeight: 500 }}>{offers.length} teklif</span> },
-    { label: 'Oluşturulma', value: fmtDate(shipment.createdAt) },
-  ];
+  const status = statusConfigs[shipment.status] || statusConfigs.pending;
+  const routeTitle = `${formatRouteTitle(shipment.origin)} → ${formatRouteTitle(shipment.destination)}`;
+  const heroMeta = [
+    normalizeText(shipment.loadDetails),
+    shipment.weight && shipment.weight > 0 ? `${shipment.weight} kg` : null,
+    formatDate(shipment.shipmentDate),
+  ].filter(Boolean) as string[];
+  const serviceChips = buildServiceChips(shipment);
+  const opsRows = buildOperationalRows(shipment);
+  const processSteps = buildProcessSteps(shipment.status);
+  const converterRows = buildConverterRows(shipment.converter);
 
   return (
-    <div style={{ background: '#F8FAFC', minHeight: '100vh' }}>
-      <div style={{ maxWidth: '1020px', margin: '0 auto', padding: '20px 24px' }}>
-
-        {/* ═══ BREADCRUMB ═══ */}
-        <div style={{ fontSize: '12px', marginBottom: '14px' }}>
-          <Link to="/ilanlarim" style={{ color: '#94A3B8', textDecoration: 'none' }}>İlanlarım</Link>
-          <span style={{ color: '#CBD5E1', margin: '0 5px' }}>/</span>
-          <span style={{ color: '#64748B' }}>İlan Detayı</span>
+    <div className="min-h-screen bg-gray-50/60 pb-12">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-7">
+        <div className="flex items-center gap-2 text-xs text-gray-400 mb-5">
+          <Link to="/ilanlar" className="hover:text-gray-600 transition-colors">İlanlar</Link>
+          <ChevronRight className="w-3.5 h-3.5" />
+          <span className="text-gray-500">İlan Detayı</span>
         </div>
 
-        {/* ═══ PAGE HEADER ═══ */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '20px' }}>
-          <h1 style={{ fontSize: '18px', fontWeight: 600, color: '#0F172A', display: 'flex', alignItems: 'center', gap: '7px', margin: 0 }}>
-            {shipment.origin} <span style={{ color: '#94A3B8', fontSize: '14px' }}>→</span> {shipment.destination}
-          </h1>
-          <StatusBadge status={shipment.status} />
-        </div>
-
-        {/* ═══ TOP ROW — 3 COLUMN GRID ═══ */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '14px', marginBottom: '14px' }}>
-
-          {/* ── COL 1: İLAN DETAYLARI ── */}
-          <div style={{ background: 'white', border: '0.5px solid #E2E8F0', borderRadius: '12px', padding: '18px', alignSelf: 'stretch' }}>
-            {/* Header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-              <span style={{ fontSize: '13px', fontWeight: 500, color: '#0F172A' }}>İlan Detayları</span>
-              <span style={{ background: '#F1F5F9', borderRadius: '5px', padding: '2px 7px', fontFamily: 'monospace', fontSize: '11px', color: '#64748B' }}>#{shortId}</span>
-            </div>
-            {/* Detail rows */}
-            {detailRows.map((row, i) => (
-              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '7px 0', borderBottom: i < detailRows.length - 1 ? '0.5px solid #F1F5F9' : 'none', gap: '8px', ...(i === 0 ? { paddingTop: 0 } : {}) }}>
-                <span style={{ fontSize: '11px', fontWeight: 500, color: '#94A3B8', textTransform: 'uppercase', letterSpacing: '0.06em', flexShrink: 0, paddingTop: '1px' }}>{row.label}</span>
-                <span style={{ fontSize: '13px', fontWeight: 500, color: '#0F172A', textAlign: 'right' }}>{row.value}</span>
+        <Card className="border border-gray-200 shadow-sm bg-white mb-6">
+          <CardContent className="p-5 sm:p-6">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <Badge variant="secondary" className={cn('text-[11px] font-semibold border', status.className)}>
+                  {status.label}
+                </Badge>
+                <span className="text-xs text-gray-500">#{shipment.id.slice(0, 8).toUpperCase()}</span>
               </div>
-            ))}
-          </div>
-
-          {/* ── COL 2: TAŞIMA SÜRECİ (TIMELINE) ── */}
-          <div style={{ background: 'white', border: '0.5px solid #E2E8F0', borderRadius: '12px', padding: '18px', alignSelf: 'stretch' }}>
-            <div style={{ fontSize: '13px', fontWeight: 500, color: '#0F172A', marginBottom: '12px' }}>Taşıma Süreci</div>
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              {timelineSteps.map((ts, idx) => {
-                const isDone = ts.done;
-                const isActive = idx === activeIdx;
-                const isPending = !isDone && !isActive;
-                const isLast = idx === timelineSteps.length - 1;
-                return (
-                  <div key={idx} style={{ display: 'flex', gap: '12px' }}>
-                    {/* Left: circle + line */}
-                    <div style={{ width: '24px', flexShrink: 0, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                      {isDone ? (
-                        <div style={{ width: '24px', height: '24px', borderRadius: '50%', background: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                          <Check style={{ width: '11px', height: '11px', color: 'white' }} />
-                        </div>
-                      ) : isActive ? (
-                        <div style={{ width: '24px', height: '24px', borderRadius: '50%', background: 'white', border: '2px solid #2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                          <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: '#2563EB' }} />
-                        </div>
-                      ) : (
-                        <div style={{ width: '24px', height: '24px', borderRadius: '50%', background: '#F1F5F9', border: '0.5px solid #E2E8F0' }} />
-                      )}
-                      {!isLast && (
-                        <div style={{ width: '2px', flex: 1, minHeight: '16px', margin: '2px 0', background: isDone ? '#2563EB' : '#E2E8F0' }} />
-                      )}
-                    </div>
-                    {/* Right: content */}
-                    <div style={{ flex: 1, paddingBottom: isLast ? 0 : '14px' }}>
-                      <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '1px', color: isDone ? '#0F172A' : isActive ? '#1D4ED8' : '#94A3B8' }}>{ts.label}</div>
-                      {ts.desc && <div style={{ fontSize: '11px', color: '#64748B', lineHeight: 1.4 }}>{ts.desc}</div>}
-                      {ts.date && <div style={{ fontSize: '11px', color: '#94A3B8', marginTop: '1px' }}>{fmtDate(ts.date)}</div>}
-                      {isCancelled && idx === 0 && <div style={{ fontSize: '11px', color: '#DC2626', marginTop: '1px' }}>Taşıma iptal edildi</div>}
-                    </div>
-                  </div>
-                );
-              })}
+              <span className="text-sm text-gray-500">Güncelleme: {formatDateTime(shipment.updatedAt || shipment.createdAt)}</span>
             </div>
-          </div>
-
-          {/* ── COL 3: ÖZET + AKSİYONLAR ── */}
-          <div style={{ background: 'white', border: '0.5px solid #E2E8F0', borderRadius: '12px', padding: '18px', alignSelf: 'stretch' }}>
-            <div style={{ fontSize: '13px', fontWeight: 500, color: '#0F172A', marginBottom: '12px' }}>Özet</div>
-            {/* Summary rows */}
-            {summaryRows.map((row, i) => (
-              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 0', borderBottom: i < summaryRows.length - 1 ? '0.5px solid #F1F5F9' : 'none', ...(i === 0 ? { paddingTop: 0 } : {}), ...(i === summaryRows.length - 1 ? { paddingBottom: 0 } : {}) }}>
-                <span style={{ fontSize: '13px', color: '#64748B' }}>{row.label}</span>
-                <span style={{ fontSize: '13px', fontWeight: 500, color: '#0F172A', textAlign: 'right' }}>{row.value}</span>
-              </div>
-            ))}
-
-            {showContactGate && (
-              <div style={{ marginTop: '12px', padding: '10px 12px', border: '0.5px solid #E2E8F0', borderRadius: '8px', background: directPhone ? '#F0FDF4' : '#F8FAFC', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Phone style={{ width: '14px', height: '14px', color: directPhone ? '#15803D' : '#64748B', flexShrink: 0 }} />
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: '11px', color: '#64748B' }}>İletişim</div>
-                  <div style={{ fontSize: '13px', fontWeight: 600, color: directPhone ? '#15803D' : '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {directPhone || 'Platform içi mesajlaşma'}
-                  </div>
-                </div>
+            <h1 className="text-2xl sm:text-3xl font-semibold text-gray-900 tracking-tight">{routeTitle}</h1>
+            {heroMeta.length > 0 && (
+              <div className="mt-2 flex items-center flex-wrap gap-2 text-sm text-gray-600">
+                {heroMeta.map((item, idx) => (
+                  <span key={`${item}-${idx}`} className="inline-flex items-center gap-2">
+                    {idx > 0 && <span className="text-gray-300">•</span>}
+                    {item}
+                  </span>
+                ))}
               </div>
             )}
+          </CardContent>
+        </Card>
 
-            {/* Action buttons */}
-            <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '0.5px solid #F1F5F9', display: 'flex', flexDirection: 'column', gap: '6px' }}>
-              {/* CUSTOMER — pending / offer_received */}
-              {userType === 'customer' && ['pending', 'offer_received'].includes(shipment.status) && (
-                <>
-                  {pendingOffers.length > 0 && (
-                    <button onClick={() => navigate(`/teklifler/${shipment.id}`)} style={{ width: '100%', height: '36px', background: '#2563EB', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 500, cursor: 'pointer' }}>
-                      Teklif Karşılaştır
-                    </button>
-                  )}
-                  <button disabled={updating} onClick={() => setCancelDialogOpen(true)} style={{ width: '100%', height: '36px', background: 'white', color: '#DC2626', border: '0.5px solid #FECACA', borderRadius: '8px', fontSize: '13px', fontWeight: 500, cursor: 'pointer' }}>
-                    İptal Et
-                  </button>
-                </>
-              )}
+        <div className="grid lg:grid-cols-12 gap-6 items-start">
+          <div className="lg:col-span-8 space-y-6">
+            <Card className="border border-gray-200 shadow-sm">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base font-semibold text-gray-900">Taşıma Genel Görünüm</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <div className="grid md:grid-cols-2 gap-4">
+                  <RouteBlock
+                    label="Çıkış"
+                    location={shipment.origin}
+                    floor={shipment.originFloor}
+                    elevator={shipment.originHasElevator ?? shipment.hasElevator ?? null}
+                  />
+                  <RouteBlock
+                    label="Varış"
+                    location={shipment.destination}
+                    floor={shipment.destinationFloor}
+                    elevator={shipment.destinationHasElevator ?? shipment.hasElevator ?? null}
+                  />
+                </div>
+                <Separator className="my-4" />
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-500">Taşıma Tarihi</span>
+                  <span className="font-medium text-gray-900">{formatDate(shipment.shipmentDate)}</span>
+                </div>
+              </CardContent>
+            </Card>
 
-              {/* CUSTOMER — matched / in_transit */}
-              {userType === 'customer' && ['matched', 'in_transit'].includes(shipment.status) && shipment.carrierId && (
-                <button onClick={() => navigate(`/nakliyeci/${shipment.carrierId}`)} style={{ width: '100%', height: '36px', background: '#2563EB', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 500, cursor: 'pointer' }}>
-                  Nakliyeci Detayı
-                </button>
-              )}
+            <div className="grid md:grid-cols-2 gap-6">
+              <SummaryCard title="Yük Özeti" icon={<Package className="h-4 w-4 text-gray-500" />}>
+                <DetailRow label="İçerik" value={normalizeText(shipment.loadDetails)} />
+                <DetailRow label="Ağırlık" value={shipment.weight && shipment.weight > 0 ? `${shipment.weight} kg` : '-'} />
+                <DetailRow label="Taşıma Tipi" value={normalizeText(shipment.transportType)} />
+              </SummaryCard>
 
-              {/* CUSTOMER — completed */}
-              {userType === 'customer' && shipment.status === 'completed' && (
-                <>
-                  <div style={{ padding: '10px 12px', background: '#F0FDF4', border: '0.5px solid #BBF7D0', borderRadius: '8px', marginBottom: '4px' }}>
-                    <div style={{ fontSize: '12px', fontWeight: 600, color: '#15803D' }}>Taşıma tamamlandı 🎉</div>
-                    <div style={{ fontSize: '11px', color: '#166534', marginTop: '2px' }}>Deneyiminizi paylaşın veya tekrar ilan oluşturun</div>
+              <SummaryCard title="Hizmet Şartları" icon={<Building2 className="h-4 w-4 text-gray-500" />}>
+                {serviceChips.length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {serviceChips.map((chip) => (
+                      <Badge key={chip} variant="secondary" className="bg-gray-100 text-gray-700 border border-gray-200">
+                        {chip}
+                      </Badge>
+                    ))}
                   </div>
-                  {shipment.carrierId && (
-                    <button onClick={() => navigate(`/nakliyeci/${shipment.carrierId}`)} style={{ width: '100%', height: '36px', background: '#2563EB', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 500, cursor: 'pointer' }}>
-                      Nakliyeciyi Değerlendir
-                    </button>
-                  )}
-                  {shipment.carrierId && (
-                    <button onClick={() => handleRepeatWithCarrier()} style={{ width: '100%', height: '36px', background: 'white', color: '#374151', border: '0.5px solid #E2E8F0', borderRadius: '8px', fontSize: '13px', fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
-                      <RotateCcw style={{ width: '14px', height: '14px' }} /> Bu Firma ile Tekrar
-                    </button>
-                  )}
-                  <button onClick={() => handleRepeatShipment()} style={{ width: '100%', height: '36px', background: 'white', color: '#374151', border: '0.5px solid #E2E8F0', borderRadius: '8px', fontSize: '13px', fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
-                    <Copy style={{ width: '14px', height: '14px' }} /> Bu İlanı Tekrar Oluştur
-                  </button>
-                </>
-              )}
-
-              {/* CUSTOMER — cancelled */}
-              {userType === 'customer' && shipment.status === 'cancelled' && (
-                <>
-                  <div style={{ padding: '10px 12px', background: '#FEF2F2', border: '0.5px solid #FECACA', borderRadius: '8px', marginBottom: '4px' }}>
-                    <div style={{ fontSize: '12px', color: '#991B1B' }}>Bu ilan iptal edildi.</div>
-                  </div>
-                  <button onClick={() => handleRepeatShipment()} style={{ width: '100%', height: '36px', background: 'white', color: '#374151', border: '0.5px solid #E2E8F0', borderRadius: '8px', fontSize: '13px', fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}>
-                    <RotateCcw style={{ width: '14px', height: '14px' }} /> Yeniden Oluştur
-                  </button>
-                </>
-              )}
-
-              {/* CARRIER — pending / offer_received: teklif ver */}
-              {userType === 'carrier' && ['pending', 'offer_received'].includes(shipment.status) && (
-                <button onClick={() => navigate(`/nakliyeci/yanit/${shipment.id}`)} style={{ width: '100%', height: '40px', background: 'linear-gradient(135deg, #1D4ED8 0%, #2563EB 100%)', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>
-                  Teklif Ver
-                </button>
-              )}
-
-              {/* CARRIER — matched */}
-              {isCarrierOwner && shipment.status === 'matched' && (
-                <button disabled={updating} onClick={handleStart} style={{ width: '100%', height: '40px', background: 'linear-gradient(135deg, #0F172A 0%, #1E3A5F 100%)', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>
-                  Taşımayı Başlat
-                </button>
-              )}
-
-              {/* CARRIER — in_transit */}
-              {isCarrierOwner && shipment.status === 'in_transit' && (
-                <button disabled={updating} onClick={handleComplete} style={{ width: '100%', height: '40px', background: 'linear-gradient(135deg, #14532D 0%, #15803D 100%)', color: 'white', border: 'none', borderRadius: '8px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>
-                  Teslim Edildi
-                </button>
-              )}
+                ) : (
+                  <p className="text-sm text-gray-500">Ek hizmet bilgisi bulunmuyor.</p>
+                )}
+              </SummaryCard>
             </div>
+
+            {converterRows.length > 0 && (
+              <Card className="border border-gray-200 shadow-sm">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base font-semibold text-gray-900">Converter Özeti</CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0 space-y-2.5">
+                  {converterRows.map((row) => (
+                    <DetailRow key={row.label} label={row.label} value={row.value} />
+                  ))}
+                  <p className="text-xs text-gray-500 pt-1">
+                    Bu sonuç tahminidir, nihai planlama taşıyıcı değerlendirmesiyle netleşebilir.
+                  </p>
+                </CardContent>
+              </Card>
+            )}
+
+            <Card className="border border-gray-200 shadow-sm">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base font-semibold text-gray-900">Operasyonel Durum</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0 space-y-3">
+                {opsRows.map((row) => (
+                  <DetailRow key={row.label} label={row.label} value={row.value} />
+                ))}
+              </CardContent>
+            </Card>
+
+            <Card className="border border-gray-200 shadow-sm">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base font-semibold text-gray-900">Süreç Özeti</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0 space-y-2">
+                {processSteps.map((step) => (
+                  <div key={step.label} className="flex items-center justify-between rounded-md border border-gray-100 px-3 py-2.5">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      {step.done ? (
+                        <CircleCheck className="h-4 w-4 text-green-600 shrink-0" />
+                      ) : (
+                        <CircleDashed className="h-4 w-4 text-gray-400 shrink-0" />
+                      )}
+                      <span className={cn('text-sm', step.done ? 'text-gray-900 font-medium' : 'text-gray-500')}>{step.label}</span>
+                    </div>
+                    <span className={cn('text-xs', step.done ? 'text-green-700' : 'text-gray-400')}>
+                      {step.done ? 'Tamamlandı' : 'Bekliyor'}
+                    </span>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="lg:col-span-4 lg:sticky lg:top-24">
+            <Card className="border border-gray-200 shadow-sm overflow-hidden">
+              <CardHeader className="pb-3 border-b border-gray-100">
+                <CardTitle className="text-base font-semibold text-gray-900">Teklif ve Karar</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-5 space-y-5">
+                <div className="rounded-lg bg-gray-50 border border-gray-200 p-4">
+                  <p className="text-xs text-gray-500 mb-1">Bütçe</p>
+                  <p className="text-2xl font-semibold text-gray-900">
+                    {shipment.price && shipment.price > 0 ? `₺${shipment.price.toLocaleString('tr-TR')}` : 'Teklife Açık'}
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <DetailRow label="Durum" value={status.label} />
+                  <DetailRow label="Teklif" value={offerCount > 0 ? `${offerCount} teklif geldi` : 'Henüz teklif yok'} />
+                  <DetailRow label="Taşıma Tarihi" value={formatDate(shipment.shipmentDate)} />
+                </div>
+
+                {userType === 'carrier' && (
+                  <Button onClick={() => navigate(`/nakliyeci/yanit/${shipment.id}`)} className="w-full h-11 bg-blue-600 hover:bg-blue-700 text-white font-medium">
+                    Teklif Ver <ArrowRight className="ml-2 h-4 w-4" />
+                  </Button>
+                )}
+
+                <div className="rounded-lg border border-gray-200 p-3.5 bg-white">
+                  <p className="text-xs text-gray-500 mb-2">İlan Sahibi</p>
+                  <div className="flex items-center gap-3">
+                    <div className="h-9 w-9 rounded-full border border-gray-200 bg-gray-50 flex items-center justify-center">
+                      <UserRound className="h-4 w-4 text-gray-500" />
+                    </div>
+                    <p className="text-sm font-medium text-gray-900">
+                      {shipment.customer?.firstName || 'Müşteri'} {shipment.customer?.lastName || ''}
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           </div>
         </div>
-
-        {/* ═══ BOTTOM ROW — OFFERS (FULL WIDTH) ═══ */}
-        {userType === 'customer' && ['pending', 'offer_received'].includes(shipment.status) && offers.length > 0 && (
-          <div style={{ background: 'white', border: '0.5px solid #E2E8F0', borderRadius: '12px', padding: '18px', width: '100%' }}>
-            {/* Header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-              <span style={{ fontSize: '13px', fontWeight: 500, color: '#0F172A' }}>Gelen Teklifler</span>
-              <span style={{ background: '#EFF6FF', color: '#1D4ED8', borderRadius: '9999px', padding: '2px 9px', fontSize: '11px', fontWeight: 500 }}>{offers.length} teklif</span>
-            </div>
-
-            {/* Offer cards grid */}
-            <div style={{ display: 'grid', gridTemplateColumns: offers.length <= 3 ? 'repeat(3, 1fr)' : 'repeat(3, 1fr)', gap: '12px' }}>
-              {offers.map(offer => {
-                const isCheapest = Number(offer.price) === lowestPrice && offer.status === 'pending';
-                const initials = (offer.carrier?.companyName || 'N').slice(0, 2).toUpperCase();
-                return (
-                  <div key={offer.id} style={{ border: isCheapest ? '1.5px solid #2563EB' : '0.5px solid #E2E8F0', borderRadius: '10px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px', position: 'relative', overflow: 'hidden', cursor: 'pointer', transition: 'border-color 150ms' }}>
-                    {/* Cheapest bar + tag */}
-                    {isCheapest && (
-                      <>
-                        <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '3px', background: '#2563EB' }} />
-                        <div style={{ position: 'absolute', top: 0, right: 0, background: '#2563EB', color: 'white', fontSize: '9px', fontWeight: 700, padding: '3px 10px', borderRadius: '0 9px 0 7px', letterSpacing: '0.07em' }}>EN UYGUN</div>
-                      </>
-                    )}
-
-                    {/* Top: avatar + info */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                      <div style={{ width: '42px', height: '42px', borderRadius: '10px', background: '#1E3A5F', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '14px', fontWeight: 500, flexShrink: 0 }}>
-                        {initials}
-                      </div>
-                      <div style={{ minWidth: 0 }}>
-                        <div style={{ fontSize: '14px', fontWeight: 500, color: '#0F172A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{offer.carrier?.companyName || 'Nakliyeci'}</div>
-                        {offer.carrier?.rating != null && Number(offer.carrier.rating) > 0 && (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '3px', marginTop: '2px' }}>
-                            <span style={{ color: '#F59E0B', fontSize: '11px' }}>★</span>
-                            <span style={{ fontSize: '11px', fontWeight: 500 }}>{Number(offer.carrier.rating).toFixed(1)}</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Price section */}
-                    <div style={{ padding: '10px 0', borderTop: '0.5px solid #F1F5F9', borderBottom: '0.5px solid #F1F5F9' }}>
-                      <div style={{ fontSize: '22px', fontWeight: 600, color: '#0F172A', lineHeight: 1 }}>₺{fmtPrice(Number(offer.price))}</div>
-                      <div style={{ fontSize: '11px', color: '#94A3B8', marginTop: '3px' }}>teklif fiyatı</div>
-                      {offer.message && (
-                        <div style={{ fontSize: '12px', color: '#64748B', marginTop: '6px', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{offer.message}</div>
-                      )}
-                    </div>
-
-                    {/* Buttons / Status */}
-                    {offer.status === 'accepted' ? (
-                      <div style={{ background: '#F0FDF4', color: '#15803D', fontSize: '12px', fontWeight: 600, textAlign: 'center', borderRadius: '7px', padding: '10px' }}>✓ Kabul Edildi</div>
-                    ) : offer.status === 'rejected' ? (
-                      <div style={{ background: '#F8FAFC', color: '#94A3B8', fontSize: '12px', textAlign: 'center', borderRadius: '7px', padding: '10px' }}>✗ Reddedildi</div>
-                    ) : (
-                      <div style={{ display: 'flex', gap: '6px' }}>
-                        <button disabled={updating} onClick={() => handleAcceptOffer(offer.id)} style={{ flex: 1, background: '#2563EB', color: 'white', border: 'none', borderRadius: '7px', padding: '8px 0', fontSize: '12px', fontWeight: 500, cursor: 'pointer' }}>
-                          Kabul Et
-                        </button>
-                        <button disabled={updating} onClick={() => handleRejectOffer(offer.id)} style={{ flex: 1, background: 'transparent', color: '#DC2626', border: '0.5px solid #FECACA', borderRadius: '7px', padding: '8px 0', fontSize: '12px', cursor: 'pointer' }}>
-                          Reddet
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
       </div>
+    </div>
+  );
+}
 
-      <AlertDialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>İlanı İptal Et</AlertDialogTitle>
-            <AlertDialogDescription>
-              İlanı iptal etmek istediğinizden emin misiniz? Bu işlem geri alınamaz.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Vazgeç</AlertDialogCancel>
-            <AlertDialogAction onClick={handleCancel} className="bg-red-600 hover:bg-red-700">
-              Evet, İptal Et
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+function formatRouteTitle(value?: string) {
+  const full = String(value || '').trim();
+  if (!full) return '-';
+
+  const parts = full.split(',').map((part) => part.trim()).filter(Boolean);
+  if (parts.length >= 2) return `${parts[0]}, ${parts[1]}`;
+  return parts[0] || '-';
+}
+
+function normalizeText(value?: string | null) {
+  const text = String(value || '').trim();
+  return text || '-';
+}
+
+function formatDate(input?: string | null) {
+  if (!input) return '-';
+  const date = new Date(input);
+  if (Number.isNaN(date.getTime())) return '-';
+  return date.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+function formatDateTime(input?: string | null) {
+  if (!input) return '-';
+  const date = new Date(input);
+  if (Number.isNaN(date.getTime())) return '-';
+  return date.toLocaleDateString('tr-TR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function formatInsurance(value?: string | null) {
+  const key = String(value || '').trim().toLowerCase();
+  if (!key) return '-';
+  if (key === 'none') return 'Sigortasız';
+  if (key === 'standard') return 'Standart Sigorta';
+  if (key === 'comprehensive') return 'Kapsamlı Sigorta';
+  return value || '-';
+}
+
+function formatVehicleCode(value?: string | null) {
+  const key = String(value || '').trim().toLowerCase();
+  if (!key) return '-';
+  const map: Record<string, string> = {
+    panelvan: 'Panelvan',
+    short_chassis_van: 'Kısa Şasi Van',
+    long_chassis_van: 'Uzun Şasi Van',
+    small_truck: 'Küçük Kamyon',
+    large_truck: 'Büyük Kamyon',
+  };
+  return map[key] || value || '-';
+}
+
+function buildServiceChips(shipment: BackendShipment) {
+  const chips: string[] = [];
+  const hasElevator = shipment.originHasElevator ?? shipment.destinationHasElevator ?? shipment.hasElevator;
+
+  if (typeof hasElevator === 'boolean') {
+    chips.push(hasElevator ? 'Asansör Var' : 'Asansör Yok');
+  }
+
+  if (shipment.insuranceType) {
+    chips.push(formatInsurance(shipment.insuranceType));
+  }
+
+  if (Array.isArray(shipment.extraServices)) {
+    for (const item of shipment.extraServices) {
+      const value = String(item || '').trim();
+      if (value) chips.push(value);
+      if (chips.length >= 6) break;
+    }
+  }
+
+  return Array.from(new Set(chips));
+}
+
+function buildOperationalRows(shipment: BackendShipment) {
+  return [
+    { label: 'Taşıma Tipi', value: normalizeText(shipment.transportType) },
+    {
+      label: 'Kat Bilgisi',
+      value: [
+        typeof shipment.originFloor === 'number' ? `Çıkış ${shipment.originFloor}. Kat` : null,
+        typeof shipment.destinationFloor === 'number' ? `Varış ${shipment.destinationFloor}. Kat` : null,
+      ].filter(Boolean).join(' • ') || '-',
+    },
+    {
+      label: 'Asansör',
+      value: (() => {
+        const hasElevator = shipment.originHasElevator ?? shipment.destinationHasElevator ?? shipment.hasElevator;
+        if (typeof hasElevator !== 'boolean') return '-';
+        return hasElevator ? 'Var' : 'Yok';
+      })(),
+    },
+    { label: 'Sigorta', value: formatInsurance(shipment.insuranceType) },
+  ];
+}
+
+function buildProcessSteps(status: ShipmentStatus) {
+  const flow: Array<{ key: ShipmentStatus | 'draft'; label: string }> = [
+    { key: 'draft', label: 'İlan Oluşturuldu' },
+    { key: 'pending', label: 'Teklif Bekleniyor' },
+    { key: 'offer_received', label: 'Teklif Alındı' },
+    { key: 'matched', label: 'Eşleşme' },
+    { key: 'in_transit', label: 'Taşıma Süreci' },
+    { key: 'completed', label: 'Tamamlandı' },
+  ];
+
+  const order: Array<ShipmentStatus | 'draft'> = ['draft', 'pending', 'offer_received', 'matched', 'in_transit', 'completed'];
+  const currentIndex = order.includes(status) ? order.indexOf(status) : 1;
+
+  return flow
+    .filter((step) => !(status === 'cancelled' && step.key === 'completed'))
+    .map((step) => ({
+      ...step,
+      done: status === 'cancelled' ? step.key === 'draft' || step.key === 'pending' : order.indexOf(step.key) <= currentIndex,
+    }));
+}
+
+function buildConverterRows(converter: ShipmentConverterSummary) {
+  if (!converter) return [] as Array<{ label: string; value: string }>;
+
+  const rows: Array<{ label: string; value: string }> = [];
+  const hasVolume = typeof converter.converterEstimatedVolumeMin === 'number' || typeof converter.converterEstimatedVolumeMax === 'number';
+
+  if (hasVolume) {
+    rows.push({
+      label: 'Hacim',
+      value: `${converter.converterEstimatedVolumeMin ?? '-'} - ${converter.converterEstimatedVolumeMax ?? '-'} m³`,
+    });
+  }
+
+  if (converter.converterRecommendedVehicleCode) {
+    rows.push({
+      label: 'Araç Önerisi',
+      value: formatVehicleCode(converter.converterRecommendedVehicleCode),
+    });
+  }
+
+  if (converter.converterAppliedAt) {
+    rows.push({
+      label: 'Uygulandı',
+      value: formatDateTime(converter.converterAppliedAt),
+    });
+  }
+
+  return rows;
+}
+
+function RouteBlock({
+  label,
+  location,
+  floor,
+  elevator,
+}: {
+  label: string;
+  location?: string;
+  floor?: number | null;
+  elevator?: boolean | null;
+}) {
+  return (
+    <div className="rounded-lg border border-gray-200 bg-white p-4">
+      <p className="text-xs text-gray-500 mb-1">{label}</p>
+      <p className="text-sm font-medium text-gray-900 break-words">{normalizeText(location)}</p>
+      <div className="mt-3 flex items-center justify-between text-xs text-gray-500">
+        <span>{typeof floor === 'number' ? `${floor}. Kat` : 'Kat bilgisi yok'}</span>
+        <span>{typeof elevator === 'boolean' ? (elevator ? 'Asansör Var' : 'Asansör Yok') : '-'}</span>
+      </div>
+    </div>
+  );
+}
+
+function SummaryCard({
+  title,
+  icon,
+  children,
+}: {
+  title: string;
+  icon: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <Card className="border border-gray-200 shadow-sm">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base font-semibold text-gray-900 flex items-center gap-2">
+          {icon}
+          {title}
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="pt-0 space-y-3">{children}</CardContent>
+    </Card>
+  );
+}
+
+function DetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span className="text-sm text-gray-500">{label}</span>
+      <span className="text-sm font-medium text-gray-900 text-right">{value}</span>
     </div>
   );
 }
