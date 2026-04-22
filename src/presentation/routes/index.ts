@@ -12,6 +12,7 @@ import authRoutes from './authRoutes';
 import paymentRoutes from './paymentRoutes';
 import configRoutes from './configRoutes';
 import aiRoutes from './aiRoutes';
+import converterRoutes from './converterRoutes';
 
 const router = Router();
 router.use('/', commonRoutes);
@@ -36,6 +37,7 @@ router.use('/offers', offerRoutes);
 router.use('/notifications', notificationRoutes);
 router.use('/payments', paymentRoutes);
 router.use('/ai', aiRoutes);
+router.use('/converter', converterRoutes);
 router.use('/', reviewRoutes);
 router.use('/admin', adminRoutes);
 router.use('/config', configRoutes);

@@ -14,3 +14,4 @@ export { NotificationService } from './NotificationService';
 export { AiService } from './AiService';
 export { CarrierProfileStatusService } from './carrier/CarrierProfileStatusService';
 export { CarrierProfileQueryService } from './carrier/CarrierProfileQueryService';
+export { ConverterService } from './ConverterService';
