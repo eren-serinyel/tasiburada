@@ -6,6 +6,7 @@
 import 'reflect-metadata';
 import { config } from 'dotenv';
 import { AppDataSource, initializeDatabase, closeDatabase } from '../../infrastructure/database/data-source';
+import { seedConverterCatalog, seedConverterVehicleRules } from '../../database/seed/seeders/converterSeeder';
 
 config(); // load .env
 
@@ -16,6 +17,16 @@ beforeAll(async () => {
     } catch (err) {
       console.warn('⚠️  DB unavailable — tests relying on DB will behave defensively\n', err);
       process.env.SKIP_DB_TESTS = 'true';
+    }
+  }
+
+  if (!process.env.SKIP_DB_TESTS && AppDataSource.isInitialized) {
+    try {
+      await AppDataSource.runMigrations();
+      await seedConverterCatalog();
+      await seedConverterVehicleRules();
+    } catch (err) {
+      console.warn('⚠️  Converter test setup bootstrap failed\n', err);
     }
   }
 }, 30000);
