@@ -116,6 +116,15 @@ interface PendingShipmentListItem {
   customerDisplayName: string;
 }
 
+type ShipmentConverterSummary = {
+  converterSessionId: string | null;
+  converterAppliedAt: Date | null;
+  converterEstimatedVolumeMin: number | null;
+  converterEstimatedVolumeMax: number | null;
+  converterRecommendedVehicleCode: string | null;
+  converterLastAppliedBy: string | null;
+} | null;
+
 export class ShipmentService {
   private shipmentRepository = new ShipmentRepository();
   private carrierRepository = new CarrierRepository();
@@ -253,6 +262,40 @@ export class ShipmentService {
       }
       return offer;
     });
+  }
+
+  private buildShipmentConverterSummary(shipment: Shipment): ShipmentConverterSummary {
+    const hasConverterData = [
+      shipment.converterSessionId,
+      shipment.converterAppliedAt,
+      shipment.converterEstimatedVolumeMin,
+      shipment.converterEstimatedVolumeMax,
+      shipment.converterRecommendedVehicleCode,
+      shipment.converterLastAppliedBy,
+    ].some((value) => value !== null && value !== undefined);
+
+    if (!hasConverterData) {
+      return null;
+    }
+
+    return {
+      converterSessionId: shipment.converterSessionId ?? null,
+      converterAppliedAt: shipment.converterAppliedAt ?? null,
+      converterEstimatedVolumeMin: shipment.converterEstimatedVolumeMin ?? null,
+      converterEstimatedVolumeMax: shipment.converterEstimatedVolumeMax ?? null,
+      converterRecommendedVehicleCode: shipment.converterRecommendedVehicleCode ?? null,
+      converterLastAppliedBy: shipment.converterLastAppliedBy ?? null,
+    };
+  }
+
+  private attachShipmentConverterSummary<T extends Shipment>(shipment: T): T {
+    const target = shipment as T & { converter?: ShipmentConverterSummary };
+    target.converter = this.buildShipmentConverterSummary(shipment);
+
+    // Keep API surface minimal by hiding internal/raw converter payload details.
+    delete (target as any).converterSpecialItemsJson;
+
+    return target;
   }
 
   private async setShipmentExtraServices(shipmentId: string, extraServices?: string[]): Promise<void> {
@@ -480,7 +523,10 @@ export class ShipmentService {
 
   async getMyShipments(customerId: string): Promise<Array<Shipment & { offerCount: number }>> {
     const shipments = await this.shipmentRepository.findByCustomerIdWithOfferCount(customerId);
-    return shipments.map(shipment => this.flattenExtraServices(shipment as Shipment & { offerCount: number }));
+    return shipments.map(shipment => {
+      const normalized = this.flattenExtraServices(shipment as Shipment & { offerCount: number });
+      return this.attachShipmentConverterSummary(normalized as Shipment & { offerCount: number });
+    });
   }
 
   async getShipmentById(
@@ -498,7 +544,7 @@ export class ShipmentService {
 
     // Admin her gönderiyi görebilir
     if (requestingUserType === 'admin') {
-      return shipment;
+      return this.attachShipmentConverterSummary(shipment);
     }
 
     // Müşteri: sadece kendi gönderisini görebilir
@@ -517,7 +563,7 @@ export class ShipmentService {
       if (!canViewCarrierContact) {
         shipment.contactPhone = null as any;
       }
-      return shipment;
+      return this.attachShipmentConverterSummary(shipment);
     }
 
     // A) ShipmentService.getById() — requester tipine göre maskeleme:
@@ -554,7 +600,7 @@ export class ShipmentService {
         this.maskCarrierDirectContact(shipment.carrier);
       }
 
-      return shipment;
+      return this.attachShipmentConverterSummary(shipment);
     }
 
     throw new ForbiddenError('Bu gönderiye erişim yetkiniz yok.');

@@ -109,6 +109,27 @@ describe('Converter API Flow', () => {
     expect(res.body.data.result).toBeNull();
   });
 
+  test('3.1 Estimate öncesi shipment GET converter alanını null dönebilmeli', async () => {
+    if (skipDB()) return;
+
+    const shipmentRes = await request(testApp)
+      .post(SHIPMENT_BASE)
+      .set('Authorization', `Bearer ${customerToken}`)
+      .send(createShipmentPayload(`pre-apply-${Date.now()}`));
+
+    expect(shipmentRes.status).toBe(201);
+    const shipmentId = shipmentRes.body.data?.id;
+    expect(shipmentId).toBeTruthy();
+
+    const getRes = await request(testApp)
+      .get(`${SHIPMENT_BASE}/${shipmentId}`)
+      .set('Authorization', `Bearer ${customerToken}`);
+
+    expect(getRes.status).toBe(200);
+    expect(getRes.body.success).toBe(true);
+    expect(getRes.body.data.converter).toBeNull();
+  });
+
   test('4. Geçersiz estimate payload validationdan düşmeli', async () => {
     if (skipDB() || !emptySessionId) return;
 
@@ -228,6 +249,21 @@ describe('Converter API Flow', () => {
     expect(shipment?.converterEstimatedVolumeMin).toBeGreaterThan(0);
     expect(shipment?.converterEstimatedVolumeMax).toBeGreaterThanOrEqual(shipment?.converterEstimatedVolumeMin ?? 0);
     expect(shipment?.converterRecommendedVehicleCode).toBeTruthy();
+
+    const getRes = await request(testApp)
+      .get(`${SHIPMENT_BASE}/${ownShipmentId}`)
+      .set('Authorization', `Bearer ${customerToken}`);
+
+    expect(getRes.status).toBe(200);
+    expect(getRes.body.success).toBe(true);
+    expect(getRes.body.data.converter).toBeTruthy();
+    expect(getRes.body.data.converter.converterSessionId).toBe(estimatedSessionId);
+    expect(getRes.body.data.converter.converterAppliedAt).toBeTruthy();
+    expect(getRes.body.data.converter.converterEstimatedVolumeMin).toBeGreaterThan(0);
+    expect(getRes.body.data.converter.converterEstimatedVolumeMax).toBeGreaterThanOrEqual(getRes.body.data.converter.converterEstimatedVolumeMin);
+    expect(getRes.body.data.converter.converterRecommendedVehicleCode).toBeTruthy();
+    expect(getRes.body.data.converter).toHaveProperty('converterLastAppliedBy');
+    expect(getRes.body.data).not.toHaveProperty('converterSpecialItemsJson');
   });
 
   test('10. Ayni shipmenta ikinci apply guvenli no-op donmeli', async () => {
