@@ -13,6 +13,7 @@ import { seedOffers } from './seeders/offerSeeder';
 import { seedCompletedFlow } from './seeders/completedFlowSeeder';
 import { seedNotifications } from './seeders/notificationSeeder';
 import { seedAuditLogs } from './seeders/auditLogSeeder';
+import { seedConverterCatalog, seedConverterVehicleRules } from './seeders/converterSeeder';
 import { MatchingService } from '../../application/services/MatchingService';
 import { ShipmentRepository } from '../../infrastructure/repositories/ShipmentRepository';
 
@@ -50,6 +51,11 @@ async function main() {
       }
       extraServiceMap.set(name, existing.id);
     }
+
+    // 3.1 Converter referans tabloları
+    console.log('🧮 Converter referans verileri oluşturuluyor...');
+    await seedConverterCatalog();
+    await seedConverterVehicleRules();
 
     // 4. Admin kullanıcılar
     console.log('👤 Admin kullanıcılar oluşturuluyor...');

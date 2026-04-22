@@ -17,6 +17,9 @@ export async function clearDatabase(): Promise<void> {
       'notifications',
       'reviews',
       'payments',
+      'converter_results',
+      'converter_answers',
+      'converter_sessions',
       'carrier_earnings_log',
       'offers',
       'shipment_invites',
@@ -42,6 +45,8 @@ export async function clearDatabase(): Promise<void> {
       'admins',
       'customers',
       'carriers',
+      'converter_vehicle_rules',
+      'converter_item_catalog',
       'platform_settings',
       // Lookup tablolar en sonda (başka tablolar bunlara FK referans veriyor)
       'vehicle_types',
