@@ -6,7 +6,7 @@
  */
 import request from 'supertest';
 import { AppDataSource } from '../infrastructure/database/data-source';
-import { Shipment } from '../domain/entities';
+import { Shipment, ShipmentStatus } from '../domain/entities';
 import { testApp } from './helpers/testApp';
 
 const skipDB = () => process.env.SKIP_DB_TESTS === 'true';
@@ -281,6 +281,97 @@ describe('Converter API Flow', () => {
     expect(res.body.data.updatedFields).toEqual([]);
     expect(Array.isArray(res.body.data.skippedFields)).toBe(true);
     expect(res.body.data.skippedFields).toContain('converterSessionId');
+  });
+
+  test('10.1 Ayni session baska own shipmente apply edilememeli', async () => {
+    if (skipDB() || !estimatedSessionId) return;
+
+    const secondOwnShipmentRes = await request(testApp)
+      .post(SHIPMENT_BASE)
+      .set('Authorization', `Bearer ${customerToken}`)
+      .send(createShipmentPayload(`own-second-${Date.now()}`));
+
+    expect(secondOwnShipmentRes.status).toBe(201);
+    const secondOwnShipmentId = secondOwnShipmentRes.body.data?.id || '';
+    expect(secondOwnShipmentId).toBeTruthy();
+
+    const res = await request(testApp)
+      .post(`${BASE}/sessions/${estimatedSessionId}/apply-to-shipment`)
+      .set('Authorization', `Bearer ${customerToken}`)
+      .send({ shipmentId: secondOwnShipmentId });
+
+    expect(res.status).toBe(409);
+    expect(res.body.success).toBe(false);
+  });
+
+  test('10.2 Estimate olmadan apply engellenmeli', async () => {
+    if (skipDB()) return;
+
+    const draftSessionRes = await request(testApp)
+      .post(`${BASE}/sessions`)
+      .set('Authorization', `Bearer ${customerToken}`)
+      .send({ flowType: 'household' });
+
+    expect(draftSessionRes.status).toBe(201);
+    const draftSessionId = draftSessionRes.body.data?.sessionId || '';
+    expect(draftSessionId).toBeTruthy();
+
+    const shipmentRes = await request(testApp)
+      .post(SHIPMENT_BASE)
+      .set('Authorization', `Bearer ${customerToken}`)
+      .send(createShipmentPayload(`no-result-${Date.now()}`));
+
+    expect(shipmentRes.status).toBe(201);
+    const shipmentId = shipmentRes.body.data?.id || '';
+    expect(shipmentId).toBeTruthy();
+
+    const res = await request(testApp)
+      .post(`${BASE}/sessions/${draftSessionId}/apply-to-shipment`)
+      .set('Authorization', `Bearer ${customerToken}`)
+      .send({ shipmentId });
+
+    expect(res.status).toBe(409);
+    expect(res.body.success).toBe(false);
+  });
+
+  test('10.3 Editlenemez shipment durumunda apply engellenmeli', async () => {
+    if (skipDB()) return;
+
+    const sessionRes = await request(testApp)
+      .post(`${BASE}/sessions`)
+      .set('Authorization', `Bearer ${customerToken}`)
+      .send({ flowType: 'household' });
+
+    expect(sessionRes.status).toBe(201);
+    const sessionId = sessionRes.body.data?.sessionId || '';
+    expect(sessionId).toBeTruthy();
+
+    const estimateRes = await request(testApp)
+      .post(`${BASE}/sessions/${sessionId}/estimate`)
+      .set('Authorization', `Bearer ${customerToken}`)
+      .send(VALID_ESTIMATE_PAYLOAD);
+
+    expect(estimateRes.status).toBe(200);
+
+    const shipmentRes = await request(testApp)
+      .post(SHIPMENT_BASE)
+      .set('Authorization', `Bearer ${customerToken}`)
+      .send(createShipmentPayload(`locked-${Date.now()}`));
+
+    expect(shipmentRes.status).toBe(201);
+    const lockedShipmentId = shipmentRes.body.data?.id || '';
+    expect(lockedShipmentId).toBeTruthy();
+
+    const shipmentRepo = AppDataSource.getRepository(Shipment);
+    await shipmentRepo.update({ id: lockedShipmentId }, { status: ShipmentStatus.MATCHED });
+
+    const res = await request(testApp)
+      .post(`${BASE}/sessions/${sessionId}/apply-to-shipment`)
+      .set('Authorization', `Bearer ${customerToken}`)
+      .send({ shipmentId: lockedShipmentId });
+
+    expect(res.status).toBe(409);
+    expect(res.body.success).toBe(false);
   });
 
   test('11. Baska kullanicinin shipmentina apply edilememeli', async () => {
