@@ -55,6 +55,24 @@ type ActiveOffer = {
   };
 };
 
+type OnboardingSteps = {
+  companyInfo: boolean;
+  taxPlate: boolean;
+  k3Authorization: boolean;
+  vehiclePhotos: boolean;
+  adminApproval: boolean;
+};
+
+type CarrierDocumentDto = {
+  type?: string;
+  fileUrl?: string;
+};
+
+type CarrierVehicleDto = {
+  photoUrls?: string[];
+  photos?: string[];
+};
+
 const formatLoadSummary = (loadDetails?: string, weight?: number) => {
   const safeLoadDetails = loadDetails?.trim() || 'Yük bilgisi yok';
   return weight && weight > 0 ? `${safeLoadDetails}, ${weight} kg` : safeLoadDetails;
@@ -64,9 +82,17 @@ export default function CarrierHome() {
   const [user, setUser] = useState<User | null>(null);
   const [profileCompletion, setProfileCompletion] = useState<number | null>(null);
   const [adminApproved, setAdminApproved] = useState(false);
+  const [taxPlateVerified, setTaxPlateVerified] = useState(false);
   const [pendingJobs, setPendingJobs] = useState<PendingJob[]>([]);
   const [activeOffers, setActiveOffers] = useState<ActiveOffer[]>([]);
   const [pendingLoading, setPendingLoading] = useState(true);
+  const [onboardingSteps, setOnboardingSteps] = useState<OnboardingSteps>({
+    companyInfo: false,
+    taxPlate: false,
+    k3Authorization: false,
+    vehiclePhotos: false,
+    adminApproval: false,
+  });
   const navigate = useNavigate();
   const API_BASE_URL = '/api/v1';
 
@@ -101,6 +127,11 @@ export default function CarrierHome() {
              setSessionUser(updatedUser);
           }
         }
+
+        setOnboardingSteps((prev) => ({
+          ...prev,
+          companyInfo: Boolean(json.data?.sections?.companyInfoCompleted),
+        }));
       } catch {}
     };
 
@@ -117,12 +148,84 @@ export default function CarrierHome() {
         const res = await apiClient(`${API_BASE_URL}/carriers/me`);
         const json = await res.json();
         const carrier = json?.data?.carrier ?? json?.data;
-        setAdminApproved(Boolean(carrier?.verifiedByAdmin || carrier?.verificationStatus === 'verified'));
+        const approved = Boolean(carrier?.verifiedByAdmin || carrier?.verificationStatus === 'verified');
+        setAdminApproved(approved);
+
+        const hasCompanyInfo = Boolean(
+          String(carrier?.companyName || '').trim() &&
+          String(carrier?.taxNumber || '').trim() &&
+          Number.isFinite(Number(carrier?.foundedYear)) &&
+          Number(carrier?.foundedYear) > 0
+        );
+
+        setOnboardingSteps((prev) => ({
+          ...prev,
+          companyInfo: prev.companyInfo || hasCompanyInfo,
+          adminApproval: approved,
+        }));
       } catch {
         setAdminApproved(false);
+        setOnboardingSteps((prev) => ({ ...prev, adminApproval: false }));
       }
     };
     fetchCarrierApproval();
+  }, [user?.id, user?.type]);
+
+  useEffect(() => {
+    if (!user || user.type !== 'carrier') return;
+
+    const fetchOnboardingAssets = async () => {
+      try {
+        const [documentsRes, vehiclesRes] = await Promise.all([
+          apiClient(`${API_BASE_URL}/carriers/me/documents`),
+          apiClient(`${API_BASE_URL}/carriers/me/vehicles`),
+        ]);
+
+        const documentsJson = await documentsRes.json().catch(() => null);
+        const vehiclesJson = await vehiclesRes.json().catch(() => null);
+
+        const documents: CarrierDocumentDto[] = Array.isArray(documentsJson?.data?.documents)
+          ? documentsJson.data.documents
+          : Array.isArray(documentsJson?.data)
+            ? documentsJson.data
+            : [];
+
+        const vehicles: CarrierVehicleDto[] = Array.isArray(vehiclesJson?.data)
+          ? vehiclesJson.data
+          : [];
+
+        const hasDocumentType = (type: string) => documents.some((doc) => {
+          const docType = String(doc?.type || '').trim().toUpperCase();
+          const fileUrl = String(doc?.fileUrl || '').trim();
+          return docType === type && Boolean(fileUrl);
+        });
+
+        const hasVehiclePhotos = vehicles.some((vehicle) => {
+          const photos = Array.isArray(vehicle?.photoUrls)
+            ? vehicle.photoUrls
+            : Array.isArray(vehicle?.photos)
+              ? vehicle.photos
+              : [];
+          return photos.some((photo) => String(photo || '').trim().length > 0);
+        });
+
+        setOnboardingSteps((prev) => ({
+          ...prev,
+          taxPlate: hasDocumentType('TAX_PLATE'),
+          k3Authorization: hasDocumentType('AUTHORIZATION_CERT'),
+          vehiclePhotos: hasVehiclePhotos,
+        }));
+      } catch {
+        setOnboardingSteps((prev) => ({
+          ...prev,
+          taxPlate: false,
+          k3Authorization: false,
+          vehiclePhotos: false,
+        }));
+      }
+    };
+
+    fetchOnboardingAssets();
   }, [user?.id, user?.type]);
 
   const [stats, setStats] = useState({
@@ -233,13 +336,28 @@ export default function CarrierHome() {
   const totalEarnings = stats.totalEarnings;
   const rating = stats.rating;
 
+  const onboardingItems = useMemo(
+    () => [
+      { key: 'companyInfo', label: 'Firma Bilgileri', checked: onboardingSteps.companyInfo },
+      { key: 'taxPlate', label: 'Vergi Levhası', checked: onboardingSteps.taxPlate },
+      { key: 'k3Authorization', label: 'K3 Yetki Belgesi', checked: onboardingSteps.k3Authorization },
+      { key: 'vehiclePhotos', label: 'Araç Fotoğrafları', checked: onboardingSteps.vehiclePhotos },
+      { key: 'adminApproval', label: 'Admin Onayı', checked: onboardingSteps.adminApproval },
+    ],
+    [onboardingSteps]
+  );
+
+  const completedOnboardingCount = onboardingItems.filter((item) => item.checked).length;
+  const onboardingPercent = Math.round((completedOnboardingCount / onboardingItems.length) * 100);
+  const missingOnboardingLabels = onboardingItems.filter((item) => !item.checked).map((item) => item.label);
+
   const fallbackProgress = user ? getCarrierProfileTasks(user as any) : { percent: 0, isComplete: false };
   const percentFromDb = profileCompletion ?? user?.profileCompletion;
-  const percent = typeof percentFromDb === 'number' && Number.isFinite(percentFromDb)
+  const profilePercent = typeof percentFromDb === 'number' && Number.isFinite(percentFromDb)
     ? Math.max(0, Math.min(100, Math.round(percentFromDb)))
     : fallbackProgress.percent;
   const profileReady = typeof percentFromDb === 'number'
-    ? percent >= 100
+    ? profilePercent >= 100
     : fallbackProgress.isComplete;
   const canOffer = profileReady && adminApproved;
 
@@ -318,7 +436,7 @@ export default function CarrierHome() {
                     <h3 className="font-semibold text-amber-900 text-lg">Hesap Onayı Bekleniyor</h3>
                     <p className="text-amber-700 mt-1">
                       Teklif vermeye başlamak için profilini tamamlaman ve gerekli belgeleri yüklemen gerekiyor.
-                      Şu an profilin %{percent} tamamlandı.
+                      Şu an profilin %{onboardingPercent} tamamlandı.
                     </p>
                     <Button variant="outline" className="mt-4 border-amber-200 text-amber-800 hover:bg-amber-100" asChild>
                       <Link to="/profilim">Profili Tamamla</Link>
@@ -456,20 +574,23 @@ export default function CarrierHome() {
               <CardContent>
                 <div className="space-y-4">
                     <div className="flex items-end justify-between">
-                        <span className="text-3xl font-bold text-gray-900">%{percent}</span>
-                        <span className={`text-sm font-medium ${percent >= 100 ? 'text-green-600' : 'text-amber-600'}`}>
-                            {percent >= 100 ? 'Tamamlandı' : 'Eksikler var'}
+                      <span className="text-3xl font-bold text-gray-900">%{onboardingPercent}</span>
+                      <span className={`text-sm font-medium ${onboardingPercent >= 100 ? 'text-green-600' : 'text-amber-600'}`}>
+                        {onboardingPercent >= 100 ? 'Tamamlandı' : 'Eksikler var'}
                         </span>
                     </div>
-                    <Progress value={percent} className="h-2" />
+                    <Progress value={onboardingPercent} className="h-2" />
                     
                     <div className="space-y-2 pt-2">
-                        <CheckItem label="Firma Bilgileri" checked={true} />
-                        <CheckItem label="Vergi Levhası" checked={user?.verificationStatus === 'verified'} />
-                        <CheckItem label="K3 Yetki Belgesi" checked={false} />
-                      <CheckItem label="Araç Fotoğrafları" checked={false} />
-                        <CheckItem label="Admin onayı" checked={adminApproved} />
+                        {onboardingItems.map((item) => (
+                          <CheckItem key={item.key} label={item.label} checked={item.checked} />
+                        ))}
                     </div>
+                    {missingOnboardingLabels.length > 0 && (
+                      <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-md px-2.5 py-2">
+                        Eksikler: {missingOnboardingLabels.join(', ')}
+                      </p>
+                    )}
                 </div>
               </CardContent>
               <CardFooter className="bg-gray-50 border-t p-4">
