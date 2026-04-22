@@ -42,3 +42,30 @@ export interface EstimateConverterResponseDto {
   summaryText: string;
   manualReviewRecommended: boolean;
 }
+
+export interface ConverterSessionSummaryDto {
+  sessionId: string;
+  flowType: ConverterFlowTypeDto;
+  status: 'draft' | 'estimated' | 'applied';
+  shipmentId: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface ConverterAnswerSummaryDto {
+  moveType: ConverterMoveTypeDto;
+  propertyType: ConverterPropertyTypeDto;
+  originFloor: number | null;
+  destinationFloor: number | null;
+  buildingElevator: boolean | null;
+  externalLift: boolean | null;
+  specialItems: string[];
+}
+
+export interface GetConverterResultResponseDto {
+  session: ConverterSessionSummaryDto;
+  answer: ConverterAnswerSummaryDto | null;
+  result: (EstimateConverterResponseDto & {
+    status: 'draft' | 'estimated' | 'applied';
+  }) | null;
+}

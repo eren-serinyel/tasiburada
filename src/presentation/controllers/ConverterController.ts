@@ -37,4 +37,19 @@ export class ConverterController {
       });
     }
   };
+
+  getResult = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const data = await this.converterService.getResult(req.params.sessionId, resolveUserId(req));
+      res.status(200).json({
+        success: true,
+        data,
+      });
+    } catch (error: any) {
+      res.status(error.statusCode || 400).json({
+        success: false,
+        message: error.message || 'Converter sonucu alınamadı.',
+      });
+    }
+  };
 }

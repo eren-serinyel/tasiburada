@@ -14,6 +14,7 @@ import {
   CreateConverterSessionRequestDto,
   EstimateConverterRequestDto,
   EstimateConverterResponseDto,
+  GetConverterResultResponseDto,
 } from '../dto';
 
 const roundDown1 = (value: number): number => Math.floor(value * 10) / 10;
@@ -170,6 +171,60 @@ export class ConverterService {
       warnings,
       summaryText,
       manualReviewRecommended,
+    };
+  }
+
+  async getResult(sessionId: string, userId: string | null): Promise<GetConverterResultResponseDto> {
+    const session = await this.sessionRepo.findOne({ where: { id: sessionId } });
+    if (!session) {
+      const error = new Error('Converter oturumu bulunamadı.');
+      (error as any).statusCode = 404;
+      throw error;
+    }
+
+    if (session.userId && userId && session.userId !== userId) {
+      const error = new Error('Bu converter oturumuna erişim yetkiniz yok.');
+      (error as any).statusCode = 403;
+      throw error;
+    }
+
+    const [answer, result] = await Promise.all([
+      this.answerRepo.findOne({ where: { sessionId: session.id } }),
+      this.resultRepo.findOne({ where: { sessionId: session.id } }),
+    ]);
+
+    return {
+      session: {
+        sessionId: session.id,
+        flowType: session.flowType,
+        status: session.status,
+        shipmentId: session.shipmentId,
+        createdAt: session.createdAt,
+        updatedAt: session.updatedAt,
+      },
+      answer: answer
+        ? {
+            moveType: answer.moveType,
+            propertyType: answer.propertyType,
+            originFloor: answer.originFloor,
+            destinationFloor: answer.destinationFloor,
+            buildingElevator: answer.buildingElevator,
+            externalLift: answer.externalLift,
+            specialItems: answer.specialItemsJson ?? [],
+          }
+        : null,
+      result: result
+        ? {
+            estimatedVolumeMin: result.estimatedVolumeMin ?? 0,
+            estimatedVolumeMax: result.estimatedVolumeMax ?? 0,
+            recommendedVehicle: (result.recommendedVehicle ?? 'panelvan') as any,
+            confidence: (result.confidence ?? 'low') as any,
+            warnings: result.warningsJson ?? [],
+            summaryText: result.summaryText ?? '',
+            manualReviewRecommended: result.manualReviewRecommended,
+            status: session.status,
+          }
+        : null,
     };
   }
 }
