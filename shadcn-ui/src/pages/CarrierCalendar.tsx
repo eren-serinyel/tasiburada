@@ -37,10 +37,10 @@ interface CalendarDay {
 }
 
 const MONTH_NAMES = [
-  'Ocak', 'Åubat', 'Mart', 'Nisan', 'MayÄ±s', 'Haziran',
-  'Temmuz', 'AÄŸustos', 'EylÃ¼l', 'Ekim', 'KasÄ±m', 'AralÄ±k',
+  'Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran',
+  'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık',
 ];
-const DAY_NAMES = ['Pzt', 'Sal', 'Ã‡ar', 'Per', 'Cum', 'Cmt', 'Paz'];
+const DAY_NAMES = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
 
 export default function CarrierCalendar() {
   const [user, setUser] = useState<Carrier | null>(null);
@@ -86,7 +86,7 @@ export default function CarrierCalendar() {
           setExistingActivity(activity);
         }
       } catch {
-        toast.error('Takvim yÃ¼klenemedi.');
+        toast.error('Takvim yüklenemedi.');
       } finally {
         setIsLoading(false);
       }
@@ -103,7 +103,7 @@ export default function CarrierCalendar() {
     const firstDay = new Date(year, month, 1);
     const lastDay = new Date(year, month + 1, 0);
 
-    /* Monday-based start: getDay() returns 0=Sun..6=Sat â†’ shift to 0=Mon..6=Sun */
+    /* Monday-based start: getDay() returns 0=Sun..6=Sat -> shift to 0=Mon..6=Sun */
     let startDow = firstDay.getDay() - 1;
     if (startDow < 0) startDow = 6;
 
@@ -166,7 +166,7 @@ export default function CarrierCalendar() {
       });
       if (!res.ok) {
         const json = await res.json().catch(() => ({}));
-        toast.error((json as { message?: string }).message ?? 'KayÄ±t baÅŸarÄ±sÄ±z.');
+        toast.error((json as { message?: string }).message ?? 'Kayıt başarısız.');
         return;
       }
       const json = await res.json().catch(() => ({}));
@@ -175,9 +175,9 @@ export default function CarrierCalendar() {
       setAvailableDates(savedDates);
       setInitialDates(savedDates);
       setExistingActivity(savedActivity);
-      toast.success('MÃ¼saitlik takvimi kaydedildi.');
+      toast.success('Müsaitlik takvimi kaydedildi.');
     } catch {
-      toast.error('KayÄ±t sÄ±rasÄ±nda bir hata oluÅŸtu.');
+      toast.error('Kayıt sırasında bir hata oluştu.');
     } finally {
       setIsSaving(false);
     }
@@ -199,11 +199,11 @@ export default function CarrierCalendar() {
 
   return (
     <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
-      {/* â”€â”€ Header â”€â”€ */}
+      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Takvimim</h1>
-          <p className="text-sm text-gray-500 mt-1">MÃ¼sait olduÄŸunuz gÃ¼nleri iÅŸaretleyin</p>
+          <p className="text-sm text-gray-500 mt-1">Müsait olduğunuz günleri işaretleyin</p>
         </div>
 
         {/* Month navigator */}
@@ -226,7 +226,7 @@ export default function CarrierCalendar() {
         </div>
       </div>
 
-      {/* â”€â”€ Calendar â”€â”€ */}
+      {/* Calendar */}
       <Card className="border shadow-sm">
         <CardContent className="p-6">
           {/* Day headers */}
@@ -292,13 +292,13 @@ export default function CarrierCalendar() {
 
           {/* Legend */}
           <div className="flex items-center gap-5 mt-4 pt-4 border-t border-gray-100">
-            <LegendItem color="bg-blue-600" label="MÃ¼sait" />
-            <LegendItem color="bg-gray-800" label="BugÃ¼n" />
+            <LegendItem color="bg-blue-600" label="Müsait" />
+            <LegendItem color="bg-gray-800" label="Bugün" />
           </div>
         </CardContent>
       </Card>
 
-      {/* â”€â”€ Save button â”€â”€ */}
+      {/* Save button */}
       <div className="flex justify-end">
         <Button
           onClick={handleSave}
@@ -310,7 +310,7 @@ export default function CarrierCalendar() {
               <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
               Kaydediliyor...
             </span>
-          ) : 'MÃ¼saitliÄŸi Kaydet'}
+          ) : 'Müsaitliği Kaydet'}
         </Button>
       </div>
     </div>

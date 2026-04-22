@@ -69,7 +69,7 @@ export default function AddressSection({ user: _user }: SectionProps) {
         setAddresses(data.data ?? []);
       }
     } catch {
-      toast({ title: 'Hata', description: 'Adresler yÃ¼klenemedi.', variant: 'destructive' });
+      toast({ title: 'Hata', description: 'Adresler yüklenemedi.', variant: 'destructive' });
     } finally {
       setLoading(false);
     }
@@ -106,15 +106,15 @@ export default function AddressSection({ user: _user }: SectionProps) {
 
   const handleSave = async () => {
     if (!form.addressLine1.trim()) {
-      toast({ title: 'Hata', description: 'Adres SatÄ±rÄ± 1 zorunludur.', variant: 'destructive' });
+      toast({ title: 'Hata', description: 'Adres Satırı 1 zorunludur.', variant: 'destructive' });
       return;
     }
     if (!form.city) {
-      toast({ title: 'Hata', description: 'Åehir seÃ§imi zorunludur.', variant: 'destructive' });
+      toast({ title: 'Hata', description: 'Şehir seçimi zorunludur.', variant: 'destructive' });
       return;
     }
     if (!form.district) {
-      toast({ title: 'Hata', description: 'Ä°lÃ§e seÃ§imi zorunludur.', variant: 'destructive' });
+      toast({ title: 'Hata', description: 'İlçe seçimi zorunludur.', variant: 'destructive' });
       return;
     }
 
@@ -146,14 +146,14 @@ export default function AddressSection({ user: _user }: SectionProps) {
 
       const data = await res.json();
       if (res.ok && data.success) {
-        toast({ title: editingId ? 'Adres gÃ¼ncellendi.' : 'Adres eklendi.' });
+        toast({ title: editingId ? 'Adres güncellendi.' : 'Adres eklendi.' });
         setModalOpen(false);
         await loadAddresses();
       } else {
-        toast({ title: 'Hata', description: data.message || 'Ä°ÅŸlem baÅŸarÄ±sÄ±z.', variant: 'destructive' });
+        toast({ title: 'Hata', description: data.message || 'İşlem başarısız.', variant: 'destructive' });
       }
     } catch {
-      toast({ title: 'BaÄŸlantÄ± hatasÄ±', variant: 'destructive' });
+      toast({ title: 'Bağlantı hatası', variant: 'destructive' });
     } finally {
       setSaving(false);
     }
@@ -169,7 +169,7 @@ export default function AddressSection({ user: _user }: SectionProps) {
         toast({ title: 'Hata', description: 'Adres silinemedi.', variant: 'destructive' });
       }
     } catch {
-      toast({ title: 'BaÄŸlantÄ± hatasÄ±', variant: 'destructive' });
+      toast({ title: 'Bağlantı hatası', variant: 'destructive' });
     }
   };
 
@@ -177,11 +177,11 @@ export default function AddressSection({ user: _user }: SectionProps) {
     try {
       const res = await apiClient(`/api/v1/customers/me/addresses/${id}/default`, { method: 'PUT' });
       if (res.ok) {
-        toast({ title: 'VarsayÄ±lan adres gÃ¼ncellendi.' });
+        toast({ title: 'Varsayılan adres güncellendi.' });
         await loadAddresses();
       }
     } catch {
-      toast({ title: 'BaÄŸlantÄ± hatasÄ±', variant: 'destructive' });
+      toast({ title: 'Bağlantı hatası', variant: 'destructive' });
     }
   };
 
@@ -190,7 +190,7 @@ export default function AddressSection({ user: _user }: SectionProps) {
       <div className="flex items-center justify-between mb-3">
         <div>
           <div className="text-lg font-semibold text-slate-800">Adreslerim</div>
-          <div className="text-sm text-slate-500">KayÄ±tlÄ± teslimat adreslerinizi yÃ¶netin.</div>
+          <div className="text-sm text-slate-500">Kayıtlı teslimat adreslerinizi yönetin.</div>
         </div>
         <Button onClick={openNew} className="bg-gradient-to-r from-blue-500 to-indigo-500 text-white">
           <Plus className="h-4 w-4 mr-2" /> Yeni Adres Ekle
@@ -201,13 +201,13 @@ export default function AddressSection({ user: _user }: SectionProps) {
         {loading && (
           <Card className="rounded-2xl">
             <CardContent className="p-8 text-center text-slate-500 flex items-center justify-center gap-2">
-              <Loader2 className="h-4 w-4 animate-spin" /> Adresler yÃ¼kleniyor...
+              <Loader2 className="h-4 w-4 animate-spin" /> Adresler yükleniyor...
             </CardContent>
           </Card>
         )}
         {!loading && addresses.length === 0 && (
           <Card className="rounded-2xl">
-            <CardContent className="p-8 text-center text-slate-500">HenÃ¼z adres eklemediniz.</CardContent>
+            <CardContent className="p-8 text-center text-slate-500">Henüz adres eklemediniz.</CardContent>
           </Card>
         )}
         {addresses.map((a) => (
@@ -216,16 +216,16 @@ export default function AddressSection({ user: _user }: SectionProps) {
               <div className="flex items-center justify-between flex-wrap gap-2">
                 <div className="flex items-center gap-2">
                   <CardTitle className="text-slate-800">{a.label || 'Adres'}</CardTitle>
-                  {a.isDefault && <Badge className="bg-green-100 text-green-700 border-green-300">VarsayÄ±lan</Badge>}
+                  {a.isDefault && <Badge className="bg-green-100 text-green-700 border-green-300">Varsayılan</Badge>}
                 </div>
                 <div className="flex gap-2 flex-wrap">
                   {!a.isDefault && (
                     <Button size="sm" variant="outline" onClick={() => handleSetDefault(a.id)}>
-                      <Star className="h-4 w-4 mr-1" /> VarsayÄ±lan Yap
+                      <Star className="h-4 w-4 mr-1" /> Varsayılan Yap
                     </Button>
                   )}
                   <Button size="sm" variant="outline" onClick={() => openEdit(a)}>
-                    <PencilLine className="h-4 w-4 mr-1" /> DÃ¼zenle
+                    <PencilLine className="h-4 w-4 mr-1" /> Düzenle
                   </Button>
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
@@ -237,11 +237,11 @@ export default function AddressSection({ user: _user }: SectionProps) {
                       <AlertDialogHeader>
                         <AlertDialogTitle>Adresi sil</AlertDialogTitle>
                         <AlertDialogDescription>
-                          Bu adresi kalÄ±cÄ± olarak silmek istediÄŸinizden emin misiniz?
+                          Bu adresi kalıcı olarak silmek istediğinizden emin misiniz?
                         </AlertDialogDescription>
                       </AlertDialogHeader>
                       <AlertDialogFooter>
-                        <AlertDialogCancel>Ä°ptal</AlertDialogCancel>
+                        <AlertDialogCancel>İptal</AlertDialogCancel>
                         <AlertDialogAction onClick={() => handleDelete(a.id)}>Sil</AlertDialogAction>
                       </AlertDialogFooter>
                     </AlertDialogContent>
@@ -267,7 +267,7 @@ export default function AddressSection({ user: _user }: SectionProps) {
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
         <DialogContent className="sm:max-w-xl">
           <DialogHeader>
-            <DialogTitle>{editingId ? 'Adresi DÃ¼zenle' : 'Yeni Adres Ekle'}</DialogTitle>
+            <DialogTitle>{editingId ? 'Adresi Düzenle' : 'Yeni Adres Ekle'}</DialogTitle>
           </DialogHeader>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5 py-2">
             <div className="md:col-span-2">
@@ -280,7 +280,7 @@ export default function AddressSection({ user: _user }: SectionProps) {
               />
             </div>
             <div className="md:col-span-2">
-              <Label>Adres SatÄ±rÄ± 1 *</Label>
+              <Label>Adres Satırı 1 *</Label>
               <Input
                 value={form.addressLine1}
                 onChange={(e) => setForm((p) => ({ ...p, addressLine1: e.target.value }))}
@@ -289,22 +289,22 @@ export default function AddressSection({ user: _user }: SectionProps) {
               />
             </div>
             <div className="md:col-span-2">
-              <Label>Adres SatÄ±rÄ± 2 (opsiyonel)</Label>
+              <Label>Adres Satırı 2 (opsiyonel)</Label>
               <Input
                 value={form.addressLine2}
                 onChange={(e) => setForm((p) => ({ ...p, addressLine2: e.target.value }))}
                 className="mt-1"
-                placeholder="Daire, kat, kapÄ±..."
+                placeholder="Daire, kat, kapı..."
               />
             </div>
             <div>
-              <Label>Åehir *</Label>
+              <Label>Şehir *</Label>
               <Select
                 value={form.city}
                 onValueChange={(v) => setForm((p) => ({ ...p, city: v, district: '' }))}
               >
                 <SelectTrigger className="mt-1">
-                  <SelectValue placeholder="Åehir seÃ§in" />
+                  <SelectValue placeholder="Şehir seçin" />
                 </SelectTrigger>
                 <SelectContent className="max-h-64">
                   {CITIES_TR.map((c) => (
@@ -314,14 +314,14 @@ export default function AddressSection({ user: _user }: SectionProps) {
               </Select>
             </div>
             <div>
-              <Label>Ä°lÃ§e *</Label>
+              <Label>İlçe *</Label>
               <Select
                 value={form.district}
                 onValueChange={(v) => setForm((p) => ({ ...p, district: v }))}
                 disabled={!form.city}
               >
                 <SelectTrigger className="mt-1">
-                  <SelectValue placeholder="Ä°lÃ§e seÃ§in" />
+                  <SelectValue placeholder="İlçe seçin" />
                 </SelectTrigger>
                 <SelectContent className="max-h-64">
                   {districts.map((d) => (
@@ -337,11 +337,11 @@ export default function AddressSection({ user: _user }: SectionProps) {
                 checked={form.isDefault}
                 onChange={(e) => setForm((p) => ({ ...p, isDefault: e.target.checked }))}
               />
-              <label htmlFor="isDefault" className="text-sm text-slate-700">VarsayÄ±lan adres olarak ayarla</label>
+              <label htmlFor="isDefault" className="text-sm text-slate-700">Varsayılan adres olarak ayarla</label>
             </div>
           </div>
           <div className="flex justify-end gap-2 pt-2">
-            <Button variant="outline" onClick={() => setModalOpen(false)}>Ä°ptal</Button>
+            <Button variant="outline" onClick={() => setModalOpen(false)}>İptal</Button>
             <Button
               className="bg-gradient-to-r from-blue-500 to-indigo-500 text-white"
               onClick={handleSave}

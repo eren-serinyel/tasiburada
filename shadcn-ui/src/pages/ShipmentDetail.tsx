@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+﻿import { useEffect, useState, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
@@ -484,9 +484,9 @@ export default function ShipmentDetail() {
               <div style={{ marginTop: '12px', padding: '10px 12px', border: '0.5px solid #E2E8F0', borderRadius: '8px', background: directPhone ? '#F0FDF4' : '#F8FAFC', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Phone style={{ width: '14px', height: '14px', color: directPhone ? '#15803D' : '#64748B', flexShrink: 0 }} />
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: '11px', color: '#64748B' }}>Ä°letiÅŸim</div>
+                  <div style={{ fontSize: '11px', color: '#64748B' }}>İletişim</div>
                   <div style={{ fontSize: '13px', fontWeight: 600, color: directPhone ? '#15803D' : '#0F172A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {directPhone || 'Platform iÃ§i mesajlaÅŸma'}
+                    {directPhone || 'Platform içi mesajlaşma'}
                   </div>
                 </div>
               </div>

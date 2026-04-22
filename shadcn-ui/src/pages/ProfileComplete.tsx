@@ -20,7 +20,7 @@ const SECTION_LIST: { key: keyof ProfileSections; label: string }[] = [
   { key: 'companyInfoCompleted', label: 'Firma Bilgileri' },
   { key: 'activityInfoCompleted', label: 'Faaliyet Bilgileri' },
   { key: 'documentsCompleted', label: 'Belgeler' },
-  { key: 'earningsCompleted', label: 'Ã–deme Bilgileri' },
+  { key: 'earningsCompleted', label: 'Ödeme Bilgileri' },
 ];
 
 export default function ProfileComplete() {
@@ -50,10 +50,10 @@ export default function ProfileComplete() {
           setCompletion(pct);
           if (json.data.sections) setSections(json.data.sections);
         } else {
-          toast({ title: 'Hata', description: 'Profil durumu yÃ¼klenemedi.', variant: 'destructive' });
+          toast({ title: 'Hata', description: 'Profil durumu yüklenemedi.', variant: 'destructive' });
         }
       } catch {
-        toast({ title: 'Hata', description: 'Sunucuya baÄŸlanÄ±lamadÄ±.', variant: 'destructive' });
+        toast({ title: 'Hata', description: 'Sunucuya bağlanılamadı.', variant: 'destructive' });
       } finally {
         setLoading(false);
       }
@@ -93,12 +93,12 @@ export default function ProfileComplete() {
       <Card className="w-full max-w-2xl shadow-xl border-0">
         <CardHeader>
           <CardTitle className="text-2xl">
-            {completion === 100 ? 'Profiliniz TamamlandÄ± ğŸ‰' : 'Profilinizi TamamlayÄ±n'}
+            {completion === 100 ? 'Profiliniz Tamamlandı' : 'Profilinizi Tamamlayın'}
           </CardTitle>
           <CardDescription>
             {completion === 100
-              ? 'TÃ¼m bÃ¶lÃ¼mleri tamamladÄ±nÄ±z. ArtÄ±k mÃ¼ÅŸterilerden teklif alabilirsiniz.'
-              : 'Eksik bÃ¶lÃ¼mleri tamamlayarak mÃ¼ÅŸterilere gÃ¶rÃ¼nÃ¼rlÃ¼ÄŸÃ¼nÃ¼zÃ¼ artÄ±rabilirsiniz.'}
+              ? 'Tüm bölümleri tamamladınız. Artık müşterilerden teklif alabilirsiniz.'
+              : 'Eksik bölümleri tamamlayarak müşterilere görünürlüğünüzü artırabilirsiniz.'}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
@@ -127,7 +127,7 @@ export default function ProfileComplete() {
                   {s.label}
                 </span>
                 {sections[s.key] && (
-                  <span className="ml-auto text-xs text-green-600 font-medium">TamamlandÄ±</span>
+                  <span className="ml-auto text-xs text-green-600 font-medium">Tamamlandı</span>
                 )}
               </div>
             ))}
