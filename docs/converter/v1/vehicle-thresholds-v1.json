@@ -1,0 +1,59 @@
+{
+  "version": "v1",
+  "flowType": "household",
+  "vehicles": [
+    {
+      "vehicleCode": "panelvan",
+      "label": "Panelvan",
+      "volumeMin": 0,
+      "volumeMax": 4,
+      "priority": 1,
+      "isActive": true
+    },
+    {
+      "vehicleCode": "short_chassis_van",
+      "label": "Kisa sasi kamyonet",
+      "volumeMin": 4,
+      "volumeMax": 8,
+      "priority": 2,
+      "isActive": true
+    },
+    {
+      "vehicleCode": "long_chassis_van",
+      "label": "Uzun sasi kamyonet",
+      "volumeMin": 8,
+      "volumeMax": 14,
+      "priority": 3,
+      "isActive": true
+    },
+    {
+      "vehicleCode": "small_truck",
+      "label": "Kucuk kamyon",
+      "volumeMin": 14,
+      "volumeMax": 22,
+      "priority": 4,
+      "isActive": true
+    },
+    {
+      "vehicleCode": "large_truck",
+      "label": "Buyuk kamyon",
+      "volumeMin": 22,
+      "volumeMax": 999,
+      "priority": 5,
+      "isActive": true
+    }
+  ],
+  "overrides": {
+    "specialItemEscalation": {
+      "enabled": true,
+      "maxStepUp": 1,
+      "description": "If special item exists, allow stepping up one vehicle class."
+    },
+    "nearThresholdEscalation": {
+      "enabled": true,
+      "triggerRatio": 0.9,
+      "maxStepUp": 1,
+      "description": "If totalMax approaches threshold by 90 percent or more, escalate one class."
+    }
+  }
+}
