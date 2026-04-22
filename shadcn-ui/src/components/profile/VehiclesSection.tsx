@@ -46,7 +46,10 @@ const emptyForm: VehicleForm = {
   photos: [],
 };
 
-export default function VehiclesSection({ user }: SectionProps) {
+const errorMessage = (error: unknown, fallback: string): string =>
+  error instanceof Error ? error.message : fallback;
+
+export default function VehiclesSection({ user, refreshProfileStatus }: SectionProps) {
   const [vehicles, setVehicles] = useState<VehicleItem[]>([]);
   const [vehicleTypes, setVehicleTypes] = useState<VehicleType[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -182,8 +185,9 @@ export default function VehiclesSection({ user }: SectionProps) {
       setEditingId(null);
       setForm(emptyForm);
       await fetchVehicles();
-    } catch (error: any) {
-      toast.error(error?.message || 'Araç kaydedilemedi.');
+      await refreshProfileStatus?.();
+    } catch (error: unknown) {
+      toast.error(errorMessage(error, 'Araç kaydedilemedi.'));
     } finally {
       setIsSaving(false);
     }
@@ -197,8 +201,9 @@ export default function VehiclesSection({ user }: SectionProps) {
       if (!res.ok || !json?.success) throw new Error(json?.message || 'Araç silinemedi.');
       toast.success('Araç silindi.');
       await fetchVehicles();
-    } catch (error: any) {
-      toast.error(error?.message || 'Araç silinemedi.');
+      await refreshProfileStatus?.();
+    } catch (error: unknown) {
+      toast.error(errorMessage(error, 'Araç silinemedi.'));
     }
   };
 
@@ -211,8 +216,9 @@ export default function VehiclesSection({ user }: SectionProps) {
       if (!res.ok || !json?.success) throw new Error(json?.message || 'Fotoğraf silinemedi.');
       toast.success('Araç fotoğrafı silindi.');
       await fetchVehicles();
-    } catch (error: any) {
-      toast.error(error?.message || 'Fotoğraf silinemedi.');
+      await refreshProfileStatus?.();
+    } catch (error: unknown) {
+      toast.error(errorMessage(error, 'Fotoğraf silinemedi.'));
     }
   };
 

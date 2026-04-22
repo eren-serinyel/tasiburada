@@ -1,4 +1,5 @@
-﻿import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
+import type { LucideIcon } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -17,12 +18,17 @@ import {
   Search, 
   Package,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Circle,
 } from 'lucide-react';
-import { getCarrierProfileTasks } from '@/lib/utils';
-import { Shipment, User } from '@/lib/types';
+import type { Shipment, User } from '@/lib/types';
 import { getSessionUser, setSessionUser } from '@/lib/storage';
 import { apiClient } from '@/lib/apiClient';
+import {
+  buildCarrierProfileCompletionSummary,
+  getNextIncompleteStepRoute,
+  type ProfileCompletionSummary,
+} from '@/lib/carrierProfileCompletion';
 
 type PendingShipmentApi = {
   id: string;
@@ -55,24 +61,6 @@ type ActiveOffer = {
   };
 };
 
-type OnboardingSteps = {
-  companyInfo: boolean;
-  taxPlate: boolean;
-  k3Authorization: boolean;
-  vehiclePhotos: boolean;
-  adminApproval: boolean;
-};
-
-type CarrierDocumentDto = {
-  type?: string;
-  fileUrl?: string;
-};
-
-type CarrierVehicleDto = {
-  photoUrls?: string[];
-  photos?: string[];
-};
-
 const formatLoadSummary = (loadDetails?: string, weight?: number) => {
   const safeLoadDetails = loadDetails?.trim() || 'Yük bilgisi yok';
   return weight && weight > 0 ? `${safeLoadDetails}, ${weight} kg` : safeLoadDetails;
@@ -80,19 +68,12 @@ const formatLoadSummary = (loadDetails?: string, weight?: number) => {
 
 export default function CarrierHome() {
   const [user, setUser] = useState<User | null>(null);
-  const [profileCompletion, setProfileCompletion] = useState<number | null>(null);
-  const [adminApproved, setAdminApproved] = useState(false);
-  const [taxPlateVerified, setTaxPlateVerified] = useState(false);
+  const [profileSummary, setProfileSummary] = useState<ProfileCompletionSummary>(() =>
+    buildCarrierProfileCompletionSummary({})
+  );
   const [pendingJobs, setPendingJobs] = useState<PendingJob[]>([]);
   const [activeOffers, setActiveOffers] = useState<ActiveOffer[]>([]);
   const [pendingLoading, setPendingLoading] = useState(true);
-  const [onboardingSteps, setOnboardingSteps] = useState<OnboardingSteps>({
-    companyInfo: false,
-    taxPlate: false,
-    k3Authorization: false,
-    vehiclePhotos: false,
-    adminApproval: false,
-  });
   const navigate = useNavigate();
   const API_BASE_URL = '/api/v1';
 
@@ -105,127 +86,62 @@ export default function CarrierHome() {
     if (!user || user.type !== 'carrier') return;
     let ignore = false;
 
-    const fetchProfileCompletion = async () => {
+    const fetchProfileVerification = async () => {
       try {
-        // Use the dedicated status endpoint for fresh calculation
-        const res = await apiClient(`${API_BASE_URL}/carriers/me/profile-status`);
-        const json = await res.json();
-        if (!res.ok || !json?.success) return;
-        
-        // Data comes directly as the status object
-        const percent = Number(json.data?.overallPercentage);
-        
-        if (!ignore && Number.isFinite(percent)) {
-          const clamped = Math.max(0, Math.min(100, Math.round(percent)));
-          setProfileCompletion(clamped);
-          localStorage.setItem('profileCompletion', String(clamped));
-          
-          // Update user state if changed
-          if (user && user.profileCompletion !== clamped) {
-             const updatedUser = { ...user, profileCompletion: clamped };
-             setUser(updatedUser);
-             setSessionUser(updatedUser);
-          }
-        }
-
-        setOnboardingSteps((prev) => ({
-          ...prev,
-          companyInfo: Boolean(json.data?.sections?.companyInfoCompleted),
-        }));
-      } catch {}
-    };
-
-    fetchProfileCompletion();
-    return () => {
-      ignore = true;
-    };
-  }, [user?.id, user?.type]);
-
-  useEffect(() => {
-    if (!user || user.type !== 'carrier') return;
-    const fetchCarrierApproval = async () => {
-      try {
-        const res = await apiClient(`${API_BASE_URL}/carriers/me`);
-        const json = await res.json();
-        const carrier = json?.data?.carrier ?? json?.data;
-        const approved = Boolean(carrier?.verifiedByAdmin || carrier?.verificationStatus === 'verified');
-        setAdminApproved(approved);
-
-        const hasCompanyInfo = Boolean(
-          String(carrier?.companyName || '').trim() &&
-          String(carrier?.taxNumber || '').trim() &&
-          Number.isFinite(Number(carrier?.foundedYear)) &&
-          Number(carrier?.foundedYear) > 0
-        );
-
-        setOnboardingSteps((prev) => ({
-          ...prev,
-          companyInfo: prev.companyInfo || hasCompanyInfo,
-          adminApproval: approved,
-        }));
-      } catch {
-        setAdminApproved(false);
-        setOnboardingSteps((prev) => ({ ...prev, adminApproval: false }));
-      }
-    };
-    fetchCarrierApproval();
-  }, [user?.id, user?.type]);
-
-  useEffect(() => {
-    if (!user || user.type !== 'carrier') return;
-
-    const fetchOnboardingAssets = async () => {
-      try {
-        const [documentsRes, vehiclesRes] = await Promise.all([
-          apiClient(`${API_BASE_URL}/carriers/me/documents`),
+        const [overviewResult, vehiclesResult] = await Promise.allSettled([
+          apiClient(`${API_BASE_URL}/carriers/me`),
           apiClient(`${API_BASE_URL}/carriers/me/vehicles`),
         ]);
 
-        const documentsJson = await documentsRes.json().catch(() => null);
-        const vehiclesJson = await vehiclesRes.json().catch(() => null);
+        if (overviewResult.status !== 'fulfilled') return;
 
-        const documents: CarrierDocumentDto[] = Array.isArray(documentsJson?.data?.documents)
-          ? documentsJson.data.documents
-          : Array.isArray(documentsJson?.data)
-            ? documentsJson.data
-            : [];
+        const overviewRes = overviewResult.value;
+        const overviewJson = await overviewRes.json().catch(() => ({}));
+        if (!overviewRes.ok || !overviewJson?.success) return;
 
-        const vehicles: CarrierVehicleDto[] = Array.isArray(vehiclesJson?.data)
-          ? vehiclesJson.data
-          : [];
+        const overview = overviewJson.data ?? {};
+        const carrier = overview.carrier ?? overview;
+        let vehicles = Array.isArray(carrier?.carrierVehicles) ? carrier.carrierVehicles : [];
 
-        const hasDocumentType = (type: string) => documents.some((doc) => {
-          const docType = String(doc?.type || '').trim().toUpperCase();
-          const fileUrl = String(doc?.fileUrl || '').trim();
-          return docType === type && Boolean(fileUrl);
+        if (vehiclesResult.status === 'fulfilled') {
+          const vehiclesRes = vehiclesResult.value;
+          const vehiclesJson = await vehiclesRes.json().catch(() => ({}));
+          if (vehiclesRes.ok && vehiclesJson?.success && Array.isArray(vehiclesJson.data)) {
+            vehicles = vehiclesJson.data;
+          }
+        }
+
+        const nextSummary = buildCarrierProfileCompletionSummary({
+          carrier,
+          activity: overview.activity,
+          documents: Array.isArray(overview.documents) ? overview.documents : carrier?.documents,
+          vehicles,
         });
 
-        const hasVehiclePhotos = vehicles.some((vehicle) => {
-          const photos = Array.isArray(vehicle?.photoUrls)
-            ? vehicle.photoUrls
-            : Array.isArray(vehicle?.photos)
-              ? vehicle.photos
-              : [];
-          return photos.some((photo) => String(photo || '').trim().length > 0);
-        });
+        if (!ignore) {
+          setProfileSummary(nextSummary);
+          localStorage.setItem('profileCompletion', String(nextSummary.percentage));
 
-        setOnboardingSteps((prev) => ({
-          ...prev,
-          taxPlate: hasDocumentType('TAX_PLATE'),
-          k3Authorization: hasDocumentType('AUTHORIZATION_CERT'),
-          vehiclePhotos: hasVehiclePhotos,
-        }));
+          if (user.profileCompletion !== nextSummary.percentage || user.verifiedByAdmin !== Boolean(carrier?.verifiedByAdmin)) {
+            const updatedUser = {
+              ...user,
+              profileCompletion: nextSummary.percentage,
+              verifiedByAdmin: Boolean(carrier?.verifiedByAdmin),
+              pendingApproval: Boolean(carrier?.pendingApproval),
+            };
+            setUser(updatedUser);
+            setSessionUser(updatedUser);
+          }
+        }
       } catch {
-        setOnboardingSteps((prev) => ({
-          ...prev,
-          taxPlate: false,
-          k3Authorization: false,
-          vehiclePhotos: false,
-        }));
+        if (!ignore) setProfileSummary(buildCarrierProfileCompletionSummary({}));
       }
     };
 
-    fetchOnboardingAssets();
+    fetchProfileVerification();
+    return () => {
+      ignore = true;
+    };
   }, [user?.id, user?.type]);
 
   const [stats, setStats] = useState({
@@ -251,6 +167,7 @@ export default function CarrierHome() {
           });
         }
       } catch {
+        // Stats are non-critical for the home screen.
       }
     };
     
@@ -336,30 +253,14 @@ export default function CarrierHome() {
   const totalEarnings = stats.totalEarnings;
   const rating = stats.rating;
 
-  const onboardingItems = useMemo(
-    () => [
-      { key: 'companyInfo', label: 'Firma Bilgileri', checked: onboardingSteps.companyInfo },
-      { key: 'taxPlate', label: 'Vergi Levhası', checked: onboardingSteps.taxPlate },
-      { key: 'k3Authorization', label: 'K3 Yetki Belgesi', checked: onboardingSteps.k3Authorization },
-      { key: 'vehiclePhotos', label: 'Araç Fotoğrafları', checked: onboardingSteps.vehiclePhotos },
-      { key: 'adminApproval', label: 'Admin Onayı', checked: onboardingSteps.adminApproval },
-    ],
-    [onboardingSteps]
-  );
-
-  const completedOnboardingCount = onboardingItems.filter((item) => item.checked).length;
-  const onboardingPercent = Math.round((completedOnboardingCount / onboardingItems.length) * 100);
-  const missingOnboardingLabels = onboardingItems.filter((item) => !item.checked).map((item) => item.label);
-
-  const fallbackProgress = user ? getCarrierProfileTasks(user as any) : { percent: 0, isComplete: false };
-  const percentFromDb = profileCompletion ?? user?.profileCompletion;
-  const profilePercent = typeof percentFromDb === 'number' && Number.isFinite(percentFromDb)
-    ? Math.max(0, Math.min(100, Math.round(percentFromDb)))
-    : fallbackProgress.percent;
-  const profileReady = typeof percentFromDb === 'number'
-    ? profilePercent >= 100
-    : fallbackProgress.isComplete;
-  const canOffer = profileReady && adminApproved;
+  const percent = profileSummary.percentage;
+  const canOffer = profileSummary.isComplete;
+  const nextProfileRoute = getNextIncompleteStepRoute(profileSummary.nextIncompleteStep);
+  const prerequisitesComplete = profileSummary.steps
+    .filter((step) => step.key !== 'admin_approval')
+    .every((step) => step.completed);
+  const waitingAdminApproval = prerequisitesComplete && !profileSummary.isComplete;
+  const submitForApprovalRoute = '/profilim?tab=company';
 
   return (
     <div className="min-h-screen bg-gray-50/50 pb-10">
@@ -433,13 +334,19 @@ export default function CarrierHome() {
                     <AlertCircle className="h-6 w-6" />
                   </div>
                   <div>
-                    <h3 className="font-semibold text-amber-900 text-lg">Hesap Onayı Bekleniyor</h3>
+                    <h3 className="font-semibold text-amber-900 text-lg">
+                      {waitingAdminApproval ? 'Onaya G\u00f6ndermeye Haz\u0131r' : 'Profil Eksikleri Var'}
+                    </h3>
                     <p className="text-amber-700 mt-1">
-                      Teklif vermeye başlamak için profilini tamamlaman ve gerekli belgeleri yüklemen gerekiyor.
-                      Şu an profilin %{onboardingPercent} tamamlandı.
+                      {waitingAdminApproval
+                        ? 'T\u00fcm do\u011frulama ad\u0131mlar\u0131n\u0131 tamamlad\u0131n. Teklif vermeye ba\u015flayabilmek i\u00e7in profilini admin onay\u0131na g\u00f6nder.'
+                        : 'Teklif vermeye ba\u015flamak i\u00e7in profilini tamamlaman ve gerekli belgeleri y\u00fcklemen gerekiyor.'}
+                      {'\u015eu an profilin %'}{percent}{' tamamland\u0131.'}
                     </p>
                     <Button variant="outline" className="mt-4 border-amber-200 text-amber-800 hover:bg-amber-100" asChild>
-                      <Link to="/profilim">Profili Tamamla</Link>
+                      <Link to={waitingAdminApproval ? submitForApprovalRoute : nextProfileRoute}>
+                        {waitingAdminApproval ? 'Onaya G\u00f6nder' : 'Profili Tamamla'}
+                      </Link>
                     </Button>
                   </div>
                 </CardContent>
@@ -574,28 +481,25 @@ export default function CarrierHome() {
               <CardContent>
                 <div className="space-y-4">
                     <div className="flex items-end justify-between">
-                      <span className="text-3xl font-bold text-gray-900">%{onboardingPercent}</span>
-                      <span className={`text-sm font-medium ${onboardingPercent >= 100 ? 'text-green-600' : 'text-amber-600'}`}>
-                        {onboardingPercent >= 100 ? 'Tamamlandı' : 'Eksikler var'}
-                        </span>
+                      <span className="text-3xl font-bold text-gray-900">%{percent}</span>
+                      <span className={`text-sm font-medium ${profileSummary.isComplete ? 'text-green-600' : 'text-amber-600'}`}>
+                        {profileSummary.statusText}
+                      </span>
                     </div>
-                    <Progress value={onboardingPercent} className="h-2" />
+                    <Progress value={percent} className="h-2" />
                     
                     <div className="space-y-2 pt-2">
-                        {onboardingItems.map((item) => (
-                          <CheckItem key={item.key} label={item.label} checked={item.checked} />
-                        ))}
+                      {profileSummary.steps.map((step) => (
+                        <CheckItem key={step.key} label={step.label} checked={step.completed} />
+                      ))}
                     </div>
-                    {missingOnboardingLabels.length > 0 && (
-                      <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-md px-2.5 py-2">
-                        Eksikler: {missingOnboardingLabels.join(', ')}
-                      </p>
-                    )}
                 </div>
               </CardContent>
               <CardFooter className="bg-gray-50 border-t p-4">
                   <Button variant="outline" className="w-full text-xs h-8" asChild>
-                    <Link to="/profilim">Profili Düzenle</Link>
+                    <Link to={profileSummary.isComplete ? '/profilim' : waitingAdminApproval ? submitForApprovalRoute : nextProfileRoute}>
+                      {profileSummary.isComplete ? 'Profili G\u00f6r\u00fcnt\u00fcle' : waitingAdminApproval ? 'Onaya G\u00f6nder' : 'Eksikleri Tamamla'}
+                    </Link>
                   </Button>
               </CardFooter>
             </Card>
@@ -639,7 +543,16 @@ export default function CarrierHome() {
 
 // --- Sub Components ---
 
-function StatsCard({ title, value, description, icon: Icon, trend, highlight }: any) {
+type StatsCardProps = {
+  title: string;
+  value: string;
+  description: string;
+  icon: LucideIcon;
+  trend?: 'up';
+  highlight?: boolean;
+};
+
+function StatsCard({ title, value, description, icon: Icon, trend, highlight }: StatsCardProps) {
   return (
     <Card className={`${highlight ? 'border-blue-200 bg-blue-50/50' : ''} shadow-sm hover:shadow-md transition-shadow`}>
       <CardContent className="p-6">
@@ -659,7 +572,16 @@ function StatsCard({ title, value, description, icon: Icon, trend, highlight }: 
   );
 }
 
-function MarketplaceItem({ from, to, price, date, type, distance }: any) {
+type MarketplaceItemProps = {
+  from: string;
+  to: string;
+  price: string;
+  date: string;
+  type: string;
+  distance: string;
+};
+
+function MarketplaceItem({ from, to, price, date, type, distance }: MarketplaceItemProps) {
     return (
         <Card className="hover:border-blue-300 transition-all group cursor-pointer border-l-4 border-l-transparent hover:border-l-blue-600 shadow-sm hover:shadow-md">
             <CardContent className="p-5">
@@ -704,7 +626,7 @@ function CheckItem({ label, checked }: { label: string, checked: boolean }) {
     return (
         <div className="flex items-center gap-2 text-sm">
             <div className={`p-0.5 rounded-full ${checked ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'}`}>
-                {checked ? <CheckCircle2 className="h-3 w-3" /> : <div className="h-3 w-3 rounded-full border border-gray-400" />}
+                {checked ? <CheckCircle2 className="h-3 w-3" /> : <Circle className="h-3 w-3" />}
             </div>
             <span className={checked ? 'text-gray-900' : 'text-gray-500'}>{label}</span>
         </div>

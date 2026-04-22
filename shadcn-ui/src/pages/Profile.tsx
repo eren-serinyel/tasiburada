@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { ElementType } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { AnimatePresence } from 'framer-motion';
 import { Button } from '@/components/ui/button';
@@ -20,6 +22,37 @@ import type { SidebarKey } from '@/components/profile';
 
 const API_BASE_URL = '/api/v1';
 
+const normalizeProfileTab = (raw: string | null, isCarrier: boolean): SidebarKey | null => {
+  const value = String(raw ?? '').trim().toLowerCase();
+  const aliases: Record<string, SidebarKey> = {
+    hesap: 'account',
+    account: 'account',
+    firma: 'company',
+    company: 'company',
+    belgeler: 'documents',
+    belge: 'documents',
+    documents: 'documents',
+    araclar: 'vehicles',
+    araçlar: 'vehicles',
+    vehicles: 'vehicles',
+    odeme: 'payouts',
+    payouts: 'payouts',
+    faaliyet: 'operations',
+    operations: 'operations',
+    guvenlik: 'security',
+    güvenlik: 'security',
+    security: 'security',
+    bildirimler: 'notifications',
+    notifications: 'notifications',
+  };
+  const tab = aliases[value];
+  if (!tab) return null;
+
+  const carrierOnly: SidebarKey[] = ['company', 'operations', 'documents', 'vehicles', 'payouts', 'notifications'];
+  if (!isCarrier && carrierOnly.includes(tab)) return null;
+  return tab;
+};
+
 export default function Profile() {
   const [active, setActive] = useState<SidebarKey>('account');
   const [user, setUser] = useState<UserType | null>(null);
@@ -37,6 +70,7 @@ export default function Profile() {
   const photoPreviewUrlRef = useRef<string | null>(null);
 
   const { refreshUser, updateUser } = useAuth();
+  const [searchParams] = useSearchParams();
   const isCarrier = user?.type === 'carrier';
   const initials = useInitials(user?.name, user?.surname);
 
@@ -62,7 +96,9 @@ export default function Profile() {
       const json = await res.json();
       const pct = Number(json?.data?.overallPercentage);
       setProfileCompletion(Math.max(0, Math.min(100, Math.round(Number.isFinite(pct) ? pct : 0))));
-    } catch {} finally { setIsProfileStatusLoading(false); }
+    } catch {
+      // Profile status is refreshed opportunistically; keep current value on failure.
+    } finally { setIsProfileStatusLoading(false); }
   }, [user]);
 
   const refreshProfileStatus = useCallback(async () => {
@@ -86,11 +122,32 @@ export default function Profile() {
     }
     setDirtyPhoto(false);
     if (u.type === 'carrier') {
-      setActive('company');
-      try { const c = localStorage.getItem(`carrier_company_${u.id}`); if (c) { const p = JSON.parse(c); setCompanyName(p.name || ''); } } catch {}
-      try { const a = localStorage.getItem(`carrier_approval_${u.id}`) as any; if (a) setApprovalStatus(a); } catch {}
+      setActive(normalizeProfileTab(new URLSearchParams(window.location.search).get('tab'), true) ?? 'company');
+      try {
+        const c = localStorage.getItem(`carrier_company_${u.id}`);
+        if (c) {
+          const p = JSON.parse(c) as { name?: string };
+          setCompanyName(p.name || '');
+        }
+      } catch {
+        // Local profile drafts are best-effort only.
+      }
+      try {
+        const a = localStorage.getItem(`carrier_approval_${u.id}`) as typeof approvalStatus | null;
+        if (a) setApprovalStatus(a);
+      } catch {
+        // Local approval hint is best-effort only.
+      }
+    } else {
+      setActive(normalizeProfileTab(new URLSearchParams(window.location.search).get('tab'), false) ?? 'account');
     }
   }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    const tab = normalizeProfileTab(searchParams.get('tab'), user.type === 'carrier');
+    if (tab) setActive(tab);
+  }, [searchParams, user?.type]);
 
   // Fetch photo + company name from backend for carrier
   useEffect(() => {
@@ -108,7 +165,9 @@ export default function Profile() {
           const updated = { ...user, pictureUrl: backendPhoto };
           setUser(updated); setSessionUser(updated);
         }
-      } catch {}
+      } catch {
+        // Backend profile photo prefill is optional.
+      }
     })();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
@@ -131,7 +190,9 @@ export default function Profile() {
             setUser(updated); setSessionUser(updated);
           }
         }
-      } catch {}
+      } catch {
+        // Backend profile photo prefill is optional.
+      }
     })();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
@@ -184,9 +245,11 @@ export default function Profile() {
       }
       setPhotoFile(null); setDirtyPhoto(false);
       if (photoPreviewUrlRef.current) { URL.revokeObjectURL(photoPreviewUrlRef.current); photoPreviewUrlRef.current = null; }
-      try { if (finalUrl) localStorage.setItem(`profile_photo_${user.id}`, finalUrl); } catch {}
+      try { if (finalUrl) localStorage.setItem(`profile_photo_${user.id}`, finalUrl); } catch {
+        // Persisting the avatar cache is optional.
+      }
       toast.success('Profil fotoğrafı kaydedildi.');
-    } catch (err: any) { toast.error(err?.message || 'Fotoğraf kaydedilemedi.'); } finally { setIsSavingPhoto(false); }
+    } catch (err: unknown) { toast.error(err instanceof Error ? err.message : 'Fotoğraf kaydedilemedi.'); } finally { setIsSavingPhoto(false); }
   };
 
   // Approval
@@ -198,7 +261,9 @@ export default function Profile() {
       const json = await res.json().catch(() => null);
       if (!res.ok) { toast.error(json?.message || 'Onay talebi gönderilemedi.'); return; }
       setApprovalStatus('pending');
-      try { localStorage.setItem(`carrier_approval_${user.id}`, 'pending'); } catch {}
+      try { localStorage.setItem(`carrier_approval_${user.id}`, 'pending'); } catch {
+        // Local approval hint is best-effort only.
+      }
       toast.success('Profiliniz incelemeye alındı.');
     } catch {
       toast.error('Sunucuya bağlanılamadı.');
@@ -215,7 +280,7 @@ export default function Profile() {
   };
 
   // Sidebar Item
-  const Item = ({ id, label, icon: Icon }: { id: SidebarKey; label: string; icon: any }) => (
+  const Item = ({ id, label, icon: Icon }: { id: SidebarKey; label: string; icon: ElementType }) => (
     <button onClick={() => setActive(id)} className={cn(
       'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] transition-all duration-200 border-l-[3px]',
       active === id ? 'bg-blue-50/80 text-blue-600 font-semibold border-blue-600' : 'text-slate-600 hover:bg-slate-50 border-transparent',
