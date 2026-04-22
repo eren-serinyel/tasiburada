@@ -5,12 +5,16 @@
  * Carrier seed:  info@silenakliyat.com / Maviface2141
  */
 import request from 'supertest';
+import { AppDataSource } from '../infrastructure/database/data-source';
+import { Shipment } from '../domain/entities';
 import { testApp } from './helpers/testApp';
 
 const skipDB = () => process.env.SKIP_DB_TESTS === 'true';
 const BASE = '/api/v1/converter';
+const SHIPMENT_BASE = '/api/v1/shipments';
 
 const CUSTOMER = { email: 'ahmet.yilmaz0@gmail.com', password: 'Maviface2141' };
+const SECOND_CUSTOMER = { email: 'ayse.kaya1@gmail.com', password: 'Maviface2141' };
 const CARRIER = { email: 'info@silenakliyat.com', password: 'Maviface2141' };
 
 const VALID_ESTIMATE_PAYLOAD = {
@@ -31,19 +35,38 @@ const VALID_ESTIMATE_PAYLOAD = {
 
 describe('Converter API Flow', () => {
   let customerToken = '';
+  let secondCustomerToken = '';
   let carrierToken = '';
   let emptySessionId = '';
   let estimatedSessionId = '';
+  let ownShipmentId = '';
+  let foreignShipmentId = '';
+
+  const createShipmentPayload = (suffix: string) => ({
+    origin: `Istanbul, Kadikoy ${suffix}`,
+    destination: `Ankara, Cankaya ${suffix}`,
+    originCity: 'Istanbul',
+    originDistrict: `Kadikoy ${suffix}`,
+    originAddressText: `Istanbul Kadikoy tasima adresi ${suffix}`,
+    destinationCity: 'Ankara',
+    destinationDistrict: `Cankaya ${suffix}`,
+    destinationAddressText: `Ankara Cankaya tasima adresi ${suffix}`,
+    loadDetails: 'Koltuk, beyaz esya ve koliler tasinacak.',
+    shipmentDate: new Date(Date.now() + 14 * 86400000).toISOString(),
+    weight: 250,
+  });
 
   beforeAll(async () => {
     if (skipDB()) return;
 
-    const [customerLogin, carrierLogin] = await Promise.all([
+    const [customerLogin, secondCustomerLogin, carrierLogin] = await Promise.all([
       request(testApp).post('/api/v1/customers/login').send(CUSTOMER),
+      request(testApp).post('/api/v1/customers/login').send(SECOND_CUSTOMER),
       request(testApp).post('/api/v1/carriers/login').send(CARRIER),
     ]);
 
     customerToken = customerLogin.body.data?.token || '';
+    secondCustomerToken = secondCustomerLogin.body.data?.token || '';
     carrierToken = carrierLogin.body.data?.token || '';
   });
 
@@ -164,6 +187,94 @@ describe('Converter API Flow', () => {
     const res = await request(testApp)
       .get(`${BASE}/sessions/00000000-0000-0000-0000-000000000000/result`)
       .set('Authorization', `Bearer ${customerToken}`);
+
+    expect(res.status).toBe(404);
+    expect(res.body.success).toBe(false);
+  });
+
+  test('9. Estimate sonucu own shipmenta apply edilebilmeli ve persist edilmeli', async () => {
+    if (skipDB() || !estimatedSessionId) return;
+
+    const shipmentRes = await request(testApp)
+      .post(SHIPMENT_BASE)
+      .set('Authorization', `Bearer ${customerToken}`)
+      .send(createShipmentPayload(`own-${Date.now()}`));
+
+    expect(shipmentRes.status).toBe(201);
+    ownShipmentId = shipmentRes.body.data?.id || '';
+    expect(ownShipmentId).toBeTruthy();
+
+    const applyRes = await request(testApp)
+      .post(`${BASE}/sessions/${estimatedSessionId}/apply-to-shipment`)
+      .set('Authorization', `Bearer ${customerToken}`)
+      .send({ shipmentId: ownShipmentId });
+
+    expect(applyRes.status).toBe(200);
+    expect(applyRes.body.success).toBe(true);
+    expect(applyRes.body.data.applied).toBe(true);
+    expect(applyRes.body.data.idempotent).toBe(false);
+    expect(applyRes.body.data.shipmentId).toBe(ownShipmentId);
+    expect(applyRes.body.data.sessionId).toBe(estimatedSessionId);
+    expect(applyRes.body.data.updatedFields).toContain('converterSessionId');
+    expect(applyRes.body.data.updatedFields).toContain('converterAppliedAt');
+    expect(applyRes.body.data.skippedFields).toContain('loadDetails');
+
+    const shipmentRepo = AppDataSource.getRepository(Shipment);
+    const shipment = await shipmentRepo.findOne({ where: { id: ownShipmentId } });
+    expect(shipment).toBeTruthy();
+    expect(shipment?.converterSessionId).toBe(estimatedSessionId);
+    expect(shipment?.converterAppliedAt).toBeTruthy();
+    expect(shipment?.converterLastAppliedBy).toBeTruthy();
+    expect(shipment?.converterEstimatedVolumeMin).toBeGreaterThan(0);
+    expect(shipment?.converterEstimatedVolumeMax).toBeGreaterThanOrEqual(shipment?.converterEstimatedVolumeMin ?? 0);
+    expect(shipment?.converterRecommendedVehicleCode).toBeTruthy();
+  });
+
+  test('10. Ayni shipmenta ikinci apply guvenli no-op donmeli', async () => {
+    if (skipDB() || !estimatedSessionId || !ownShipmentId) return;
+
+    const res = await request(testApp)
+      .post(`${BASE}/sessions/${estimatedSessionId}/apply-to-shipment`)
+      .set('Authorization', `Bearer ${customerToken}`)
+      .send({ shipmentId: ownShipmentId });
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.applied).toBe(true);
+    expect(res.body.data.idempotent).toBe(true);
+    expect(res.body.data.updatedFields).toEqual([]);
+    expect(Array.isArray(res.body.data.skippedFields)).toBe(true);
+    expect(res.body.data.skippedFields).toContain('converterSessionId');
+  });
+
+  test('11. Baska kullanicinin shipmentina apply edilememeli', async () => {
+    if (skipDB() || !estimatedSessionId) return;
+
+    const shipmentRes = await request(testApp)
+      .post(SHIPMENT_BASE)
+      .set('Authorization', `Bearer ${secondCustomerToken}`)
+      .send(createShipmentPayload(`foreign-${Date.now()}`));
+
+    expect(shipmentRes.status).toBe(201);
+    foreignShipmentId = shipmentRes.body.data?.id || '';
+    expect(foreignShipmentId).toBeTruthy();
+
+    const res = await request(testApp)
+      .post(`${BASE}/sessions/${estimatedSessionId}/apply-to-shipment`)
+      .set('Authorization', `Bearer ${customerToken}`)
+      .send({ shipmentId: foreignShipmentId });
+
+    expect(res.status).toBe(404);
+    expect(res.body.success).toBe(false);
+  });
+
+  test('12. Olmayan session apply icin 404 donmeli', async () => {
+    if (skipDB() || !ownShipmentId) return;
+
+    const res = await request(testApp)
+      .post(`${BASE}/sessions/00000000-0000-0000-0000-000000000000/apply-to-shipment`)
+      .set('Authorization', `Bearer ${customerToken}`)
+      .send({ shipmentId: ownShipmentId });
 
     expect(res.status).toBe(404);
     expect(res.body.success).toBe(false);

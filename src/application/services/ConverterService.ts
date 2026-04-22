@@ -9,16 +9,26 @@ import {
   ConverterSession,
   ConverterSessionStatus,
   ConverterVehicleRule,
+  Shipment,
+  ShipmentStatus,
+  VehicleType,
 } from '../../domain/entities';
 import {
+  ApplyConverterToShipmentRequestDto,
+  ApplyConverterToShipmentResponseDto,
   CreateConverterSessionRequestDto,
   EstimateConverterRequestDto,
   EstimateConverterResponseDto,
   GetConverterResultResponseDto,
 } from '../dto';
+import { CONVERTER_TO_VEHICLE_TYPE_NAME } from './converter/vehicleTypeMapping';
 
 const roundDown1 = (value: number): number => Math.floor(value * 10) / 10;
 const roundUp1 = (value: number): number => Math.ceil(value * 10) / 10;
+const EDITABLE_SHIPMENT_STATUSES = new Set<ShipmentStatus>([
+  ShipmentStatus.PENDING,
+  ShipmentStatus.OFFER_RECEIVED,
+]);
 
 export class ConverterService {
   private sessionRepo = AppDataSource.getRepository(ConverterSession);
@@ -26,6 +36,8 @@ export class ConverterService {
   private resultRepo = AppDataSource.getRepository(ConverterResult);
   private catalogRepo = AppDataSource.getRepository(ConverterItemCatalog);
   private vehicleRuleRepo = AppDataSource.getRepository(ConverterVehicleRule);
+  private shipmentRepo = AppDataSource.getRepository(Shipment);
+  private vehicleTypeRepo = AppDataSource.getRepository(VehicleType);
 
   async createSession(userId: string | null, payload: CreateConverterSessionRequestDto) {
     const session: ConverterSession = this.sessionRepo.create({
@@ -225,6 +237,147 @@ export class ConverterService {
             status: session.status,
           }
         : null,
+    };
+  }
+
+  async applyToShipment(
+    sessionId: string,
+    userId: string | null,
+    payload: ApplyConverterToShipmentRequestDto,
+  ): Promise<ApplyConverterToShipmentResponseDto> {
+    const session = await this.sessionRepo.findOne({ where: { id: sessionId } });
+    if (!session) {
+      const error = new Error('Converter oturumu bulunamadı.');
+      (error as any).statusCode = 404;
+      throw error;
+    }
+
+    if (!session.userId || !userId || session.userId !== userId) {
+      const error = new Error('Bu converter oturumuna erişim yetkiniz yok.');
+      (error as any).statusCode = 403;
+      throw error;
+    }
+
+    const [shipment, answer, result] = await Promise.all([
+      this.shipmentRepo.findOne({ where: { id: payload.shipmentId, customerId: userId } }),
+      this.answerRepo.findOne({ where: { sessionId: session.id } }),
+      this.resultRepo.findOne({ where: { sessionId: session.id } }),
+    ]);
+
+    if (!shipment) {
+      const error = new Error('Shipment bulunamadı.');
+      (error as any).statusCode = 404;
+      throw error;
+    }
+
+    if (!EDITABLE_SHIPMENT_STATUSES.has(shipment.status)) {
+      const error = new Error('Bu shipment durumunda converter apply işlemi yapılamaz.');
+      (error as any).statusCode = 409;
+      throw error;
+    }
+
+    if (!result) {
+      const error = new Error('Apply için önce estimate sonucu oluşturulmalıdır.');
+      (error as any).statusCode = 409;
+      throw error;
+    }
+
+    if (session.shipmentId && session.shipmentId !== shipment.id) {
+      const error = new Error('Bu converter oturumu başka bir shipment için zaten uygulanmış.');
+      (error as any).statusCode = 409;
+      throw error;
+    }
+
+    const vehicleTypeName = result.recommendedVehicle
+      ? CONVERTER_TO_VEHICLE_TYPE_NAME[result.recommendedVehicle]
+      : undefined;
+    const vehicleType = vehicleTypeName
+      ? await this.vehicleTypeRepo.findOne({ where: { name: vehicleTypeName } })
+      : null;
+
+    const updatedFields: string[] = [];
+    const skippedFields: string[] = [];
+
+    const applyIfEmpty = <T>(field: string, currentValue: T | null | undefined, nextValue: T | null | undefined, setter: (value: T) => void) => {
+      const isEmpty = currentValue === null || currentValue === undefined || currentValue === '';
+      const hasValue = nextValue !== null && nextValue !== undefined && nextValue !== '';
+      if (isEmpty && hasValue) {
+        setter(nextValue as T);
+        updatedFields.push(field);
+        return;
+      }
+      skippedFields.push(field);
+    };
+
+    applyIfEmpty('estimatedWeight', shipment.estimatedWeight, result.estimatedVolumeMax, (value) => {
+      shipment.estimatedWeight = Number(value);
+    });
+    applyIfEmpty('loadDetails', shipment.loadDetails, result.summaryText, (value) => {
+      shipment.loadDetails = value;
+    });
+    applyIfEmpty('vehicleTypePreferenceId', shipment.vehicleTypePreferenceId, vehicleType?.id, (value) => {
+      shipment.vehicleTypePreferenceId = value;
+    });
+    applyIfEmpty('converterEstimatedVolumeMin', shipment.converterEstimatedVolumeMin, result.estimatedVolumeMin, (value) => {
+      shipment.converterEstimatedVolumeMin = Number(value);
+    });
+    applyIfEmpty('converterEstimatedVolumeMax', shipment.converterEstimatedVolumeMax, result.estimatedVolumeMax, (value) => {
+      shipment.converterEstimatedVolumeMax = Number(value);
+    });
+    applyIfEmpty('converterRecommendedVehicleCode', shipment.converterRecommendedVehicleCode, result.recommendedVehicle, (value) => {
+      shipment.converterRecommendedVehicleCode = value;
+    });
+    applyIfEmpty('converterSpecialItemsJson', shipment.converterSpecialItemsJson, answer?.specialItemsJson ?? [], (value) => {
+      shipment.converterSpecialItemsJson = value;
+    });
+    applyIfEmpty('converterSessionId', shipment.converterSessionId, session.id, (value) => {
+      shipment.converterSessionId = value;
+    });
+
+    const isAlreadyAppliedToSameShipment = session.status === ConverterSessionStatus.APPLIED
+      && session.shipmentId === shipment.id
+      && !!shipment.converterAppliedAt;
+
+    if (updatedFields.length === 0 && isAlreadyAppliedToSameShipment) {
+      return {
+        shipmentId: shipment.id,
+        sessionId: session.id,
+        applied: true,
+        idempotent: true,
+        updatedFields,
+        skippedFields,
+        appliedAt: shipment.converterAppliedAt,
+      };
+    }
+
+    const appliedAt = shipment.converterAppliedAt ?? new Date();
+    shipment.converterAppliedAt = appliedAt;
+    shipment.converterLastAppliedBy = userId;
+    if (!updatedFields.includes('converterAppliedAt')) {
+      updatedFields.push('converterAppliedAt');
+    }
+    if (!updatedFields.includes('converterLastAppliedBy')) {
+      updatedFields.push('converterLastAppliedBy');
+    }
+
+    session.shipmentId = shipment.id;
+    session.status = ConverterSessionStatus.APPLIED;
+    result.appliedToShipmentAt = appliedAt;
+
+    await Promise.all([
+      this.shipmentRepo.save(shipment),
+      this.sessionRepo.save(session),
+      this.resultRepo.save(result),
+    ]);
+
+    return {
+      shipmentId: shipment.id,
+      sessionId: session.id,
+      applied: true,
+      idempotent: false,
+      updatedFields,
+      skippedFields,
+      appliedAt,
     };
   }
 }

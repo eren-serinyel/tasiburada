@@ -52,4 +52,19 @@ export class ConverterController {
       });
     }
   };
+
+  applyToShipment = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const data = await this.converterService.applyToShipment(req.params.sessionId, resolveUserId(req), req.body);
+      res.status(200).json({
+        success: true,
+        data,
+      });
+    } catch (error: any) {
+      res.status(error.statusCode || 400).json({
+        success: false,
+        message: error.message || 'Converter sonucu shipmenta uygulanamadı.',
+      });
+    }
+  };
 }

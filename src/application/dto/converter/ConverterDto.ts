@@ -69,3 +69,17 @@ export interface GetConverterResultResponseDto {
     status: 'draft' | 'estimated' | 'applied';
   }) | null;
 }
+
+export interface ApplyConverterToShipmentRequestDto {
+  shipmentId: string;
+}
+
+export interface ApplyConverterToShipmentResponseDto {
+  shipmentId: string;
+  sessionId: string;
+  applied: boolean;
+  idempotent: boolean;
+  updatedFields: string[];
+  skippedFields: string[];
+  appliedAt: Date | null;
+}

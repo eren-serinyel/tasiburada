@@ -208,6 +208,27 @@ export class Shipment {
     @Column({ name: 'matched_at', type: 'datetime', nullable: true })
     matchedAt: Date | null;
 
+    @Column({ name: 'converter_session_id', type: 'varchar', length: 36, nullable: true })
+    converterSessionId: string | null;
+
+    @Column({ name: 'converter_estimated_volume_min', type: 'decimal', precision: 7, scale: 2, nullable: true, transformer: decimalToNumberTransformer })
+    converterEstimatedVolumeMin: number | null;
+
+    @Column({ name: 'converter_estimated_volume_max', type: 'decimal', precision: 7, scale: 2, nullable: true, transformer: decimalToNumberTransformer })
+    converterEstimatedVolumeMax: number | null;
+
+    @Column({ name: 'converter_recommended_vehicle_code', type: 'varchar', length: 100, nullable: true })
+    converterRecommendedVehicleCode: string | null;
+
+    @Column({ name: 'converter_special_items_json', type: 'json', nullable: true })
+    converterSpecialItemsJson: string[] | null;
+
+    @Column({ name: 'converter_applied_at', type: 'datetime', nullable: true })
+    converterAppliedAt: Date | null;
+
+    @Column({ name: 'converter_last_applied_by', type: 'varchar', length: 36, nullable: true })
+    converterLastAppliedBy: string | null;
+
     @ManyToMany(() => ExtraService)
     @JoinTable({
         name: 'shipment_extra_services',
