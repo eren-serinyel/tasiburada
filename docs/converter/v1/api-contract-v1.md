@@ -1,18 +1,21 @@
 # Converter API and DTO Contract v1
 
+This document reflects implemented v1 behavior in the backend.
+
+Base path: `/api/v1/converter`
+
+Auth: all endpoints require `Authorization: Bearer <token>`.
+
 ## Enums
 
-### FlowType
-
+FlowType
 - household
 
-### MoveType
-
+MoveType
 - household
 - partial_load
 
-### PropertyType
-
+PropertyType
 - studio
 - 1+1
 - 2+1
@@ -20,31 +23,48 @@
 - 4+1_plus
 - unknown
 
-### Confidence
-
+Confidence
 - high
 - medium
 - low
 
-### RecommendedVehicle
-
+RecommendedVehicle
 - panelvan
 - short_chassis_van
 - long_chassis_van
 - small_truck
 - large_truck
 
-### SessionStatus
-
+SessionStatus
 - draft
 - estimated
 - applied
 
+## Response Envelope
+
+Success:
+
+```json
+{
+  "success": true,
+  "data": {}
+}
+```
+
+Error:
+
+```json
+{
+  "success": false,
+  "message": "Error message"
+}
+```
+
 ## Endpoint 1: Create Session
 
-POST /api/converter/sessions
+POST `/api/v1/converter/sessions`
 
-Request DTO:
+Request:
 
 ```json
 {
@@ -53,25 +73,27 @@ Request DTO:
 ```
 
 Validation:
-
-- flowType required
-- flowType must be household
+- `flowType` required
+- `flowType` must be `household`
 
 Response 201:
 
 ```json
 {
-  "sessionId": "uuid",
-  "status": "draft",
-  "createdAt": "2026-04-22T10:00:00.000Z"
+  "success": true,
+  "data": {
+    "sessionId": "uuid",
+    "status": "draft",
+    "createdAt": "2026-04-22T10:00:00.000Z"
+  }
 }
 ```
 
 ## Endpoint 2: Estimate
 
-POST /api/converter/sessions/:sessionId/estimate
+POST `/api/v1/converter/sessions/:sessionId/estimate`
 
-Request DTO:
+Request:
 
 ```json
 {
@@ -79,9 +101,7 @@ Request DTO:
   "propertyType": "2+1",
   "items": [
     { "itemCode": "sofa_3_seat", "quantity": 1 },
-    { "itemCode": "bed_double", "quantity": 1 },
-    { "itemCode": "washing_machine", "quantity": 1 },
-    { "itemCode": "box_medium", "quantity": 12 }
+    { "itemCode": "bed_double", "quantity": 1 }
   ],
   "originFloor": 3,
   "destinationFloor": 2,
@@ -92,61 +112,81 @@ Request DTO:
 ```
 
 Validation:
-
-- moveType required, enum
-- propertyType required, enum
-- items required, max 200 entries
-- each itemCode required and must exist in active catalog
-- each quantity required, integer, min 0, max 999
-- originFloor and destinationFloor required, integer, min -5, max 100
-- buildingElevator required, boolean
-- externalLift required, boolean
-- specialItems optional, each code must exist and be special
-
-Response 200:
-
-```json
-{
-  "estimatedVolumeMin": 11,
-  "estimatedVolumeMax": 15,
-  "recommendedVehicle": "long_chassis_van",
-  "confidence": "medium",
-  "warnings": [
-    "Ozel esya secildigi icin daha genis arac onerildi."
-  ],
-  "summaryText": "Yukunuz orta hacimli gorunuyor. Nihai arac secimi kesif sonrasi netlesebilir.",
-  "manualReviewRecommended": false,
-  "status": "estimated"
-}
-```
-
-## Endpoint 3: Get Result
-
-GET /api/converter/sessions/:sessionId/result
+- `moveType` enum
+- `propertyType` enum
+- `items` required, array, max 200
+- each `itemCode` required
+- each `quantity` integer in [0, 999]
+- `originFloor` and `destinationFloor` integer in [-5, 100]
+- `buildingElevator` boolean
+- `externalLift` boolean
+- `specialItems` optional array
 
 Response 200:
 
 ```json
 {
-  "sessionId": "uuid",
-  "status": "estimated",
-  "result": {
+  "success": true,
+  "data": {
     "estimatedVolumeMin": 11,
     "estimatedVolumeMax": 15,
     "recommendedVehicle": "long_chassis_van",
     "confidence": "medium",
     "warnings": [],
-    "summaryText": "Tahmini hacim bandi olustu.",
+    "summaryText": "Tahmini hacim bandi 11-15 m3 araliginda gorunuyor. Nihai planlama kesif ve tasiyici degerlendirmesiyle netlesir.",
     "manualReviewRecommended": false
   }
 }
 ```
 
+## Endpoint 3: Get Result
+
+GET `/api/v1/converter/sessions/:sessionId/result`
+
+Response 200:
+
+```json
+{
+  "success": true,
+  "data": {
+    "session": {
+      "sessionId": "uuid",
+      "flowType": "household",
+      "status": "estimated",
+      "shipmentId": null,
+      "createdAt": "2026-04-22T10:00:00.000Z",
+      "updatedAt": "2026-04-22T10:03:00.000Z"
+    },
+    "answer": {
+      "moveType": "household",
+      "propertyType": "2+1",
+      "originFloor": 3,
+      "destinationFloor": 2,
+      "buildingElevator": true,
+      "externalLift": false,
+      "specialItems": ["large_tv"]
+    },
+    "result": {
+      "estimatedVolumeMin": 11,
+      "estimatedVolumeMax": 15,
+      "recommendedVehicle": "long_chassis_van",
+      "confidence": "medium",
+      "warnings": [],
+      "summaryText": "Tahmini hacim bandi 11-15 m3 araliginda gorunuyor. Nihai planlama kesif ve tasiyici degerlendirmesiyle netlesir.",
+      "manualReviewRecommended": false,
+      "status": "estimated"
+    }
+  }
+}
+```
+
+Note: before first estimate, `answer` and `result` may be `null`.
+
 ## Endpoint 4: Apply to Shipment
 
-POST /api/converter/sessions/:sessionId/apply-to-shipment
+POST `/api/v1/converter/sessions/:sessionId/apply-to-shipment`
 
-Request DTO:
+Request:
 
 ```json
 {
@@ -154,49 +194,36 @@ Request DTO:
 }
 ```
 
-Validation:
-
-- shipmentId required, valid uuid
-- session must belong to current user scope
-- session status must be estimated or applied
+Validation and rules:
+- `shipmentId` required, valid uuid
+- session ownership enforced
+- shipment ownership enforced
+- shipment status must be editable (`pending` or `offer_received`)
+- estimate result must exist before apply
+- fill-only behavior (overwrite disabled)
+- repeat apply on same session+shipment returns idempotent no-op
 
 Response 200:
 
 ```json
 {
-  "shipmentId": "uuid",
-  "applied": true,
-  "status": "applied",
-  "appliedAt": "2026-04-22T10:10:00.000Z"
-}
-```
-
-## Error Contract
-
-Common error shape:
-
-```json
-{
-  "success": false,
-  "error": {
-    "code": "VALIDATION_ERROR",
-    "message": "Request validation failed",
-    "details": [
-      {
-        "field": "items[0].quantity",
-        "rule": "min",
-        "message": "Quantity must be >= 0"
-      }
-    ]
+  "success": true,
+  "data": {
+    "shipmentId": "uuid",
+    "sessionId": "uuid",
+    "applied": true,
+    "idempotent": false,
+    "updatedFields": ["converterSessionId", "converterAppliedAt"],
+    "skippedFields": ["loadDetails"],
+    "appliedAt": "2026-04-22T10:10:00.000Z"
   }
 }
 ```
 
-Error codes:
+## Common Error Statuses
 
-- VALIDATION_ERROR
-- SESSION_NOT_FOUND
-- CATALOG_ITEM_NOT_FOUND
-- RESULT_NOT_READY
-- SHIPMENT_NOT_FOUND
-- FORBIDDEN
+- 400: validation errors
+- 401: missing/invalid auth token
+- 403: ownership/authorization violation
+- 404: session or shipment not found
+- 409: business rule conflict (non-editable shipment, apply before estimate, etc.)
