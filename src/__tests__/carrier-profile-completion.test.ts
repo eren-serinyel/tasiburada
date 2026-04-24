@@ -1,4 +1,4 @@
-import { buildCarrierProfileCompletionSummary } from '../../shadcn-ui/src/lib/carrierProfileCompletion';
+import { buildCarrierProfileCompletionSummary } from '../lib/carrierProfileCompletion';
 
 const completeCarrier = {
   companyName: 'Sile Lojistik',
