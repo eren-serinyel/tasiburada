@@ -24,6 +24,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { apiClient } from '@/lib/apiClient';
+import VolumeCalculatorModal from '@/components/converter/VolumeCalculatorModal';
 
 type Step = 1 | 2 | 3;
 
@@ -53,6 +54,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
   const [phone, setPhone] = useState('');
   const [inviteCarrierId, setInviteCarrierId] = useState<string | null>(null);
   const [inviteCarrierName, setInviteCarrierName] = useState<string | null>(null);
+  const [isVolumeCalculatorOpen, setIsVolumeCalculatorOpen] = useState(false);
   const [form, setForm] = useState({
     originCity: '',
     originDistrict: '',
@@ -220,6 +222,12 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
   }, [step]);
 
   const handleChange = (field: string, value: any) => setForm((f) => ({ ...f, [field]: value }));
+
+  const applyConverterWeightToForm = (weightKg: number) => {
+    // TODO: backend'in estimatedWeight desteğine taşı
+    setForm((prev) => ({ ...prev, weightKg: String(weightKg) }));
+    toast({ title: 'Ağırlık güncellendi', description: `Tahmini ağırlık ${weightKg} kg olarak forma uygulandı.` });
+  };
 
   const todayStr = useMemo(() => formatDateYYYYMMDD(new Date()), []);
   const maxDateStr = useMemo(() => { const d = new Date(); d.setDate(d.getDate() + 30); return formatDateYYYYMMDD(d); }, []);
@@ -859,6 +867,17 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
                   </Select>
                 </div>
                 <div>
+                  <label style={labelStyle}>Tahmini Ağırlık (kg)</label>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={form.weightKg}
+                    onChange={(e) => handleChange('weightKg', e.target.value)}
+                    placeholder="Örn. 1200"
+                    style={inputStyle}
+                  />
+                </div>
+                <div>
                   <label style={labelStyle}>Kat</label>
                   <Input type="number" min={0} value={form.floor} onChange={(e) => handleChange('floor', e.target.value)} placeholder="Örn. 3" style={inputStyle} />
                 </div>
@@ -897,6 +916,18 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
                       <SelectItem value="farketmez">Farketmez</SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '24px', padding: '12px', border: '1px solid #BFDBFE', borderRadius: '10px', background: '#EFF6FF' }}>
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between" style={{ gap: '10px' }}>
+                  <div>
+                    <div style={{ fontSize: '14px', fontWeight: 600, color: '#1D4ED8' }}>Hacmi Hesapla</div>
+                    <div style={{ fontSize: '12px', color: '#475569' }}>Eşya listesi ile tahmini hacim ve ağırlık hesabı yapın.</div>
+                  </div>
+                  <Button type="button" onClick={() => setIsVolumeCalculatorOpen(true)}>
+                    Hacmi Hesapla
+                  </Button>
                 </div>
               </div>
 
@@ -1283,6 +1314,12 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
           </motion.div>
         )}
       </AnimatePresence>
+
+      <VolumeCalculatorModal
+        open={isVolumeCalculatorOpen}
+        onOpenChange={setIsVolumeCalculatorOpen}
+        onApplyWeightKg={applyConverterWeightToForm}
+      />
     </div>
   );
 }
