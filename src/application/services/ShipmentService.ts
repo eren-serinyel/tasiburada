@@ -112,6 +112,10 @@ interface PendingShipmentListItem {
   createdAt: Date;
   origin: string;
   destination: string;
+  originCity: string | null;
+  originDistrict: string | null;
+  destinationCity: string | null;
+  destinationDistrict: string | null;
   loadDetails: string;
   customerDisplayName: string;
 }
@@ -237,7 +241,7 @@ export class ShipmentService {
     if (!safeLastName) return safeFirstName;
 
     const last = safeLastName.split(/\s+/)[0] ?? '';
-    return `${safeFirstName} ${last.charAt(0).toUpperCase()}.`;
+    return `${safeFirstName} ${last.charAt(0).toUpperCase()}*`;
   }
 
   private maskOpenAddressForCarrier<T extends Shipment>(shipment: T, canViewOpenAddress: boolean): T {
@@ -337,6 +341,11 @@ export class ShipmentService {
       existingByName.set(name, saved);
     }
 
+      const missingServices = normalizedNames.filter(name => !existingByName.has(name));
+    if (missingServices.length > 0) {
+      throw new ValidationError(`Tanımsız ek hizmet(ler): ${missingServices.join(', ')}`);
+    }
+
     const targetIds = normalizedNames.map(name => existingByName.get(name)!.id);
     await AppDataSource.createQueryBuilder()
       .relation(Shipment, 'extraServices')
@@ -366,6 +375,10 @@ export class ShipmentService {
         createdAt: s.createdAt,
         origin: this.buildLocationLabel(s.originCity, s.originDistrict),
         destination: this.buildLocationLabel(s.destinationCity, s.destinationDistrict),
+        originCity: s.originCity,
+        originDistrict: s.originDistrict,
+        destinationCity: s.destinationCity,
+        destinationDistrict: s.destinationDistrict,
         loadDetails: s.loadDetails,
         customerDisplayName: this.buildDisplayName(s.customer?.firstName, s.customer?.lastName),
       };
@@ -408,7 +421,7 @@ export class ShipmentService {
     });
 
     // BR3 — Çift İlan Engeli:
-        const originCity = payload.originCity ?? (origin ? this.extractCity(origin) : '');
+    const originCity = payload.originCity ?? (origin ? this.extractCity(origin) : '');
     const destinationCity = payload.destinationCity ?? (destination ? this.extractCity(destination) : '');
     const originDistrict = payload.originDistrict ?? this.extractDistrict(origin);
     const destinationDistrict = payload.destinationDistrict ?? this.extractDistrict(destination);
@@ -572,20 +585,17 @@ export class ShipmentService {
       const canViewDetails = isAssigned && this.platformPolicy.shouldRevealDirectContact(shipment, 'carrier', requestingUserId);
 
       if (shipment.customer) {
+        const maskedName = this.buildDisplayName(shipment.customer.firstName, shipment.customer.lastName);
+        const nameParts = maskedName.split(' ');
+        const maskedFirstName = nameParts[0] || shipment.customer.firstName;
+        const maskedLastName = nameParts[1] || undefined;
+
         shipment.customer = {
           ...shipment.customer,
-          // Carrier için MATCHED+ aşamasında (atanan carrier ise) lastName tam, değilse maskeli
-          lastName: canViewDetails
-            ? shipment.customer.lastName
-            : (shipment.customer.lastName?.[0] ?? '') + '***',
-
-          // Carrier için MATCHED+ aşamasında (atanan carrier ise) phone görünür, değilse undefined
+          firstName: maskedFirstName,
+          lastName: canViewDetails ? shipment.customer.lastName : maskedLastName,
           phone: canViewDetails ? shipment.customer.phone : undefined,
-
-          // customer.email → her durumda carrier için undefined (admin değilse)
           email: undefined,
-
-          // customer.id → her durumda carrier için undefined
           id: undefined,
         } as any;
       }

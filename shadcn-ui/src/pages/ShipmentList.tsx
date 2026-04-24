@@ -19,9 +19,15 @@ type BackendShipment = {
   customerId?: string;
   origin?: string;
   destination?: string;
+  originCity?: string;
+  originDistrict?: string;
+  destinationCity?: string;
+  destinationDistrict?: string;
   loadDetails?: string;
   customerDisplayName?: string;
   transportType?: string;
+  insuranceType?: string;
+  hasElevator?: boolean;
   weight?: number | string | null;
   shipmentDate?: string;
   createdAt?: string;
@@ -33,6 +39,10 @@ type BackendShipment = {
 type ShipmentListItem = Shipment & {
   customerDisplayName: string;
   rawStatus: string;
+  originDistrict?: string;
+  destinationDistrict?: string;
+  isAssured?: boolean;
+  hasElevator?: boolean;
 };
 
 const formatLoadSummary = (loadDetails?: string, weight?: number) => {
@@ -61,18 +71,21 @@ const toUiShipment = (shipment: BackendShipment): ShipmentListItem => {
   const originText = shipment.origin || '';
   const destinationText = shipment.destination || '';
 
+  const originCity = shipment.originCity || originText.split(',')[0] || '';
+  const destinationCity = shipment.destinationCity || destinationText.split(',')[0] || '';
+
   return {
     id: shipment.id,
     customerId: shipment.customerId || '',
     origin: {
       address: originText,
-      city: originText,
+      city: originCity,
       lat: 0,
       lng: 0
     },
     destination: {
       address: destinationText,
-      city: destinationText,
+      city: destinationCity,
       lat: 0,
       lng: 0
     },
@@ -85,6 +98,10 @@ const toUiShipment = (shipment: BackendShipment): ShipmentListItem => {
     status: normalizeStatus(shipment.status),
     rawStatus: shipment.status || 'pending',
     price: Number(shipment.price || 0),
+    originDistrict: shipment.originDistrict,
+    destinationDistrict: shipment.destinationDistrict,
+    isAssured: String(shipment.insuranceType || '').trim().toLowerCase() !== 'none' && Boolean(shipment.insuranceType),
+    hasElevator: Boolean(shipment.hasElevator),
     createdAt: shipment.createdAt ? new Date(shipment.createdAt) : new Date(),
     customerDisplayName: shipment.customerDisplayName || 'Müşteri'
   };
@@ -353,90 +370,60 @@ export default function ShipmentList() {
         <div className="space-y-6">
           {filteredShipments.map((shipment) => {
             return (
-              <Card key={shipment.id} className="hover:shadow-md transition-shadow">
-                <CardHeader>
+              <Card key={shipment.id} className="hover:shadow-md transition-shadow border-gray-200">
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <Badge className={`${getStatusColor(shipment.status)} font-semibold text-[10px] uppercase tracking-wider`}>
+                        {getStatusText(shipment.status)}
+                      </Badge>
+                      <span className="text-[11px] text-gray-400 font-mono">#{shipment.id.slice(0, 8)}</span>
+                    </div>
+                    <div className="flex items-center gap-1 text-[11px] text-gray-500">
+                       <Clock className="h-3 w-3" />
+                       {shipment.requestedDate ? new Date(shipment.requestedDate).toLocaleDateString('tr-TR') : '-'}
+                    </div>
+                  </div>
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
-                      <div className="flex items-center space-x-2 mb-2">
-                        <MapPin className="h-4 w-4 text-gray-400" />
-                        <span className="font-medium">
-                          {shipment.origin.city} → {shipment.destination.city}
+                      <div className="flex items-center space-x-2 text-base">
+                        <MapPin className="h-4 w-4 text-blue-500" />
+                        <span className="font-bold text-gray-900">
+                          {shipment.origin.city}{shipment.originDistrict ? `, ${shipment.originDistrict}` : ''} 
+                          <span className="mx-2 text-gray-300">→</span> 
+                          {shipment.destination.city}{shipment.destinationDistrict ? `, ${shipment.destinationDistrict}` : ''}
                         </span>
-                        <Badge className={getStatusColor(shipment.status)}>
-                          {getStatusText(shipment.status)}
-                        </Badge>
                       </div>
-                      <CardDescription className="mt-1">
-                        Müşteri: {shipment.customerDisplayName}
-                      </CardDescription>
-                      <CardTitle className="mt-2 text-lg">{shipment.description}</CardTitle>
-                      <CardDescription className="mt-1">
-                        {LOAD_TYPES[shipment.loadType]} • {shipment.weight}kg • {shipment.distance}km
-                      </CardDescription>
+                      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm font-medium text-gray-700">
+                        <span className="flex items-center gap-1"><Package className="h-3.5 w-3.5" /> {LOAD_TYPES[shipment.loadType]}</span>
+                        {shipment.weight > 0 && <span className="text-gray-300">|</span>}
+                        {shipment.weight > 0 && <span>{shipment.weight} kg</span>}
+                      </div>
                     </div>
-                    
                     <div className="text-right">
-                      <div className="text-2xl font-bold text-green-600">{shipment.price}₺</div>
-                      <div className="text-sm text-gray-500">
-                        {shipment.requestedDate ? new Date(shipment.requestedDate).toLocaleDateString('tr-TR') : '-'}
-                      </div>
+                       <div className="text-xl font-black text-gray-900">{shipment.price > 0 ? `${shipment.price}₺` : 'Teklif Al'}</div>
+                       <div className="text-[10px] text-gray-400 font-medium">{shipment.customerDisplayName}*</div>
                     </div>
                   </div>
                 </CardHeader>
-                
-                <CardContent>
-                  <div className="grid md:grid-cols-2 gap-6">
-                    <div className="space-y-2">
-                      <div>
-                        <span className="text-sm font-medium text-gray-700">Çıkış:</span>
-                        <p className="text-sm text-gray-600">{shipment.origin.address}</p>
-                      </div>
-                      <div>
-                        <span className="text-sm font-medium text-gray-700">Varış:</span>
-                        <p className="text-sm text-gray-600">{shipment.destination.address}</p>
-                      </div>
-                      <div>
-                        <span className="text-sm font-medium text-gray-700">Yük:</span>
-                        <p className="text-sm text-gray-600">{formatLoadSummary(shipment.description, shipment.weight)}</p>
-                      </div>
-                    </div>
-                    
-                    <div className="space-y-2">
-                      {shipment.specialRequirements && shipment.specialRequirements.length > 0 && (
-                        <div>
-                          <span className="text-sm font-medium text-gray-700">Özel Gereksinimler:</span>
-                          <div className="flex flex-wrap gap-1 mt-1">
-                            {shipment.specialRequirements.map((req, index) => (
-                              <Badge key={index} variant="outline" className="text-xs">{req}</Badge>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                      
-                      <div className="flex items-center space-x-4 text-xs text-gray-500">
-                        <span>Oluşturulma: {new Date(shipment.createdAt).toLocaleDateString('tr-TR')}</span>
-                        {shipment.estimatedDuration && (
-                          <span>Tahmini süre: {shipment.estimatedDuration} saat</span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
+                <CardContent className="pt-0">
+                   <div className="flex items-center gap-2 mb-4">
+                      {shipment.rawStatus === 'pending' && <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-100 text-[10px]">Yeni İlan</Badge>}
+                      {shipment.isAssured && <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-100 text-[10px]">Sigortalı</Badge>}
+                      {shipment.hasElevator && <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-100 text-[10px]">Asansörlü</Badge>}
+                   </div>
                   
-                  <div className="flex items-center justify-between mt-6 pt-4 border-t">
-                    <div className="flex items-center space-x-2">
-                      <Clock className="h-4 w-4 text-gray-400" />
-                      <span className="text-sm text-gray-600">
-                        {new Date(shipment.createdAt).toLocaleDateString('tr-TR')} tarihinde oluşturuldu
-                      </span>
+                  <div className="flex items-center justify-between mt-2 pt-3 border-t">
+                    <div className="text-xs text-gray-400">
+                      İlan: {new Date(shipment.createdAt).toLocaleDateString('tr-TR')}
                     </div>
                     
                     <div className="flex items-center space-x-2">
                       {user.type === 'customer' ? (
                         <>
+                           <Button size="sm" variant="ghost" onClick={() => navigate(`/sevkiyat/${shipment.id}`)}>Detaylar</Button>
                           {shipment.status === 'pending' && (
-                            <Button size="sm" variant="outline" disabled>
-                              Teklif Bekleniyor
-                            </Button>
+                            <Badge variant="secondary" className="bg-gray-100 text-gray-600">Teklif Bekleniyor</Badge>
                           )}
                         </>
                       ) : (

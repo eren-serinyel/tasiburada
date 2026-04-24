@@ -3,9 +3,17 @@ import { useEffect, useState } from 'react';
 import type { User } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { CheckCircle2, ClipboardList, Image as ImageIcon, MapPin, MessageSquare, Send, Truck, UserPlus, Wallet } from 'lucide-react';
+import {
+  CheckCircle2,
+  ClipboardList,
+  MapPin,
+  Search,
+  Send,
+  Truck,
+  UserPlus,
+  Wallet,
+} from 'lucide-react';
 import { getSessionUser } from '@/lib/storage';
 
 export default function HowItWorksCustomer() {
@@ -15,48 +23,51 @@ export default function HowItWorksCustomer() {
     try {
       const u = getSessionUser() || (localStorage.getItem('currentUser') ? JSON.parse(localStorage.getItem('currentUser') as string) : null);
       setUser(u);
-    } catch {}
+    } catch {
+      // Session data is optional on public info pages.
+    }
   }, []);
+
   const steps = [
     {
       icon: UserPlus,
-      title: 'Kayıt Ol / Giriş Yap',
-      desc: 'Hızlıca üye olun ya da hesabınıza giriş yapın. Profil bilgilerinizi daha sonra da tamamlayabilirsiniz.'
+      title: 'Müşteri hesabınızla başlayın',
+      desc: 'Üye olun veya giriş yapın. Kayıtlı adresleriniz ve profil telefonunuz varsa talep formunda otomatik kullanılabilir.'
+    },
+    {
+      icon: MapPin,
+      title: 'Rota ve tarihi seçin',
+      desc: 'Çıkış-varış il ve ilçelerini, taşıma tarihini ve saat tercihini girin. Sistem şehir içi veya şehirlerarası kapsamı rotaya göre belirler.'
     },
     {
       icon: ClipboardList,
-      title: 'Yeni Taşıma Talebi Oluşturun',
-      desc: 'Gönderici ve alıcı adreslerini, tarih ve zaman aralığını, yük türü ve ölçülerini girin.'
+      title: 'Yük ve hizmet detaylarını ekleyin',
+      desc: 'Evden eve, ofis, parça eşya veya depolama gibi taşıma tipini; kat, asansör, sigorta ve ek hizmet ihtiyaçlarını belirtin.'
     },
     {
-      icon: ImageIcon,
-      title: 'Fotoğraf ve Not Ekleyin',
-      desc: 'Yüke dair fotoğraflar ve nakliyeciye özel notlar ekleyerek işi netleştirin.'
+      icon: Search,
+      title: 'Uygun nakliyecileri inceleyin',
+      desc: 'Tarih uygunluğu, onay durumu, puan, araç kapasitesi ve hizmet bölgelerine göre firmaları karşılaştırın. İsterseniz belirli bir firmayı talebinize davet edin.'
     },
     {
       icon: Send,
-      title: 'Talebi Yayınlayın',
-      desc: 'Talebiniz yayına alınır ve uygun nakliyeciler tarafından görüntülenir.'
+      title: 'Talebi yayınlayın',
+      desc: 'Talebiniz teklif almaya açılır. Uygun nakliyeciler bilgilendirilir; doğrudan iletişim bilgileri teklif aşamasında gizli tutulur.'
     },
     {
       icon: Wallet,
-      title: 'Teklifleri Görün ve Karşılaştırın',
-      desc: 'Fiyat, tarih, taşıyıcı puanı ve yorumlara göre teklifleri karşılaştırın.'
+      title: 'Teklifleri karşılaştırın',
+      desc: 'Fiyatı; tahmini süre, firma profili, belge durumu, puan ve yorumlarla birlikte değerlendirin. Beğendiğiniz teklifleri kaydedip filtreleyebilirsiniz.'
     },
     {
       icon: CheckCircle2,
-      title: 'Nakliyeciyi Seçin ve Onaylayın',
-      desc: 'Seçtiğiniz teklifi onaylayın, nakliyeciyle mesajlaşarak detayları netleştirin.'
+      title: 'Teklifi kabul edin',
+      desc: 'Bir teklifi kabul ettiğinizde taşıma o nakliyeciyle eşleşir ve diğer bekleyen teklifler otomatik olarak kapanır.'
     },
     {
       icon: Truck,
-      title: 'Yükünüz Taşınsın',
-      desc: 'Nakliyeci planlanan tarihte yükü adresten alır ve teslimatı gerçekleştirir.'
-    },
-    {
-      icon: MessageSquare,
-      title: 'Değerlendirme ve Geri Bildirim',
-      desc: 'Deneyiminizi puanlayın ve yorum bırakın; diğer müşterilere yardımcı olun.'
+      title: 'Taşıma ve değerlendirme',
+      desc: 'Nakliyeci işi başlatıp tamamladığında bildirim alırsınız. Teslimat sonrası deneyiminizi puanlayarak firma profilini güçlendirebilirsiniz.'
     }
   ];
 
@@ -66,10 +77,12 @@ export default function HowItWorksCustomer() {
         <div className="flex flex-col items-center text-center gap-1 md:gap-2">
           <span className="px-3 py-1 text-sm font-medium bg-blue-50 text-blue-700 rounded-md shadow-sm hover:bg-blue-100 transition-colors">Kılavuz</span>
           <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-blue-700 via-sky-600 to-indigo-600 bg-clip-text text-transparent tracking-tight">
-            Nasıl Çalışır — Müşteri
+            Nasıl Çalışır - Müşteri
           </h1>
         </div>
-        <p className="mt-3 text-gray-600 text-center">Bu adımları izleyerek birkaç dakika içinde taşıma talebi oluşturabilir ve teklifleri karşılaştırabilirsiniz.</p>
+        <p className="mt-3 text-gray-600 text-center">
+          Taşıburada'da talep oluşturur, uygun nakliyecilerden teklif alır ve seçtiğiniz firmayla kontrollü şekilde eşleşirsiniz.
+        </p>
       </div>
 
       <div className="grid md:grid-cols-2 gap-6">
@@ -97,21 +110,20 @@ export default function HowItWorksCustomer() {
         </CardHeader>
         <CardContent className="text-gray-600">
           <ul className="list-disc pl-5 space-y-2">
-            <li>Adresleri mümkün olduğunca detaylı girin; <MapPin className="inline h-4 w-4" /> konum doğruluğu teklif kalitesini artırır.</li>
-            <li>Tarih aralığını geniş tutmak daha uygun fiyatlı teklifler getirir.</li>
-            <li>Fotoğraf eklemek muğlaklıkları azaltır ve sürpriz maliyetleri önler.</li>
+            <li>İlçe, kat, asansör ve eşya kapsamını net yazın; <MapPin className="inline h-4 w-4" /> doğru konum ve yük bilgisi teklif kalitesini artırır.</li>
+            <li>Not alanına telefon, e-posta, link veya platform dışı iletişim yönlendirmesi yazmayın; güvenlik politikası bu bilgileri engeller.</li>
+            <li>Açık adres ve telefon bilgileri teklif aşamasında gizlenir; sadece eşleşen taraflara, operasyonel ihtiyaç oluştuğunda sistem kurallarına göre açılır.</li>
           </ul>
         </CardContent>
       </Card>
 
-      {/* Müşteri sayfasında, giriş yapan kullanıcı nakliyeci ise CTA'lar gizlenir */}
       {user?.type !== 'carrier' && (
         <div className="mt-8 flex flex-wrap items-center gap-3">
           <Link to="/teklif-talebi">
-            <Button className="bg-blue-600 hover:bg-blue-700">Hemen Talep Oluştur</Button>
+            <Button className="bg-blue-600 hover:bg-blue-700">Talep Oluştur</Button>
           </Link>
           <Link to="/tekliflerim">
-            <Button variant="outline">Taleplerimi Gör</Button>
+            <Button variant="outline">Tekliflerimi Gör</Button>
           </Link>
         </div>
       )}
@@ -121,43 +133,49 @@ export default function HowItWorksCustomer() {
           <AccordionItem value="a1">
             <AccordionTrigger>Talebim yayınlandıktan sonra ne olur?</AccordionTrigger>
             <AccordionContent>
-              Uygun kriterlere sahip nakliyeciler talebinizi görür ve teklif gönderir. Yeni teklif geldiğinde bildirim alırsınız.
+              Talep teklif almaya açılır ve rota, tarih, kapsam, araç kapasitesi ve firma uygunluğuna göre nakliyecilere gösterilir. Size gelen teklifler bildirim ve Tekliflerim ekranında görünür.
             </AccordionContent>
           </AccordionItem>
           <AccordionItem value="a2">
-            <AccordionTrigger>Fiyatı nasıl karşılaştırmalıyım?</AccordionTrigger>
+            <AccordionTrigger>Belirli bir nakliyeciden teklif isteyebilir miyim?</AccordionTrigger>
             <AccordionContent>
-              Sadece fiyata değil, nakliyecinin puanı, yorumları ve tarih uygunluğuna da bakmanızı öneririz.
+              Evet. Nakliyeci profilinden Teklif İste ile talep oluşturduğunuzda ilgili firma davet edilir. Talep yine sistem kayıtları ve güvenlik kuralları içinde ilerler.
             </AccordionContent>
           </AccordionItem>
           <AccordionItem value="a3">
-            <AccordionTrigger>Ödemeyi nasıl yaparım?</AccordionTrigger>
+            <AccordionTrigger>Fiyatı nasıl karşılaştırmalıyım?</AccordionTrigger>
             <AccordionContent>
-              Ödemeler güvenli altyapımız üzerinden gerçekleştirilir; teklif onayı öncesinde toplam tutar ve olası ek ücretler şeffaf şekilde gösterilir.
+              Sadece en düşük fiyata değil; tahmini süreye, onaylı profil ve belge durumuna, puana, yorumlara ve hizmet kapsamına birlikte bakmanız önerilir.
             </AccordionContent>
           </AccordionItem>
           <AccordionItem value="a4">
-            <AccordionTrigger>Onayladığım işi iptal edebilir miyim?</AccordionTrigger>
+            <AccordionTrigger>Nakliyeciyle ne zaman doğrudan iletişim kurabilirim?</AccordionTrigger>
             <AccordionContent>
-              İptal koşulları, işin durumuna ve zamana göre değişebilir. Onaydan kısa süre sonra ücretsiz iptal mümkün olabilir; detaylar onay ekranında yer alır.
+              Teklif aşamasında telefon ve e-posta gizlidir. Platform içi mesajlaşma ana iletişim yoludur; telefon bilgisi yalnızca eşleşme sonrası, taşıma zamanına yaklaşıldığında veya taşıma sırasında politika kurallarına göre açılır.
             </AccordionContent>
           </AccordionItem>
           <AccordionItem value="a5">
-            <AccordionTrigger>Randevu tarihini değiştirebilir miyim?</AccordionTrigger>
+            <AccordionTrigger>Ödemeyi nasıl yaparım?</AccordionTrigger>
             <AccordionContent>
-              Nakliyeci ile mesajlaşarak yeni tarih önerisi sunabilirsiniz. Uygunluk olduğunda takvim güncellenir; fiyat değişikliği gerekebilir.
+              Eşleşen taşıma için ödeme ekranında kart veya havale/EFT seçenekleri kullanılabilir. Tutar, seçtiğiniz teklif üzerinden gösterilir; emanet ödeme modeli platformun sonraki fazında genişletilecektir.
             </AccordionContent>
           </AccordionItem>
           <AccordionItem value="a6">
-            <AccordionTrigger>Hasar olursa ne yapmalıyım?</AccordionTrigger>
+            <AccordionTrigger>Onayladığım işi iptal edebilir miyim?</AccordionTrigger>
             <AccordionContent>
-              Teslimat öncesi ve sonrası fotoğraf çekip uygulamaya yükleyin. Destek ekibimiz ve nakliyeci ile süreç hızlıca değerlendirilir.
+              İptal işlemi taşımanın durumuna göre değerlendirilir. Eşleşmeden uzun süre sonra yapılan iptallerde aynı müşteri-nakliyeci eşleşmesi için bekleme süresi uygulanabilir.
             </AccordionContent>
           </AccordionItem>
           <AccordionItem value="a7">
             <AccordionTrigger>Adres ve kişisel bilgilerim gizli mi?</AccordionTrigger>
             <AccordionContent>
-              Bilgileriniz sadece ilgili ilan ve teklif sürecinde yetkili taraflarla paylaşılır; gizlilik politikamız uyarınca korunur.
+              Bekleyen taleplerde açık adres, telefon ve kişisel bilgiler maskelenir. Atanmamış nakliyeciler yalnızca gerekli özet bilgileri görür; detaylar eşleşme ve taşıma durumuna göre açılır.
+            </AccordionContent>
+          </AccordionItem>
+          <AccordionItem value="a8">
+            <AccordionTrigger>Hasar veya sorun yaşarsam ne yapmalıyım?</AccordionTrigger>
+            <AccordionContent>
+              Taşıma öncesi ve sonrası fotoğraf, not ve mesaj kayıtlarını saklayın. Destek ekibi, taşıma ve teklif kayıtları üzerinden süreci değerlendirir.
             </AccordionContent>
           </AccordionItem>
         </Accordion>

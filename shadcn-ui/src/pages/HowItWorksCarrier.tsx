@@ -3,9 +3,18 @@ import { useEffect, useState } from 'react';
 import type { User } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Calendar, CheckCircle2, ClipboardCheck, DollarSign, FileText, MessageSquare, Route, Truck, UserPlus } from 'lucide-react';
+import {
+  Calendar,
+  ClipboardCheck,
+  DollarSign,
+  FileText,
+  MessageSquare,
+  Route,
+  ShieldCheck,
+  Truck,
+  UserPlus,
+} from 'lucide-react';
 import { getSessionUser } from '@/lib/storage';
 
 export default function HowItWorksCarrier() {
@@ -15,48 +24,51 @@ export default function HowItWorksCarrier() {
     try {
       const u = getSessionUser() || (localStorage.getItem('currentUser') ? JSON.parse(localStorage.getItem('currentUser') as string) : null);
       setUser(u);
-    } catch {}
+    } catch {
+      // Session data is optional on public info pages.
+    }
   }, []);
+
   const steps = [
     {
       icon: UserPlus,
-      title: 'Kayıt Ol / Giriş Yap',
-      desc: 'Nakliyeci hesabı oluşturun veya mevcut hesabınızla giriş yapın.'
+      title: 'Nakliyeci hesabı açın',
+      desc: 'Firma hesabınızı oluşturun veya mevcut hesabınızla giriş yapın. İş akışı nakliyeci rolüyle ilerler.'
     },
     {
       icon: FileText,
-      title: 'Profilinizi Tamamlayın',
-      desc: 'Araç tipleri, kapasite, şehirler ve evraklarınızı ekleyin; daha çok iş görün.'
+      title: 'Profilinizi tamamlayın',
+      desc: 'Firma bilgileri, faaliyet alanı, zorunlu belgeler ve ödeme bilgileri profil tamamlanma yüzdesini oluşturur. Araç ve hizmet bilgileri eşleşme kalitesini artırır.'
+    },
+    {
+      icon: ShieldCheck,
+      title: 'Onay sürecini tamamlayın',
+      desc: 'Teklif verebilmek için profilinizin en az %75 tamamlanması ve hesabınızın admin tarafından onaylanması gerekir.'
     },
     {
       icon: Route,
-      title: 'Uygun İşleri Görüntüleyin',
-      desc: 'Belirlediğiniz güzergâh ve kapasiteye uygun yayınlanmış işleri listeleyin.'
+      title: 'Uygun talepleri görüntüleyin',
+      desc: 'Sistem rota, kapsam, hizmet alanı ve kapasiteye göre eşleşen bekleyen talepleri gösterir. Müşteri adı, açık adres ve telefon teklif öncesinde maskelenir.'
     },
     {
       icon: DollarSign,
-      title: 'Teklif Verin',
-      desc: 'Fiyat, tarih ve ek notlarınızı ekleyerek hızlıca teklif gönderin.'
+      title: 'Teklif verin',
+      desc: 'Fiyat, tahmini süre ve açıklama ekleyin. Minimum teklif tutarı sistem ayarlarından gelir; aynı talebe yeniden teklif verirseniz aktif teklifiniz güncellenir.'
     },
     {
       icon: MessageSquare,
-      title: 'Müşteri ile İletişim',
-      desc: 'Sorularınızı sorun, teslimat detaylarını mesajlaşma ile netleştirin.'
-    },
-    {
-      icon: CheckCircle2,
-      title: 'Onay ve Planlama',
-      desc: 'Teklifiniz onaylanınca işi takviminize ekleyin ve rota planlaması yapın.'
+      title: 'Teklifinizi yönetin',
+      desc: 'Müşteri kabul edene kadar teklifinizi güncelleyebilir veya geri çekebilirsiniz. Telefon, e-posta ve link içeren mesajlar güvenlik politikasıyla engellenir.'
     },
     {
       icon: Truck,
-      title: 'Yükü Taşıyın',
-      desc: 'Belirlenen tarih ve saatte yükü alın, güvenle teslim edin.'
+      title: 'Eşleşen işi taşıyın',
+      desc: 'Teklifiniz kabul edildiğinde taşıma size atanır. Açık iletişim bilgileri yalnızca eşleşme sonrası, taşıma zamanına yaklaşıldığında veya taşıma sırasında açılır.'
     },
     {
       icon: ClipboardCheck,
-      title: 'Teslimat Sonrası',
-      desc: 'Teslimatı kapatın, müşteri değerlendirmesi alın ve kazancınızı görüntüleyin.'
+      title: 'Tamamlayın ve kazancı görün',
+      desc: 'Taşımayı başlatıp tamamladığınızda müşteri bilgilendirilir. Tamamlanan iş kazanç kayıtlarınıza ve performans istatistiklerinize yansır.'
     }
   ];
 
@@ -66,10 +78,12 @@ export default function HowItWorksCarrier() {
         <div className="flex flex-col items-center text-center gap-1 md:gap-2">
           <span className="px-3 py-1 text-sm font-medium bg-blue-50 text-blue-700 rounded-md shadow-sm hover:bg-blue-100 transition-colors">Kılavuz</span>
           <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-blue-700 via-sky-600 to-indigo-600 bg-clip-text text-transparent tracking-tight">
-            Nasıl Çalışır — Nakliyeci
+            Nasıl Çalışır - Nakliyeci
           </h1>
         </div>
-        <p className="mt-3 text-gray-600 text-center">Taşıburada ile uygun işleri bulun, teklif verin ve takviminizi doldurun.</p>
+        <p className="mt-3 text-gray-600 text-center">
+          Taşıburada'da onaylı profilinizle uygun talepleri görür, kontrollü iletişimle teklif verir ve tamamlanan işlerden kazanç elde edersiniz.
+        </p>
       </div>
 
       <div className="grid md:grid-cols-2 gap-6">
@@ -97,21 +111,20 @@ export default function HowItWorksCarrier() {
         </CardHeader>
         <CardContent className="text-gray-600">
           <ul className="list-disc pl-5 space-y-2">
-            <li>Rekabetçi ama sürdürülebilir fiyat verin; detaylı notlarla güven verin.</li>
-            <li>Takvim (<Calendar className="inline h-4 w-4" />) kullanılabilirliğinizi güncel tutun; uygunluk öne çıkar.</li>
-            <li>Profil ve evraklarınız tam olsun; puan ve yorumlarınız daha çok iş getirir.</li>
+            <li>Firma, faaliyet, belge ve ödeme bilgilerinizi güncel tutun; eksik profil teklif verme ve görünürlükte sorun çıkarabilir.</li>
+            <li>Takvim (<Calendar className="inline h-4 w-4" />) ve araç kapasitesi bilgilerini doğru tutun; sistem uygun talepleri buna göre filtreler.</li>
+            <li>Teklif notuna telefon, e-posta, link veya platform dışı iletişim çağrısı eklemeyin; bu içerikler otomatik engellenir.</li>
           </ul>
         </CardContent>
       </Card>
 
-      {/* Nakliyeci sayfasında, giriş yapan kullanıcı müşteri ise CTA'lar gizlenir */}
       {user?.type !== 'customer' && (
         <div className="mt-8 flex flex-wrap items-center gap-3">
           <Link to="/ilanlar">
-            <Button className="bg-sky-600 hover:bg-sky-700">Mevcut İşlere Göz At</Button>
+            <Button className="bg-sky-600 hover:bg-sky-700">Uygun Taleplere Göz At</Button>
           </Link>
-          <Link to="/takvim">
-            <Button variant="outline">Takvimim</Button>
+          <Link to="/nakliyeci/teklifler">
+            <Button variant="outline">Tekliflerimi Yönet</Button>
           </Link>
         </div>
       )}
@@ -119,33 +132,45 @@ export default function HowItWorksCarrier() {
       <div className="mt-12">
         <Accordion type="single" collapsible className="w-full">
           <AccordionItem value="b1">
-            <AccordionTrigger>Teklifimi geri çekebilir miyim?</AccordionTrigger>
+            <AccordionTrigger>Neden bazı talepleri göremiyorum?</AccordionTrigger>
             <AccordionContent>
-              Müşteri onaylamadan önce teklifinizi düzenleyebilir veya geri çekebilirsiniz.
+              Bekleyen talepler hizmet alanı, rota, kapsam ve taşıma kapasitesi gibi bilgilerle eşleştirilir. Profilinizdeki araç, hizmet ve faaliyet alanı bilgileri eksikse uygun talepler azalabilir.
             </AccordionContent>
           </AccordionItem>
           <AccordionItem value="b2">
-            <AccordionTrigger>Komisyonlar nasıl işliyor?</AccordionTrigger>
+            <AccordionTrigger>Belgelerim onaylanmadan teklif verebilir miyim?</AccordionTrigger>
             <AccordionContent>
-              Platform komisyonları ve ödeme koşulları teklif onayı öncesi şeffaf şekilde gösterilir.
+              Teklif verebilmek için profiliniz en az %75 tamamlanmalı ve hesabınız admin tarafından onaylanmış olmalıdır. Eksik belge veya onay bekleyen hesap teklif gönderemez.
             </AccordionContent>
           </AccordionItem>
           <AccordionItem value="b3">
-            <AccordionTrigger>Ödemeyi ne zaman alırım?</AccordionTrigger>
+            <AccordionTrigger>Teklifimi geri çekebilir miyim?</AccordionTrigger>
             <AccordionContent>
-              Teslimat tamamlanıp müşteri tarafından onaylandıktan sonra ödeme süreçleri başlar ve belirlenen süre içinde hesabınıza yansır.
+              Müşteri kabul etmeden önce bekleyen teklifinizi güncelleyebilir veya geri çekebilirsiniz. Kabul edilmiş tekliflerde geri çekme işlemi taşımanın durumuna göre sistem kurallarıyla değerlendirilir.
             </AccordionContent>
           </AccordionItem>
           <AccordionItem value="b4">
-            <AccordionTrigger>Belgelerim onaylanmadan teklif verebilir miyim?</AccordionTrigger>
+            <AccordionTrigger>Müşterinin telefonunu ve açık adresini ne zaman görürüm?</AccordionTrigger>
             <AccordionContent>
-              Bazı ilanlarda ön onay gerekebilir; belgeleriniz eksiksiz ve güncel olduğunda daha çok ilana erişirsiniz.
+              Teklif aşamasında müşteri bilgileri maskelenir. Eşleşen nakliyeci olarak açık adres ve telefon bilgilerine yalnızca taşıma zamanına yaklaşıldığında veya taşıma sırasında, politika şartları sağlandığında erişebilirsiniz.
             </AccordionContent>
           </AccordionItem>
           <AccordionItem value="b5">
+            <AccordionTrigger>Komisyonlar nasıl işliyor?</AccordionTrigger>
+            <AccordionContent>
+              Platform komisyonu ve minimum komisyon tutarı yönetim ayarlarından belirlenir. Tamamlanan taşımalarda net kazanç, kayıtlarınıza komisyon sonrası yansıtılır.
+            </AccordionContent>
+          </AccordionItem>
+          <AccordionItem value="b6">
+            <AccordionTrigger>Ödemeyi ne zaman alırım?</AccordionTrigger>
+            <AccordionContent>
+              Taşıma tamamlandığında kazanç kaydı oluşturulur ve ödeme bilgileriniz üzerinden takip edilir. Ödeme süreleri, platformun güncel ödeme ve komisyon ayarlarına göre ilerler.
+            </AccordionContent>
+          </AccordionItem>
+          <AccordionItem value="b7">
             <AccordionTrigger>Çifte rezervasyonları nasıl önlerim?</AccordionTrigger>
             <AccordionContent>
-              Takviminizi güncel tutun ve onayladığınız işleri anında işaretleyin; sistem çakışmaları size uyarı olarak gösterir.
+              Takviminizi ve uygunluk bilgilerinizi düzenli güncelleyin. Kabul edilen işlerinizi Taşıma Detayı ve Teklif Yönetimi ekranlarından takip ederek aynı tarih aralığına yeni teklif verirken kontrol edin.
             </AccordionContent>
           </AccordionItem>
         </Accordion>

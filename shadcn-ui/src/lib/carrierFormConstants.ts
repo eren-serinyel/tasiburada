@@ -29,6 +29,10 @@ export const SPECIAL_SERVICES: Record<string, string> = {
   "depolama": "Eşya Depolama",
 };
 
+/**
+ * Ek Hizmetler Source of Truth
+ * UI etiketleri ve backend ile uyumlu canonical key'ler burada tanımlanır.
+ */
 export const ADDITIONAL_SERVICE_OPTIONS: Record<string, Record<string, string>> = {
   "evden-eve": {
     asansor: "Asansörle taşıma",

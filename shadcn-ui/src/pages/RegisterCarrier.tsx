@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useState } from "react";
 import {
   Card,
   CardContent,
@@ -14,209 +14,126 @@ import {
   Users,
   Shield,
   Star,
-
+  Eye,
+  EyeOff,
+  Loader2
 } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { setSessionUser } from '@/lib/storage';
-import { TURKISH_CITIES } from '@/lib/constants';
-import MultiSelect from '@/components/ui/multi-select';
 import { useToast } from '@/hooks/use-toast';
-import { cn } from '@/lib/utils';
 import { apiClient } from '@/lib/apiClient';
-// import { cities as sharedCities, VEHICLE_TYPES as VEHICLE_TYPES_MAP, SPECIAL_SERVICES, ADDITIONAL_SERVICE_OPTIONS } from '@/lib/carrierFormConstants';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-// import MultiSelect from "@/components/ui/multi-select";
-// import FileUpload from "@/components/ui/file-upload";
-// import { Checkbox } from "@/components/ui/checkbox";
-
-// Paylaşılan sabitler
-// const cities = sharedCities;
-// const VEHICLE_TYPES: Record<string, { name: string; maxCapacity: number }> = VEHICLE_TYPES_MAP as any;
 
 const API_BASE_URL = '/api/v1';
+
+const validateEmail = (email: string): string => {
+  if (!email) return 'E-posta adresi gerekli';
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) return 'Geçerli bir e-posta adresi giriniz';
+  return '';
+};
+
+const validatePassword = (password: string): string => {
+  if (!password) return 'Şifre gerekli';
+  if (password.length < 8) return 'Şifre en az 8 karakter olmalı';
+  if (!/(?=.*[A-Z])/.test(password)) return 'Şifre en az bir büyük harf içermeli';
+  if (!/(?=.*[a-z])/.test(password)) return 'Şifre en az bir küçük harf içermeli';
+  if (!/(?=.*[0-9])/.test(password)) return 'Şifre en az bir rakam içermeli';
+  return '';
+};
 
 export default function RegisterCarrier() {
   const navigate = useNavigate();
   const { toast } = useToast();
 
   const [isLoading, setIsLoading] = useState(false);
-  const [isGeoLoading, setIsGeoLoading] = useState(false);
-  const [termsAccepted, setTermsAccepted] = useState(false);
-  const [selectedVehicleTypeIds, setSelectedVehicleTypeIds] = useState<number[]>([]);
-
-  const toggleVehicleType = (id: number) => {
-    setSelectedVehicleTypeIds((prev) =>
-      prev.includes(id) ? prev.filter((v) => v !== id) : [...prev, id]
-    );
-  };
-
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [formData, setFormData] = useState({
-    // 1. Şirket Bilgileri
     companyName: "",
-    taxOrRegistry: "", // Vergi Numarası veya Ticaret Sicil No (10–15 hane)
-    taxNumber: "", // eski alanlar mock uyumu için tutuluyor
-    tradeRegistryNo: "",
-    mersisNo: "",
-    // 2. İletişim Bilgileri
+    taxOrRegistry: "",
     authorizedFullName: "",
     phone: "",
     email: "",
-    addressLine1: "",
-    addressLine2: "",
-    district: "",
-    cityText: "", // Faaliyet İli (opsiyonel)
-    addressLat: null as number | null,
-    addressLng: null as number | null,
-    useGps: false,
-    gpsLat: null as number | null,
-    gpsLng: null as number | null,
-    // 3. Operasyonel Bilgiler
-    vehicleTypes: [] as string[], // backend isimleri ile (örn. "Kamyon", "Kamyonet")
-    // Seçilen her araç türü için kapasite (kg). key: araç türü adı (örn. "Kamyon")
-    vehicleCapacities: {} as Record<string, { value: string; unit: 'kg' | 'ton' }>,
-    licensePlate: "",
-    serviceAreas: [] as string[],
-    specialServices: [] as string[],
-    additionalServices: {} as Record<string, string[]>,
-    // 4. Belgeler
-    kBelgesiFiles: [] as File[],
-    insuranceFiles: [] as File[],
-    driverFiles: [] as File[],
-    // 5. Platform Kullanımı
-    username: "",
     password: "",
     confirmPassword: "",
-    iban: "",
-    // Ek: mevcut mock ile uyum için
-    baseFee: "",
-    startYear: '' as string | number, // Kuruluş yılı (opsiyonel)
+    acceptTerms: false,
   });
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const handleChange = (field: string, value: any) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
+  const handleChange = (field: string, value: string | boolean) => {
+    setFormData((p) => ({ ...p, [field]: value }));
+    if (typeof value === 'string') {
+      let error = '';
+      switch (field) {
+        case 'companyName':
+          error = value.trim().length < 2 ? 'Şirket adı en az 2 karakter olmalı' : '';
+          break;
+        case 'taxOrRegistry':
+          error = !/^\d{10,16}$/.test(value) ? '10-16 hane arası rakam girmelisiniz' : '';
+          break;
+        case 'authorizedFullName':
+          error = value.trim().length < 2 ? 'Ad Soyad en az 2 karakter olmalı' : '';
+          break;
+        case 'phone':
+          error = !/^(?:\+90|0)?(5\d{9})$/.test(value.replace(/\s|-/g, '')) ? 'Geçerli bir telefon giriniz' : '';
+          break;
+        case 'email':
+          error = validateEmail(value);
+          break;
+        case 'password':
+          error = validatePassword(value);
+          break;
+        case 'confirmPassword':
+          error = value !== formData.password ? 'Şifreler eşleşmiyor' : '';
+          break;
+      }
+      setErrors((prev) => ({ ...prev, [field]: error }));
+    }
   };
-
-  const currentYear = new Date().getFullYear();
-  const years = Array.from({ length: 36 }, (_, i) => currentYear - i);
-  const handleVehicleCapacityChange = (typeKey: string, value: string) => {
-    setFormData((prev) => ({
-      ...prev,
-      vehicleCapacities: {
-        ...prev.vehicleCapacities,
-        [typeKey]: { value, unit: 'kg' },
-      },
-    }));
-  };
-
-  // Araç türleri (backend'den dinamik)
-  type VehicleType = { id: number; name: string; defaultCapacityKg: number; defaultCapacityM3: number };
-  const [vehicleTypesList, setVehicleTypesList] = useState<VehicleType[]>([]);
-  const nameToId = useMemo(() => Object.fromEntries(vehicleTypesList.map(v => [v.name, v.id])), [vehicleTypesList]);
-  const defaultsByName = useMemo(() => Object.fromEntries(vehicleTypesList.map(v => [v.name, v.defaultCapacityKg])), [vehicleTypesList]);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await apiClient(`${API_BASE_URL}/vehicle-types`);
-        const json = await res.json();
-        if (res.ok && json?.success && Array.isArray(json.data)) {
-          setVehicleTypesList(json.data);
-        }
-      } catch { }
-    })();
-  }, []);
-  const isValidEmail = (email: string) => /.+@.+\..+/.test(email);
-  // +90xxxxxxxxxx veya 05xxxxxxxxx biçimleri
-  const isValidPhone = (phone: string) => /^(?:\+90|05)\d{9}$/.test(phone.replace(/\s|-/g, ''));
-  // 10–15 haneli sadece rakam
-  const isValidTaxOrRegistry = (val: string) => /^\d{10,15}$/.test(val);
-  // En az 8 karakter, 1 büyük harf ve 1 sayı
-  const isValidPassword = (pw: string) => /^(?=.*[A-Z])(?=.*\d).{8,}$/.test(pw);
-
-  // Ek hizmet (checkbox) toggle helper
-  // Ek hizmetler hızlı kayıtta toplanmıyor.
-
-
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Basit doğrulamalar (tek adım)
-    const showValidationError = (msg: string) => { toast({ title: 'Doğrulama Hatası', description: msg, variant: 'destructive' }); };
-    // 1) Zorunlu alanlar
-    if (!formData.companyName) return showValidationError('Firma Adı zorunludur.');
-    if (!isValidTaxOrRegistry(formData.taxOrRegistry)) return showValidationError('Vergi Numarası veya Ticaret Sicil No 10–15 haneli olmalıdır.');
-    if (!formData.authorizedFullName) return showValidationError('Yetkili Ad Soyad zorunludur.');
-    if (!isValidPhone(formData.phone)) return showValidationError('Telefon +90 veya 05 ile başlamalıdır.');
-    if (!isValidEmail(formData.email)) return showValidationError('Geçerli bir e-posta giriniz.');
-    if (!isValidPassword(formData.password)) return showValidationError('Şifre en az 8 karakter, 1 büyük harf ve 1 sayı içermelidir.');
-    if (formData.password !== formData.confirmPassword) return showValidationError('Şifre Tekrar, şifreyle birebir aynı olmalıdır.');
-    if (!termsAccepted) return showValidationError('KVKK ve Kullanım Koşullarını kabul etmelisiniz.');
-    if (selectedVehicleTypeIds.length === 0) {
-      toast({ title: 'Hata', description: 'En az bir araç tipi seçiniz.', variant: 'destructive' });
-      return;
-    }
+
+    const newErrors: Record<string, string> = {
+      companyName: formData.companyName.trim().length < 2 ? 'Şirket adı en az 2 karakter olmalı' : '',
+      taxOrRegistry: !/^\d{10,16}$/.test(formData.taxOrRegistry) ? 'Geçerli bir Vergi/TCKN giriniz' : '',
+      authorizedFullName: formData.authorizedFullName.trim().length < 2 ? 'Yetkili adı en az 2 karakter olmalı' : '',
+      phone: !/^(?:\+90|0)?(5\d{9})$/.test(formData.phone.replace(/\s|-/g, '')) ? 'Geçerli bir telefon giriniz' : '',
+      email: validateEmail(formData.email),
+      password: validatePassword(formData.password),
+      confirmPassword: formData.password !== formData.confirmPassword ? 'Şifreler eşleşmiyor' : '',
+      acceptTerms: !formData.acceptTerms ? 'Kullanım koşullarını kabul etmelisiniz' : '',
+    };
+
+    setErrors(newErrors);
+    if (Object.values(newErrors).some((err) => err !== '')) return;
 
     setIsLoading(true);
-    await new Promise(r => setTimeout(r, 300));
     try {
-      const startYearNum = Number(formData.startYear) || new Date().getFullYear();
-
-      // 1) Backend'e kayıt
-      const vehicleTypeIds = selectedVehicleTypeIds;
-      const selectedVehicles: any[] = [];
-
-      const normalizePhone = (phone: string) => phone.replace(/\s|-/g, '');
+      const startYearNum = new Date().getFullYear();
+      const normalizePhone = (p: string) => p.replace(/\s|-/g, '');
 
       const registerRes = await apiClient(`${API_BASE_URL}/carriers/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           companyName: formData.companyName,
-          taxNumber: formData.taxOrRegistry || formData.taxNumber,
+          taxNumber: formData.taxOrRegistry,
           email: formData.email,
           phone: normalizePhone(formData.phone),
           contactName: formData.authorizedFullName,
           password: formData.password,
-          foundedYear: startYearNum,
-          vehicleTypeIds,
-          activityCity: formData.cityText || undefined,
-
-          // Frontend local usage (backend currently ignores these; safe to send)
-          vehicleTypeNames: formData.vehicleTypes,
-          selectedVehicles
+          foundedYear: startYearNum
         }),
       });
+
       const regJson = await registerRes.json().catch(() => ({}));
       if (!registerRes.ok || !regJson?.success) {
         throw new Error(regJson?.message || `Kayıt başarısız. (HTTP ${registerRes.status})`);
       }
 
-      // 2) Token + session (register response preferred; fallback to login)
-      const tokenFromRegister = regJson?.data?.token;
-      const carrierFromRegister = regJson?.data?.carrier;
-
-      let token = tokenFromRegister as string | undefined;
-      let c = carrierFromRegister as any;
-
-      if (!token || !c?.id) {
-        const loginRes = await apiClient(`${API_BASE_URL}/carriers/login`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: formData.email, password: formData.password })
-        });
-        const loginJson = await loginRes.json().catch(() => ({}));
-        if (!loginRes.ok || !loginJson?.success) {
-          throw new Error(loginJson?.message || `Giriş başarısız. (HTTP ${loginRes.status})`);
-        }
-        token = loginJson?.data?.token;
-        c = loginJson?.data?.carrier;
-      }
+      const c = regJson?.data?.carrier;
+      const token = regJson?.data?.token;
 
       if (token) {
         localStorage.setItem('authToken', token);
@@ -234,55 +151,44 @@ export default function RegisterCarrier() {
       } as any;
       setSessionUser(sessionCarrier, 5 * 24 * 60 * 60 * 1000);
 
-      // 3) Profil taslaklarını doldur (prefill)
+      // Profil taslaklarını doldur (prefill)
       try {
-        const companyDraft = {
+        localStorage.setItem(`carrier_company_${sessionCarrier.id}`, JSON.stringify({
           name: formData.companyName,
-          type: '',
-          taxNumber: formData.taxOrRegistry || formData.taxNumber || '',
+          taxNumber: formData.taxOrRegistry,
           year: String(startYearNum),
-          services: [] as string[],
-          vehicleType: (formData.vehicleTypes && formData.vehicleTypes[0]) || '',
-          vehicleTypes: formData.vehicleTypes || [],
-          // Yeni: her tür için kapasite (kg) haritası, anahtarlar gösterim adıyla eşleşir
-          vehicleCapacities: (() => {
-            const out: Record<string, string> = {};
-            for (const name of formData.vehicleTypes || []) {
-              const v = formData.vehicleCapacities?.[name]?.value || '';
-              if (v) out[name] = String(v);
-            }
-            return out;
-          })()
-        };
-        const opsDraft = {
-          address1: formData.addressLine1 || '',
-          address2: formData.addressLine2 || '',
-          district: formData.district || '',
-          city: formData.cityText || '',
-          serviceAreas: formData.serviceAreas || [],
-          mapLat: '',
-          mapLng: ''
-        };
-        localStorage.setItem(`carrier_company_${sessionCarrier.id}`, JSON.stringify(companyDraft));
-        localStorage.setItem(`carrier_ops_${sessionCarrier.id}`, JSON.stringify(opsDraft));
+          services: [],
+          vehicleTypes: []
+        }));
       } catch { }
 
       window.dispatchEvent(new Event('userLogin'));
-      setIsLoading(false);
+      toast({ title: 'Kayıt başarılı!', description: 'Hesabınız oluşturuldu, onboarding sayfasına yönlendiriliyorsunuz.' });
       navigate('/nakliyeci-onboarding');
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Kayıt sırasında bir hata oluştu.';
-      setIsLoading(false);
       toast({ title: 'Hata', description: message, variant: 'destructive' });
+    } finally {
+      setIsLoading(false);
     }
   };
 
+    const canSubmit =
+      formData.companyName &&
+      formData.taxOrRegistry &&
+      formData.authorizedFullName &&
+      formData.phone &&
+      formData.email &&
+      formData.password &&
+      formData.confirmPassword &&
+      formData.acceptTerms &&
+      !Object.values(errors).some((err) => err !== '');
 
   return (
-    <section className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-blue-50 flex items-start justify-center px-12">
+    <section className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-blue-50 flex items-start justify-center px-4 sm:px-12">
       <div className="w-full max-w-7xl mx-auto grid lg:grid-cols-2 gap-16">
         {/* SOL TARAF */}
-        <div className="space-y-12 pt-12">
+        <div className="hidden lg:block space-y-12 pt-12">
           <div className="space-y-6">
             <h1 className="text-5xl font-bold text-gray-900 leading-tight">
               Gelir Elde Etmenin{" "}
@@ -294,7 +200,6 @@ export default function RegisterCarrier() {
             </p>
           </div>
 
-          {/* Avantajlar */}
           <div className="space-y-6">
             <div className="flex items-start space-x-4">
               <div className="p-3 bg-green-100 rounded-lg">
@@ -331,141 +236,163 @@ export default function RegisterCarrier() {
                 </p>
               </div>
             </div>
-
-            <div className="flex items-start space-x-4">
-              <div className="p-3 bg-yellow-100 rounded-lg">
-                <Star className="h-6 w-6 text-yellow-600" />
-              </div>
-              <div>
-                <h3 className="text-lg font-semibold">İtibar Kazanın</h3>
-                <p className="text-base text-gray-600">
-                  Müşteri değerlendirmeleriyle itibarınızı artırın
-                </p>
-              </div>
-            </div>
           </div>
         </div>
 
         {/* SAĞ FORM */}
-        <Card className="w-full max-w-lg mx-auto shadow-xl border-0 mt-20">
+        <Card className="w-full max-w-lg mx-auto shadow-xl border-0 mt-10 sm:mt-20">
           <CardHeader className="text-center">
             <CardTitle className="text-3xl font-bold text-gray-900">Hızlı Nakliyeci Kaydı</CardTitle>
-            <CardDescription className="text-lg">Sadece temel bilgiler, detayları profilde tamamlarsınız</CardDescription>
+            <CardDescription className="text-lg">Sadece temel bilgilerle hemen başlayın</CardDescription>
           </CardHeader>
 
           <CardContent>
-            <form className="space-y-6" onSubmit={handleSubmit}>
+            <form className="space-y-5" onSubmit={handleSubmit}>
               <div>
-                <Label>Şirket Adı</Label>
-                <Input value={formData.companyName} onChange={(e) => handleChange('companyName', e.target.value)} placeholder="Örn. ABC Lojistik A.Ş." className="h-12 mt-1" />
+                <Label>Şirket Adı *</Label>
+                <Input 
+                  value={formData.companyName} 
+                  onChange={(e) => handleChange('companyName', e.target.value)} 
+                  placeholder="Örn. ABC Lojistik A.Ş." 
+                  className={`h-12 mt-1 ${errors.companyName ? 'border-red-500' : ''}`} 
+                />
+                {errors.companyName && <p className="text-red-500 text-sm mt-1">{errors.companyName}</p>}
               </div>
+
               <div>
-                <Label>Vergi Numarası veya Ticaret Sicil Numarası</Label>
+                <Label>Vergi Numarası / TCKN *</Label>
                 <Input
                   inputMode="numeric"
                   value={formData.taxOrRegistry}
                   onChange={(e) => handleChange('taxOrRegistry', e.target.value.replace(/\D/g, ''))}
-                  placeholder="Sadece rakam, 10–15 hane"
-                  className="h-12 mt-1"
-                  maxLength={15}
+                  placeholder="10-11 haneli numara"
+                  className={`h-12 mt-1 ${errors.taxOrRegistry ? 'border-red-500' : ''}`}
+                  maxLength={16}
                 />
+                {errors.taxOrRegistry && <p className="text-red-500 text-sm mt-1">{errors.taxOrRegistry}</p>}
               </div>
 
               <div>
-                <Label>Yetkili Kişi Ad Soyad (opsiyonel)</Label>
-                <Input value={formData.authorizedFullName} onChange={(e) => handleChange('authorizedFullName', e.target.value)} placeholder="Ad Soyad" className="h-12 mt-1" />
+                <Label>Yetkili Kişi Ad Soyad *</Label>
+                <Input 
+                  value={formData.authorizedFullName} 
+                  onChange={(e) => handleChange('authorizedFullName', e.target.value)} 
+                  placeholder="Ad Soyad" 
+                  className={`h-12 mt-1 ${errors.authorizedFullName ? 'border-red-500' : ''}`} 
+                />
+                {errors.authorizedFullName && <p className="text-red-500 text-sm mt-1">{errors.authorizedFullName}</p>}
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <Label>Telefon</Label>
-                  <Input type="tel" value={formData.phone} onChange={(e) => handleChange('phone', e.target.value)} placeholder="+90 5xx xxx xx xx" className="h-12 mt-1" />
+                  <Label>Telefon *</Label>
+                  <Input 
+                    type="tel" 
+                    value={formData.phone} 
+                    onChange={(e) => handleChange('phone', e.target.value)} 
+                    placeholder="05xx xxx xx xx" 
+                    className={`h-12 mt-1 ${errors.phone ? 'border-red-500' : ''}`} 
+                  />
+                  {errors.phone && <p className="text-red-500 text-sm mt-1">{errors.phone}</p>}
                 </div>
                 <div>
-                  <Label>E-posta</Label>
-                  <Input type="email" value={formData.email} onChange={(e) => handleChange('email', e.target.value)} placeholder="ornek@firma.com" className="h-12 mt-1" />
+                  <Label>E-posta *</Label>
+                  <Input 
+                    type="email" 
+                    value={formData.email} 
+                    onChange={(e) => handleChange('email', e.target.value)} 
+                    placeholder="ornek@firma.com" 
+                    className={`h-12 mt-1 ${errors.email ? 'border-red-500' : ''}`} 
+                  />
+                  {errors.email && <p className="text-red-500 text-sm mt-1">{errors.email}</p>}
                 </div>
               </div>
+
               <div>
-                <Label>Faaliyet İli (opsiyonel)</Label>
-                <Select value={formData.cityText} onValueChange={(v) => handleChange('cityText', v)}>
-                  <SelectTrigger className="h-12 mt-1"><SelectValue placeholder="Seçiniz" /></SelectTrigger>
-                  <SelectContent>
-                    {TURKISH_CITIES.map((c: string) => (
-                      <SelectItem key={c} value={c}>{c}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label>Şifre *</Label>
+                <div className="relative mt-1">
+                  <Input 
+                    type={showPassword ? 'text' : 'password'} 
+                    value={formData.password} 
+                    onChange={(e) => handleChange('password', e.target.value)} 
+                    placeholder="En az 8 karakter, 1 büyük harf, 1 rakam" 
+                    className={`h-12 pr-10 ${errors.password ? 'border-red-500' : ''}`} 
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((p) => !p)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    tabIndex={-1}
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+                {errors.password && <p className="text-red-500 text-sm mt-1">{errors.password}</p>}
               </div>
+
               <div>
-                <Label>Araç Tipleri <span className="text-muted-foreground">(en az 1 seçin)</span></Label>
-                <div className="grid grid-cols-2 gap-2 mt-1">
-                  {vehicleTypesList.map((vt) => (
-                    <button
-                      key={vt.id}
-                      type="button"
-                      onClick={() => toggleVehicleType(vt.id)}
-                      className={cn(
-                        'px-3 py-2 rounded-md border text-sm text-left transition-colors',
-                        selectedVehicleTypeIds.includes(vt.id)
-                          ? 'bg-orange-600 text-white border-orange-600'
-                          : 'bg-background border-input hover:bg-accent'
-                      )}
-                    >
-                      {vt.name}
-                    </button>
-                  ))}
+                <Label>Şifre Tekrar *</Label>
+                <div className="relative mt-1">
+                  <Input 
+                    type={showConfirmPassword ? 'text' : 'password'} 
+                    value={formData.confirmPassword} 
+                    onChange={(e) => handleChange('confirmPassword', e.target.value)} 
+                    placeholder="Şifrenizi tekrar girin" 
+                    className={`h-12 pr-10 ${errors.confirmPassword ? 'border-red-500' : ''}`} 
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword((p) => !p)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    tabIndex={-1}
+                  >
+                    {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
                 </div>
-                {selectedVehicleTypeIds.length === 0 && vehicleTypesList.length > 0 && (
-                  <p className="text-sm text-muted-foreground mt-1">En az bir araç tipi seçiniz</p>
-                )}
+                {errors.confirmPassword && <p className="text-red-500 text-sm mt-1">{errors.confirmPassword}</p>}
               </div>
-              <div>
-                <Label>Kuruluş Yılı (opsiyonel)</Label>
-                <Select value={String(formData.startYear || '')} onValueChange={(v) => handleChange('startYear', v)}>
-                  <SelectTrigger className="h-12 mt-1"><SelectValue placeholder="Seçiniz" /></SelectTrigger>
-                  <SelectContent>
-                    {years.map((y) => (
-                      <SelectItem key={y} value={String(y)}>{y}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-gray-500 mt-1">Profilde deneyim göstergesi olarak kullanılabilir.</p>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label>Şifre</Label>
-                  <Input type="password" value={formData.password} onChange={(e) => handleChange('password', e.target.value)} placeholder="Güçlü bir şifre" className="h-12 mt-1" />
-                </div>
-                <div>
-                  <Label>Şifre Tekrar</Label>
-                  <Input type="password" value={formData.confirmPassword} onChange={(e) => handleChange('confirmPassword', e.target.value)} placeholder="Tekrar şifre" className="h-12 mt-1" />
-                </div>
-              </div>
-              <div className="flex items-start gap-2 pt-2">
+
+              <div className="flex items-start space-x-3 p-4 bg-gray-50 rounded-lg">
                 <input
-                  id="termsAccepted"
                   type="checkbox"
-                  checked={termsAccepted}
-                  onChange={(e) => setTermsAccepted(e.target.checked)}
+                  id="acceptTerms"
+                  checked={formData.acceptTerms}
+                  onChange={(e) => handleChange('acceptTerms', e.target.checked)}
                   className="mt-1 h-4 w-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500"
                 />
-                <label htmlFor="termsAccepted" className="text-sm text-gray-600">
-                  <a href="/kullanim-sartlari" target="_blank" className="text-orange-600 underline hover:text-orange-800">Kullanım Koşulları</a>{' '}ve{' '}
-                  <a href="/gizlilik-politikasi" target="_blank" className="text-orange-600 underline hover:text-orange-800">KVKK Aydınlatma Metni</a>'ni okudum, kabul ediyorum.
+                <label htmlFor="acceptTerms" className="text-sm text-gray-700">
+                  <Link to="/kullanim-sartlari" className="text-orange-600 hover:underline font-medium">Kullanım Koşulları</Link>
+                  {' '}ve{' '}
+                  <Link to="/gizlilik-politikasi" className="text-orange-600 hover:underline font-medium">Gizlilik Politikası</Link>'nı
+                  okudum ve kabul ediyorum.
                 </label>
               </div>
+              {errors.acceptTerms && <p className="text-red-500 text-sm">{errors.acceptTerms}</p>}
+
               <div className="pt-2">
-                <Button type="submit" disabled={isLoading || !termsAccepted} className="w-full h-12 bg-gradient-to-r from-orange-600 to-blue-600 hover:from-orange-700 hover:to-blue-700">
-                  {isLoading ? 'Oluşturuluyor...' : 'Hesabı Oluştur ve Devam Et'}
+                                <Button 
+                                  type="submit" 
+                                  disabled={isLoading || !canSubmit} 
+                                  className="w-full h-12 bg-gradient-to-r from-orange-600 to-blue-600 hover:from-orange-700 hover:to-blue-700 shadow-lg"
+                                >
+                  {isLoading ? (
+                    <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Oluşturuluyor...</>
+                  ) : (
+                    'Hesabı Oluştur ve Devam Et'
+                  )}
                 </Button>
-                <p className="text-xs text-gray-500 mt-2">Detayları profilden tamamlayabilirsiniz.</p>
+                <div className="text-center pt-4 border-t mt-4">
+                  <p className="text-sm text-gray-600">
+                    Zaten hesabınız var mı?{' '}
+                    <Link to="/giris" className="text-orange-600 hover:underline font-medium font-bold italic tracking-wider">Giriş yapın</Link>
+                  </p>
+                </div>
               </div>
             </form>
           </CardContent>
         </Card>
       </div>
-    </section>
+        </section>
   );
 }
 
