@@ -223,7 +223,8 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
 
   const handleChange = (field: string, value: any) => setForm((f) => ({ ...f, [field]: value }));
 
-  const applyConverterWeightToForm = (weightKg: number) => {
+  const applyConverterEstimateToForm = (result: { estimatedVolumeMin: number; estimatedVolumeMax: number }) => {
+    const weightKg = Math.round(((result.estimatedVolumeMin + result.estimatedVolumeMax) / 2) * 200);
     // TODO: backend'in estimatedWeight desteğine taşı
     setForm((prev) => ({ ...prev, weightKg: String(weightKg) }));
     toast({ title: 'Ağırlık güncellendi', description: `Tahmini ağırlık ${weightKg} kg olarak forma uygulandı.` });
@@ -1318,7 +1319,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
       <VolumeCalculatorModal
         open={isVolumeCalculatorOpen}
         onOpenChange={setIsVolumeCalculatorOpen}
-        onApplyWeightKg={applyConverterWeightToForm}
+        onApplyEstimate={applyConverterEstimateToForm}
       />
     </div>
   );

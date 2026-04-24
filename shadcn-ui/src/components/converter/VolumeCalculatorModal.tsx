@@ -26,7 +26,7 @@ import { CONVERTER_ITEM_CATALOG_V1 } from '@/lib/itemCatalog';
 interface VolumeCalculatorModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onApplyWeightKg: (weightKg: number) => void;
+  onApplyEstimate: (result: EstimateConverterResponse) => void;
 }
 
 const VEHICLE_LABELS: Record<string, string> = {
@@ -52,7 +52,7 @@ const CONFIDENCE_CLASS: Record<'low' | 'medium' | 'high', string> = {
 export default function VolumeCalculatorModal({
   open,
   onOpenChange,
-  onApplyWeightKg,
+  onApplyEstimate,
 }: VolumeCalculatorModalProps) {
   const [moveType, setMoveType] = useState<ConverterMoveType>('household');
   const [propertyType, setPropertyType] = useState<ConverterPropertyType>('2+1');
@@ -110,8 +110,7 @@ export default function VolumeCalculatorModal({
 
   const handleApply = () => {
     if (!result) return;
-    const estimatedWeightKg = Math.round(((result.estimatedVolumeMin + result.estimatedVolumeMax) / 2) * 200);
-    onApplyWeightKg(estimatedWeightKg);
+    onApplyEstimate(result);
     onOpenChange(false);
   };
 
