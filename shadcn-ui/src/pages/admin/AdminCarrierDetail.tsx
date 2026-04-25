@@ -1,31 +1,41 @@
-import { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { adminApiClient } from '@/lib/adminAuth';
-import { toast } from '@/components/ui/sonner';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
-} from '@/components/ui/dialog';
-import { Textarea } from '@/components/ui/textarea';
-import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
-import {
-  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
-} from '@/components/ui/table';
-import { StatusBadge, EmptyState, ErrorState } from '@/components/admin/shared';
-import { CARRIER_STATUS, DOCUMENT_STATUS, SHIPMENT_STATUS, REVIEW_STATUS, resolveCarrierStatus } from '@/lib/admin-constants';
-import {
-  ArrowLeft, CheckCircle, XCircle, FileText, Phone, Mail, MapPin,
-  Building2, Calendar, Star, Truck, AlertTriangle, ExternalLink,
-  Shield, Hash,
-} from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { format } from 'date-fns';
 import { tr } from 'date-fns/locale';
-import { formatLocation } from '@/utils/formatLocation';
+import {
+  AlertTriangle,
+  ArrowLeft,
+  Building2,
+  Calendar,
+  CheckCircle,
+  ExternalLink,
+  FileText,
+  Hash,
+  Lock,
+  Mail,
+  MapPin,
+  Phone,
+  RefreshCcw,
+  Shield,
+  Star,
+  Truck,
+  XCircle,
+} from 'lucide-react';
+import { adminApiClient, getAdminId } from '@/lib/adminAuth';
+import { getApprovalActions, isApprovalLockExpired, resolveApprovalState, type CarrierApprovalState } from '@/lib/admin-approval';
+import { APPROVAL_STATUS, DOCUMENT_STATUS, REVIEW_STATUS, SHIPMENT_STATUS } from '@/lib/admin-constants';
+import { toast } from '@/components/ui/sonner';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Textarea } from '@/components/ui/textarea';
+import { EmptyState, ErrorState, StatusBadge } from '@/components/admin/shared';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
-interface Document {
+interface DocumentItem {
   id: string;
   type: string;
   fileUrl: string;
@@ -34,169 +44,163 @@ interface Document {
   uploadedAt: string;
 }
 
-interface Review {
+interface ReviewItem {
   id: string;
   rating: number;
-  comment: string;
+  comment?: string;
   createdAt: string;
-  user?: { firstName: string; lastName: string };
-  customer?: { firstName: string; lastName: string };
-  shipment?: { origin: string; destination: string };
+  customer?: { firstName?: string; lastName?: string };
 }
 
-interface Shipment {
+interface ShipmentItem {
   id: string;
-  loadDetails: string;
+  loadDetails?: string;
   status: string;
-  origin: string;
-  destination: string;
+  origin?: string;
+  destination?: string;
   createdAt: string;
   price?: number;
-  customer?: { firstName: string; lastName: string };
+  customer?: { firstName?: string; lastName?: string };
 }
 
-interface Carrier {
+interface CarrierDetail {
   id: string;
   companyName: string;
-  email: string;
-  phone: string;
-  address: string;
-  city: string;
-  taxNumber: string;
-  isActive: boolean;
-  verifiedByAdmin: boolean;
-  hasUploadedDocuments: boolean;
-  rejectionReason?: string;
-  rating: number;
-  completedShipments: number;
-  cancelledShipments: number;
+  email?: string | null;
+  phone?: string | null;
+  address?: string | null;
+  city?: string | null;
+  district?: string | null;
+  taxNumber?: string | null;
+  isActive?: boolean;
+  verifiedByAdmin?: boolean;
+  pendingApproval?: boolean;
+  approvalState?: CarrierApprovalState | string | null;
+  approvalVersion?: number;
+  resubmissionCount?: number;
+  lastRejectedAt?: string | null;
+  lastSubmittedAt?: string | null;
+  reviewLockAdminId?: string | null;
+  reviewLockExpiresAt?: string | null;
+  rejectionReason?: string | null;
+  lastDecisionReason?: string | null;
+  rating?: number;
+  completedShipments?: number;
+  cancelledShipments?: number;
   createdAt: string;
-  documents?: Document[];
-  reviews?: Review[];
-  shipments?: Shipment[];
+  documents?: DocumentItem[];
 }
+
+type DecisionMode = 'reject' | 'suspend' | null;
 
 export default function AdminCarrierDetail() {
   const { carrierId } = useParams<{ carrierId: string }>();
   const navigate = useNavigate();
-  const [carrier, setCarrier] = useState<Carrier | null>(null);
+  const adminId = getAdminId();
+
+  const [carrier, setCarrier] = useState<CarrierDetail | null>(null);
+  const [shipments, setShipments] = useState<ShipmentItem[]>([]);
+  const [reviews, setReviews] = useState<ReviewItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
-  const [actionLoading, setActionLoading] = useState(false);
-  const [rejectDialogOpen, setRejectDialogOpen] = useState(false);
-  const [rejectionReason, setRejectionReason] = useState('');
   const [activeTab, setActiveTab] = useState('general');
+  const [actionLoading, setActionLoading] = useState(false);
+  const [decisionMode, setDecisionMode] = useState<DecisionMode>(null);
+  const [decisionReason, setDecisionReason] = useState('');
 
-  // Shipments tab state
-  const [carrierShipments, setCarrierShipments] = useState<Shipment[]>([]);
-  const [shipmentsLoading, setShipmentsLoading] = useState(false);
-  const [shipmentsPage, setShipmentsPage] = useState(1);
-  const [shipmentsMeta, setShipmentsMeta] = useState({ total: 0, totalPages: 1 });
-
-  // Reviews tab state
-  const [carrierReviews, setCarrierReviews] = useState<Review[]>([]);
-  const [reviewsLoading, setReviewsLoading] = useState(false);
-  const [reviewsPage, setReviewsPage] = useState(1);
-  const [reviewsMeta, setReviewsMeta] = useState({ total: 0, totalPages: 1, averageRating: 0 });
-
-  const fetchCarrier = () => {
+  const fetchCarrier = async () => {
     if (!carrierId) return;
     setLoading(true);
     setError(false);
-    Promise.all([
-      adminApiClient(`/admin/carriers/${carrierId}`).then((r) => r.json()),
-      adminApiClient(`/admin/carriers/${carrierId}/documents`).then((r) => r.json()),
-    ])
-      .then(([carrierRes, docsRes]) => {
-        if (carrierRes.success) {
-          setCarrier({
-            ...carrierRes.data,
-            documents: docsRes.success ? docsRes.data : [],
-          });
-        } else {
-          toast.error(carrierRes.message);
-          setError(true);
-        }
-      })
-      .catch(() => {
-        toast.error('Veriler yüklenemedi.');
+
+    try {
+      const [carrierResponse, documentsResponse] = await Promise.all([
+        adminApiClient(`/admin/carriers/${carrierId}`),
+        adminApiClient(`/admin/carriers/${carrierId}/documents`),
+      ]);
+
+      const carrierData = await carrierResponse.json();
+      const documentsData = await documentsResponse.json();
+
+      if (!carrierData.success) {
+        toast.error(carrierData.message || 'Carrier detayi yuklenemedi.');
         setError(true);
-      })
-      .finally(() => setLoading(false));
-  };
-
-  const fetchCarrierShipments = async (page: number) => {
-    if (!carrierId) return;
-    setShipmentsLoading(true);
-    try {
-      const res = await adminApiClient(`/admin/carriers/${carrierId}/shipments?page=${page}&limit=10`);
-      const data = await res.json();
-      if (data.success) {
-        setCarrierShipments(data.data.shipments ?? []);
-        setShipmentsMeta({
-          total: data.data.pagination?.total ?? 0,
-          totalPages: data.data.pagination?.totalPages ?? 1,
-        });
+        return;
       }
+
+      setCarrier({
+        ...carrierData.data,
+        documents: documentsData.success ? documentsData.data : [],
+      });
     } catch {
-      toast.error('İş verileri yüklenemedi.');
+      toast.error('Carrier detayi yuklenemedi.');
+      setError(true);
     } finally {
-      setShipmentsLoading(false);
+      setLoading(false);
     }
   };
 
-  const fetchCarrierReviews = async (page: number) => {
+  const fetchShipments = async () => {
     if (!carrierId) return;
-    setReviewsLoading(true);
     try {
-      const res = await adminApiClient(`/admin/carriers/${carrierId}/reviews?page=${page}&limit=10`);
-      const data = await res.json();
+      const response = await adminApiClient(`/admin/carriers/${carrierId}/shipments?page=1&limit=10`);
+      const data = await response.json();
       if (data.success) {
-        setCarrierReviews(data.data.reviews ?? []);
-        setReviewsMeta({
-          total: data.data.pagination?.total ?? 0,
-          totalPages: data.data.pagination?.totalPages ?? 1,
-          averageRating: data.data.averageRating ?? 0,
-        });
+        setShipments(data.data?.shipments ?? []);
       }
     } catch {
-      toast.error('Yorum verileri yüklenemedi.');
-    } finally {
-      setReviewsLoading(false);
+      toast.error('Tasima verileri yuklenemedi.');
     }
   };
 
-  useEffect(() => { fetchCarrier(); }, [carrierId]);
+  const fetchReviews = async () => {
+    if (!carrierId) return;
+    try {
+      const response = await adminApiClient(`/admin/carriers/${carrierId}/reviews?page=1&limit=10`);
+      const data = await response.json();
+      if (data.success) {
+        setReviews(data.data?.reviews ?? []);
+      }
+    } catch {
+      toast.error('Yorum verileri yuklenemedi.');
+    }
+  };
 
   useEffect(() => {
-    if (activeTab === 'shipments') fetchCarrierShipments(shipmentsPage);
-  }, [activeTab, shipmentsPage, carrierId]);
+    fetchCarrier();
+  }, [carrierId]);
 
   useEffect(() => {
-    if (activeTab === 'reviews') fetchCarrierReviews(reviewsPage);
-  }, [activeTab, reviewsPage, carrierId]);
+    if (activeTab === 'shipments') void fetchShipments();
+    if (activeTab === 'reviews') void fetchReviews();
+  }, [activeTab, carrierId]);
 
-  const handleVerify = async (approved: boolean, reason?: string) => {
+  const approvalState = useMemo(() => resolveApprovalState(carrier ?? {}), [carrier]);
+  const approvalActions = useMemo(() => getApprovalActions(carrier ?? {}, adminId), [carrier, adminId]);
+  const lockExpired = isApprovalLockExpired(carrier?.reviewLockExpiresAt);
+
+  const performAction = async (path: string, body?: Record<string, unknown>, successMessage?: string) => {
     if (!carrierId) return;
     setActionLoading(true);
     try {
-      const res = await adminApiClient(`/admin/carriers/${carrierId}/verify`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ approved, rejectionReason: reason }),
+      const response = await adminApiClient(path, {
+        method: 'POST',
+        headers: body ? { 'Content-Type': 'application/json' } : undefined,
+        body: body ? JSON.stringify(body) : undefined,
       });
-      const data = await res.json();
-      if (data.success) {
-        toast.success(data.message);
-        setCarrier((prev) =>
-          prev ? { ...prev, verifiedByAdmin: approved, isActive: approved, rejectionReason: reason } : prev,
-        );
-        setRejectDialogOpen(false);
-      } else {
-        toast.error(data.message);
+      const data = await response.json();
+      if (!data.success) {
+        toast.error(data.message || 'Islem basarisiz.');
+        return;
       }
+      if (successMessage) {
+        toast.success(successMessage);
+      }
+      setDecisionMode(null);
+      setDecisionReason('');
+      await fetchCarrier();
     } catch {
-      toast.error('İşlem başarısız.');
+      toast.error('Islem basarisiz.');
     } finally {
       setActionLoading(false);
     }
@@ -205,11 +209,11 @@ export default function AdminCarrierDetail() {
   if (loading) {
     return (
       <div className="p-6 lg:p-8 space-y-4">
-        <div className="h-5 w-16 bg-slate-200 animate-pulse rounded" />
-        <div className="h-8 w-64 bg-slate-200 animate-pulse rounded" />
-        <div className="grid grid-cols-2 gap-4">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="h-20 bg-slate-200 animate-pulse rounded-xl" />
+        <div className="h-5 w-20 rounded bg-slate-200 animate-pulse" />
+        <div className="h-8 w-72 rounded bg-slate-200 animate-pulse" />
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {Array.from({ length: 6 }).map((_, index) => (
+            <div key={index} className="h-24 rounded-xl bg-slate-200 animate-pulse" />
           ))}
         </div>
       </div>
@@ -219,153 +223,232 @@ export default function AdminCarrierDetail() {
   if (error || !carrier) {
     return (
       <div className="p-6 lg:p-8">
-        <ErrorState message="Nakliyeci bilgileri yüklenemedi." onRetry={fetchCarrier} />
+        <ErrorState message="Carrier detaylari yuklenemedi." onRetry={fetchCarrier} />
       </div>
     );
   }
 
-  const st = resolveCarrierStatus(carrier);
-  const isPending = st === 'pending';
-  const isVerified = st === 'verified';
   const totalJobs = (carrier.completedShipments ?? 0) + (carrier.cancelledShipments ?? 0);
   const cancelRate = totalJobs > 0 ? Math.round(((carrier.cancelledShipments ?? 0) / totalJobs) * 100) : 0;
+  const rejectReasonFromApi = carrier.lastDecisionReason || carrier.rejectionReason || null;
 
   const infoFields = [
-    { icon: Phone, label: 'Telefon', value: carrier.phone },
-    { icon: Mail, label: 'E-posta', value: carrier.email },
-    { icon: MapPin, label: 'Şehir', value: carrier.city },
-    { icon: Building2, label: 'Adres', value: carrier.address },
-    { icon: Hash, label: 'Vergi No', value: carrier.taxNumber },
-    { icon: Calendar, label: 'Kayıt Tarihi', value: carrier.createdAt ? format(new Date(carrier.createdAt), 'dd MMMM yyyy', { locale: tr }) : '—' },
+    { icon: Phone, label: 'Telefon', value: carrier.phone || '—' },
+    { icon: Mail, label: 'E-posta', value: carrier.email || '—' },
+    { icon: MapPin, label: 'Sehir', value: [carrier.city, carrier.district].filter(Boolean).join(' / ') || '—' },
+    { icon: Building2, label: 'Adres', value: carrier.address || '—' },
+    { icon: Hash, label: 'Vergi No', value: carrier.taxNumber || '—' },
+    {
+      icon: Calendar,
+      label: 'Kayit Tarihi',
+      value: carrier.createdAt ? format(new Date(carrier.createdAt), 'dd MMMM yyyy', { locale: tr }) : '—',
+    },
   ];
 
   return (
     <div className="p-6 lg:p-8 space-y-6">
-      {/* Back / Header */}
-      <button onClick={() => navigate(-1)} className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800 transition-colors">
-        <ArrowLeft className="h-4 w-4" /> Nakliyeciler
+      <button onClick={() => navigate(-1)} className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-800">
+        <ArrowLeft className="h-4 w-4" />
+        Nakliyeciler
       </button>
 
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
         <div className="flex items-center gap-4">
-          <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white font-bold text-lg">
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-sky-500 to-sky-600 text-lg font-bold text-white">
             {carrier.companyName?.charAt(0) ?? 'N'}
           </div>
-          <div>
-            <h1 className="text-xl font-bold text-slate-800">{carrier.companyName}</h1>
-            <div className="flex items-center gap-3 mt-0.5">
-              <StatusBadge status={st} statusMap={CARRIER_STATUS} />
+          <div className="space-y-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-xl font-bold text-slate-800">{carrier.companyName}</h1>
+              <StatusBadge status={approvalState} statusMap={APPROVAL_STATUS} />
+            </div>
+            <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
+              <span>ID: {carrier.id}</span>
+              <span>v{carrier.approvalVersion ?? 0}</span>
+              <span>tekrar {carrier.resubmissionCount ?? 0}</span>
               {(carrier.rating ?? 0) > 0 && (
-                <span className="flex items-center gap-1 text-sm text-slate-500">
-                  <Star className="h-3.5 w-3.5 text-amber-400 fill-amber-400" />
+                <span className="inline-flex items-center gap-1">
+                  <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
                   {Number(carrier.rating).toFixed(1)}
                 </span>
               )}
-              <span className="text-xs text-slate-400">ID: {carrier.id}</span>
             </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          {isPending && (
-            <Button size="sm" onClick={() => handleVerify(true)} disabled={actionLoading} className="bg-emerald-600 hover:bg-emerald-700 text-white">
-              <CheckCircle className="h-3.5 w-3.5 mr-1.5" /> Onayla
+        <div className="flex flex-wrap items-center gap-2">
+          {approvalActions.canClaim && (
+            <Button
+              size="sm"
+              className="bg-sky-600 hover:bg-sky-700 text-white"
+              disabled={actionLoading}
+              onClick={() => performAction(`/admin/carriers/${carrier.id}/approval/claim`, undefined, 'Kayit incelemeye alindi.')}
+            >
+              <RefreshCcw className="mr-1.5 h-3.5 w-3.5" />
+              Claim
             </Button>
           )}
-          {(isPending || isVerified) && (
-            <Button size="sm" variant="destructive" onClick={() => setRejectDialogOpen(true)} disabled={actionLoading}>
-              <XCircle className="h-3.5 w-3.5 mr-1.5" /> Reddet
+          {approvalActions.canRelease && (
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={actionLoading}
+              onClick={() => performAction(`/admin/carriers/${carrier.id}/approval/release`, undefined, 'Review birakildi.')}
+            >
+              <Lock className="mr-1.5 h-3.5 w-3.5" />
+              Release
+            </Button>
+          )}
+          {approvalActions.canApprove && (
+            <Button
+              size="sm"
+              className="bg-emerald-600 hover:bg-emerald-700 text-white"
+              disabled={actionLoading}
+              onClick={() => performAction(`/admin/carriers/${carrier.id}/approval/approve`, {}, 'Carrier onaylandi.')}
+            >
+              <CheckCircle className="mr-1.5 h-3.5 w-3.5" />
+              Approve
+            </Button>
+          )}
+          {approvalActions.canReject && (
+            <Button size="sm" variant="destructive" disabled={actionLoading} onClick={() => setDecisionMode('reject')}>
+              <XCircle className="mr-1.5 h-3.5 w-3.5" />
+              Reject
+            </Button>
+          )}
+          {approvalActions.canSuspend && (
+            <Button size="sm" variant="destructive" disabled={actionLoading} onClick={() => setDecisionMode('suspend')}>
+              <Shield className="mr-1.5 h-3.5 w-3.5" />
+              Suspend
             </Button>
           )}
         </div>
       </div>
 
-      {carrier.rejectionReason && (
-        <div className="flex items-start gap-3 p-3 bg-rose-50 border border-rose-200 rounded-lg text-sm text-rose-700">
-          <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
-          <span><strong>Red gerekçesi:</strong> {carrier.rejectionReason}</span>
+      {(carrier.reviewLockAdminId || carrier.reviewLockExpiresAt) && (
+        <div className={`rounded-lg border p-3 text-sm ${lockExpired ? 'border-rose-200 bg-rose-50 text-rose-700' : 'border-sky-200 bg-sky-50 text-sky-700'}`}>
+          <div className="flex items-start gap-2">
+            {lockExpired ? <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /> : <Lock className="mt-0.5 h-4 w-4 shrink-0" />}
+            <div className="space-y-1">
+              {carrier.reviewLockAdminId && <p><strong>reviewLockAdminId:</strong> {carrier.reviewLockAdminId}</p>}
+              {carrier.reviewLockExpiresAt && (
+                <p>
+                  <strong>reviewLockExpiresAt:</strong>{' '}
+                  {format(new Date(carrier.reviewLockExpiresAt), 'dd.MM.yyyy HH:mm', { locale: tr })}
+                </p>
+              )}
+              {lockExpired && <p>Lock suresi dolmus. Kayit tekrar claim edilebilir.</p>}
+            </div>
+          </div>
         </div>
       )}
 
-      {/* KPI row */}
+      {rejectReasonFromApi && (
+        <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            <div>
+              <p className="font-medium">Reject reason</p>
+              <p>{rejectReasonFromApi}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { label: 'Tamamlanan İş', value: carrier.completedShipments ?? 0, icon: Truck },
-          { label: 'İptal Oranı', value: `%${cancelRate}`, icon: XCircle, warn: cancelRate > 15 },
-          { label: 'Ortalama Puan', value: (carrier.rating ?? 0) > 0 ? Number(carrier.rating).toFixed(1) : '—', icon: Star },
+          { label: 'Tamamlanan is', value: carrier.completedShipments ?? 0, icon: Truck },
+          { label: 'Iptal orani', value: `%${cancelRate}`, icon: XCircle, warn: cancelRate > 15 },
+          { label: 'Ortalama puan', value: (carrier.rating ?? 0) > 0 ? Number(carrier.rating).toFixed(1) : '—', icon: Star },
           { label: 'Belgeler', value: carrier.documents?.length ?? 0, icon: FileText },
-        ].map((kpi) => (
-          <Card key={kpi.label} className="border-slate-200">
-            <CardContent className="pt-4 pb-3 px-4 flex items-center gap-3">
-              <div className={`h-9 w-9 rounded-lg flex items-center justify-center ${kpi.warn ? 'bg-rose-100 text-rose-600' : 'bg-slate-100 text-slate-500'}`}>
-                <kpi.icon className="h-4 w-4" />
+        ].map((metric) => (
+          <Card key={metric.label} className="border-slate-200">
+            <CardContent className="px-4 py-4 flex items-center gap-3">
+              <div className={`flex h-9 w-9 items-center justify-center rounded-lg ${metric.warn ? 'bg-rose-100 text-rose-600' : 'bg-slate-100 text-slate-500'}`}>
+                <metric.icon className="h-4 w-4" />
               </div>
               <div>
-                <p className="text-xs text-slate-500">{kpi.label}</p>
-                <p className={`text-lg font-semibold tabular-nums ${kpi.warn ? 'text-rose-600' : 'text-slate-800'}`}>{kpi.value}</p>
+                <p className="text-xs text-slate-500">{metric.label}</p>
+                <p className={`text-lg font-semibold ${metric.warn ? 'text-rose-600' : 'text-slate-800'}`}>{metric.value}</p>
               </div>
             </CardContent>
           </Card>
         ))}
       </div>
 
-      {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList className="bg-slate-100">
-          <TabsTrigger value="general" className="text-xs">Genel Bilgiler</TabsTrigger>
-          <TabsTrigger value="documents" className="text-xs">
-            Belgeler {carrier.documents && carrier.documents.length > 0 && <Badge variant="secondary" className="ml-1.5 h-4 text-[10px] px-1.5">{carrier.documents.length}</Badge>}
-          </TabsTrigger>
-          <TabsTrigger value="shipments" className="text-xs">İşler</TabsTrigger>
+          <TabsTrigger value="general" className="text-xs">Genel</TabsTrigger>
+          <TabsTrigger value="documents" className="text-xs">Belgeler</TabsTrigger>
+          <TabsTrigger value="shipments" className="text-xs">Isler</TabsTrigger>
           <TabsTrigger value="reviews" className="text-xs">Yorumlar</TabsTrigger>
         </TabsList>
 
-        {/* General Tab */}
-        <TabsContent value="general" className="space-y-4">
+        <TabsContent value="general">
           <Card className="border-slate-200">
             <CardHeader className="pb-3">
-              <CardTitle className="text-sm font-semibold text-slate-700">İletişim & Şirket Bilgileri</CardTitle>
+              <CardTitle className="text-sm font-semibold text-slate-700">Iletisim ve sirket bilgileri</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {infoFields.map(({ icon: Icon, label, value }) => (
                   <div key={label} className="flex items-start gap-3">
-                    <div className="h-8 w-8 rounded-lg bg-slate-100 flex items-center justify-center shrink-0">
-                      <Icon className="h-3.5 w-3.5 text-slate-500" />
+                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-100 text-slate-500">
+                      <Icon className="h-3.5 w-3.5" />
                     </div>
                     <div>
                       <p className="text-xs text-slate-500">{label}</p>
-                      <p className="text-sm font-medium text-slate-800">{value || '—'}</p>
+                      <p className="text-sm font-medium text-slate-800">{value}</p>
                     </div>
                   </div>
                 ))}
+              </div>
+
+              <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm text-slate-600">
+                <div>
+                  <p className="text-xs text-slate-500">Approval state</p>
+                  <p className="font-medium">{approvalState}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-500">Last submitted</p>
+                  <p className="font-medium">
+                    {carrier.lastSubmittedAt ? format(new Date(carrier.lastSubmittedAt), 'dd.MM.yyyy HH:mm', { locale: tr }) : '—'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-500">Last rejected</p>
+                  <p className="font-medium">
+                    {carrier.lastRejectedAt ? format(new Date(carrier.lastRejectedAt), 'dd.MM.yyyy HH:mm', { locale: tr }) : '—'}
+                  </p>
+                </div>
               </div>
             </CardContent>
           </Card>
         </TabsContent>
 
-        {/* Documents Tab */}
-        <TabsContent value="documents" className="space-y-4">
+        <TabsContent value="documents">
           {carrier.documents && carrier.documents.length > 0 ? (
             <div className="space-y-2">
-              {carrier.documents.map((doc) => (
-                <Card key={doc.id} className="border-slate-200">
-                  <CardContent className="py-3 px-4 flex items-center justify-between">
+              {carrier.documents.map((document) => (
+                <Card key={document.id} className="border-slate-200">
+                  <CardContent className="px-4 py-3 flex items-center justify-between gap-3">
                     <div className="flex items-center gap-3">
-                      <div className="h-9 w-9 rounded-lg bg-slate-100 flex items-center justify-center">
-                        <FileText className="h-4 w-4 text-slate-500" />
+                      <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 text-slate-500">
+                        <FileText className="h-4 w-4" />
                       </div>
                       <div>
-                        <p className="text-sm font-medium text-slate-800">{doc.type}</p>
+                        <p className="text-sm font-medium text-slate-800">{document.type}</p>
                         <p className="text-xs text-slate-400">
-                          {format(new Date(doc.uploadedAt), 'dd MMM yyyy', { locale: tr })}
+                          {format(new Date(document.uploadedAt), 'dd MMM yyyy', { locale: tr })}
                         </p>
                       </div>
                     </div>
+
                     <div className="flex items-center gap-2">
-                      <StatusBadge status={doc.isApproved ? 'verified' : 'pending'} statusMap={DOCUMENT_STATUS} size="sm" />
-                      <a href={doc.fileUrl} target="_blank" rel="noreferrer" className="text-xs text-blue-600 hover:underline flex items-center gap-1">
-                        Görüntüle <ExternalLink className="h-3 w-3" />
+                      <StatusBadge status={String(document.status || 'PENDING').toUpperCase()} statusMap={DOCUMENT_STATUS} />
+                      <a href={document.fileUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline">
+                        Goruntule
+                        <ExternalLink className="h-3 w-3" />
                       </a>
                     </div>
                   </CardContent>
@@ -373,178 +456,101 @@ export default function AdminCarrierDetail() {
               ))}
             </div>
           ) : (
-            <EmptyState icon={FileText} title="Belge yüklenmemiş" description="Bu nakliyeci henüz belge yüklememiş." />
+            <EmptyState icon={FileText} title="Belge yok" description="Carrier icin yuklenmis belge bulunmuyor." />
           )}
         </TabsContent>
 
-        {/* Shipments Tab */}
         <TabsContent value="shipments">
-          {shipmentsLoading ? (
+          {shipments.length > 0 ? (
             <Card className="border-slate-200">
               <Table>
                 <TableHeader>
                   <TableRow className="bg-slate-50/50">
-                    <TableHead className="font-semibold text-slate-600 text-xs">İlan ID</TableHead>
-                    <TableHead className="font-semibold text-slate-600 text-xs">Güzergah</TableHead>
-                    <TableHead className="font-semibold text-slate-600 text-xs">Müşteri</TableHead>
-                    <TableHead className="font-semibold text-slate-600 text-xs">Durum</TableHead>
-                    <TableHead className="font-semibold text-slate-600 text-xs">Tarih</TableHead>
-                    <TableHead className="font-semibold text-slate-600 text-xs">Fiyat</TableHead>
+                    <TableHead>Yuk</TableHead>
+                    <TableHead>Guzergah</TableHead>
+                    <TableHead>Musteri</TableHead>
+                    <TableHead>Durum</TableHead>
+                    <TableHead>Tarih</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {Array.from({ length: 5 }).map((_, i) => (
-                    <TableRow key={i}>
-                      {Array.from({ length: 6 }).map((_, j) => (
-                        <TableCell key={j}><div className="h-4 w-20 bg-slate-200 rounded animate-pulse" /></TableCell>
-                      ))}
+                  {shipments.map((shipment) => (
+                    <TableRow key={shipment.id}>
+                      <TableCell className="text-sm text-slate-700">{shipment.loadDetails || shipment.id}</TableCell>
+                      <TableCell className="text-sm text-slate-700">{[shipment.origin, shipment.destination].filter(Boolean).join(' → ') || '—'}</TableCell>
+                      <TableCell className="text-sm text-slate-700">{[shipment.customer?.firstName, shipment.customer?.lastName].filter(Boolean).join(' ') || '—'}</TableCell>
+                      <TableCell><StatusBadge status={shipment.status} statusMap={SHIPMENT_STATUS} /></TableCell>
+                      <TableCell className="text-sm text-slate-500">{format(new Date(shipment.createdAt), 'dd.MM.yyyy', { locale: tr })}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
             </Card>
-          ) : carrierShipments.length > 0 ? (
-            <div className="space-y-3">
-              <Card className="border-slate-200">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-slate-50/50">
-                      <TableHead className="font-semibold text-slate-600 text-xs">İlan ID</TableHead>
-                      <TableHead className="font-semibold text-slate-600 text-xs">Güzergah</TableHead>
-                      <TableHead className="font-semibold text-slate-600 text-xs">Müşteri</TableHead>
-                      <TableHead className="font-semibold text-slate-600 text-xs">Durum</TableHead>
-                      <TableHead className="font-semibold text-slate-600 text-xs">Tarih</TableHead>
-                      <TableHead className="font-semibold text-slate-600 text-xs">Fiyat</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {carrierShipments.map((s) => (
-                      <TableRow key={s.id}>
-                        <TableCell className="font-mono text-xs text-gray-400">{s.id.slice(0, 8)}</TableCell>
-                        <TableCell className="text-sm text-slate-600">{formatLocation(s.origin)} → {formatLocation(s.destination)}</TableCell>
-                        <TableCell className="text-sm text-slate-600">
-                          {s.customer ? `${s.customer.firstName} ${s.customer.lastName}` : '—'}
-                        </TableCell>
-                        <TableCell>
-                          <StatusBadge status={s.status} statusMap={SHIPMENT_STATUS} size="sm" />
-                        </TableCell>
-                        <TableCell className="text-xs text-slate-500">
-                          {new Date(s.createdAt).toLocaleDateString('tr-TR')}
-                        </TableCell>
-                        <TableCell className="text-sm font-medium text-slate-800">
-                          {s.price ? `₺${s.price.toLocaleString('tr-TR')}` : '—'}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </Card>
-              {shipmentsMeta.totalPages > 1 && (
-                <div className="flex items-center justify-between">
-                  <p className="text-xs text-slate-500">Toplam {shipmentsMeta.total} kayıt</p>
-                  <div className="flex items-center gap-2">
-                    <Button size="sm" variant="outline" disabled={shipmentsPage <= 1} onClick={() => setShipmentsPage((p) => p - 1)}>Önceki</Button>
-                    <span className="text-xs text-slate-600">{shipmentsPage} / {shipmentsMeta.totalPages}</span>
-                    <Button size="sm" variant="outline" disabled={shipmentsPage >= shipmentsMeta.totalPages} onClick={() => setShipmentsPage((p) => p + 1)}>Sonraki</Button>
-                  </div>
-                </div>
-              )}
-            </div>
           ) : (
-            <EmptyState icon={Truck} title="📦 Bu nakliyeci henüz iş almamış" description="Bu nakliyeciye ait iş kaydı bulunamadı." />
+            <EmptyState icon={Truck} title="Is bulunmuyor" description="Bu carrier icin kayitli tasima bulunmuyor." />
           )}
         </TabsContent>
 
-        {/* Reviews Tab */}
         <TabsContent value="reviews">
-          {reviewsLoading ? (
-            <div className="space-y-3">
-              {Array.from({ length: 5 }).map((_, i) => (
-                <div key={i} className="h-24 bg-slate-200 rounded-xl animate-pulse" />
-              ))}
-            </div>
-          ) : carrierReviews.length > 0 ? (
-            <div className="space-y-4">
-              {/* Summary */}
-              <Card className="border-slate-200">
-                <CardContent className="py-4 px-5 flex items-center gap-6">
-                  <div className="flex items-center gap-2">
-                    <span className="text-3xl font-bold text-slate-800">{reviewsMeta.averageRating.toFixed(1)}</span>
-                    <div className="flex items-center gap-0.5">
-                      {Array.from({ length: 5 }).map((_, i) => (
-                        <Star key={i} className={`h-4 w-4 ${i < Math.round(reviewsMeta.averageRating) ? 'text-amber-400 fill-amber-400' : 'text-slate-200'}`} />
-                      ))}
-                    </div>
-                  </div>
-                  <span className="text-sm text-slate-500">{reviewsMeta.total} yorum</span>
-                </CardContent>
-              </Card>
-
-              {/* Review Cards */}
-              {carrierReviews.map((r) => (
-                <Card key={r.id} className="border-slate-200">
-                  <CardContent className="py-3 px-4">
-                    <div className="flex items-center justify-between mb-2">
+          {reviews.length > 0 ? (
+            <div className="space-y-2">
+              {reviews.map((review) => (
+                <Card key={review.id} className="border-slate-200">
+                  <CardContent className="px-4 py-3 space-y-2">
+                    <div className="flex items-center justify-between gap-3">
                       <div className="flex items-center gap-2">
-                        <div className="flex items-center gap-0.5">
-                          {Array.from({ length: 5 }).map((_, i) => (
-                            <Star key={i} className={`h-3 w-3 ${i < r.rating ? 'text-amber-400 fill-amber-400' : 'text-slate-200'}`} />
-                          ))}
-                        </div>
-                        <span className="text-sm font-medium text-slate-700">
-                          {(r.customer || r.user) ? `${(r.customer ?? r.user)!.firstName} ${(r.customer ?? r.user)!.lastName}` : 'Anonim'}
+                        <StatusBadge status="published" statusMap={REVIEW_STATUS} />
+                        <span className="inline-flex items-center gap-1 text-sm text-slate-700">
+                          <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
+                          {review.rating}
                         </span>
                       </div>
                       <span className="text-xs text-slate-400">
-                        {new Date(r.createdAt).toLocaleDateString('tr-TR')}
+                        {format(new Date(review.createdAt), 'dd.MM.yyyy', { locale: tr })}
                       </span>
                     </div>
-                    {r.comment && <p className="text-sm text-slate-700 mb-1.5">{r.comment}</p>}
-                    {r.shipment && (
-                      <p className="text-xs text-slate-400">📦 {formatLocation(r.shipment.origin)} → {formatLocation(r.shipment.destination)}</p>
-                    )}
+                    <p className="text-sm text-slate-700">{review.comment || 'Yorum yok.'}</p>
                   </CardContent>
                 </Card>
               ))}
-
-              {/* Pagination */}
-              {reviewsMeta.totalPages > 1 && (
-                <div className="flex items-center justify-between">
-                  <p className="text-xs text-slate-500">Toplam {reviewsMeta.total} yorum</p>
-                  <div className="flex items-center gap-2">
-                    <Button size="sm" variant="outline" disabled={reviewsPage <= 1} onClick={() => setReviewsPage((p) => p - 1)}>Önceki</Button>
-                    <span className="text-xs text-slate-600">{reviewsPage} / {reviewsMeta.totalPages}</span>
-                    <Button size="sm" variant="outline" disabled={reviewsPage >= reviewsMeta.totalPages} onClick={() => setReviewsPage((p) => p + 1)}>Sonraki</Button>
-                  </div>
-                </div>
-              )}
             </div>
           ) : (
-            <EmptyState icon={Star} title="Henüz yorum yok" description="Bu nakliyeciye henüz yorum yapılmamış." />
+            <EmptyState icon={Star} title="Yorum yok" description="Carrier icin kayitli yorum bulunmuyor." />
           )}
         </TabsContent>
       </Tabs>
 
-      {/* Reject Dialog */}
-      <Dialog open={rejectDialogOpen} onOpenChange={setRejectDialogOpen}>
+      <Dialog open={decisionMode !== null} onOpenChange={(open) => !open && setDecisionMode(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Nakliyeciyi Reddet</DialogTitle>
+            <DialogTitle>{decisionMode === 'suspend' ? 'Carrier suspend' : 'Carrier reject'}</DialogTitle>
           </DialogHeader>
           <div className="space-y-2 py-2">
-            <Label htmlFor="reason">Red Gerekçesi (opsiyonel)</Label>
+            <Label htmlFor="decision-reason">Reason</Label>
             <Textarea
-              id="reason"
-              placeholder="Eksik belge, hatalı bilgi vb."
-              value={rejectionReason}
-              onChange={(e) => setRejectionReason(e.target.value)}
-              rows={3}
+              id="decision-reason"
+              rows={4}
+              value={decisionReason}
+              onChange={(event) => setDecisionReason(event.target.value)}
+              placeholder={decisionMode === 'suspend' ? 'Suspend reason zorunlu' : 'Reject reason zorunlu'}
             />
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setRejectDialogOpen(false)}>Vazgeç</Button>
-            <Button variant="destructive" disabled={actionLoading} onClick={() => handleVerify(false, rejectionReason || undefined)}>
-              Reddet
+            <Button variant="outline" onClick={() => setDecisionMode(null)}>
+              Vazgec
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={actionLoading || !decisionReason.trim()}
+              onClick={() => {
+                if (decisionMode === 'suspend') {
+                  void performAction(`/admin/carriers/${carrier.id}/approval/suspend`, { reason: decisionReason }, 'Carrier askiya alindi.');
+                } else {
+                  void performAction(`/admin/carriers/${carrier.id}/approval/reject`, { reason: decisionReason }, 'Carrier reddedildi.');
+                }
+              }}
+            >
+              {decisionMode === 'suspend' ? 'Suspend' : 'Reject'}
             </Button>
           </DialogFooter>
         </DialogContent>
