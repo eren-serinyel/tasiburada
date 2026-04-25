@@ -5,7 +5,11 @@ import { Carrier } from '../../../domain/entities/Carrier';
 import { CarrierVehicle } from '../../../domain/entities/CarrierVehicle';
 import { CarrierActivity } from '../../../domain/entities/CarrierActivity';
 import { CarrierProfileStatus } from '../../../domain/entities/CarrierProfileStatus';
+import { CarrierLoadTypeCapability } from '../../../domain/entities/CarrierLoadTypeCapability';
+import { CarrierExtraServiceCapability } from '../../../domain/entities/CarrierExtraServiceCapability';
+import { ExtraServiceLoadType } from '../../../domain/entities/ExtraServiceApplicability';
 import { CITIES, OFFER_MESSAGE_TEMPLATES } from '../data/constants';
+import { inferExtraServiceLoadTypeFromShipmentCategory } from '../../../application/services/extra-services/extraServiceApplicability';
 import {
   calculateShipmentBasePrice,
   pickRandom,
@@ -23,6 +27,8 @@ export async function seedOffers(
   const vehicleRepo = AppDataSource.getRepository(CarrierVehicle);
   const activityRepo = AppDataSource.getRepository(CarrierActivity);
   const profileRepo = AppDataSource.getRepository(CarrierProfileStatus);
+  const loadTypeCapabilityRepo = AppDataSource.getRepository(CarrierLoadTypeCapability);
+  const extraCapabilityRepo = AppDataSource.getRepository(CarrierExtraServiceCapability);
 
   const created: Offer[] = [];
   const offerCounts: Record<string, number> = {};
@@ -31,6 +37,38 @@ export async function seedOffers(
   );
   const activityCarrierIds = new Set((await activityRepo.find()).map((row) => row.carrierId));
   const profileCarrierIds = new Set((await profileRepo.find()).map((row) => row.carrierId));
+  const loadTypeCapabilities = await loadTypeCapabilityRepo.find({ where: { isActive: true } });
+  const extraServiceCapabilities = await extraCapabilityRepo.find({ where: { isActive: true } });
+  let shipmentExtraServiceRows: Array<{ shipmentId: string; extraServiceId: string }> = [];
+  try {
+    shipmentExtraServiceRows = await AppDataSource.query(
+      'SELECT `shipment_id` AS shipmentId, `extra_service_id` AS extraServiceId FROM `shipment_extra_services`',
+    );
+  } catch {
+    shipmentExtraServiceRows = [];
+  }
+
+  const loadTypeMapByCarrier = new Map<string, Set<ExtraServiceLoadType>>();
+  loadTypeCapabilities.forEach((item) => {
+    const bucket = loadTypeMapByCarrier.get(item.carrierId) ?? new Set<ExtraServiceLoadType>();
+    bucket.add(item.loadType);
+    loadTypeMapByCarrier.set(item.carrierId, bucket);
+  });
+
+  const extraCapabilityMap = new Map<string, Set<string>>();
+  extraServiceCapabilities.forEach((item) => {
+    const key = `${item.carrierId}|${item.loadType}`;
+    const bucket = extraCapabilityMap.get(key) ?? new Set<string>();
+    bucket.add(item.extraServiceId);
+    extraCapabilityMap.set(key, bucket);
+  });
+
+  const shipmentExtraServiceMap = new Map<string, Set<string>>();
+  shipmentExtraServiceRows.forEach((row) => {
+    const bucket = shipmentExtraServiceMap.get(row.shipmentId) ?? new Set<string>();
+    bucket.add(row.extraServiceId);
+    shipmentExtraServiceMap.set(row.shipmentId, bucket);
+  });
 
   const usableCarriers = carriers.filter((carrier) =>
     carrier.verifiedByAdmin &&
@@ -45,12 +83,30 @@ export async function seedOffers(
   }
 
   for (const shipment of shipments) {
-    const offerCount = determineOfferCount(shipment.status, usableCarriers.length);
+    const loadType = inferExtraServiceLoadTypeFromShipmentCategory(shipment.shipmentCategory);
+    const requiredExtraServiceIds = shipmentExtraServiceMap.get(shipment.id) ?? new Set<string>();
+    const capabilityFilteredCarriers = filterCarriersByCapabilities(
+      usableCarriers,
+      loadType,
+      requiredExtraServiceIds,
+      loadTypeMapByCarrier,
+      extraCapabilityMap,
+    );
+
+    // NO FALLBACK: If no capable carriers, skip this shipment
+    // This ensures data integrity: every offer matches carrier capabilities
+    if (capabilityFilteredCarriers.length === 0) {
+      continue;
+    }
+
+    const offerCount = determineOfferCount(shipment.status, capabilityFilteredCarriers.length);
     if (offerCount === 0) {
       continue;
     }
 
-    const offeringCarriers = pickOfferingCarriers(shipment, usableCarriers, offerCount);
+    const candidateCarriers = capabilityFilteredCarriers;
+
+    const offeringCarriers = pickOfferingCarriers(shipment, candidateCarriers, offerCount);
     const basePrice = Number(shipment.price ?? deriveBasePrice(shipment));
     const offersForShipment = offeringCarriers.map((carrier, index) => {
       const isAcceptedCarrier = shipment.carrierId === carrier.id;
@@ -183,4 +239,41 @@ function estimateDuration(shipment: Shipment): number {
   }
 
   return randomInt(2, 8);
+}
+
+function filterCarriersByCapabilities(
+  carriers: Carrier[],
+  loadType: ExtraServiceLoadType | null,
+  requiredExtraServiceIds: Set<string>,
+  loadTypeMapByCarrier: Map<string, Set<ExtraServiceLoadType>>,
+  extraCapabilityMap: Map<string, Set<string>>,
+): Carrier[] {
+  if (!loadType) {
+    return carriers;
+  }
+
+  return carriers.filter((carrier) => {
+    const loadTypes = loadTypeMapByCarrier.get(carrier.id);
+    if (!loadTypes || !loadTypes.has(loadType)) {
+      return false;
+    }
+
+    if (requiredExtraServiceIds.size === 0) {
+      return true;
+    }
+
+    const key = `${carrier.id}|${loadType}`;
+    const extraCapabilities = extraCapabilityMap.get(key);
+    if (!extraCapabilities) {
+      return false;
+    }
+
+    for (const extraServiceId of requiredExtraServiceIds) {
+      if (!extraCapabilities.has(extraServiceId)) {
+        return false;
+      }
+    }
+
+    return true;
+  });
 }
