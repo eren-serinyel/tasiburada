@@ -33,6 +33,15 @@ export class CarrierCapabilityModel1778000000000 implements MigrationInterface {
         "CREATE TABLE `carrier_load_type_capabilities` (`id` varchar(36) NOT NULL, `carrier_id` char(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL, `load_type` enum ('HOME', 'OFFICE', 'PARTIAL', 'STORAGE') NOT NULL, `is_active` tinyint NOT NULL DEFAULT 1, `created_at` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6), `updated_at` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6), UNIQUE INDEX `UQ_carrier_load_type_capabilities_carrier_load_type` (`carrier_id`, `load_type`), PRIMARY KEY (`id`)) ENGINE=InnoDB",
       );
     }
+
+    // Defensive cleanup for reruns on drifted databases.
+    await queryRunner.query(
+      `DELETE clc
+         FROM \`carrier_load_type_capabilities\` clc
+    LEFT JOIN \`carriers\` c ON c.\`id\` = clc.\`carrier_id\`
+        WHERE c.\`id\` IS NULL`,
+    );
+
     if (!(await this.constraintExists(queryRunner, 'FK_carrier_load_type_capabilities_carrier_id'))) {
       await queryRunner.query(
         'ALTER TABLE `carrier_load_type_capabilities` ADD CONSTRAINT `FK_carrier_load_type_capabilities_carrier_id` FOREIGN KEY (`carrier_id`) REFERENCES `carriers`(`id`) ON DELETE CASCADE ON UPDATE NO ACTION',
@@ -44,6 +53,21 @@ export class CarrierCapabilityModel1778000000000 implements MigrationInterface {
         "CREATE TABLE `carrier_extra_service_capabilities` (`id` varchar(36) NOT NULL, `carrier_id` char(36) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NOT NULL, `extra_service_id` varchar(36) NOT NULL, `load_type` enum ('HOME', 'OFFICE', 'PARTIAL', 'STORAGE') NOT NULL, `is_active` tinyint NOT NULL DEFAULT 1, `price_mode` enum ('NONE', 'FIXED', 'QUOTE') NULL, `base_price` decimal(10,2) NULL, `notes` varchar(500) NULL, `created_at` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6), `updated_at` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6), UNIQUE INDEX `UQ_carrier_extra_service_capabilities_scope` (`carrier_id`, `extra_service_id`, `load_type`), INDEX `IDX_carrier_extra_service_capabilities_load_type` (`load_type`), PRIMARY KEY (`id`)) ENGINE=InnoDB",
       );
     }
+
+    // Defensive cleanup for reruns on drifted databases.
+    await queryRunner.query(
+      `DELETE cesc
+         FROM \`carrier_extra_service_capabilities\` cesc
+    LEFT JOIN \`carriers\` c ON c.\`id\` = cesc.\`carrier_id\`
+    LEFT JOIN \`extra_services\` es ON es.\`id\` = cesc.\`extra_service_id\`
+    LEFT JOIN \`extra_service_applicability\` esa
+           ON esa.\`extra_service_id\` = cesc.\`extra_service_id\`
+          AND esa.\`load_type\` = cesc.\`load_type\`
+        WHERE c.\`id\` IS NULL
+           OR es.\`id\` IS NULL
+           OR esa.\`id\` IS NULL`,
+    );
+
     if (!(await this.constraintExists(queryRunner, 'FK_carrier_extra_service_capabilities_carrier_id'))) {
       await queryRunner.query(
         'ALTER TABLE `carrier_extra_service_capabilities` ADD CONSTRAINT `FK_carrier_extra_service_capabilities_carrier_id` FOREIGN KEY (`carrier_id`) REFERENCES `carriers`(`id`) ON DELETE CASCADE ON UPDATE NO ACTION',
@@ -63,53 +87,65 @@ export class CarrierCapabilityModel1778000000000 implements MigrationInterface {
     // Load type capability backfill from existing carrier service types.
     await queryRunner.query(
       `INSERT INTO \`carrier_load_type_capabilities\` (\`id\`, \`carrier_id\`, \`load_type\`, \`is_active\`)
-       SELECT UUID(), cst.\`carrierId\`, 'HOME', 1
-         FROM \`carrier_service_types\` cst
-         INNER JOIN \`service_types\` st ON st.\`id\` = cst.\`serviceTypeId\`
-        WHERE st.\`name\` IN ('Evden Eve Nakliyat', 'Şehir İçi Taşıma', 'Şehirlerarası Taşıma')
-          AND NOT EXISTS (
+       SELECT UUID(), src.\`carrier_id\`, 'HOME', 1
+         FROM (
+           SELECT DISTINCT cst.\`carrierId\` AS \`carrier_id\`
+             FROM \`carrier_service_types\` cst
+             INNER JOIN \`service_types\` st ON st.\`id\` = cst.\`serviceTypeId\`
+            WHERE st.\`name\` IN ('Evden Eve Nakliyat', 'Şehir İçi Taşıma', 'Şehirlerarası Taşıma')
+         ) src
+        WHERE NOT EXISTS (
             SELECT 1
               FROM \`carrier_load_type_capabilities\` clc
-             WHERE clc.\`carrier_id\` = cst.\`carrierId\`
+             WHERE clc.\`carrier_id\` = src.\`carrier_id\`
                AND clc.\`load_type\` = 'HOME'
           )`,
     );
     await queryRunner.query(
       `INSERT INTO \`carrier_load_type_capabilities\` (\`id\`, \`carrier_id\`, \`load_type\`, \`is_active\`)
-       SELECT UUID(), cst.\`carrierId\`, 'OFFICE', 1
-         FROM \`carrier_service_types\` cst
-         INNER JOIN \`service_types\` st ON st.\`id\` = cst.\`serviceTypeId\`
-        WHERE st.\`name\` = 'Ofis Taşıma'
-          AND NOT EXISTS (
+       SELECT UUID(), src.\`carrier_id\`, 'OFFICE', 1
+         FROM (
+           SELECT DISTINCT cst.\`carrierId\` AS \`carrier_id\`
+             FROM \`carrier_service_types\` cst
+             INNER JOIN \`service_types\` st ON st.\`id\` = cst.\`serviceTypeId\`
+            WHERE st.\`name\` = 'Ofis Taşıma'
+         ) src
+        WHERE NOT EXISTS (
             SELECT 1
               FROM \`carrier_load_type_capabilities\` clc
-             WHERE clc.\`carrier_id\` = cst.\`carrierId\`
+             WHERE clc.\`carrier_id\` = src.\`carrier_id\`
                AND clc.\`load_type\` = 'OFFICE'
           )`,
     );
     await queryRunner.query(
       `INSERT INTO \`carrier_load_type_capabilities\` (\`id\`, \`carrier_id\`, \`load_type\`, \`is_active\`)
-       SELECT UUID(), cst.\`carrierId\`, 'PARTIAL', 1
-         FROM \`carrier_service_types\` cst
-         INNER JOIN \`service_types\` st ON st.\`id\` = cst.\`serviceTypeId\`
-        WHERE st.\`name\` IN ('Parça Eşya Taşıma', 'Şehir İçi Taşıma', 'Şehirlerarası Taşıma')
-          AND NOT EXISTS (
+       SELECT UUID(), src.\`carrier_id\`, 'PARTIAL', 1
+         FROM (
+           SELECT DISTINCT cst.\`carrierId\` AS \`carrier_id\`
+             FROM \`carrier_service_types\` cst
+             INNER JOIN \`service_types\` st ON st.\`id\` = cst.\`serviceTypeId\`
+            WHERE st.\`name\` IN ('Parça Eşya Taşıma', 'Şehir İçi Taşıma', 'Şehirlerarası Taşıma')
+         ) src
+        WHERE NOT EXISTS (
             SELECT 1
               FROM \`carrier_load_type_capabilities\` clc
-             WHERE clc.\`carrier_id\` = cst.\`carrierId\`
+             WHERE clc.\`carrier_id\` = src.\`carrier_id\`
                AND clc.\`load_type\` = 'PARTIAL'
           )`,
     );
     await queryRunner.query(
       `INSERT INTO \`carrier_load_type_capabilities\` (\`id\`, \`carrier_id\`, \`load_type\`, \`is_active\`)
-       SELECT UUID(), cst.\`carrierId\`, 'STORAGE', 1
-         FROM \`carrier_service_types\` cst
-         INNER JOIN \`service_types\` st ON st.\`id\` = cst.\`serviceTypeId\`
-        WHERE st.\`name\` = 'Eşya Depolama'
-          AND NOT EXISTS (
+       SELECT UUID(), src.\`carrier_id\`, 'STORAGE', 1
+         FROM (
+           SELECT DISTINCT cst.\`carrierId\` AS \`carrier_id\`
+             FROM \`carrier_service_types\` cst
+             INNER JOIN \`service_types\` st ON st.\`id\` = cst.\`serviceTypeId\`
+            WHERE st.\`name\` = 'Eşya Depolama'
+         ) src
+        WHERE NOT EXISTS (
             SELECT 1
               FROM \`carrier_load_type_capabilities\` clc
-             WHERE clc.\`carrier_id\` = cst.\`carrierId\`
+             WHERE clc.\`carrier_id\` = src.\`carrier_id\`
                AND clc.\`load_type\` = 'STORAGE'
           )`,
     );
