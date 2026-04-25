@@ -1,4 +1,4 @@
-export { Carrier } from './Carrier';
+export { Carrier, CarrierApprovalState } from './Carrier';
 export { Customer } from './Customer';
 export { VehicleType } from './VehicleType';
 export { CarrierDocument } from './CarrierDocument';

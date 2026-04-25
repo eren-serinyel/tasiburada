@@ -9,6 +9,15 @@ import { CarrierSecuritySettings } from './CarrierSecuritySettings';
 import { CarrierServiceType } from './CarrierServiceType';
 import { CarrierScopeOfWork } from './CarrierScopeOfWork';
 
+export enum CarrierApprovalState {
+  DRAFT = 'DRAFT',
+  SUBMITTED = 'SUBMITTED',
+  IN_REVIEW = 'IN_REVIEW',
+  APPROVED = 'APPROVED',
+  REJECTED = 'REJECTED',
+  SUSPENDED = 'SUSPENDED',
+}
+
 @Entity('carriers')
 export class Carrier {
   @PrimaryGeneratedColumn('uuid')
@@ -61,6 +70,47 @@ export class Carrier {
 
   @Column({ name: 'pending_approval', type: 'boolean', default: false })
   pendingApproval: boolean;
+
+  @Column({
+    name: 'approval_state',
+    type: 'enum',
+    enum: CarrierApprovalState,
+    default: CarrierApprovalState.DRAFT,
+  })
+  approvalState: CarrierApprovalState;
+
+  @Column({ name: 'approval_version', type: 'int', default: 0 })
+  approvalVersion: number;
+
+  @Column({ name: 'resubmission_count', type: 'int', default: 0 })
+  resubmissionCount: number;
+
+  @Column({ name: 'last_rejected_at', type: 'datetime', nullable: true })
+  lastRejectedAt: Date | null;
+
+  @Column({ name: 'last_submitted_at', type: 'datetime', nullable: true })
+  lastSubmittedAt: Date | null;
+
+  @Column({ name: 'review_lock_admin_id', type: 'varchar', length: 36, nullable: true })
+  reviewLockAdminId: string | null;
+
+  @Column({ name: 'review_lock_expires_at', type: 'datetime', nullable: true })
+  reviewLockExpiresAt: Date | null;
+
+  @Column({ name: 'review_session_id', type: 'varchar', length: 36, nullable: true })
+  reviewSessionId: string | null;
+
+  @Column({ name: 'approval_readiness_cached', type: 'boolean', default: false })
+  approvalReadinessCached: boolean;
+
+  @Column({ name: 'approval_readiness_computed_at', type: 'datetime', nullable: true })
+  approvalReadinessComputedAt: Date | null;
+
+  @Column({ name: 'draft_revision', type: 'int', default: 0 })
+  draftRevision: number;
+
+  @Column({ name: 'last_reviewed_draft_revision', type: 'int', default: 0 })
+  lastReviewedDraftRevision: number;
 
   @Column({ type: 'int', default: 0 })
   documentCount: number;

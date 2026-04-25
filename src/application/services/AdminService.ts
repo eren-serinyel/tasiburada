@@ -1,5 +1,5 @@
 import { AppDataSource } from '../../infrastructure/database/data-source';
-import { Carrier } from '../../domain/entities/Carrier';
+import { Carrier, CarrierApprovalState } from '../../domain/entities/Carrier';
 import { Customer } from '../../domain/entities/Customer';
 import { Shipment, ShipmentStatus } from '../../domain/entities/Shipment';
 import { Review } from '../../domain/entities/Review';
@@ -9,16 +9,19 @@ import { Admin } from '../../domain/entities/Admin';
 import { PlatformSetting } from '../../domain/entities/PlatformSetting';
 import { AuditLogRepository } from '../../infrastructure/repositories/AuditLogRepository';
 import { NotificationService } from './NotificationService';
+import { CarrierApprovalService } from './carrier/CarrierApprovalService';
 import * as bcrypt from 'bcryptjs';
 import { ValidationError } from '../../domain/errors/AppError';
 
 export class AdminService {
   private auditLogRepository: AuditLogRepository;
   private notificationService: NotificationService;
+  private carrierApprovalService: CarrierApprovalService;
 
   constructor() {
     this.auditLogRepository = new AuditLogRepository();
     this.notificationService = new NotificationService();
+    this.carrierApprovalService = new CarrierApprovalService();
   }
 
   // ─── Dashboard ─────────────────────────────────────────────────────────────
@@ -45,8 +48,13 @@ export class AdminService {
     ] = await Promise.all([
       customerRepo.count(),
       carrierRepo.count(),
-      carrierRepo.count({ where: { verifiedByAdmin: true } }),
-      carrierRepo.count({ where: { verifiedByAdmin: false, hasUploadedDocuments: true } }),
+      carrierRepo.count({ where: { approvalState: CarrierApprovalState.APPROVED } }),
+      carrierRepo.count({
+        where: [
+          { approvalState: CarrierApprovalState.SUBMITTED },
+          { approvalState: CarrierApprovalState.IN_REVIEW },
+        ],
+      }),
       shipmentRepo.count(),
       shipmentRepo.count({ where: { status: ShipmentStatus.IN_TRANSIT } }),
       shipmentRepo.count({ where: { status: ShipmentStatus.COMPLETED } }),
@@ -83,17 +91,19 @@ export class AdminService {
   async getCarriers(params: { status?: string; page?: number; limit?: number; search?: string }) {
     const { status = 'all', page = 1, limit = 20, search } = params;
     const carrierRepo = AppDataSource.getRepository(Carrier);
+    await this.carrierApprovalService.selfHealExpiredLocks();
     const query = carrierRepo.createQueryBuilder('carrier');
 
     if (status === 'verified') {
-      query.andWhere('carrier.verifiedByAdmin = :v AND carrier.isActive = :a', { v: true, a: true });
+      query.andWhere('carrier.approvalState = :state', { state: CarrierApprovalState.APPROVED });
     } else if (status === 'pending') {
-      query.andWhere('carrier.verifiedByAdmin = :v AND carrier.hasUploadedDocuments = :d', {
-        v: false,
-        d: true,
+      query.andWhere('carrier.approvalState IN (:...states)', {
+        states: [CarrierApprovalState.SUBMITTED, CarrierApprovalState.IN_REVIEW],
       });
     } else if (status === 'rejected') {
-      query.andWhere('carrier.isActive = :a AND carrier.verifiedByAdmin = :v', { a: false, v: false });
+      query.andWhere('carrier.approvalState IN (:...states)', {
+        states: [CarrierApprovalState.REJECTED, CarrierApprovalState.SUSPENDED],
+      });
     }
 
     if (search) {
@@ -114,6 +124,7 @@ export class AdminService {
 
   async getCarrierById(carrierId: string) {
     const carrierRepo = AppDataSource.getRepository(Carrier);
+    await this.carrierApprovalService.selfHealExpiredLocks(carrierId);
     const carrier = await carrierRepo.findOne({
       where: { id: carrierId },
       relations: ['documents', 'carrierVehicles'],
@@ -130,21 +141,34 @@ export class AdminService {
     rejectionReason?: string
   ) {
     const carrierRepo = AppDataSource.getRepository(Carrier);
+    await this.carrierApprovalService.selfHealExpiredLocks(carrierId);
     const carrier = await carrierRepo.findOne({ where: { id: carrierId } });
     if (!carrier) throw new Error('Nakliyeci bulunamadı.');
 
-    await carrierRepo.update(carrierId, {
-      verifiedByAdmin: approved,
-      isActive: approved,
-    });
+    if (carrier.approvalState === CarrierApprovalState.SUBMITTED) {
+      await this.carrierApprovalService.claimForReview(adminId, carrierId);
+    } else if (
+      carrier.approvalState !== CarrierApprovalState.IN_REVIEW &&
+      !(approved === false && carrier.approvalState === CarrierApprovalState.APPROVED)
+    ) {
+      throw new ValidationError('Nakliyeci karar verilebilir durumda deÄŸil.');
+    }
 
-    await this.auditLogRepository.log({
-      adminId,
-      action: approved ? 'CARRIER_VERIFIED' : 'CARRIER_REJECTED',
-      targetType: 'carrier',
-      targetId: carrierId,
-      details: { approved, rejectionReason: rejectionReason || null, carrierEmail: carrier.email },
-    });
+    if (approved) {
+      await this.carrierApprovalService.approve(adminId, carrierId);
+    } else if (carrier.approvalState === CarrierApprovalState.APPROVED) {
+      await this.carrierApprovalService.suspend(
+        adminId,
+        carrierId,
+        rejectionReason || 'Legacy verify endpoint rejection',
+      );
+    } else {
+      await this.carrierApprovalService.reject(
+        adminId,
+        carrierId,
+        rejectionReason || 'Legacy verify endpoint rejection',
+      );
+    }
 
     return { success: true, approved };
   }
@@ -806,7 +830,7 @@ export class AdminService {
   async getTopCarriers(limit: number = 10) {
     const carrierRepo = AppDataSource.getRepository(Carrier);
     const carriers = await carrierRepo.createQueryBuilder('c')
-      .select(['c.id', 'c.companyName', 'c.rating', 'c.completedShipments', 'c.email', 'c.verifiedByAdmin'])
+      .select(['c.id', 'c.companyName', 'c.rating', 'c.completedShipments', 'c.email', 'c.approvalState'])
       .orderBy('c.completedShipments', 'DESC')
       .take(limit)
       .getMany();
@@ -817,7 +841,7 @@ export class AdminService {
       email: c.email,
       rating: Number(c.rating || 0),
       completedShipments: c.completedShipments || 0,
-      verified: c.verifiedByAdmin,
+      verified: c.approvalState === CarrierApprovalState.APPROVED,
     }));
   }
 
