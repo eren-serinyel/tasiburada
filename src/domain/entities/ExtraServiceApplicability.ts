@@ -9,13 +9,8 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { ExtraService } from './ExtraService';
-
-export enum ExtraServiceLoadType {
-  HOME = 'HOME',
-  OFFICE = 'OFFICE',
-  PARTIAL = 'PARTIAL',
-  STORAGE = 'STORAGE',
-}
+import { ExtraServiceLoadType } from './ExtraServiceLoadType';
+export { ExtraServiceLoadType } from './ExtraServiceLoadType';
 
 @Entity('extra_service_applicability')
 @Index('UQ_extra_service_applicability_service_load_type', ['extraServiceId', 'loadType'], { unique: true })

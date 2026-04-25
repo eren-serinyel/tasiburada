@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { CarrierAuthController } from '../controllers/CarrierAuthController';
 import { CarrierProfileController } from '../controllers/CarrierProfileController';
+import { CarrierCapabilityController } from '../controllers/CarrierCapabilityController';
 import { CarrierDocumentController } from '../controllers/CarrierDocumentController';
 import { authenticateCarrier } from '../middleware/auth';
 import { CarrierSearchController } from '../controllers/CarrierSearchController';
@@ -15,6 +16,7 @@ import { approvalSubmitLimiter, authLimiter } from '../middleware/rateLimiter';
 const router = Router();
 const authController = new CarrierAuthController();
 const profileController = new CarrierProfileController();
+const capabilityController = new CarrierCapabilityController();
 const documentController = new CarrierDocumentController();
 const searchController = new CarrierSearchController();
 const detailController = new CarrierDetailController();
@@ -41,6 +43,7 @@ router.get('/me/profile-status', authenticateCarrier, profileController.getProfi
 router.put('/me/profile-status', authenticateCarrier, profileController.refreshProfileStatus);
 router.post('/me/submit-for-approval', authenticateCarrier, approvalSubmitLimiter, profileController.submitForApproval);
 router.put('/me/company-info', authenticateCarrier, profileController.updateCompanyInfo);
+router.get('/me/capabilities', authenticateCarrier, capabilityController.getMyCapabilities);
 router.get('/me/activity', authenticateCarrier, profileController.getActivityInfo);
 router.put('/me/activity', authenticateCarrier, profileController.updateActivityInfo);
 router.put('/me/vehicle-types', authenticateCarrier, profileController.updateVehicleTypes);

@@ -11,6 +11,7 @@ import { CarrierServiceTypeService } from '../../application/services/carrier/Ca
 import { CarrierProfileStatusService } from '../../application/services/carrier/CarrierProfileStatusService';
 import { CarrierScopeOfWorkService } from '../../application/services/carrier/CarrierScopeOfWorkService';
 import { CarrierApprovalService } from '../../application/services/carrier/CarrierApprovalService';
+import { CarrierCapabilityService } from '../../application/services/carrier/CarrierCapabilityService';
 
 export class CarrierProfileController {
   private companyInfoService = new CarrierCompanyInfoService();
@@ -25,6 +26,7 @@ export class CarrierProfileController {
   private profileQueryService = new CarrierProfileQueryService();
   private profileStatusService = new CarrierProfileStatusService();
   private approvalService = new CarrierApprovalService();
+  private capabilityService = new CarrierCapabilityService();
 
   private ensureCarrier(req: Request, res: Response): string | null {
     if (!req.carrierId) {

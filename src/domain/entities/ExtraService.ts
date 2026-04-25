@@ -1,5 +1,6 @@
 import { Entity, PrimaryGeneratedColumn, Column, OneToMany } from 'typeorm';
 import { ExtraServiceApplicability } from './ExtraServiceApplicability';
+import { CarrierExtraServiceCapability } from './CarrierExtraServiceCapability';
 
 @Entity('extra_services')
 export class ExtraService {
@@ -20,4 +21,7 @@ export class ExtraService {
 
   @OneToMany(() => ExtraServiceApplicability, (rule) => rule.extraService)
   applicabilityRules: ExtraServiceApplicability[];
+
+  @OneToMany(() => CarrierExtraServiceCapability, (capability) => capability.extraService)
+  carrierCapabilities: CarrierExtraServiceCapability[];
 }

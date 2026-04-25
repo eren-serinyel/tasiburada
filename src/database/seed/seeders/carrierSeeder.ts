@@ -1,5 +1,6 @@
 import { AppDataSource } from '../../../infrastructure/database/data-source';
 import fs from 'node:fs';
+import { Repository } from 'typeorm';
 import { Carrier } from '../../../domain/entities/Carrier';
 import { CarrierVehicle } from '../../../domain/entities/CarrierVehicle';
 import { CarrierVehicleType } from '../../../domain/entities/CarrierVehicleType';
@@ -18,6 +19,13 @@ import { CarrierSecuritySettings } from '../../../domain/entities/CarrierSecurit
 import { VehicleType } from '../../../domain/entities/VehicleType';
 import { ServiceType } from '../../../domain/entities/ServiceType';
 import { ScopeOfWork } from '../../../domain/entities/ScopeOfWork';
+import { ExtraService } from '../../../domain/entities/ExtraService';
+import { ExtraServiceLoadType } from '../../../domain/entities/ExtraServiceApplicability';
+import { CarrierLoadTypeCapability } from '../../../domain/entities/CarrierLoadTypeCapability';
+import {
+  CarrierExtraServiceCapability,
+  CarrierExtraServicePriceMode,
+} from '../../../domain/entities/CarrierExtraServiceCapability';
 import { CARRIER_COMPANIES } from '../data/constants';
 import {
   ensureSeedDocumentsDirectory,
@@ -74,6 +82,13 @@ export async function seedCarriers(
   const statsRepo = AppDataSource.getRepository(CarrierStats);
   const earningsRepo = AppDataSource.getRepository(CarrierEarnings);
   const securityRepo = AppDataSource.getRepository(CarrierSecuritySettings);
+  const loadTypeCapabilityRepo = AppDataSource.getRepository(CarrierLoadTypeCapability);
+  const extraCapabilityRepo = AppDataSource.getRepository(CarrierExtraServiceCapability);
+  const extraServiceRepo = AppDataSource.getRepository(ExtraService);
+  const extraServices = await extraServiceRepo.find({
+    where: { status: 'ACTIVE' },
+    relations: ['applicabilityRules'],
+  });
   ensureSeedDocumentsDirectory();
 
   const serviceTypeNames = Object.keys(serviceTypeMap);
@@ -157,6 +172,14 @@ export async function seedCarriers(
     });
 
     const savedCarrier = await carrierRepo.save(carrier);
+
+    await seedCarrierCapabilitiesForTier(
+      savedCarrier.id,
+      tierProfile,
+      extraServices,
+      loadTypeCapabilityRepo,
+      extraCapabilityRepo,
+    );
 
     // Security Settings Guarantee (Adım 6)
     await securityRepo.save(securityRepo.create({
@@ -398,4 +421,134 @@ function formatDateOnly(date: Date): string {
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
+}
+
+function resolveLoadTypesForTier(tier: CarrierTierProfile['tier']): ExtraServiceLoadType[] {
+  const universe = [
+    ExtraServiceLoadType.HOME,
+    ExtraServiceLoadType.OFFICE,
+    ExtraServiceLoadType.PARTIAL,
+    ExtraServiceLoadType.STORAGE,
+  ];
+
+  if (tier === 'elite') {
+    return universe;
+  }
+
+  if (tier === 'established') {
+    const selected = [ExtraServiceLoadType.HOME, ExtraServiceLoadType.PARTIAL];
+    if (chance(0.8)) selected.push(ExtraServiceLoadType.OFFICE);
+    if (chance(0.65)) selected.push(ExtraServiceLoadType.STORAGE);
+    return selected;
+  }
+
+  if (tier === 'growing') {
+    const selected = [ExtraServiceLoadType.HOME];
+    if (chance(0.8)) selected.push(ExtraServiceLoadType.PARTIAL);
+    if (chance(0.55)) selected.push(ExtraServiceLoadType.OFFICE);
+    if (chance(0.35)) selected.push(ExtraServiceLoadType.STORAGE);
+    return selected;
+  }
+
+  if (tier === 'new') {
+    const selected: ExtraServiceLoadType[] = [];
+    if (chance(0.8)) selected.push(ExtraServiceLoadType.HOME);
+    if (chance(0.6)) selected.push(ExtraServiceLoadType.PARTIAL);
+    if (chance(0.35)) selected.push(ExtraServiceLoadType.OFFICE);
+    if (chance(0.2)) selected.push(ExtraServiceLoadType.STORAGE);
+    return selected.length > 0 ? selected : [ExtraServiceLoadType.HOME];
+  }
+
+  const onboarding: ExtraServiceLoadType[] = [];
+  if (chance(0.45)) onboarding.push(randomFrom(universe));
+  return onboarding;
+}
+
+function resolveExtraCapabilityCoverage(tier: CarrierTierProfile['tier']): number {
+  if (tier === 'elite') return 0.92;
+  if (tier === 'established') return 0.8;
+  if (tier === 'growing') return 0.62;
+  if (tier === 'new') return 0.45;
+  return 0.2;
+}
+
+function resolvePriceModeForCapability(tier: CarrierTierProfile['tier']): CarrierExtraServicePriceMode {
+  if (tier === 'elite' || tier === 'established') {
+    return chance(0.35) ? CarrierExtraServicePriceMode.FIXED : CarrierExtraServicePriceMode.QUOTE;
+  }
+
+  if (tier === 'growing') {
+    return chance(0.2) ? CarrierExtraServicePriceMode.FIXED : CarrierExtraServicePriceMode.QUOTE;
+  }
+
+  if (tier === 'new') {
+    return chance(0.1) ? CarrierExtraServicePriceMode.FIXED : CarrierExtraServicePriceMode.QUOTE;
+  }
+
+  return CarrierExtraServicePriceMode.NONE;
+}
+
+async function seedCarrierCapabilitiesForTier(
+  carrierId: string,
+  tierProfile: CarrierTierProfile,
+  extraServices: ExtraService[],
+  loadTypeCapabilityRepo: Repository<CarrierLoadTypeCapability>,
+  extraCapabilityRepo: Repository<CarrierExtraServiceCapability>,
+): Promise<void> {
+  const loadTypes = resolveLoadTypesForTier(tierProfile.tier);
+  if (loadTypes.length === 0) {
+    return;
+  }
+
+  const loadTypeCapabilities = loadTypes.map((loadType) =>
+    loadTypeCapabilityRepo.create({
+      carrierId,
+      loadType,
+      isActive: true,
+    }),
+  );
+  await loadTypeCapabilityRepo.save(loadTypeCapabilities);
+
+  const coverage = resolveExtraCapabilityCoverage(tierProfile.tier);
+  const createdCapabilities: CarrierExtraServiceCapability[] = [];
+
+  for (const loadType of loadTypes) {
+    const applicableServices = extraServices.filter((service) =>
+      (service.applicabilityRules ?? []).some((rule) => rule.loadType === loadType),
+    );
+    if (applicableServices.length === 0) continue;
+
+    const selected = applicableServices.filter((service) => {
+      const rule = (service.applicabilityRules ?? []).find((entry) => entry.loadType === loadType);
+      if (!rule) return false;
+      if (rule.isRecommendedByConverter) return chance(Math.min(0.98, coverage + 0.22));
+      if (rule.isDefaultVisible) return chance(coverage);
+      return chance(Math.max(0.18, coverage - 0.22));
+    });
+
+    if (selected.length === 0) {
+      selected.push(randomFrom(applicableServices));
+    }
+
+    for (const service of selected) {
+      const priceMode = resolvePriceModeForCapability(tierProfile.tier);
+      const basePrice = priceMode === CarrierExtraServicePriceMode.FIXED
+        ? randomFloat(250, 3500)
+        : null;
+
+      createdCapabilities.push(extraCapabilityRepo.create({
+        carrierId,
+        extraServiceId: service.id,
+        loadType,
+        isActive: true,
+        priceMode,
+        basePrice,
+        notes: null,
+      }));
+    }
+  }
+
+  if (createdCapabilities.length > 0) {
+    await extraCapabilityRepo.save(createdCapabilities);
+  }
 }

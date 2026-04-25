@@ -4,6 +4,7 @@ import { testApp } from './helpers/testApp';
 import { seedExtraServices } from '../database/seed/seeders/extraServiceSeeder';
 import { ExtraService, ExtraServiceApplicability, ExtraServiceLoadType } from '../domain/entities';
 import { ConverterService } from '../application/services/ConverterService';
+import { Carrier } from '../domain/entities/Carrier';
 
 const { reconcileSelectedExtraServiceIds } = require('../../shadcn-ui/src/lib/extraServices');
 
@@ -90,5 +91,108 @@ describe('extra service applicability', () => {
     expect(officeOnlyNames).toContain('Server/IT özel taşıma');
     expect(officeOnlyNames).not.toContain('Beyaz Eşya Kurulumu');
     expect(await AppDataSource.getRepository(ExtraServiceApplicability).count()).toBeGreaterThan(0);
+  });
+
+  test('shipment create OFFICE loadType icin gecersiz extra service secimini reddeder', async () => {
+    if (skipDB()) return;
+
+    const login = await request(testApp)
+      .post('/api/v1/customers/login')
+      .send({ email: 'ahmet.yilmaz0@gmail.com', password: 'Maviface2141' });
+
+    expect(login.status).toBe(200);
+    const token = login.body.data?.token;
+    expect(token).toBeTruthy();
+
+    const response = await request(testApp)
+      .post('/api/v1/shipments')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        origin: 'Trabzon, Ortahisar',
+        destination: 'Samsun, Atakum',
+        loadDetails: 'Ofis mobilyalari ve evrak klasorleri tasinacak.',
+        shipmentDate: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),
+        shipmentCategory: 'OFFICE_MOVE',
+        extraServices: ['Beyaz Eşya Kurulumu'],
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.success).toBe(false);
+  });
+
+  test('carrier capability yoksa teklif veremez', async () => {
+    if (skipDB()) return;
+
+    let hasCapabilityTables = true;
+    try {
+      await AppDataSource.query('SELECT 1 FROM `carrier_load_type_capabilities` LIMIT 1');
+      await AppDataSource.query('SELECT 1 FROM `carrier_extra_service_capabilities` LIMIT 1');
+    } catch {
+      hasCapabilityTables = false;
+    }
+
+    if (!hasCapabilityTables) return;
+
+    const customerLogin = await request(testApp)
+      .post('/api/v1/customers/login')
+      .send({ email: 'ahmet.yilmaz0@gmail.com', password: 'Maviface2141' });
+    const carrierLogin = await request(testApp)
+      .post('/api/v1/carriers/login')
+      .send({ email: 'info@silenakliyat.com', password: 'Maviface2141' });
+
+    expect(customerLogin.status).toBe(200);
+    expect(carrierLogin.status).toBe(200);
+
+    const customerToken = customerLogin.body.data?.token;
+    const carrierToken = carrierLogin.body.data?.token;
+    expect(customerToken).toBeTruthy();
+    expect(carrierToken).toBeTruthy();
+
+    const carrier = await AppDataSource.getRepository(Carrier).findOne({
+      where: { email: 'info@silenakliyat.com' },
+    });
+    const homeService = await AppDataSource.getRepository(ExtraService).findOne({
+      where: { name: 'Beyaz Eşya Kurulumu' },
+    });
+
+    expect(carrier).toBeTruthy();
+    expect(homeService).toBeTruthy();
+
+    await AppDataSource.query(
+      'DELETE FROM `carrier_extra_service_capabilities` WHERE `carrier_id` = ? AND `load_type` = ? AND `extra_service_id` = ?',
+      [carrier!.id, ExtraServiceLoadType.HOME, homeService!.id],
+    );
+    await AppDataSource.query(
+      'DELETE FROM `carrier_load_type_capabilities` WHERE `carrier_id` = ? AND `load_type` = ?',
+      [carrier!.id, ExtraServiceLoadType.HOME],
+    );
+
+    const shipmentCreate = await request(testApp)
+      .post('/api/v1/shipments')
+      .set('Authorization', `Bearer ${customerToken}`)
+      .send({
+        origin: 'Balıkesir, Karesi',
+        destination: 'Kocaeli, İzmit',
+        loadDetails: 'Beyaz esya ve mutfak urunleri tasinacak.',
+        shipmentDate: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
+        shipmentCategory: 'HOME_MOVE',
+        extraServices: ['Beyaz Eşya Kurulumu'],
+      });
+
+    expect(shipmentCreate.status).toBe(201);
+    const shipmentId = shipmentCreate.body.data?.id;
+    expect(shipmentId).toBeTruthy();
+
+    const offerResponse = await request(testApp)
+      .post('/api/v1/offers')
+      .set('Authorization', `Bearer ${carrierToken}`)
+      .send({
+        shipmentId,
+        price: 6500,
+        message: 'Planlanan tarihte hizmet verebiliriz.',
+      });
+
+    expect(offerResponse.status).toBe(403);
+    expect(offerResponse.body.success).toBe(false);
   });
 });

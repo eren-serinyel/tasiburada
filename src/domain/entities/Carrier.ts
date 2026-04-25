@@ -8,6 +8,8 @@ import { CarrierActivity } from './CarrierActivity';
 import { CarrierSecuritySettings } from './CarrierSecuritySettings';
 import { CarrierServiceType } from './CarrierServiceType';
 import { CarrierScopeOfWork } from './CarrierScopeOfWork';
+import { CarrierLoadTypeCapability } from './CarrierLoadTypeCapability';
+import { CarrierExtraServiceCapability } from './CarrierExtraServiceCapability';
 
 export enum CarrierApprovalState {
   DRAFT = 'DRAFT',
@@ -181,4 +183,10 @@ export class Carrier {
 
   @OneToOne(() => CarrierSecuritySettings, security => security.carrier)
   securitySettings: CarrierSecuritySettings;
+
+  @OneToMany(() => CarrierLoadTypeCapability, capability => capability.carrier)
+  loadTypeCapabilities: CarrierLoadTypeCapability[];
+
+  @OneToMany(() => CarrierExtraServiceCapability, capability => capability.carrier)
+  extraServiceCapabilities: CarrierExtraServiceCapability[];
 }

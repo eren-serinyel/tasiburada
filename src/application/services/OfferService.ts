@@ -10,6 +10,9 @@ import { AppDataSource } from '../../infrastructure/database/data-source';
 import { PlatformSetting } from '../../domain/entities/PlatformSetting';
 import { PlatformPolicyService } from './PlatformPolicyService';
 import { ContactFilterSurface } from '../../domain/entities';
+import { CarrierLoadTypeCapability } from '../../domain/entities/CarrierLoadTypeCapability';
+import { CarrierExtraServiceCapability } from '../../domain/entities/CarrierExtraServiceCapability';
+import { inferExtraServiceLoadTypeFromShipmentCategory } from './extra-services/extraServiceApplicability';
 
 interface CreateOfferPayload {
   shipmentId: string;
@@ -60,6 +63,48 @@ export class OfferService {
     return sanitized;
   }
 
+  private async assertCarrierCapabilityForShipment(carrierId: string, shipment: Shipment): Promise<void> {
+    const loadType = inferExtraServiceLoadTypeFromShipmentCategory(shipment.shipmentCategory);
+    if (!loadType) {
+      return;
+    }
+
+    const loadTypeCapability = await AppDataSource.getRepository(CarrierLoadTypeCapability).findOne({
+      where: {
+        carrierId,
+        loadType,
+        isActive: true,
+      },
+    });
+
+    if (!loadTypeCapability) {
+      throw new ForbiddenError(`Bu yuk turu icin teklif veremezsiniz. loadType=${loadType}`);
+    }
+
+    const extraServices = Array.isArray(shipment.extraServices) ? shipment.extraServices : [];
+    if (extraServices.length === 0) {
+      return;
+    }
+
+    const extraServiceIds = extraServices.map((item) => item.id);
+    const capabilities = await AppDataSource.getRepository(CarrierExtraServiceCapability)
+      .createQueryBuilder('capability')
+      .where('capability.carrierId = :carrierId', { carrierId })
+      .andWhere('capability.loadType = :loadType', { loadType })
+      .andWhere('capability.isActive = :isActive', { isActive: true })
+      .andWhere('capability.extraServiceId IN (:...extraServiceIds)', { extraServiceIds })
+      .getMany();
+
+    const capableIds = new Set(capabilities.map((item) => item.extraServiceId));
+    const missingExtraServiceNames = extraServices
+      .filter((item) => !capableIds.has(item.id))
+      .map((item) => item.name);
+
+    if (missingExtraServiceNames.length > 0) {
+      throw new ForbiddenError(`Bu ilandaki ek hizmetler icin yetkiniz yok: ${missingExtraServiceNames.join(', ')}`);
+    }
+  }
+
   async createOffer(carrierId: string, payload: CreateOfferPayload): Promise<{ offer: Offer, isNew: boolean, warnings?: any[] }> {
     if (!payload.shipmentId || typeof payload.price !== 'number') {
       throw new ValidationError('shipmentId ve price alanları zorunludur.');
@@ -77,7 +122,9 @@ export class OfferService {
       throw new ValidationError(`Teklif fiyatı platform minimum tutarının (${minPrice} TL) altında olamaz.`);
     }
 
-    const shipment = await this.shipmentRepository.findById(payload.shipmentId);
+    const shipment = await this.shipmentRepository.findById(payload.shipmentId, {
+      relations: ['extraServices'],
+    });
     if (!shipment) {
       throw new NotFoundError('Taşıma talebi bulunamadı.');
     }
@@ -90,6 +137,8 @@ export class OfferService {
     if (shipment.status !== ShipmentStatus.PENDING && shipment.status !== ShipmentStatus.OFFER_RECEIVED) {
       throw new ValidationError('Sadece teklif almaya açık taşıma taleplerine teklif verilebilir.');
     }
+
+    await this.assertCarrierCapabilityForShipment(carrierId, shipment);
 
     await this.platformPolicy.enforceNoContactInfo({
       actorType: 'carrier',

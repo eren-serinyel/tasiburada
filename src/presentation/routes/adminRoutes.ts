@@ -1,11 +1,13 @@
 import { Router } from 'express';
 import { AdminAuthController } from '../controllers/AdminAuthController';
 import { AdminController } from '../controllers/AdminController';
+import { CarrierCapabilityController } from '../controllers/CarrierCapabilityController';
 import { authenticateAdmin, requireSuperadmin } from '../middleware/auth';
 
 const router = Router();
 const authController = new AdminAuthController();
 const adminController = new AdminController();
+const capabilityController = new CarrierCapabilityController();
 
 // ─── Public ────────────────────────────────────────────────────────────────
 router.post('/login', authController.login);
@@ -33,6 +35,8 @@ router.post('/carriers/:carrierId/approval/suspend', adminController.suspendCarr
 router.get('/carriers/:carrierId/documents', adminController.getCarrierDocuments);
 router.get('/carriers/:carrierId/shipments', adminController.getCarrierShipments);
 router.get('/carriers/:carrierId/reviews', adminController.getCarrierReviews);
+router.get('/carriers/:carrierId/capabilities', capabilityController.getCarrierCapabilities);
+router.put('/carriers/:carrierId/capabilities', capabilityController.updateCarrierCapability);
 
 // Customers
 router.get('/customers', adminController.getCustomers);

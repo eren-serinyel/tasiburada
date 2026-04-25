@@ -107,6 +107,36 @@ const NOTE_TEMPLATES = [
   'Depo alanına giriş için yarım saat önce aranması yeterli.',
 ];
 
+const EXTRA_SERVICE_ATTACH_PROBABILITY: Record<ExtraServiceLoadType, number> = {
+  [ExtraServiceLoadType.HOME]: 0.68,
+  [ExtraServiceLoadType.OFFICE]: 0.74,
+  [ExtraServiceLoadType.PARTIAL]: 0.36,
+  [ExtraServiceLoadType.STORAGE]: 0.27,
+};
+
+const EXTRA_SERVICE_COUNT_WEIGHTS: Record<ExtraServiceLoadType, Array<{ count: number; weight: number }>> = {
+  [ExtraServiceLoadType.HOME]: [
+    { count: 1, weight: 45 },
+    { count: 2, weight: 35 },
+    { count: 3, weight: 20 },
+  ],
+  [ExtraServiceLoadType.OFFICE]: [
+    { count: 1, weight: 30 },
+    { count: 2, weight: 40 },
+    { count: 3, weight: 30 },
+  ],
+  [ExtraServiceLoadType.PARTIAL]: [
+    { count: 1, weight: 65 },
+    { count: 2, weight: 30 },
+    { count: 3, weight: 5 },
+  ],
+  [ExtraServiceLoadType.STORAGE]: [
+    { count: 1, weight: 70 },
+    { count: 2, weight: 25 },
+    { count: 3, weight: 5 },
+  ],
+};
+
 export async function seedShipments(
   customers: Customer[],
   carriers: Carrier[],
@@ -192,13 +222,11 @@ export async function seedShipments(
     const [originPlaceType, destinationPlaceType] = randomFrom(PLACE_TYPE_GROUPS[category]);
     const originFloor = randomFloor(originPlaceType);
     const destinationFloor = randomFloor(destinationPlaceType);
-    const shouldHaveExtras = chance(0.4);
+    const loadType = inferExtraServiceLoadTypeFromShipmentCategory(category);
     const applicableExtraServices = extraServiceEntities.filter((extraService) =>
-      matchesApplicability(extraService, inferExtraServiceLoadTypeFromShipmentCategory(category)),
+      matchesApplicability(extraService, loadType),
     );
-    const extraServices = shouldHaveExtras && applicableExtraServices.length > 0
-      ? pickRandom(applicableExtraServices, randomInt(1, Math.min(3, applicableExtraServices.length)))
-      : [];
+    const extraServices = pickRealisticExtraServices(applicableExtraServices, loadType);
     const weight = randomWeight(category);
     const estimatedWeight = chance(0.8) ? Math.round(weight * randomFloat(0.9, 1.15)) : null;
     const insuranceType = weightedInsuranceType();
@@ -403,4 +431,57 @@ function matchesApplicability(extraService: ExtraService & { applicabilityRules?
     return true;
   }
   return extraService.applicabilityRules.some((rule) => rule.loadType === loadType);
+}
+
+function pickRealisticExtraServices(
+  applicableServices: Array<ExtraService & { applicabilityRules?: Array<{ loadType: ExtraServiceLoadType; isRecommendedByConverter?: boolean; isDefaultVisible?: boolean }> }>,
+  loadType: ExtraServiceLoadType | null,
+): ExtraService[] {
+  if (!loadType || applicableServices.length === 0) {
+    return [];
+  }
+
+  const shouldAttach = chance(EXTRA_SERVICE_ATTACH_PROBABILITY[loadType]);
+  if (!shouldAttach) {
+    return [];
+  }
+
+  const targetCount = weightedCount(EXTRA_SERVICE_COUNT_WEIGHTS[loadType]);
+  const weightedPool = applicableServices.flatMap((service) => {
+    const rule = (service.applicabilityRules ?? []).find((entry) => entry.loadType === loadType);
+    const multiplier = rule?.isRecommendedByConverter
+      ? 3
+      : rule?.isDefaultVisible
+        ? 2
+        : 1;
+    return Array.from({ length: multiplier }, () => service);
+  });
+
+  const selectedById = new Map<string, ExtraService>();
+  const attempts = Math.max(8, targetCount * 6);
+
+  for (let index = 0; index < attempts && selectedById.size < targetCount; index += 1) {
+    const picked = randomFrom(weightedPool);
+    selectedById.set(picked.id, picked);
+  }
+
+  if (selectedById.size === 0) {
+    selectedById.set(applicableServices[0].id, applicableServices[0]);
+  }
+
+  return Array.from(selectedById.values()).slice(0, Math.min(targetCount, applicableServices.length));
+}
+
+function weightedCount(options: Array<{ count: number; weight: number }>): number {
+  const totalWeight = options.reduce((sum, option) => sum + option.weight, 0);
+  let cursor = Math.random() * totalWeight;
+
+  for (const option of options) {
+    cursor -= option.weight;
+    if (cursor <= 0) {
+      return option.count;
+    }
+  }
+
+  return options[0].count;
 }
