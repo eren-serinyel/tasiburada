@@ -9,6 +9,8 @@ import {
   ConverterSession,
   ConverterSessionStatus,
   ConverterVehicleRule,
+  ExtraService,
+  ExtraServiceLoadType,
   Shipment,
   ShipmentStatus,
   VehicleType,
@@ -38,6 +40,57 @@ export class ConverterService {
   private vehicleRuleRepo = AppDataSource.getRepository(ConverterVehicleRule);
   private shipmentRepo = AppDataSource.getRepository(Shipment);
   private vehicleTypeRepo = AppDataSource.getRepository(VehicleType);
+  private extraServiceRepo = AppDataSource.getRepository(ExtraService);
+
+  private inferConverterLoadType(payload: Pick<EstimateConverterRequestDto, 'loadType' | 'moveType'>): ExtraServiceLoadType {
+    if (payload.loadType) {
+      return payload.loadType as ExtraServiceLoadType;
+    }
+
+    return payload.moveType === 'partial_load'
+      ? ExtraServiceLoadType.PARTIAL
+      : ExtraServiceLoadType.HOME;
+  }
+
+  private async buildSuggestedExtraServiceIds(
+    payload: EstimateConverterRequestDto,
+    estimatedVolumeMax: number,
+  ): Promise<string[]> {
+    const loadType = this.inferConverterLoadType(payload);
+    const suggestedNames = new Set<string>();
+    const totalItemCount = payload.items.reduce((sum, item) => sum + item.quantity, 0);
+    const highFloorWithoutLift = Math.max(payload.originFloor, payload.destinationFloor) >= 4
+      && !payload.buildingElevator
+      && !payload.externalLift;
+
+    if (highFloorWithoutLift && [ExtraServiceLoadType.HOME, ExtraServiceLoadType.OFFICE].includes(loadType)) {
+      suggestedNames.add('Asansörlü Taşıma');
+      suggestedNames.add('Kat arası taşıma');
+    }
+
+    if ((payload.specialItems?.length ?? 0) > 0 || totalItemCount >= 8 || estimatedVolumeMax >= 20) {
+      suggestedNames.add('Profesyonel Paketleme');
+    }
+
+    if (loadType === ExtraServiceLoadType.OFFICE) {
+      suggestedNames.add('Server/IT özel taşıma');
+    }
+
+    if (suggestedNames.size === 0) {
+      return [];
+    }
+
+    const services = await this.extraServiceRepo
+      .createQueryBuilder('extraService')
+      .innerJoin('extraService.applicabilityRules', 'applicability', 'applicability.loadType = :loadType', { loadType })
+      .where('extraService.status = :status', { status: 'ACTIVE' })
+      .andWhere('extraService.name IN (:...names)', { names: Array.from(suggestedNames) })
+      .orderBy('applicability.sortOrder', 'ASC')
+      .addOrderBy('extraService.sortOrder', 'ASC')
+      .getMany();
+
+    return services.map((service) => service.id);
+  }
 
   async createSession(userId: string | null, payload: CreateConverterSessionRequestDto) {
     const session: ConverterSession = this.sessionRepo.create({
@@ -142,6 +195,7 @@ export class ConverterService {
     const manualReviewRecommended = confidence === ConverterConfidence.LOW && (hasSpecialItems || payload.items.length < 2);
     const summaryText = `Tahmini hacim bandı ${estimatedVolumeMin}-${estimatedVolumeMax} m3 aralığında görünüyor. Nihai planlama keşif ve taşıyıcı değerlendirmesiyle netleşir.`;
 
+    const suggestedExtraServiceIds = await this.buildSuggestedExtraServiceIds(payload, estimatedVolumeMax);
     let answer = await this.answerRepo.findOne({ where: { sessionId: session.id } });
     if (!answer) {
       answer = this.answerRepo.create({ sessionId: session.id } as Partial<ConverterAnswer>);
@@ -183,6 +237,7 @@ export class ConverterService {
       warnings,
       summaryText,
       manualReviewRecommended,
+      suggestedExtraServiceIds,
     };
   }
 
@@ -204,6 +259,11 @@ export class ConverterService {
       this.answerRepo.findOne({ where: { sessionId: session.id } }),
       this.resultRepo.findOne({ where: { sessionId: session.id } }),
     ]);
+
+    const answerPayload = (answer?.rawAnswersJson ?? null) as EstimateConverterRequestDto | null;
+    const suggestedExtraServiceIds = answerPayload && result
+      ? await this.buildSuggestedExtraServiceIds(answerPayload, result.estimatedVolumeMax ?? 0)
+      : [];
 
     return {
       session: {
@@ -234,6 +294,7 @@ export class ConverterService {
             warnings: result.warningsJson ?? [],
             summaryText: result.summaryText ?? '',
             manualReviewRecommended: result.manualReviewRecommended,
+            suggestedExtraServiceIds,
             status: session.status,
           }
         : null,
@@ -381,3 +442,5 @@ export class ConverterService {
     };
   }
 }
+
+

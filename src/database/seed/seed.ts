@@ -1,11 +1,10 @@
 import 'reflect-metadata';
 import { AppDataSource, initializeDatabase, closeDatabase } from '../../infrastructure/database/data-source';
-import { ExtraService } from '../../domain/entities/ExtraService';
 import { clearDatabase } from './clearDatabase';
-import { EXTRA_SERVICES } from './data/constants';
 import { seedPlatformSettings } from './seeders/settingsSeeder';
 import { seedAdmins } from './seeders/adminSeeder';
 import { seedLookupTables } from './seeders/lookupSeeder';
+import { seedExtraServices } from './seeders/extraServiceSeeder';
 import { seedCarriers } from './seeders/carrierSeeder';
 import { seedCustomers } from './seeders/customerSeeder';
 import { seedShipments } from './seeders/shipmentSeeder';
@@ -36,21 +35,7 @@ async function main() {
     console.log('📋 Referans veriler oluşturuluyor...');
     const { vehicleTypeMap, serviceTypeMap, scopeMap } = await seedLookupTables();
     const vehicleTypeIdMap = new Map(Object.entries(vehicleTypeMap).map(([name, vehicleType]) => [name, vehicleType.id]));
-    const extraRepo = AppDataSource.getRepository(ExtraService);
-    const extraServiceMap = new Map<string, string>();
-
-    for (const [index, name] of EXTRA_SERVICES.entries()) {
-      let existing = await extraRepo.findOne({ where: { name } });
-      if (!existing) {
-        existing = await extraRepo.save(extraRepo.create({
-          name,
-          description: null,
-          status: 'ACTIVE',
-          sortOrder: index + 1,
-        }));
-      }
-      extraServiceMap.set(name, existing.id);
-    }
+    const extraServiceMap = await seedExtraServices();
 
     // 3.1 Converter referans tabloları
     console.log('🧮 Converter referans verileri oluşturuluyor...');

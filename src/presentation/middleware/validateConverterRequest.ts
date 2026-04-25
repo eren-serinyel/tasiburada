@@ -3,6 +3,7 @@ import { NextFunction, Request, Response } from 'express';
 const FLOW_TYPES = new Set(['household']);
 const MOVE_TYPES = new Set(['household', 'partial_load']);
 const PROPERTY_TYPES = new Set(['studio', '1+1', '2+1', '3+1', '4+1_plus', 'unknown']);
+const LOAD_TYPES = new Set(['HOME', 'OFFICE', 'PARTIAL', 'STORAGE']);
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export const validateCreateConverterSession = (req: Request, res: Response, next: NextFunction): void => {
@@ -21,6 +22,7 @@ export const validateEstimateConverterRequest = (req: Request, res: Response, ne
   const {
     moveType,
     propertyType,
+    loadType,
     items,
     originFloor,
     destinationFloor,
@@ -35,6 +37,10 @@ export const validateEstimateConverterRequest = (req: Request, res: Response, ne
   }
   if (!PROPERTY_TYPES.has(propertyType)) {
     res.status(400).json({ success: false, message: 'propertyType geçersiz.' });
+    return;
+  }
+  if (loadType !== undefined && !LOAD_TYPES.has(loadType)) {
+    res.status(400).json({ success: false, message: 'loadType gecersiz.' });
     return;
   }
   if (!Array.isArray(items) || items.length > 200) {
@@ -85,3 +91,4 @@ export const validateApplyConverterRequest = (req: Request, res: Response, next:
   }
   next();
 };
+

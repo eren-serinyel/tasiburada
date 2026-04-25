@@ -12,7 +12,9 @@ import { Customer } from '../../../domain/entities/Customer';
 import { Carrier } from '../../../domain/entities/Carrier';
 import { VehicleType } from '../../../domain/entities/VehicleType';
 import { ExtraService } from '../../../domain/entities/ExtraService';
+import { ExtraServiceLoadType } from '../../../domain/entities/ExtraServiceApplicability';
 import { LOAD_TYPES } from '../data/constants';
+import { inferExtraServiceLoadTypeFromShipmentCategory } from '../../../application/services/extra-services/extraServiceApplicability';
 import {
   calculateShipmentBasePrice,
   chance,
@@ -119,8 +121,11 @@ export async function seedShipments(
   const activeVehicleTypes = (await vehicleTypeRepo.findBy({
     id: In(Array.from(vehicleTypeMap.values())),
   })).filter((vehicleType) => vehicleType.status === 'ACTIVE');
-  const extraServiceEntities = await extraServiceRepo.findBy({
-    id: In(Array.from(extraServiceMap.values())),
+  const extraServiceEntities = await extraServiceRepo.find({
+    where: {
+      id: In(Array.from(extraServiceMap.values())),
+    },
+    relations: ['applicabilityRules'],
   });
 
   if (activeVehicleTypes.length === 0) {
@@ -188,8 +193,11 @@ export async function seedShipments(
     const originFloor = randomFloor(originPlaceType);
     const destinationFloor = randomFloor(destinationPlaceType);
     const shouldHaveExtras = chance(0.4);
-    const extraServices = shouldHaveExtras
-      ? pickRandom(extraServiceEntities, randomInt(1, Math.min(3, extraServiceEntities.length)))
+    const applicableExtraServices = extraServiceEntities.filter((extraService) =>
+      matchesApplicability(extraService, inferExtraServiceLoadTypeFromShipmentCategory(category)),
+    );
+    const extraServices = shouldHaveExtras && applicableExtraServices.length > 0
+      ? pickRandom(applicableExtraServices, randomInt(1, Math.min(3, applicableExtraServices.length)))
       : [];
     const weight = randomWeight(category);
     const estimatedWeight = chance(0.8) ? Math.round(weight * randomFloat(0.9, 1.15)) : null;
@@ -387,4 +395,12 @@ function shiftDays(date: Date, dayOffset: number): Date {
   const shifted = new Date(date);
   shifted.setDate(shifted.getDate() + dayOffset);
   return shifted > new Date() ? new Date() : shifted;
+}
+
+function matchesApplicability(extraService: ExtraService & { applicabilityRules?: Array<{ loadType: ExtraServiceLoadType }> }, loadType: ExtraServiceLoadType | null): boolean {
+  if (!loadType) return true;
+  if (!Array.isArray(extraService.applicabilityRules) || extraService.applicabilityRules.length === 0) {
+    return true;
+  }
+  return extraService.applicabilityRules.some((rule) => rule.loadType === loadType);
 }

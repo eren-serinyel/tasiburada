@@ -1,10 +1,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import {
+
+const {
   buildApprovalQueueViewModel,
   getApprovalActions,
   isApprovalLockExpired,
-} from '../../shadcn-ui/src/lib/admin-approval';
+} = require('../../shadcn-ui/src/lib/admin-approval');
 
 describe('admin approval frontend contract', () => {
   test('approval queue view model renders submitted queue item correctly', () => {

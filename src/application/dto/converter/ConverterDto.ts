@@ -3,6 +3,7 @@ export type ConverterFlowTypeDto = 'household';
 export type ConverterMoveTypeDto = 'household' | 'partial_load';
 
 export type ConverterPropertyTypeDto = 'studio' | '1+1' | '2+1' | '3+1' | '4+1_plus' | 'unknown';
+export type ConverterApplicableLoadTypeDto = 'HOME' | 'OFFICE' | 'PARTIAL' | 'STORAGE';
 
 export type ConverterConfidenceDto = 'high' | 'medium' | 'low';
 
@@ -25,6 +26,7 @@ export interface CreateConverterSessionRequestDto {
 export interface EstimateConverterRequestDto {
   moveType: ConverterMoveTypeDto;
   propertyType: ConverterPropertyTypeDto;
+  loadType?: ConverterApplicableLoadTypeDto;
   items: ConverterItemInputDto[];
   originFloor: number;
   destinationFloor: number;
@@ -41,6 +43,7 @@ export interface EstimateConverterResponseDto {
   warnings: string[];
   summaryText: string;
   manualReviewRecommended: boolean;
+  suggestedExtraServiceIds: string[];
 }
 
 export interface ConverterSessionSummaryDto {

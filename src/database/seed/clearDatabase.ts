@@ -38,6 +38,7 @@ export async function clearDatabase(): Promise<void> {
       'carrier_stats',
       'vehicles',
       'shipment_extra_services',
+      'extra_service_applicability',
       'extra_services',
       'contact_filter_logs',
       'match_cooldowns',

@@ -2,6 +2,7 @@ import { ShipmentRepository } from '../../infrastructure/repositories/ShipmentRe
 import { Shipment, ShipmentStatus, ShipmentCategory, PlaceType, InsuranceType, LoadProfile, AccessDistance, DateFlexibility } from '../../domain/entities/Shipment';
 import { Offer, OfferStatus } from '../../domain/entities/Offer';
 import { ExtraService } from '../../domain/entities/ExtraService';
+import { ExtraServiceLoadType } from '../../domain/entities/ExtraServiceApplicability';
 import { CarrierRepository } from '../../infrastructure/repositories/CarrierRepository';
 import { CarrierStatsRepository } from '../../infrastructure/repositories/CarrierStatsRepository';
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from '../../domain/errors/AppError';
@@ -17,6 +18,12 @@ import { CustomerAddress } from '../../domain/entities/CustomerAddress';
 import { PlatformPolicyService } from './PlatformPolicyService';
 import { ContactFilterSurface } from '../../domain/entities';
 import { MatchingService } from './MatchingService';
+import {
+  EXTRA_SERVICE_NAME_ALIASES,
+  inferExtraServiceLoadTypeFromShipmentCategory,
+  inferExtraServiceLoadTypeFromTransportType,
+  inferShipmentCategoryFromTransportType,
+} from './extra-services/extraServiceApplicability';
 
 interface CreateShipmentPayload {
   origin: string;
@@ -46,6 +53,7 @@ interface CreateShipmentPayload {
   weight?: number;
   estimatedWeight?: number;
   shipmentDate: string | Date;
+  transportType?: string;
   price?: number;
   note?: string;
   vehicleTypePreferenceId?: string;
@@ -81,6 +89,7 @@ interface UpdateShipmentPayload {
   weight?: number;
   estimatedWeight?: number;
   shipmentDate?: string | Date;
+  transportType?: string;
   price?: number;
   note?: string;
   vehicleTypePreferenceId?: string;
@@ -194,14 +203,26 @@ export class ShipmentService {
     return InsuranceType.NONE;
   }
 
-  private normalizeExtraServiceNames(extraServices?: string[]): string[] {
+  private normalizeExtraServiceInputs(extraServices?: string[]): string[] {
     if (!Array.isArray(extraServices)) return [];
     return Array.from(new Set(
       extraServices
         .map(service => String(service).trim())
         .filter(Boolean)
-        .map(service => EXTRA_SERVICE_ALIASES[service] ?? service)
+        .map(service => EXTRA_SERVICE_NAME_ALIASES[service] ?? service)
     ));
+  }
+
+  private normalizeExtraServiceNames(extraServices?: string[]): string[] {
+    return this.normalizeExtraServiceInputs(extraServices);
+  }
+
+  private resolveExtraServiceLoadType(
+    shipmentCategory?: ShipmentCategory | string | null,
+    transportType?: string | null,
+  ): ExtraServiceLoadType | null {
+    return inferExtraServiceLoadTypeFromShipmentCategory(shipmentCategory)
+      ?? inferExtraServiceLoadTypeFromTransportType(transportType);
   }
 
   private async getCustomerPreferenceSafe(customerId: string): Promise<CustomerPreference | null> {
@@ -353,6 +374,85 @@ export class ShipmentService {
       .addAndRemove(targetIds.filter(id => !currentIds.includes(id)), currentIds.filter(id => !targetIds.includes(id)));
   }
 
+  private async resolveValidatedExtraServices(
+    extraServices: string[] | undefined,
+    loadType: ExtraServiceLoadType | null,
+  ): Promise<ExtraService[]> {
+    const normalizedValues = this.normalizeExtraServiceInputs(extraServices);
+    if (!normalizedValues.length) return [];
+
+    const repo = AppDataSource.getRepository(ExtraService);
+    const uuidValues = normalizedValues.filter((value) => /^[0-9a-f-]{36}$/i.test(value));
+    const nameValues = normalizedValues.filter((value) => !uuidValues.includes(value));
+
+    const qb = repo
+      .createQueryBuilder('extraService')
+      .leftJoinAndSelect('extraService.applicabilityRules', 'applicability')
+      .where('extraService.status = :status', { status: 'ACTIVE' });
+
+    if (uuidValues.length && nameValues.length) {
+      qb.andWhere('(extraService.id IN (:...ids) OR extraService.name IN (:...names))', {
+        ids: uuidValues,
+        names: nameValues,
+      });
+    } else if (uuidValues.length) {
+      qb.andWhere('extraService.id IN (:...ids)', { ids: uuidValues });
+    } else {
+      qb.andWhere('extraService.name IN (:...names)', { names: nameValues });
+    }
+
+    if (loadType) {
+      qb.andWhere('applicability.loadType = :loadType', { loadType });
+    }
+
+    const resolved = await qb.getMany();
+    const resolvedIds = new Set(resolved.map((item) => item.id));
+    const resolvedNames = new Set(resolved.map((item) => item.name));
+    const missingValues = normalizedValues.filter((value) => !resolvedIds.has(value) && !resolvedNames.has(value));
+
+    if (missingValues.length > 0) {
+      const messageBase = `Tanimsiz veya bu yuk turu icin gecersiz ek hizmet(ler): ${missingValues.join(', ')}`;
+      throw new ValidationError(loadType ? `${messageBase}. loadType=${loadType}` : messageBase);
+    }
+
+    return resolved;
+  }
+
+  private async applyShipmentExtraServices(
+    shipmentId: string,
+    extraServices: string[] | undefined,
+    loadType: ExtraServiceLoadType | null,
+  ): Promise<string[]> {
+    const resolvedServices = await this.resolveValidatedExtraServices(extraServices, loadType);
+
+    const shipmentWithRelations = await AppDataSource.getRepository(Shipment).findOne({
+      where: { id: shipmentId },
+      relations: ['extraServices'],
+    });
+    const currentIds = shipmentWithRelations?.extraServices?.map((item) => item.id) ?? [];
+
+    if (!resolvedServices.length) {
+      if (currentIds.length) {
+        await AppDataSource.createQueryBuilder()
+          .relation(Shipment, 'extraServices')
+          .of(shipmentId)
+          .remove(currentIds);
+      }
+      return [];
+    }
+
+    const targetIds = resolvedServices.map((item) => item.id);
+    await AppDataSource.createQueryBuilder()
+      .relation(Shipment, 'extraServices')
+      .of(shipmentId)
+      .addAndRemove(
+        targetIds.filter((id) => !currentIds.includes(id)),
+        currentIds.filter((id) => !targetIds.includes(id)),
+      );
+
+    return resolvedServices.map((item) => item.name);
+  }
+
   async getPendingShipmentsForCarrier(carrierId: string): Promise<PendingShipmentListItem[]> {
     const carrier = await this.matchingService.getCarrierForMatching(carrierId);
     const shipments = await this.shipmentRepository.findPendingShipmentsForCarrier(carrierId);
@@ -445,6 +545,11 @@ export class ShipmentService {
       }
     }
 
+    const normalizedShipmentCategory = (payload.shipmentCategory as ShipmentCategory | undefined)
+      ?? inferShipmentCategoryFromTransportType(payload.transportType)
+      ?? null;
+    const extraServiceLoadType = this.resolveExtraServiceLoadType(normalizedShipmentCategory, payload.transportType);
+
     const shipment = await this.shipmentRepository.createShipmentRecord({
       customerId,
       originCity,
@@ -465,7 +570,7 @@ export class ShipmentService {
       destinationAddressText: payload.destinationAddressText ?? null,
       loadProfile: payload.loadProfile as LoadProfile ?? null,
       loadDetails: payload.loadDetails,
-      shipmentCategory: payload.shipmentCategory as any ?? null,
+      shipmentCategory: normalizedShipmentCategory,
       insuranceType: this.normalizeInsuranceType(payload.insuranceType),
       timePreference: payload.timePreference,
       dateFlexibility: payload.dateFlexibility as DateFlexibility ?? DateFlexibility.EXACT,
@@ -479,8 +584,11 @@ export class ShipmentService {
       status: ShipmentStatus.PENDING
     });
 
-    await this.setShipmentExtraServices(shipment.id, payload.extraServices);
-    shipment.extraServices = this.normalizeExtraServiceNames(payload.extraServices) as any;
+    shipment.extraServices = await this.applyShipmentExtraServices(
+      shipment.id,
+      payload.extraServices,
+      extraServiceLoadType,
+    ) as any;
 
     // Fire-and-forget: notify eligible carriers about the new shipment
     this.notifyEligibleCarriers(shipment).catch(err =>
@@ -641,6 +749,12 @@ export class ShipmentService {
       shipmentId,
     });
 
+    const normalizedShipmentCategory = (payload.shipmentCategory as ShipmentCategory | undefined)
+      ?? shipment.shipmentCategory
+      ?? inferShipmentCategoryFromTransportType(payload.transportType)
+      ?? null;
+    const extraServiceLoadType = this.resolveExtraServiceLoadType(normalizedShipmentCategory, payload.transportType);
+
     const updatedShipment = await this.shipmentRepository.update(shipmentId, {
       originCity: payload.originCity,
       originDistrict: payload.originDistrict,
@@ -660,7 +774,7 @@ export class ShipmentService {
       destinationAddressText: payload.destinationAddressText !== undefined ? payload.destinationAddressText : undefined,
       loadDetails: payload.loadDetails,
       loadProfile: payload.loadProfile as LoadProfile | undefined,
-      shipmentCategory: payload.shipmentCategory as any,
+      shipmentCategory: normalizedShipmentCategory,
       insuranceType: payload.insuranceType ? this.normalizeInsuranceType(payload.insuranceType) : undefined,
       timePreference: payload.timePreference,
       dateFlexibility: payload.dateFlexibility as DateFlexibility | undefined,
@@ -672,8 +786,11 @@ export class ShipmentService {
     });
 
     if (payload.extraServices !== undefined) {
-      await this.setShipmentExtraServices(shipmentId, payload.extraServices);
-      (updatedShipment as any).extraServices = this.normalizeExtraServiceNames(payload.extraServices);
+      (updatedShipment as any).extraServices = await this.applyShipmentExtraServices(
+        shipmentId,
+        payload.extraServices,
+        extraServiceLoadType,
+      );
     }
 
     if (!updatedShipment) {

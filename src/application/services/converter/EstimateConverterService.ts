@@ -16,6 +16,7 @@ export class EstimateConverterService {
       warnings: ['Estimate engine scaffold is active; rules are not implemented yet.'],
       summaryText: 'Tahmini hacim bandi kurallari bir sonraki adimda eklenecek.',
       manualReviewRecommended: true,
+      suggestedExtraServiceIds: [],
     };
   }
 }

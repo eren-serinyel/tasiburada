@@ -1,4 +1,5 @@
 import { apiClient } from '@/lib/apiClient';
+import type { ExtraServiceLoadType } from '@/lib/extraServices';
 
 export type ConverterMoveType = 'household' | 'partial_load';
 export type ConverterPropertyType = 'studio' | '1+1' | '2+1' | '3+1' | '4+1_plus' | 'unknown';
@@ -17,6 +18,7 @@ export interface CreateConverterSessionResponse {
 export interface EstimateConverterRequest {
   moveType: ConverterMoveType;
   propertyType: ConverterPropertyType;
+  loadType?: ExtraServiceLoadType;
   items: ConverterEstimateItemInput[];
   originFloor: number;
   destinationFloor: number;
@@ -33,6 +35,7 @@ export interface EstimateConverterResponse {
   warnings: string[];
   summaryText: string;
   manualReviewRecommended: boolean;
+  suggestedExtraServiceIds: string[];
 }
 
 const parseApiJson = async (response: Response): Promise<any> => {

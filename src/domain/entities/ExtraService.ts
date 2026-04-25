@@ -1,4 +1,5 @@
-import { Entity, PrimaryGeneratedColumn, Column } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, OneToMany } from 'typeorm';
+import { ExtraServiceApplicability } from './ExtraServiceApplicability';
 
 @Entity('extra_services')
 export class ExtraService {
@@ -16,4 +17,7 @@ export class ExtraService {
 
   @Column({ name: 'sort_order', type: 'int', default: 0 })
   sortOrder: number;
+
+  @OneToMany(() => ExtraServiceApplicability, (rule) => rule.extraService)
+  applicabilityRules: ExtraServiceApplicability[];
 }

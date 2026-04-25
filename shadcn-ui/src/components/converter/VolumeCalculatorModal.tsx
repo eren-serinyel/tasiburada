@@ -22,11 +22,13 @@ import {
   type EstimateConverterResponse,
 } from '@/lib/converterApi';
 import { CONVERTER_ITEM_CATALOG_V1 } from '@/lib/itemCatalog';
+import type { ExtraServiceLoadType } from '@/lib/extraServices';
 
 interface VolumeCalculatorModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onApplyEstimate: (result: EstimateConverterResponse) => void;
+  loadType?: ExtraServiceLoadType | null;
 }
 
 const VEHICLE_LABELS: Record<string, string> = {
@@ -53,6 +55,7 @@ export default function VolumeCalculatorModal({
   open,
   onOpenChange,
   onApplyEstimate,
+  loadType,
 }: VolumeCalculatorModalProps) {
   const [moveType, setMoveType] = useState<ConverterMoveType>('household');
   const [propertyType, setPropertyType] = useState<ConverterPropertyType>('2+1');
@@ -93,6 +96,7 @@ export default function VolumeCalculatorModal({
       const estimate = await estimateConverter(session.sessionId, {
         moveType,
         propertyType,
+        loadType: loadType ?? undefined,
         items: selectedItemEntries.map(([itemCode, quantity]) => ({ itemCode, quantity })),
         originFloor,
         destinationFloor,

@@ -18,13 +18,20 @@ import { Carrier, LOAD_TYPES, VEHICLE_TYPES } from '@/lib/types';
 import { getSessionUser } from '@/lib/storage';
 import { CITIES_TR, getDistrictsForCity, formatDateYYYYMMDD } from '@/lib/locations';
 import FileUpload from '@/components/ui/file-upload';
-import { ADDITIONAL_SERVICE_OPTIONS, SPECIAL_SERVICES } from '@/lib/carrierFormConstants';
+import { SPECIAL_SERVICES } from '@/lib/carrierFormConstants';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useToast } from '@/hooks/use-toast';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { apiClient } from '@/lib/apiClient';
 import VolumeCalculatorModal from '@/components/converter/VolumeCalculatorModal';
+import {
+  getExtraServiceLoadType,
+  mapSelectedExtraServiceNames,
+  mergeSuggestedExtraServiceIds,
+  reconcileSelectedExtraServiceIds,
+  type ExtraServiceOption,
+} from '@/lib/extraServices';
 
 type Step = 1 | 2 | 3;
 
@@ -55,6 +62,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
   const [inviteCarrierId, setInviteCarrierId] = useState<string | null>(null);
   const [inviteCarrierName, setInviteCarrierName] = useState<string | null>(null);
   const [isVolumeCalculatorOpen, setIsVolumeCalculatorOpen] = useState(false);
+  const [availableExtraServices, setAvailableExtraServices] = useState<ExtraServiceOption[]>([]);
   const [form, setForm] = useState({
     originCity: '',
     originDistrict: '',
@@ -204,6 +212,10 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
     'depolama': 'depolama',
   };
   const currentServiceGroup = useMemo(() => SERVICE_GROUP_BY_TRANSPORT_TYPE[form.transportType] || '', [form.transportType]);
+  const currentExtraServiceLoadType = useMemo(
+    () => getExtraServiceLoadType((form.transportType as any) || ''),
+    [form.transportType],
+  );
 
   useEffect(() => {
     setForm(prev => {
@@ -212,6 +224,66 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
       return { ...prev, serviceOptions: { [currentServiceGroup]: keep } };
     });
   }, [currentServiceGroup]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!currentExtraServiceLoadType || !currentServiceGroup) {
+      setAvailableExtraServices([]);
+      setForm((prev) => ({ ...prev, serviceOptions: {}, extraServices: [] }));
+      return;
+    }
+
+    apiClient(`/extra-services?loadType=${currentExtraServiceLoadType}`)
+      .then((response) => response.json())
+      .then((json) => {
+        if (cancelled) return;
+        const nextOptions = Array.isArray(json?.data) ? json.data as ExtraServiceOption[] : [];
+        setAvailableExtraServices(nextOptions);
+
+        setForm((prev) => {
+          const currentIds = prev.serviceOptions?.[currentServiceGroup] || [];
+          const fallbackIds = currentIds.length
+            ? currentIds
+            : nextOptions
+                .filter((option) => (prev.extraServices || []).includes(option.name))
+                .map((option) => option.id);
+          const { keptIds, removedIds } = reconcileSelectedExtraServiceIds(fallbackIds, nextOptions);
+
+          if (removedIds.length > 0) {
+            toast({
+              title: 'Ek hizmetler güncellendi',
+              description: 'Yük türü değiştiği için artık geçerli olmayan seçimler temizlendi.',
+            });
+          }
+
+          return {
+            ...prev,
+            serviceOptions: { [currentServiceGroup]: keptIds },
+            extraServices: mapSelectedExtraServiceNames(keptIds, nextOptions),
+          };
+        });
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setAvailableExtraServices([]);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentExtraServiceLoadType, currentServiceGroup, toast]);
+
+  useEffect(() => {
+    if (!currentServiceGroup) return;
+    const selectedIds = form.serviceOptions?.[currentServiceGroup] || [];
+    const selectedNames = mapSelectedExtraServiceNames(selectedIds, availableExtraServices);
+    const prevNames = form.extraServices || [];
+    if (JSON.stringify(prevNames) === JSON.stringify(selectedNames)) return;
+
+    setForm((prev) => ({ ...prev, extraServices: selectedNames }));
+  }, [availableExtraServices, currentServiceGroup, form.extraServices, form.serviceOptions]);
 
   const [originDistricts, setOriginDistricts] = useState<string[]>([]);
   const [destinationDistricts, setDestinationDistricts] = useState<string[]>([]);
@@ -223,10 +295,22 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
 
   const handleChange = (field: string, value: any) => setForm((f) => ({ ...f, [field]: value }));
 
-  const applyConverterEstimateToForm = (result: { estimatedVolumeMin: number; estimatedVolumeMax: number }) => {
+  const applyConverterEstimateToForm = (result: { estimatedVolumeMin: number; estimatedVolumeMax: number; suggestedExtraServiceIds?: string[] }) => {
     const weightKg = Math.round(((result.estimatedVolumeMin + result.estimatedVolumeMax) / 2) * 200);
     // TODO: backend'in estimatedWeight desteğine taşı
-    setForm((prev) => ({ ...prev, weightKg: String(weightKg) }));
+    setForm((prev) => {
+      const currentIds = currentServiceGroup ? (prev.serviceOptions?.[currentServiceGroup] || []) : [];
+      const mergedIds = currentServiceGroup
+        ? mergeSuggestedExtraServiceIds(currentIds, result.suggestedExtraServiceIds, availableExtraServices)
+        : currentIds;
+
+      return {
+        ...prev,
+        weightKg: String(weightKg),
+        serviceOptions: currentServiceGroup ? { [currentServiceGroup]: mergedIds } : prev.serviceOptions,
+        extraServices: mapSelectedExtraServiceNames(mergedIds, availableExtraServices),
+      };
+    });
     toast({ title: 'Ağırlık güncellendi', description: `Tahmini ağırlık ${weightKg} kg olarak forma uygulandı.` });
   };
 
@@ -937,11 +1021,11 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
                 <div style={{ marginBottom: '24px' }}>
                   <label style={labelStyle}>Ek Hizmetler</label>
                   <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                    {Object.entries(ADDITIONAL_SERVICE_OPTIONS[currentServiceGroup] || {}).map(([key, lbl]) => {
-                      const checked = (form.serviceOptions?.[currentServiceGroup] || []).includes(key);
+                    {availableExtraServices.map((option) => {
+                      const checked = (form.serviceOptions?.[currentServiceGroup] || []).includes(option.id);
                       return (
                         <label
-                          key={key}
+                          key={option.id}
                           className="flex items-center cursor-pointer transition-colors"
                           style={{
                             gap: '8px', padding: '10px 14px',
@@ -951,8 +1035,12 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
                           }}
                           onClick={() => setForm(prev => {
                             const current = new Set(prev.serviceOptions?.[currentServiceGroup] || []);
-                            if (current.has(key)) current.delete(key); else current.add(key);
-                            return { ...prev, serviceOptions: { [currentServiceGroup]: Array.from(current) } };
+                            if (current.has(option.id)) current.delete(option.id); else current.add(option.id);
+                            return {
+                              ...prev,
+                              serviceOptions: { [currentServiceGroup]: Array.from(current) },
+                              extraServices: mapSelectedExtraServiceNames(Array.from(current), availableExtraServices),
+                            };
                           })}
                         >
                           <input
@@ -961,7 +1049,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
                             readOnly
                             style={{ accentColor: '#2563EB', width: '16px', height: '16px' }}
                           />
-                          <span style={{ fontSize: '13px', color: '#374151' }}>{lbl}</span>
+                          <span style={{ fontSize: '13px', color: '#374151' }}>{option.name}</span>
                         </label>
                       );
                     })}
@@ -1132,7 +1220,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
                     {(() => {
                       const svcGroup = ({'evden-eve': 'evden-eve', 'parca': 'parca', 'ofis-tasima': 'ofis', 'depolama': 'depolama'} as Record<string, string>)[form.transportType];
                       const selected = svcGroup ? (form.serviceOptions?.[svcGroup] || []) : [];
-                      const allOpts = svcGroup ? (ADDITIONAL_SERVICE_OPTIONS[svcGroup] || {}) : {};
+                      const allOpts = new Map(availableExtraServices.map((option) => [option.id, option.name]));
                       if (!selected.length) return null;
                       return (
                         <div>
@@ -1140,7 +1228,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
                           <div className="flex flex-wrap" style={{ gap: '4px' }}>
                             {selected.map((k: string) => (
                               <span key={k} style={{ background: '#F1F5F9', borderRadius: '6px', padding: '3px 10px', fontSize: '12px', color: '#374151' }}>
-                                {(allOpts as Record<string, string>)[k] || k}
+                                {allOpts.get(k) || k}
                               </span>
                             ))}
                           </div>
@@ -1320,6 +1408,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
         open={isVolumeCalculatorOpen}
         onOpenChange={setIsVolumeCalculatorOpen}
         onApplyEstimate={applyConverterEstimateToForm}
+        loadType={currentExtraServiceLoadType}
       />
     </div>
   );
@@ -1402,13 +1491,19 @@ function SummaryCard({ step, form, onEditStep }: { step: Step; form: any; onEdit
 function CarrierCard({ carrier, form, onRequest }: { carrier: Carrier; form: any; onRequest: () => void; }) {
   const weight = Number(form.weightKg || 0);
   const capacityOk = !weight || carrier.vehicle.capacity >= weight;
-  const insuranceNeeded = form.insurance !== 'none' || form.extras?.sigorta || (form.extraServices || []).includes('sigorta');
+  const selectedExtraServices = Array.isArray(form.extraServices) ? form.extraServices : [];
+  const insuranceNeeded = form.insurance !== 'none'
+    || form.extras?.sigorta
+    || selectedExtraServices.includes('Ek sigorta')
+    || selectedExtraServices.includes('Kurumsal sigorta');
   const hasInsurance = (carrier.badges || []).some((b) => ['Sigorta', 'Soğuk Zincir'].includes(b));
   const insuranceOk = !insuranceNeeded || hasInsurance;
   const vehicleOk = !form.vehicleType || carrier.vehicle.type === form.vehicleType;
   const routeOk = (!form.originCity || carrier.serviceAreas.includes(form.originCity)) && (!form.destinationCity || carrier.serviceAreas.includes(form.destinationCity));
   const scopeOk = !form.scope || !(carrier.scopes && carrier.scopes.length) || (carrier.scopes || []).includes(form.scope);
-  const wantsPackaging = form.extras?.ambalaj || (form.extraServices || []).includes('paketleme') || (form.extraServices || []).includes('ambalaj');
+  const wantsPackaging = form.extras?.ambalaj
+    || selectedExtraServices.includes('Profesyonel Paketleme')
+    || selectedExtraServices.includes('Ambalajlama');
   const hasPackaging = (carrier.badges || []).some((b) => ['Profesyonel', 'Altın Taşıyıcı'].includes(b));
   const extrasOk = (!wantsPackaging || hasPackaging) && (!form.extras?.sigorta || hasInsurance);
 

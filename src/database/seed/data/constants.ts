@@ -256,14 +256,19 @@ export const LOAD_TYPES = [
 ];
 
 export const EXTRA_SERVICES = [
-  'Montaj/Demontaj',
-  'Ambalajlama',
-  'Sigorta',
   'Asansörlü Taşıma',
-  'Depolama',
-  'Beyaz Eşya Kurulumu',
   'Profesyonel Paketleme',
-  'Hafta Sonu Teslimat',
+  'Montaj/Demontaj',
+  'Depolama',
+  'Piyano Taşıma',
+  'Ambalajlama',
+  'Beyaz Eşya Kurulumu',
+  'Server/IT özel taşıma',
+  'Kablo etiketleme',
+  'Kurumsal sigorta',
+  'Ek sigorta',
+  'Hafta sonu teslimat',
+  'Kat arası taşıma',
 ];
 
 const FIXTURE_CARRIER_COMPANIES: CarrierCompanySeed[] = [

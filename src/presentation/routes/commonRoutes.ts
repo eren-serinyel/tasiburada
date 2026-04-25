@@ -3,10 +3,12 @@ import { ServiceType } from '../../domain/entities/ServiceType';
 import { ScopeOfWork } from '../../domain/entities/ScopeOfWork';
 import { ServiceTypeRepository } from '../../infrastructure/repositories/ServiceTypeRepository';
 import { ScopeOfWorkRepository } from '../../infrastructure/repositories/ScopeOfWorkRepository';
+import { ExtraServiceController } from '../controllers/ExtraServiceController';
 
 const router = Router();
 const serviceTypeRepo = new ServiceTypeRepository();
 const scopeRepo = new ScopeOfWorkRepository();
+const extraServiceController = new ExtraServiceController();
 
 router.get('/service-types', async (req, res) => {
     try {
@@ -25,5 +27,7 @@ router.get('/scope-of-works', async (req, res) => {
         res.status(400).json({ success: false, message: error.message });
     }
 });
+
+router.get('/extra-services', extraServiceController.list);
 
 export default router;

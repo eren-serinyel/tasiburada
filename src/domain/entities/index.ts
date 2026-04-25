@@ -33,3 +33,5 @@ export { ConverterAnswer, ConverterMoveType, ConverterPropertyType } from './Con
 export { ConverterResult, ConverterConfidence, ConverterRecommendedVehicle } from './ConverterResult';
 export { ConverterItemCatalog } from './ConverterItemCatalog';
 export { ConverterVehicleRule } from './ConverterVehicleRule';
+export { ExtraService } from './ExtraService';
+export { ExtraServiceApplicability, ExtraServiceLoadType } from './ExtraServiceApplicability';
