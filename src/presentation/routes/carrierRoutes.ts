@@ -10,7 +10,7 @@ import { CarrierReviewController } from '../controllers/CarrierReviewController'
 import { OfferController } from '../controllers/OfferController';
 import { ShipmentInviteController } from '../controllers/ShipmentInviteController';
 import { documentUpload, pictureUpload } from '../../infrastructure/upload/uploadMiddleware';
-import { authLimiter } from '../middleware/rateLimiter';
+import { approvalSubmitLimiter, authLimiter } from '../middleware/rateLimiter';
 
 const router = Router();
 const authController = new CarrierAuthController();
@@ -39,7 +39,7 @@ router.get('/:carrierId/stats', authenticateCarrier, dashboardController.getStat
 
 router.get('/me/profile-status', authenticateCarrier, profileController.getProfileStatus);
 router.put('/me/profile-status', authenticateCarrier, profileController.refreshProfileStatus);
-router.post('/me/submit-for-approval', authenticateCarrier, profileController.submitForApproval);
+router.post('/me/submit-for-approval', authenticateCarrier, approvalSubmitLimiter, profileController.submitForApproval);
 router.put('/me/company-info', authenticateCarrier, profileController.updateCompanyInfo);
 router.get('/me/activity', authenticateCarrier, profileController.getActivityInfo);
 router.put('/me/activity', authenticateCarrier, profileController.updateActivityInfo);

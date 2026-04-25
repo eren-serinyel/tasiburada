@@ -21,9 +21,15 @@ router.get('/stats/trends', adminController.getStatsTrends);
 
 // Carriers
 router.get('/carriers', adminController.getCarriers);
+router.get('/carriers/approval-queue', adminController.getCarrierApprovalQueue);
 router.get('/carriers/:carrierId', adminController.getCarrierById);
 router.put('/carriers/:carrierId', adminController.updateCarrier);
 router.put('/carriers/:carrierId/verify', adminController.verifyCarrier);
+router.post('/carriers/:carrierId/approval/claim', adminController.claimCarrierApproval);
+router.post('/carriers/:carrierId/approval/release', adminController.releaseCarrierApproval);
+router.post('/carriers/:carrierId/approval/approve', adminController.approveCarrier);
+router.post('/carriers/:carrierId/approval/reject', adminController.rejectCarrier);
+router.post('/carriers/:carrierId/approval/suspend', adminController.suspendCarrier);
 router.get('/carriers/:carrierId/documents', adminController.getCarrierDocuments);
 router.get('/carriers/:carrierId/shipments', adminController.getCarrierShipments);
 router.get('/carriers/:carrierId/reviews', adminController.getCarrierReviews);
@@ -62,7 +68,7 @@ router.get('/settings', adminController.getSettings);
 router.put('/settings', requireSuperadmin as any, adminController.updateSettings);
 
 // Admin Management (superadmin only)
-router.get('/admins', adminController.getAdmins);
+router.get('/admins', requireSuperadmin as any, adminController.getAdmins);
 router.post('/admins', requireSuperadmin as any, adminController.createAdmin);
 router.put('/admins/:adminId', requireSuperadmin as any, adminController.updateAdmin);
 router.delete('/admins/:adminId', requireSuperadmin as any, adminController.deleteAdminUser);

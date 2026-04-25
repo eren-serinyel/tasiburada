@@ -17,3 +17,11 @@ export const passwordResetLimiter = rateLimit({
   legacyHeaders: false,
   message: { success: false, message: 'Çok fazla şifre sıfırlama isteği. 1 saat sonra tekrar deneyin.' },
 });
+
+export const approvalSubmitLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: isTest ? 10000 : 3,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: 'Çok fazla onay gönderim denemesi. Lütfen daha sonra tekrar deneyin.' },
+});

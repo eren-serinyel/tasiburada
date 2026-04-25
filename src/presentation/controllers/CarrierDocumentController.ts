@@ -2,9 +2,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { Request, Response } from 'express';
 import { CarrierDocumentService } from '../../application/services/carrier/CarrierDocumentService';
+import { CarrierApprovalService } from '../../application/services/carrier/CarrierApprovalService';
 
 export class CarrierDocumentController {
   private documentService = new CarrierDocumentService();
+  private approvalService = new CarrierApprovalService();
 
   private ensureCarrier(req: Request, res: Response): string | null {
     if (!req.carrierId) {
@@ -24,6 +26,7 @@ export class CarrierDocumentController {
   getDocuments = async (req: Request, res: Response) => {
     const carrierId = this.ensureCarrier(req, res);
     if (!carrierId) return;
+
     try {
       const docs = await this.documentService.getDocumentsForCarrier(carrierId);
       res.status(200).json({ success: true, data: docs });
@@ -35,6 +38,7 @@ export class CarrierDocumentController {
   updateDocuments = async (req: Request, res: Response) => {
     const carrierId = this.ensureCarrier(req, res);
     if (!carrierId) return;
+
     try {
       if (req.file) {
         const rawType = String(req.body?.type || '').trim();
@@ -44,16 +48,25 @@ export class CarrierDocumentController {
         }
 
         const fileUrl = `/uploads/documents/${req.file.filename}`;
-        const result = await this.documentService.saveDocumentsDraft(carrierId, [
-          { type: rawType, fileUrl }
-        ]);
-        res.status(200).json({ success: true, allRequiredHaveDoc: result.allRequiredHaveDoc, fileUrl });
+        const result = await this.documentService.saveDocumentsDraft(carrierId, [{ type: rawType, fileUrl }]);
+        const readiness = await this.approvalService.markDraftChanged(carrierId);
+        res.status(200).json({
+          success: true,
+          allRequiredHaveDoc: result.allRequiredHaveDoc,
+          fileUrl,
+          approvalReadiness: readiness,
+        });
         return;
       }
 
       const documents = Array.isArray(req.body?.documents) ? req.body.documents : [];
       const result = await this.documentService.saveDocumentsDraft(carrierId, documents);
-      res.status(200).json({ success: true, allRequiredHaveDoc: result.allRequiredHaveDoc });
+      const readiness = await this.approvalService.markDraftChanged(carrierId);
+      res.status(200).json({
+        success: true,
+        allRequiredHaveDoc: result.allRequiredHaveDoc,
+        approvalReadiness: readiness,
+      });
     } catch (error: any) {
       res.status(400).json({ success: false, message: error.message || 'Belgeler güncellenemedi.' });
     }
@@ -62,6 +75,7 @@ export class CarrierDocumentController {
   downloadDocument = async (req: Request, res: Response) => {
     const carrierId = this.ensureCarrier(req, res);
     if (!carrierId) return;
+
     try {
       const doc = await this.documentService.getDocumentById(carrierId, req.params.documentId);
       const filePath = this.resolveDocumentPath(doc.fileUrl);
@@ -79,6 +93,7 @@ export class CarrierDocumentController {
   deleteDocument = async (req: Request, res: Response) => {
     const carrierId = this.ensureCarrier(req, res);
     if (!carrierId) return;
+
     try {
       const deleted = await this.documentService.deleteDocument(carrierId, req.params.documentId);
       const filePath = this.resolveDocumentPath(deleted.fileUrl);
@@ -86,10 +101,12 @@ export class CarrierDocumentController {
         try {
           fs.unlinkSync(filePath);
         } catch {
-          // no-op: DB delete is the source of truth
+          // DB kaydı source of truth.
         }
       }
-      res.status(200).json({ success: true, message: 'Belge silindi.' });
+
+      const readiness = await this.approvalService.markDraftChanged(carrierId);
+      res.status(200).json({ success: true, message: 'Belge silindi.', approvalReadiness: readiness });
     } catch (error: any) {
       res.status(400).json({ success: false, message: error.message || 'Belge silinemedi.' });
     }

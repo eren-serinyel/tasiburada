@@ -10,7 +10,7 @@ import { CarrierProfileQueryService } from '../../application/services/carrier/C
 import { CarrierServiceTypeService } from '../../application/services/carrier/CarrierServiceTypeService';
 import { CarrierProfileStatusService } from '../../application/services/carrier/CarrierProfileStatusService';
 import { CarrierScopeOfWorkService } from '../../application/services/carrier/CarrierScopeOfWorkService';
-import { CarrierRepository } from '../../infrastructure/repositories/CarrierRepository';
+import { CarrierApprovalService } from '../../application/services/carrier/CarrierApprovalService';
 
 export class CarrierProfileController {
   private companyInfoService = new CarrierCompanyInfoService();
@@ -24,7 +24,7 @@ export class CarrierProfileController {
   private notificationService = new NotificationPreferenceService();
   private profileQueryService = new CarrierProfileQueryService();
   private profileStatusService = new CarrierProfileStatusService();
-  private carrierRepository = new CarrierRepository();
+  private approvalService = new CarrierApprovalService();
 
   private ensureCarrier(req: Request, res: Response): string | null {
     if (!req.carrierId) {
@@ -44,16 +44,15 @@ export class CarrierProfileController {
   getProfileStatus = async (req: Request, res: Response) => {
     const carrierId = this.ensureCarrier(req, res);
     if (!carrierId) return;
+
     try {
-      console.log('Getting profile status for carrierId:', carrierId);
       const summary = await this.profileQueryService.getProfileStatus(carrierId);
       res.status(200).json({ success: true, data: summary });
     } catch (error: any) {
-      console.error('Profile status error:', error);
-      res.status(500).json({ 
-        success: false, 
+      res.status(500).json({
+        success: false,
         message: 'Profil durumu alınamadı: ' + error.message,
-        error: process.env.NODE_ENV === 'development' ? error.stack : undefined
+        error: process.env.NODE_ENV === 'development' ? error.stack : undefined,
       });
     }
   };
@@ -61,17 +60,16 @@ export class CarrierProfileController {
   refreshProfileStatus = async (req: Request, res: Response) => {
     const carrierId = this.ensureCarrier(req, res);
     if (!carrierId) return;
+
     try {
-      console.log('Refreshing profile status for carrierId:', carrierId);
       await this.profileStatusService.updateProfileCompletion(carrierId);
       const summary = await this.profileQueryService.getProfileStatus(carrierId);
       res.status(200).json({ success: true, data: summary });
     } catch (error: any) {
-      console.error('Profile status refresh error:', error);
-      res.status(500).json({ 
-        success: false, 
+      res.status(500).json({
+        success: false,
         message: 'Profil durumu güncellenemedi: ' + error.message,
-        error: process.env.NODE_ENV === 'development' ? error.stack : undefined
+        error: process.env.NODE_ENV === 'development' ? error.stack : undefined,
       });
     }
   };
@@ -82,12 +80,14 @@ export class CarrierProfileController {
       res.status(400).json({ success: false, message: 'Carrier ID gereklidir.' });
       return;
     }
+
     try {
       const overview = await this.profileQueryService.getCarrierOverview(carrierId);
       if (!overview) {
         res.status(404).json({ success: false, message: 'Nakliyeci bulunamadı.' });
         return;
       }
+
       res.status(200).json({ success: true, data: overview });
     } catch (error: any) {
       res.status(400).json({ success: false, message: error.message || 'Profil bilgileri alınamadı.' });
@@ -97,6 +97,7 @@ export class CarrierProfileController {
   updateCompanyInfo = async (req: Request, res: Response) => {
     const carrierId = this.ensureCarrier(req, res);
     if (!carrierId) return;
+
     try {
       const carrier = await this.companyInfoService.updateCompanyInfo(carrierId, req.body);
 
@@ -106,25 +107,26 @@ export class CarrierProfileController {
         await this.serviceTypeService.replaceSelectedTypeNames(carrierId, serviceTypeNames);
         serviceTypes = await this.serviceTypeService.listSelectedTypes(carrierId);
       } else if (req.body.serviceTypeIds) {
-        // If IDs are provided directly
         await this.serviceTypeService.replaceSelectedTypes(carrierId, req.body.serviceTypeIds);
         serviceTypes = await this.serviceTypeService.listSelectedTypes(carrierId);
       }
 
       const scopeOfWorkNames = this.extractStringArray(req.body.scopeOfWorkNames, req.body.scopes);
-      let scopeOfWorks: any = null; 
+      let scopeOfWorks: any = null;
       if (scopeOfWorkNames) {
-         await this.scopeOfWorkService.replaceSelectedTypeNames(carrierId, scopeOfWorkNames);
-         scopeOfWorks = await this.scopeOfWorkService.listSelectedTypes(carrierId);
+        await this.scopeOfWorkService.replaceSelectedTypeNames(carrierId, scopeOfWorkNames);
+        scopeOfWorks = await this.scopeOfWorkService.listSelectedTypes(carrierId);
       } else if (req.body.scopeOfWorkIds) {
-          await this.scopeOfWorkService.replaceSelectedTypes(carrierId, req.body.scopeOfWorkIds);
-          scopeOfWorks = await this.scopeOfWorkService.listSelectedTypes(carrierId);
+        await this.scopeOfWorkService.replaceSelectedTypes(carrierId, req.body.scopeOfWorkIds);
+        scopeOfWorks = await this.scopeOfWorkService.listSelectedTypes(carrierId);
       }
 
       const vehicleTypeNames = this.extractStringArray(req.body.vehicleTypeNames, req.body.vehicleTypes);
       let vehicleTypes: any = null;
       if (vehicleTypeNames) {
-        const capacityOverrides = this.extractCapacityOverrides(req.body.vehicleTypeCapacities ?? req.body.vehicleCapacities);
+        const capacityOverrides = this.extractCapacityOverrides(
+          req.body.vehicleTypeCapacities ?? req.body.vehicleCapacities,
+        );
         await this.vehicleTypeService.replaceSelectedTypeNames(carrierId, vehicleTypeNames, capacityOverrides);
         vehicleTypes = await this.vehicleTypeService.listSelectedTypes(carrierId);
       }
@@ -134,11 +136,17 @@ export class CarrierProfileController {
         earnings = await this.earningsService.upsert(carrierId, {
           bankName: req.body.bankName,
           iban: req.body.iban,
-          accountHolder: req.body.accountHolder ?? req.body.accountHolderTitle
+          accountHolder: req.body.accountHolder ?? req.body.accountHolderTitle,
         });
       }
 
-      res.status(200).json({ success: true, message: 'Firma bilgileri güncellendi.', data: { carrier, serviceTypes, scopeOfWorks, vehicleTypes, earnings } });
+      await this.approvalService.markDraftChanged(carrierId);
+
+      res.status(200).json({
+        success: true,
+        message: 'Firma bilgileri güncellendi.',
+        data: { carrier, serviceTypes, scopeOfWorks, vehicleTypes, earnings },
+      });
     } catch (error: any) {
       res.status(400).json({ success: false, message: error.message || 'Firma bilgileri güncellenemedi.' });
     }
@@ -165,6 +173,7 @@ export class CarrierProfileController {
   getActivityInfo = async (req: Request, res: Response) => {
     const carrierId = this.ensureCarrier(req, res);
     if (!carrierId) return;
+
     try {
       const activity = await this.activityService.getActivityInfo(carrierId);
       res.status(200).json({ success: true, data: activity });
@@ -176,8 +185,10 @@ export class CarrierProfileController {
   updateActivityInfo = async (req: Request, res: Response) => {
     const carrierId = this.ensureCarrier(req, res);
     if (!carrierId) return;
+
     try {
       const activity = await this.activityService.updateActivityInfo(carrierId, req.body);
+      await this.approvalService.markDraftChanged(carrierId);
       res.status(200).json({ success: true, message: 'Faaliyet bilgileri kaydedildi.', data: activity });
     } catch (error: any) {
       res.status(400).json({ success: false, message: error.message || 'Faaliyet bilgileri güncellenemedi.' });
@@ -187,8 +198,10 @@ export class CarrierProfileController {
   updateVehicleTypes = async (req: Request, res: Response) => {
     const carrierId = this.ensureCarrier(req, res);
     if (!carrierId) return;
+
     try {
       await this.vehicleTypeService.replaceSelectedTypes(carrierId, req.body.vehicleTypeIds || []);
+      await this.approvalService.markDraftChanged(carrierId);
       res.status(200).json({ success: true, message: 'Araç türleri güncellendi.' });
     } catch (error: any) {
       res.status(400).json({ success: false, message: error.message || 'Araç türleri güncellenemedi.' });
@@ -198,8 +211,10 @@ export class CarrierProfileController {
   updateServiceTypes = async (req: Request, res: Response) => {
     const carrierId = this.ensureCarrier(req, res);
     if (!carrierId) return;
+
     try {
       await this.serviceTypeService.replaceSelectedTypes(carrierId, req.body.serviceTypeIds || []);
+      await this.approvalService.markDraftChanged(carrierId);
       res.status(200).json({ success: true, message: 'Hizmet türleri güncellendi.' });
     } catch (error: any) {
       res.status(400).json({ success: false, message: error.message || 'Hizmet türleri güncellenemedi.' });
@@ -209,6 +224,7 @@ export class CarrierProfileController {
   upsertVehicles = async (req: Request, res: Response) => {
     const carrierId = this.ensureCarrier(req, res);
     if (!carrierId) return;
+
     try {
       const payload = (req.body.vehicles || req.body.selectedVehicles || []).map((vehicle: any) => ({
         id: vehicle.id,
@@ -223,7 +239,12 @@ export class CarrierProfileController {
       }));
 
       const vehicles = await this.vehicleService.upsertVehicles(carrierId, payload);
-      res.status(200).json({ success: true, message: 'Araç bilgileri kaydedildi.', data: this.formatVehicles(vehicles) });
+      await this.approvalService.markDraftChanged(carrierId);
+      res.status(200).json({
+        success: true,
+        message: 'Araç bilgileri kaydedildi.',
+        data: this.formatVehicles(vehicles),
+      });
     } catch (error: any) {
       res.status(400).json({ success: false, message: error.message || 'Araç bilgileri güncellenemedi.' });
     }
@@ -232,9 +253,15 @@ export class CarrierProfileController {
   createVehicle = async (req: Request, res: Response) => {
     const carrierId = this.ensureCarrier(req, res);
     if (!carrierId) return;
+
     try {
       const vehicle = await this.vehicleService.createVehicle(carrierId, req.body);
-      res.status(201).json({ success: true, message: 'Araç eklendi.', data: vehicle ? this.formatVehicles([vehicle])[0] : null });
+      await this.approvalService.markDraftChanged(carrierId);
+      res.status(201).json({
+        success: true,
+        message: 'Araç eklendi.',
+        data: vehicle ? this.formatVehicles([vehicle])[0] : null,
+      });
     } catch (error: any) {
       res.status(400).json({ success: false, message: error.message || 'Araç eklenemedi.' });
     }
@@ -243,9 +270,15 @@ export class CarrierProfileController {
   updateVehicleById = async (req: Request, res: Response) => {
     const carrierId = this.ensureCarrier(req, res);
     if (!carrierId) return;
+
     try {
       const vehicle = await this.vehicleService.updateVehicle(carrierId, req.params.vehicleId, req.body);
-      res.status(200).json({ success: true, message: 'Araç güncellendi.', data: vehicle ? this.formatVehicles([vehicle])[0] : null });
+      await this.approvalService.markDraftChanged(carrierId);
+      res.status(200).json({
+        success: true,
+        message: 'Araç güncellendi.',
+        data: vehicle ? this.formatVehicles([vehicle])[0] : null,
+      });
     } catch (error: any) {
       res.status(400).json({ success: false, message: error.message || 'Araç güncellenemedi.' });
     }
@@ -254,8 +287,10 @@ export class CarrierProfileController {
   deleteVehicleById = async (req: Request, res: Response) => {
     const carrierId = this.ensureCarrier(req, res);
     if (!carrierId) return;
+
     try {
       await this.vehicleService.deleteVehicle(carrierId, req.params.vehicleId);
+      await this.approvalService.markDraftChanged(carrierId);
       res.status(200).json({ success: true, message: 'Araç silindi.' });
     } catch (error: any) {
       res.status(400).json({ success: false, message: error.message || 'Araç silinemedi.' });
@@ -265,14 +300,25 @@ export class CarrierProfileController {
   addVehiclePhotos = async (req: Request, res: Response) => {
     const carrierId = this.ensureCarrier(req, res);
     if (!carrierId) return;
+
     try {
       const files = Array.isArray(req.files) ? req.files : [];
       if (!files.length) {
         res.status(400).json({ success: false, message: 'En az bir fotoğraf seçmelisiniz.' });
         return;
       }
-      const vehicle = await this.vehicleService.addVehiclePhotos(carrierId, req.params.vehicleId, files.map((file: any) => file.filename));
-      res.status(200).json({ success: true, message: 'Araç fotoğrafları yüklendi.', data: vehicle ? this.formatVehicles([vehicle])[0] : null });
+
+      const vehicle = await this.vehicleService.addVehiclePhotos(
+        carrierId,
+        req.params.vehicleId,
+        files.map((file: any) => file.filename),
+      );
+      await this.approvalService.markDraftChanged(carrierId);
+      res.status(200).json({
+        success: true,
+        message: 'Araç fotoğrafları yüklendi.',
+        data: vehicle ? this.formatVehicles([vehicle])[0] : null,
+      });
     } catch (error: any) {
       res.status(400).json({ success: false, message: error.message || 'Araç fotoğrafları yüklenemedi.' });
     }
@@ -281,9 +327,15 @@ export class CarrierProfileController {
   deleteVehiclePhoto = async (req: Request, res: Response) => {
     const carrierId = this.ensureCarrier(req, res);
     if (!carrierId) return;
+
     try {
       const vehicle = await this.vehicleService.deleteVehiclePhoto(carrierId, req.params.vehicleId, req.params.photoId);
-      res.status(200).json({ success: true, message: 'Araç fotoğrafı silindi.', data: vehicle ? this.formatVehicles([vehicle])[0] : null });
+      await this.approvalService.markDraftChanged(carrierId);
+      res.status(200).json({
+        success: true,
+        message: 'Araç fotoğrafı silindi.',
+        data: vehicle ? this.formatVehicles([vehicle])[0] : null,
+      });
     } catch (error: any) {
       res.status(400).json({ success: false, message: error.message || 'Araç fotoğrafı silinemedi.' });
     }
@@ -292,6 +344,7 @@ export class CarrierProfileController {
   listVehicles = async (req: Request, res: Response) => {
     const carrierId = this.ensureCarrier(req, res);
     if (!carrierId) return;
+
     try {
       const vehicles = await this.vehicleService.listVehicles(carrierId);
       res.status(200).json({ success: true, data: this.formatVehicles(vehicles) });
@@ -303,6 +356,7 @@ export class CarrierProfileController {
   updateEarnings = async (req: Request, res: Response) => {
     const carrierId = this.ensureCarrier(req, res);
     if (!carrierId) return;
+
     try {
       const earnings = await this.earningsService.upsert(carrierId, req.body);
       res.status(200).json({ success: true, message: 'Kazanç bilgileri güncellendi.', data: earnings });
@@ -314,6 +368,7 @@ export class CarrierProfileController {
   updateSecurity = async (req: Request, res: Response) => {
     const carrierId = this.ensureCarrier(req, res);
     if (!carrierId) return;
+
     try {
       const settings = await this.securityService.updateSettings(carrierId, req.body);
       res.status(200).json({ success: true, message: 'Güvenlik ayarları kaydedildi.', data: settings });
@@ -325,6 +380,7 @@ export class CarrierProfileController {
   getNotifications = async (req: Request, res: Response) => {
     const carrierId = this.ensureCarrier(req, res);
     if (!carrierId) return;
+
     try {
       const preferences = await this.notificationService.getPreferences(carrierId);
       res.status(200).json({ success: true, data: preferences });
@@ -336,6 +392,7 @@ export class CarrierProfileController {
   toggleNotification = async (req: Request, res: Response) => {
     const carrierId = this.ensureCarrier(req, res);
     if (!carrierId) return;
+
     try {
       const preferences = await this.notificationService.togglePreference(carrierId, req.body);
       res.status(200).json({ success: true, message: 'Bildirim tercihi güncellendi.', data: preferences });
@@ -344,13 +401,44 @@ export class CarrierProfileController {
     }
   };
 
+  submitForApproval = async (req: Request, res: Response) => {
+    const carrierId = this.ensureCarrier(req, res);
+    if (!carrierId) return;
+
+    try {
+      const status = await this.profileStatusService.updateProfileCompletion(carrierId);
+      if (status.overallPercentage < 100) {
+        res.status(400).json({ success: false, message: 'Tüm profil bölümlerini tamamlamanız gerekiyor.' });
+        return;
+      }
+
+      const result = await this.approvalService.submitForReview(carrierId);
+      res.status(200).json({
+        success: true,
+        message: 'Profiliniz incelemeye alındı.',
+        data: {
+          approvalState: result.approvalState,
+          approvalVersion: result.approvalVersion,
+          resubmissionCount: result.resubmissionCount,
+          submittedAt: result.submittedAt,
+          pendingApproval: true,
+        },
+      });
+    } catch (error: any) {
+      const statusCode = typeof error?.statusCode === 'number' ? error.statusCode : 500;
+      res.status(statusCode).json({ success: false, message: 'Onay talebi gönderilemedi: ' + error.message });
+    }
+  };
+
   private formatVehicles(vehicles: any[]) {
-    return vehicles.map(vehicle => ({
+    return vehicles.map((vehicle) => ({
       id: vehicle.id,
       vehicleTypeId: vehicle.vehicleTypeId,
       vehicleTypeName: vehicle.vehicleType?.name,
-      capacityKg: vehicle.capacityKg !== null && vehicle.capacityKg !== undefined ? Number(vehicle.capacityKg) : null,
-      capacityM3: vehicle.capacityM3 !== null && vehicle.capacityM3 !== undefined ? Number(vehicle.capacityM3) : null,
+      capacityKg:
+        vehicle.capacityKg !== null && vehicle.capacityKg !== undefined ? Number(vehicle.capacityKg) : null,
+      capacityM3:
+        vehicle.capacityM3 !== null && vehicle.capacityM3 !== undefined ? Number(vehicle.capacityM3) : null,
       licensePlate: vehicle.plate ?? vehicle.licensePlate ?? null,
       plate: vehicle.plate ?? vehicle.licensePlate ?? null,
       brand: vehicle.brand ?? null,
@@ -358,14 +446,14 @@ export class CarrierProfileController {
       year: vehicle.year ?? null,
       photoUrls: Array.isArray(vehicle.photos) ? vehicle.photos : [],
       createdAt: vehicle.createdAt,
-      updatedAt: vehicle.updatedAt
+      updatedAt: vehicle.updatedAt,
     }));
   }
 
   private extractStringArray(...candidates: any[]): string[] | null {
-    const source = candidates.find(candidate => Array.isArray(candidate));
+    const source = candidates.find((candidate) => Array.isArray(candidate));
     if (!source) return null;
-    return (source as any[]).map(item => String(item).trim()).filter(Boolean);
+    return (source as any[]).map((item) => String(item).trim()).filter(Boolean);
   }
 
   private extractCapacityOverrides(candidate: any): Record<string, number> | undefined {
@@ -379,33 +467,8 @@ export class CarrierProfileController {
         return [String(key).trim(), parsed] as [string, number];
       })
       .filter(Boolean) as [string, number][];
+
     if (!entries.length) return undefined;
     return Object.fromEntries(entries);
   }
-
-  submitForApproval = async (req: Request, res: Response) => {
-    const carrierId = this.ensureCarrier(req, res);
-    if (!carrierId) return;
-    try {
-      const status = await this.profileStatusService.updateProfileCompletion(carrierId);
-      if (status.overallPercentage < 100) {
-        res.status(400).json({ success: false, message: 'Tüm profil bölümlerini tamamlamanız gerekiyor.' });
-        return;
-      }
-      const carrier = await this.carrierRepository.findFullById(carrierId);
-      if (!carrier) {
-        res.status(404).json({ success: false, message: 'Nakliyeci bulunamadı.' });
-        return;
-      }
-      if (carrier.verifiedByAdmin) {
-        res.status(400).json({ success: false, message: 'Profiliniz zaten onaylı.' });
-        return;
-      }
-      carrier.pendingApproval = true;
-      await this.carrierRepository['repository'].save(carrier);
-      res.status(200).json({ success: true, message: 'Profiliniz incelemeye alındı.', data: { pendingApproval: true } });
-    } catch (error: any) {
-      res.status(500).json({ success: false, message: 'Onay talebi gönderilemedi: ' + error.message });
-    }
-  };
 }

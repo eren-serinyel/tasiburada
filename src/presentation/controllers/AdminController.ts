@@ -1,11 +1,14 @@
 import { Request, Response } from 'express';
 import { AdminService } from '../../application/services/AdminService';
+import { CarrierApprovalService } from '../../application/services/carrier/CarrierApprovalService';
 
 export class AdminController {
   private adminService: AdminService;
+  private carrierApprovalService: CarrierApprovalService;
 
   constructor() {
     this.adminService = new AdminService();
+    this.carrierApprovalService = new CarrierApprovalService();
   }
 
   // ─── Dashboard ─────────────────────────────────────────────────────────────
@@ -480,6 +483,82 @@ export class AdminController {
   };
 
   // ─── Audit Log Write ───────────────────────────────────────────────────────
+
+  getCarrierApprovalQueue = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { state, assignedAdminId, search, page, limit } = req.query;
+      const result = await this.carrierApprovalService.getApprovalQueue({
+        state: state as any,
+        assignedAdminId: assignedAdminId as string | undefined,
+        search: search as string | undefined,
+        page: page ? Number(page) : 1,
+        limit: limit ? Number(limit) : 20,
+      });
+      res.status(200).json({ success: true, data: result });
+    } catch (error: any) {
+      res.status(400).json({ success: false, message: error.message || 'Approval kuyruğu alınamadı.' });
+    }
+  };
+
+  claimCarrierApproval = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const adminId = req.user?.adminId;
+      if (!adminId) { res.status(401).json({ success: false, message: 'Yetkisiz erişim.' }); return; }
+      const result = await this.carrierApprovalService.claimForReview(adminId, req.params.carrierId);
+      res.status(200).json({ success: true, data: result });
+    } catch (error: any) {
+      const statusCode = typeof error?.statusCode === 'number' ? error.statusCode : 400;
+      res.status(statusCode).json({ success: false, message: error.message || 'Kayıt claim edilemedi.' });
+    }
+  };
+
+  releaseCarrierApproval = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const adminId = req.user?.adminId;
+      if (!adminId) { res.status(401).json({ success: false, message: 'Yetkisiz erişim.' }); return; }
+      const result = await this.carrierApprovalService.releaseReview(adminId, req.params.carrierId);
+      res.status(200).json({ success: true, data: result });
+    } catch (error: any) {
+      const statusCode = typeof error?.statusCode === 'number' ? error.statusCode : 400;
+      res.status(statusCode).json({ success: false, message: error.message || 'Review bırakılamadı.' });
+    }
+  };
+
+  approveCarrier = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const adminId = req.user?.adminId;
+      if (!adminId) { res.status(401).json({ success: false, message: 'Yetkisiz erişim.' }); return; }
+      const result = await this.carrierApprovalService.approve(adminId, req.params.carrierId, req.body?.note);
+      res.status(200).json({ success: true, message: 'Nakliyeci onaylandı.', data: result });
+    } catch (error: any) {
+      const statusCode = typeof error?.statusCode === 'number' ? error.statusCode : 400;
+      res.status(statusCode).json({ success: false, message: error.message || 'Onay işlemi başarısız.' });
+    }
+  };
+
+  rejectCarrier = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const adminId = req.user?.adminId;
+      if (!adminId) { res.status(401).json({ success: false, message: 'Yetkisiz erişim.' }); return; }
+      const result = await this.carrierApprovalService.reject(adminId, req.params.carrierId, req.body?.reason);
+      res.status(200).json({ success: true, message: 'Nakliyeci reddedildi.', data: result });
+    } catch (error: any) {
+      const statusCode = typeof error?.statusCode === 'number' ? error.statusCode : 400;
+      res.status(statusCode).json({ success: false, message: error.message || 'Red işlemi başarısız.' });
+    }
+  };
+
+  suspendCarrier = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const adminId = req.user?.adminId;
+      if (!adminId) { res.status(401).json({ success: false, message: 'Yetkisiz erişim.' }); return; }
+      const result = await this.carrierApprovalService.suspend(adminId, req.params.carrierId, req.body?.reason);
+      res.status(200).json({ success: true, message: 'Nakliyeci askıya alındı.', data: result });
+    } catch (error: any) {
+      const statusCode = typeof error?.statusCode === 'number' ? error.statusCode : 400;
+      res.status(statusCode).json({ success: false, message: error.message || 'Askıya alma işlemi başarısız.' });
+    }
+  };
 
   createAuditLog = async (req: Request, res: Response): Promise<void> => {
     try {
