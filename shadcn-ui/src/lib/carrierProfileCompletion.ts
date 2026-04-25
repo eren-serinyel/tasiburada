@@ -31,6 +31,7 @@ export type CarrierCompletionCarrier = {
   addressLine2?: string | null;
   address?: string | null;
   taxNumber?: string | null;
+  approvalState?: string | null;
   verifiedByAdmin?: boolean | null;
   pendingApproval?: boolean | null;
 };
@@ -90,7 +91,7 @@ const hasVehiclePhoto = (vehicles: CarrierCompletionVehicle[] | null | undefined
   });
 
 const isAdminApproved = (carrier?: CarrierCompletionCarrier | null): boolean =>
-  Boolean(carrier?.verifiedByAdmin);
+  Boolean(carrier?.verifiedByAdmin) || String(carrier?.approvalState ?? '').toUpperCase() === 'APPROVED';
 
 const hasCompanyInfo = (carrier?: CarrierCompletionCarrier | null, activity?: CarrierCompletionActivity | null): boolean => {
   const city = carrier?.activityCity ?? carrier?.city ?? activity?.city;
@@ -128,10 +129,11 @@ export function buildCarrierProfileCompletionSummary(input: BuildCarrierProfileC
     .filter((step) => step.key !== 'admin_approval')
     .every((step) => step.completed);
   const adminApprovalCompleted = Boolean(steps.find((step) => step.key === 'admin_approval')?.completed);
+  const approvalState = String(carrier?.approvalState ?? '').toUpperCase();
   const statusText = isComplete
     ? 'Onayland\u0131'
     : prerequisitesComplete && !adminApprovalCompleted
-      ? carrier?.pendingApproval
+      ? carrier?.pendingApproval || ['SUBMITTED', 'IN_REVIEW'].includes(approvalState)
         ? 'Onay bekleniyor'
         : 'Onaya g\u00f6nder'
       : 'Eksikler var';

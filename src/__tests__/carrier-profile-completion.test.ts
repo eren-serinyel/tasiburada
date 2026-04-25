@@ -46,9 +46,9 @@ describe('carrier profile completion mapper', () => {
     expect(summary.steps.find((step) => step.key === 'admin_approval')?.completed).toBe(false);
   });
 
-  test('admin approval is only completed by verifiedByAdmin', () => {
+  test('admin approval is completed by explicit approval state', () => {
     const pendingSummary = buildCarrierProfileCompletionSummary({
-      carrier: { ...completeCarrier, pendingApproval: true },
+      carrier: { ...completeCarrier, pendingApproval: true, approvalState: 'SUBMITTED' },
       documents: [
         { type: 'TAX_PLATE', fileUrl: '/uploads/tax.pdf' },
         { type: 'AUTHORIZATION_CERT', fileUrl: '/uploads/k.pdf' },
@@ -61,7 +61,7 @@ describe('carrier profile completion mapper', () => {
     expect(pendingSummary.steps.find((step) => step.key === 'admin_approval')?.completed).toBe(false);
 
     const approvedSummary = buildCarrierProfileCompletionSummary({
-      carrier: { ...completeCarrier, pendingApproval: true, verifiedByAdmin: true },
+      carrier: { ...completeCarrier, approvalState: 'APPROVED' },
       documents: [
         { type: 'TAX_PLATE', fileUrl: '/uploads/tax.pdf' },
         { type: 'AUTHORIZATION_CERT', fileUrl: '/uploads/k.pdf' },
