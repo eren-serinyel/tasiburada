@@ -259,7 +259,7 @@ export const EXTRA_SERVICES = [
   'Asansörlü Taşıma',
   'Profesyonel Paketleme',
   'Montaj/Demontaj',
-  'Depolama',
+  'Geçici depolama',
   'Piyano Taşıma',
   'Ambalajlama',
   'Beyaz Eşya Kurulumu',
