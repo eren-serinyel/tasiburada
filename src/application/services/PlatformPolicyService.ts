@@ -1,5 +1,5 @@
 import { createHash } from 'crypto';
-import { MoreThan } from 'typeorm';
+import { In, MoreThan } from 'typeorm';
 import {
   ContactFilterAction,
   ContactFilterLog,
@@ -29,6 +29,45 @@ const DIRECT_CONTACT_MESSAGE =
   'Guvenliginiz icin telefon, e-posta, link veya platform disi iletisim yonlendirmesi paylasilamaz.';
 
 export class PlatformPolicyService {
+  async hasActiveCooldown(customerId: string, carrierId: string): Promise<boolean> {
+    const repo = AppDataSource.getRepository(MatchCooldown);
+    const cooldown = await repo.findOne({
+      where: {
+        customerId,
+        carrierId,
+        status: MatchCooldownStatus.ACTIVE,
+        activeUntil: MoreThan(new Date()),
+      },
+      select: ['id'],
+    });
+
+    return Boolean(cooldown);
+  }
+
+  async getActiveCooldownCustomerIdsForCarrier(carrierId: string, customerIds: string[]): Promise<Set<string>> {
+    if (!carrierId || customerIds.length === 0) {
+      return new Set<string>();
+    }
+
+    const uniqueCustomerIds = Array.from(new Set(customerIds.filter(Boolean)));
+    if (uniqueCustomerIds.length === 0) {
+      return new Set<string>();
+    }
+
+    const repo = AppDataSource.getRepository(MatchCooldown);
+    const rows = await repo.find({
+      where: {
+        carrierId,
+        customerId: In(uniqueCustomerIds),
+        status: MatchCooldownStatus.ACTIVE,
+        activeUntil: MoreThan(new Date()),
+      },
+      select: ['customerId'],
+    });
+
+    return new Set(rows.map((row) => row.customerId));
+  }
+
   async enforceNoContactInfo(input: ContactPolicyInput): Promise<void> {
     if (!input.text?.trim()) return;
 
@@ -83,20 +122,9 @@ export class PlatformPolicyService {
   }
 
   async assertNoActiveCooldown(customerId: string, carrierId: string): Promise<void> {
-    const repo = AppDataSource.getRepository(MatchCooldown);
-    const cooldown = await repo.findOne({
-      where: {
-        customerId,
-        carrierId,
-        status: MatchCooldownStatus.ACTIVE,
-        activeUntil: MoreThan(new Date()),
-      },
-      order: { activeUntil: 'DESC' },
-    });
-
-    if (cooldown) {
+    if (await this.hasActiveCooldown(customerId, carrierId)) {
       throw new ConflictError(
-        `Bu musteri ve nakliyeci eslesmesi ${cooldown.activeUntil.toLocaleDateString('tr-TR')} tarihine kadar bekleme suresinde.`
+        'Bu musteri ve nakliyeci eslesmesi aktif bekleme suresinde.'
       );
     }
   }

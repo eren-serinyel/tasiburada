@@ -23,6 +23,7 @@ describe('OfferService approvalState alignment', () => {
       findActiveByShipmentAndCarrier: jest.fn().mockResolvedValue(null),
     };
     service.platformPolicy = {
+      hasActiveCooldown: jest.fn().mockResolvedValue(false),
       enforceNoContactInfo: jest.fn().mockResolvedValue(undefined),
     };
     service.carrierRepository = {

@@ -139,6 +139,10 @@ export class OfferService {
       throw new ValidationError('Sadece teklif almaya açık taşıma taleplerine teklif verilebilir.');
     }
 
+    if (await this.platformPolicy.hasActiveCooldown(shipment.customerId, carrierId)) {
+      throw new ConflictError('Bu müşteri ile aktif eşleşme bekleme süresi bulunduğu için teklif verilemez.');
+    }
+
     await this.assertCarrierCapabilityForShipment(carrierId, shipment);
 
     await this.platformPolicy.enforceNoContactInfo({

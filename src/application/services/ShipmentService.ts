@@ -460,9 +460,18 @@ export class ShipmentService {
       this.matchingService.isShipmentMatchingCarrier(shipment, carrier)
     );
 
+    const customerIds = Array.from(new Set(
+      matchingShipments
+        .map((shipment) => shipment.customerId)
+        .filter((customerId): customerId is string => Boolean(customerId))
+    ));
+
+    const cooldownCustomerIds = await this.platformPolicy.getActiveCooldownCustomerIdsForCarrier(carrierId, customerIds);
+    const visibleShipments = matchingShipments.filter((shipment) => !cooldownCustomerIds.has(shipment.customerId));
+
     // ANTI-DISINTERMEDIATION: contactPhone ve müşteri PII maskeleme
     // Bekleyen talepleri listelerken carrier iletişim bilgisi göremez
-    return matchingShipments.map(s => {
+    return visibleShipments.map(s => {
       s.contactPhone = null as any;
       this.maskOpenAddressForCarrier(s, false);
       this.flattenExtraServices(s);
