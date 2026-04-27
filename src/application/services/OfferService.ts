@@ -12,6 +12,7 @@ import { PlatformPolicyService } from './PlatformPolicyService';
 import { ContactFilterSurface } from '../../domain/entities';
 import { CarrierLoadTypeCapability } from '../../domain/entities/CarrierLoadTypeCapability';
 import { CarrierExtraServiceCapability } from '../../domain/entities/CarrierExtraServiceCapability';
+import { CarrierApprovalState } from '../../domain/entities/Carrier';
 import { inferExtraServiceLoadTypeFromShipmentCategory } from './extra-services/extraServiceApplicability';
 
 interface CreateOfferPayload {
@@ -188,6 +189,10 @@ export class OfferService {
 
     if (!carrier.verifiedByAdmin) {
       throw new ForbiddenError('Teklif verebilmek için hesabınızın admin tarafından onaylanması gerekmektedir.');
+    }
+
+    if (carrier.approvalState !== CarrierApprovalState.APPROVED) {
+      throw new ForbiddenError('Teklif verebilmek için hesabınızın onay durumunun APPROVED olması gerekmektedir.');
     }
 
     const offer = await this.offerRepository.create({

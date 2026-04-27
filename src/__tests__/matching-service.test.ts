@@ -125,11 +125,11 @@ describe('MatchingService MVP hardening', () => {
     expect(service.isShipmentMatchingCarrier(shipment, carrier)).toBe(false);
   });
 
-  test('legacy fallback: approvalState missingse legacy path bozulmaz', () => {
+  test('strict mode: approvalState missingse matching false', () => {
     const carrier = buildCarrier({ approvalState: undefined as any });
     const shipment = buildShipment();
 
-    expect(service.isShipmentMatchingCarrier(shipment, carrier)).toBe(true);
+    expect(service.isShipmentMatchingCarrier(shipment, carrier)).toBe(false);
   });
 
   test('shipment extra service istemiyorsa pass', () => {

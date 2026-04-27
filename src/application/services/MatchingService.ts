@@ -71,8 +71,7 @@ export class MatchingService {
     if (!carrier) return 'carrier_not_found';
     if (!carrier.isActive) return 'carrier_inactive';
     if (!carrier.verifiedByAdmin) return 'carrier_unverified';
-    // Legacy fallback: if approvalState is absent, preserve previous behavior.
-    if (carrier.approvalState && carrier.approvalState !== CarrierApprovalState.APPROVED) return 'carrier_not_approved';
+    if (carrier.approvalState !== CarrierApprovalState.APPROVED) return 'carrier_not_approved';
     if (!this.hasMatchingScope(shipment, carrier)) return 'scope_mismatch';
     if (!this.hasMatchingCity(shipment, carrier)) return 'city_mismatch';
     if (!this.hasMatchingLoadTypeCapability(shipment, carrier)) return 'load_type_mismatch';
