@@ -8,6 +8,21 @@ const resolveUserId = (req: Request): string | null => {
 export class ConverterController {
   private converterService = new ConverterService();
 
+  listItems = async (_req: Request, res: Response): Promise<void> => {
+    try {
+      const data = await this.converterService.listActiveItems();
+      res.status(200).json({
+        success: true,
+        data,
+      });
+    } catch (error: any) {
+      res.status(error.statusCode || 500).json({
+        success: false,
+        message: error.message || 'Converter item katalogu alınamadı.',
+      });
+    }
+  };
+
   createSession = async (req: Request, res: Response): Promise<void> => {
     try {
       const data = await this.converterService.createSession(resolveUserId(req), req.body);

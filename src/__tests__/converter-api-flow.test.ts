@@ -24,7 +24,7 @@ const VALID_ESTIMATE_PAYLOAD = {
     { itemCode: 'sofa_3_seat', quantity: 1 },
     { itemCode: 'bed_double', quantity: 1 },
     { itemCode: 'washing_machine', quantity: 1 },
-    { itemCode: 'box_medium', quantity: 12 },
+    { itemCode: 'medium_box', quantity: 12 },
   ],
   originFloor: 3,
   destinationFloor: 2,
@@ -92,6 +92,22 @@ describe('Converter API Flow', () => {
     expect(res.body.data.sessionId).toBeTruthy();
     expect(res.body.data.status).toBe('draft');
     emptySessionId = res.body.data.sessionId;
+  });
+
+  test('2.1 Item catalog endpoint aktif katalogu dondurmeli', async () => {
+    if (skipDB()) return;
+
+    const res = await request(testApp).get(`${BASE}/items`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(Array.isArray(res.body.data)).toBe(true);
+    expect(res.body.data.length).toBeGreaterThanOrEqual(20);
+    expect(res.body.data.length).toBeLessThanOrEqual(25);
+    const codes = res.body.data.map((item: any) => item.itemCode);
+    expect(new Set(codes).size).toBe(codes.length);
+    expect(codes).toContain('refrigerator');
+    expect(codes).toContain('medium_box');
   });
 
   test('3. Estimate öncesi result endpoint answer/result null dönebilmeli', async () => {
@@ -169,6 +185,9 @@ describe('Converter API Flow', () => {
     expect(res.body.success).toBe(true);
     expect(res.body.data.estimatedVolumeMin).toBeGreaterThan(0);
     expect(res.body.data.estimatedVolumeMax).toBeGreaterThanOrEqual(res.body.data.estimatedVolumeMin);
+    expect(res.body.data.estimatedWeightKg).toBe(
+      Math.round(((res.body.data.estimatedVolumeMin + res.body.data.estimatedVolumeMax) / 2) * 200),
+    );
     expect(res.body.data.recommendedVehicle).toBeTruthy();
     expect(['high', 'medium', 'low']).toContain(res.body.data.confidence);
   });
@@ -188,6 +207,9 @@ describe('Converter API Flow', () => {
     expect(res.body.data.result).toBeDefined();
     expect(res.body.data.result.estimatedVolumeMin).toBeGreaterThan(0);
     expect(res.body.data.result.estimatedVolumeMax).toBeGreaterThanOrEqual(res.body.data.result.estimatedVolumeMin);
+    expect(res.body.data.result.estimatedWeightKg).toBe(
+      Math.round(((res.body.data.result.estimatedVolumeMin + res.body.data.result.estimatedVolumeMax) / 2) * 200),
+    );
     expect(res.body.data.result.status).toBe('estimated');
   });
 

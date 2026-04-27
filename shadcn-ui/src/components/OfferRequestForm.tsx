@@ -25,6 +25,8 @@ import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { apiClient } from '@/lib/apiClient';
 import VolumeCalculatorModal from '@/components/converter/VolumeCalculatorModal';
+import type { VolumeCalculatorInitialValues } from '@/components/converter/VolumeCalculatorModal';
+import type { EstimateConverterResponse } from '@/lib/converterApi';
 import {
   getExtraServiceLoadType,
   mapSelectedExtraServiceNames,
@@ -45,6 +47,19 @@ interface CustomerAddress {
   isDefault: boolean;
 }
 
+interface VehicleTypeOption {
+  id: string;
+  name: string;
+}
+
+const CONVERTER_TO_VEHICLE_TYPE_NAME: Record<EstimateConverterResponse['recommendedVehicle'], string> = {
+  panelvan: 'Panel Van',
+  short_chassis_van: 'Kamyonet',
+  long_chassis_van: 'Kamyonet',
+  small_truck: 'Kamyon',
+  large_truck: 'Kamyon',
+};
+
 export default function OfferRequestForm({ showHeader = false }: { showHeader?: boolean }) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -63,6 +78,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
   const [inviteCarrierName, setInviteCarrierName] = useState<string | null>(null);
   const [isVolumeCalculatorOpen, setIsVolumeCalculatorOpen] = useState(false);
   const [availableExtraServices, setAvailableExtraServices] = useState<ExtraServiceOption[]>([]);
+  const [vehicleTypeOptions, setVehicleTypeOptions] = useState<VehicleTypeOption[]>([]);
   const [form, setForm] = useState({
     originCity: '',
     originDistrict: '',
@@ -143,6 +159,20 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
         .catch(() => {});
     }
   }, [isAuthenticated, user?.type]);
+
+  useEffect(() => {
+    apiClient('/vehicle-types')
+      .then((response) => response.json())
+      .then((json) => {
+        const nextOptions = Array.isArray(json?.data)
+          ? json.data
+              .filter((item: any) => item?.status === 'ACTIVE')
+              .map((item: any) => ({ id: String(item.id), name: String(item.name) }))
+          : [];
+        setVehicleTypeOptions(nextOptions);
+      })
+      .catch(() => setVehicleTypeOptions([]));
+  }, []);
 
   // Handle URL "type" parameter mappings
   useEffect(() => {
@@ -295,9 +325,42 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
 
   const handleChange = (field: string, value: any) => setForm((f) => ({ ...f, [field]: value }));
 
-  const applyConverterEstimateToForm = (result: { estimatedVolumeMin: number; estimatedVolumeMax: number; suggestedExtraServiceIds?: string[] }) => {
-    const weightKg = Math.round(((result.estimatedVolumeMin + result.estimatedVolumeMax) / 2) * 200);
-    // TODO: backend'in estimatedWeight desteğine taşı
+  const getVehicleTypeLabel = (value: string) => {
+    return vehicleTypeOptions.find((item) => item.id === value)?.name
+      || VEHICLE_TYPES[value as keyof typeof VEHICLE_TYPES]?.name
+      || '';
+  };
+
+  const mapRecommendedVehicleToVehicleTypeId = (recommendedVehicle: EstimateConverterResponse['recommendedVehicle']) => {
+    const targetName = CONVERTER_TO_VEHICLE_TYPE_NAME[recommendedVehicle]?.toLocaleLowerCase('tr-TR');
+    if (!targetName) return '';
+    return vehicleTypeOptions.find((item) => item.name.toLocaleLowerCase('tr-TR') === targetName)?.id ?? '';
+  };
+
+  const converterInitialValues = useMemo<VolumeCalculatorInitialValues>(() => {
+    const placeType = form.placeType.toLowerCase();
+    const propertyType = placeType.includes('1+1')
+      ? '1+1'
+      : placeType.includes('2+1')
+        ? '2+1'
+        : placeType.includes('3+1')
+          ? '3+1'
+          : placeType.includes('4+1')
+            ? '4+1_plus'
+            : 'unknown';
+
+    return {
+      moveType: form.transportType === 'parca' ? 'partial_load' : 'household',
+      propertyType,
+      originFloor: form.floor ? Number(form.floor) : 0,
+      destinationFloor: 0,
+      buildingElevator: Boolean(form.hasElevator),
+    };
+  }, [form.floor, form.hasElevator, form.placeType, form.transportType]);
+
+  const applyConverterEstimateToForm = (result: EstimateConverterResponse) => {
+    const weightKg = result.estimatedWeightKg;
+    const mappedVehicleTypeId = mapRecommendedVehicleToVehicleTypeId(result.recommendedVehicle);
     setForm((prev) => {
       const currentIds = currentServiceGroup ? (prev.serviceOptions?.[currentServiceGroup] || []) : [];
       const mergedIds = currentServiceGroup
@@ -307,11 +370,17 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
       return {
         ...prev,
         weightKg: String(weightKg),
+        vehicleType: mappedVehicleTypeId || prev.vehicleType,
         serviceOptions: currentServiceGroup ? { [currentServiceGroup]: mergedIds } : prev.serviceOptions,
         extraServices: mapSelectedExtraServiceNames(mergedIds, availableExtraServices),
       };
     });
-    toast({ title: 'Ağırlık güncellendi', description: `Tahmini ağırlık ${weightKg} kg olarak forma uygulandı.` });
+    toast({
+      title: 'Ağırlık güncellendi',
+      description: mappedVehicleTypeId
+        ? `Tahmini ağırlık ${weightKg} kg olarak forma uygulandı.`
+        : `Tahmini ağırlık ${weightKg} kg olarak forma uygulandı. Araç önerisi metin olarak kaldı.`,
+    });
   };
 
   const todayStr = useMemo(() => formatDateYYYYMMDD(new Date()), []);
@@ -503,7 +572,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
       timePreference: form.timeWindow || undefined,
       extraServices: extraServicesFromOptions.length ? extraServicesFromOptions : undefined,
       weight: form.weightKg ? Number(form.weightKg) : (form.placeType && TEMPLATE_WEIGHTS[form.placeType]) ? TEMPLATE_WEIGHTS[form.placeType] : undefined,
-      vehiclePreference: form.vehicleType || undefined,
+      vehicleTypePreferenceId: vehicleTypeOptions.some((item) => item.id === form.vehicleType) ? form.vehicleType : undefined,
       note: form.note || undefined,
       shipmentDate: form.date || new Date().toISOString().split('T')[0],
       contactPhone,
@@ -948,7 +1017,11 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
                   <label style={labelStyle}>Araç Tercihi (opsiyonel)</label>
                   <Select value={form.vehicleType} onValueChange={(v) => handleChange('vehicleType', v)}>
                     <SelectTrigger style={inputStyle}><SelectValue placeholder="Araç seçin" /></SelectTrigger>
-                    <SelectContent>{Object.entries(VEHICLE_TYPES).map(([k, v]) => (<SelectItem key={k} value={k}>{v.name}</SelectItem>))}</SelectContent>
+                    <SelectContent>
+                      {vehicleTypeOptions.length > 0
+                        ? vehicleTypeOptions.map((item) => (<SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>))
+                        : Object.entries(VEHICLE_TYPES).map(([k, v]) => (<SelectItem key={k} value={k}>{v.name}</SelectItem>))}
+                    </SelectContent>
                   </Select>
                 </div>
                 <div>
@@ -1193,7 +1266,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
                     {form.vehicleType && (
                       <div className="flex justify-between">
                         <span style={{ fontSize: '12px', color: '#64748B' }}>Araç</span>
-                        <span style={{ fontSize: '14px', fontWeight: 500, color: '#0F172A' }}>{VEHICLE_TYPES[form.vehicleType as keyof typeof VEHICLE_TYPES]?.name}</span>
+                        <span style={{ fontSize: '14px', fontWeight: 500, color: '#0F172A' }}>{getVehicleTypeLabel(form.vehicleType)}</span>
                       </div>
                     )}
                     {form.floor && (
@@ -1409,6 +1482,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
         onOpenChange={setIsVolumeCalculatorOpen}
         onApplyEstimate={applyConverterEstimateToForm}
         loadType={currentExtraServiceLoadType}
+        initialValues={converterInitialValues}
       />
     </div>
   );
@@ -1498,7 +1572,7 @@ function CarrierCard({ carrier, form, onRequest }: { carrier: Carrier; form: any
     || selectedExtraServices.includes('Kurumsal sigorta');
   const hasInsurance = (carrier.badges || []).some((b) => ['Sigorta', 'Soğuk Zincir'].includes(b));
   const insuranceOk = !insuranceNeeded || hasInsurance;
-  const vehicleOk = !form.vehicleType || carrier.vehicle.type === form.vehicleType;
+  const vehicleOk = !form.vehicleType || !(form.vehicleType in VEHICLE_TYPES) || carrier.vehicle.type === form.vehicleType;
   const routeOk = (!form.originCity || carrier.serviceAreas.includes(form.originCity)) && (!form.destinationCity || carrier.serviceAreas.includes(form.destinationCity));
   const scopeOk = !form.scope || !(carrier.scopes && carrier.scopes.length) || (carrier.scopes || []).includes(form.scope);
   const wantsPackaging = form.extras?.ambalaj

@@ -1,5 +1,5 @@
 import { Input } from '@/components/ui/input';
-import type { ConverterCatalogItem } from '@/lib/itemCatalog';
+import type { ConverterCatalogItem } from '@/lib/converterApi';
 
 interface ItemSelectorProps {
   items: ConverterCatalogItem[];

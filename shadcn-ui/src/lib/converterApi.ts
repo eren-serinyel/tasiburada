@@ -30,12 +30,23 @@ export interface EstimateConverterRequest {
 export interface EstimateConverterResponse {
   estimatedVolumeMin: number;
   estimatedVolumeMax: number;
+  estimatedWeightKg: number;
   recommendedVehicle: 'panelvan' | 'short_chassis_van' | 'long_chassis_van' | 'small_truck' | 'large_truck';
   confidence: 'high' | 'medium' | 'low';
   warnings: string[];
   summaryText: string;
   manualReviewRecommended: boolean;
   suggestedExtraServiceIds: string[];
+}
+
+export interface ConverterCatalogItem {
+  itemCode: string;
+  label: string;
+  category: string;
+  unitVolumeMin: number;
+  unitVolumeMax: number;
+  isSpecial: boolean;
+  sortOrder: number;
 }
 
 const parseApiJson = async (response: Response): Promise<any> => {
@@ -77,4 +88,14 @@ export async function estimateConverter(
   }
 
   return json.data as EstimateConverterResponse;
+}
+
+export async function fetchConverterItems(): Promise<ConverterCatalogItem[]> {
+  const response = await apiClient('/converter/items');
+  const json = await parseApiJson(response);
+  if (!response.ok || !json?.success || !Array.isArray(json?.data)) {
+    throw new Error(json?.message || 'Eşya katalogu alınamadı.');
+  }
+
+  return json.data as ConverterCatalogItem[];
 }

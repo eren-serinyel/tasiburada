@@ -65,7 +65,7 @@ describe('extra service applicability', () => {
       loadType: 'OFFICE',
       items: [
         { itemCode: 'sofa_3_seat', quantity: 2 },
-        { itemCode: 'box_medium', quantity: 8 },
+        { itemCode: 'medium_box', quantity: 8 },
       ],
       originFloor: 6,
       destinationFloor: 5,

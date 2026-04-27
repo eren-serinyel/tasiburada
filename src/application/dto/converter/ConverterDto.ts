@@ -38,12 +38,23 @@ export interface EstimateConverterRequestDto {
 export interface EstimateConverterResponseDto {
   estimatedVolumeMin: number;
   estimatedVolumeMax: number;
+  estimatedWeightKg: number;
   recommendedVehicle: ConverterRecommendedVehicleDto;
   confidence: ConverterConfidenceDto;
   warnings: string[];
   summaryText: string;
   manualReviewRecommended: boolean;
   suggestedExtraServiceIds: string[];
+}
+
+export interface ConverterItemCatalogDto {
+  itemCode: string;
+  label: string;
+  category: string;
+  unitVolumeMin: number;
+  unitVolumeMax: number;
+  isSpecial: boolean;
+  sortOrder: number;
 }
 
 export interface ConverterSessionSummaryDto {

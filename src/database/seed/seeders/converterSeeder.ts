@@ -5,6 +5,7 @@ import { CONVERTER_ITEM_CATALOG_V1, CONVERTER_VEHICLE_RULES_V1 } from '../data/c
 
 export async function seedConverterCatalog() {
   const repo = AppDataSource.getRepository(ConverterItemCatalog);
+  const activeCodes = new Set(CONVERTER_ITEM_CATALOG_V1.map((item) => item.itemCode));
 
   for (const item of CONVERTER_ITEM_CATALOG_V1) {
     const existing = await repo.findOne({ where: { itemCode: item.itemCode } });
@@ -21,6 +22,12 @@ export async function seedConverterCatalog() {
     existing.isActive = item.isActive;
     existing.sortOrder = item.sortOrder;
     await repo.save(existing);
+  }
+
+  const staleItems = (await repo.find()).filter((item) => !activeCodes.has(item.itemCode) && item.isActive);
+  for (const item of staleItems) {
+    item.isActive = false;
+    await repo.save(item);
   }
 
   console.log(`  ✓ ${CONVERTER_ITEM_CATALOG_V1.length} converter item catalog kaydi`);

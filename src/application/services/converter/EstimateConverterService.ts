@@ -11,6 +11,7 @@ export class EstimateConverterService {
     return {
       estimatedVolumeMin: 0,
       estimatedVolumeMax: 0,
+      estimatedWeightKg: 0,
       recommendedVehicle: 'panelvan',
       confidence: 'low',
       warnings: ['Estimate engine scaffold is active; rules are not implemented yet.'],

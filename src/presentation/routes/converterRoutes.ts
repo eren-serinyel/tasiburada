@@ -10,6 +10,7 @@ import {
 const router = Router();
 const controller = new ConverterController();
 
+router.get('/items', controller.listItems);
 router.post('/sessions', authenticateToken, validateCreateConverterSession, controller.createSession);
 router.post('/sessions/:sessionId/estimate', authenticateToken, validateEstimateConverterRequest, controller.estimate);
 router.get('/sessions/:sessionId/result', authenticateToken, controller.getResult);

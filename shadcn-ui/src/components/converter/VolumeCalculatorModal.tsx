@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -17,18 +17,28 @@ import ItemSelector from '@/components/converter/ItemSelector';
 import {
   createConverterSession,
   estimateConverter,
+  fetchConverterItems,
+  type ConverterCatalogItem,
   type ConverterMoveType,
   type ConverterPropertyType,
   type EstimateConverterResponse,
 } from '@/lib/converterApi';
-import { CONVERTER_ITEM_CATALOG_V1 } from '@/lib/itemCatalog';
 import type { ExtraServiceLoadType } from '@/lib/extraServices';
+
+export interface VolumeCalculatorInitialValues {
+  moveType?: ConverterMoveType;
+  propertyType?: ConverterPropertyType;
+  originFloor?: number;
+  destinationFloor?: number;
+  buildingElevator?: boolean;
+}
 
 interface VolumeCalculatorModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onApplyEstimate: (result: EstimateConverterResponse) => void;
   loadType?: ExtraServiceLoadType | null;
+  initialValues?: VolumeCalculatorInitialValues;
 }
 
 const VEHICLE_LABELS: Record<string, string> = {
@@ -56,6 +66,7 @@ export default function VolumeCalculatorModal({
   onOpenChange,
   onApplyEstimate,
   loadType,
+  initialValues,
 }: VolumeCalculatorModalProps) {
   const [moveType, setMoveType] = useState<ConverterMoveType>('household');
   const [propertyType, setPropertyType] = useState<ConverterPropertyType>('2+1');
@@ -65,6 +76,9 @@ export default function VolumeCalculatorModal({
   const [externalLift, setExternalLift] = useState(false);
   const [selectedItems, setSelectedItems] = useState<Record<string, number>>({});
   const [specialItems, setSpecialItems] = useState<string[]>([]);
+  const [catalogItems, setCatalogItems] = useState<ConverterCatalogItem[]>([]);
+  const [catalogLoading, setCatalogLoading] = useState(false);
+  const [catalogError, setCatalogError] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [result, setResult] = useState<EstimateConverterResponse | null>(null);
@@ -74,12 +88,60 @@ export default function VolumeCalculatorModal({
     [selectedItems],
   );
 
+  useEffect(() => {
+    if (!open) return;
+
+    setMoveType(initialValues?.moveType ?? 'household');
+    setPropertyType(initialValues?.propertyType ?? '2+1');
+    setOriginFloor(initialValues?.originFloor ?? 0);
+    setDestinationFloor(initialValues?.destinationFloor ?? 0);
+    setBuildingElevator(initialValues?.buildingElevator ?? false);
+    setExternalLift(false);
+    setResult(null);
+    setErrorMessage('');
+  }, [open, initialValues]);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+
+    setCatalogLoading(true);
+    setCatalogError('');
+    fetchConverterItems()
+      .then((items) => {
+        if (cancelled) return;
+        setCatalogItems(items);
+        setSelectedItems((prev) => {
+          const validCodes = new Set(items.map((item) => item.itemCode));
+          return Object.fromEntries(Object.entries(prev).filter(([code]) => validCodes.has(code)));
+        });
+        setSpecialItems((prev) => {
+          const validSpecialCodes = new Set(items.filter((item) => item.isSpecial).map((item) => item.itemCode));
+          return prev.filter((code) => validSpecialCodes.has(code));
+        });
+      })
+      .catch((error: any) => {
+        if (cancelled) return;
+        setCatalogItems([]);
+        setSelectedItems({});
+        setSpecialItems([]);
+        setCatalogError(error?.message || 'Eşya katalogu alınamadı.');
+      })
+      .finally(() => {
+        if (!cancelled) setCatalogLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open]);
+
   const specialCatalog = useMemo(
-    () => CONVERTER_ITEM_CATALOG_V1.filter((item) => item.isSpecial),
-    [],
+    () => catalogItems.filter((item) => item.isSpecial),
+    [catalogItems],
   );
 
-  const canCalculate = selectedItemEntries.length > 0 && !loading;
+  const canCalculate = selectedItemEntries.length > 0 && !loading && !catalogLoading && !catalogError;
 
   const handleCalculate = async () => {
     if (selectedItemEntries.length === 0) {
@@ -204,13 +266,23 @@ export default function VolumeCalculatorModal({
 
           <div className="space-y-2">
             <Label>Esya Listesi ve Adet</Label>
-            <ItemSelector
-              items={CONVERTER_ITEM_CATALOG_V1}
-              selectedItems={selectedItems}
-              onQuantityChange={(itemCode, quantity) => {
-                setSelectedItems((prev) => ({ ...prev, [itemCode]: quantity }));
-              }}
-            />
+            {catalogLoading ? (
+              <div className="rounded-md border border-slate-200 p-3 text-sm text-slate-600">Eşya katalogu yükleniyor...</div>
+            ) : catalogError ? (
+              <Alert variant="destructive">
+                <AlertDescription>{catalogError}</AlertDescription>
+              </Alert>
+            ) : catalogItems.length === 0 ? (
+              <div className="rounded-md border border-slate-200 p-3 text-sm text-slate-600">Aktif eşya katalogu bulunamadı.</div>
+            ) : (
+              <ItemSelector
+                items={catalogItems}
+                selectedItems={selectedItems}
+                onQuantityChange={(itemCode, quantity) => {
+                  setSelectedItems((prev) => ({ ...prev, [itemCode]: quantity }));
+                }}
+              />
+            )}
           </div>
 
           <div className="space-y-2">
@@ -250,6 +322,9 @@ export default function VolumeCalculatorModal({
             <div className="space-y-2 rounded-md border border-sky-200 bg-sky-50 p-3">
               <div className="text-sm font-semibold text-slate-800">
                 Tahmini hacim: {result.estimatedVolumeMin}-{result.estimatedVolumeMax} m³
+              </div>
+              <div className="text-sm text-slate-700">
+                Tahmini ağırlık: {result.estimatedWeightKg} kg
               </div>
               <div className="text-sm text-slate-700">
                 Önerilen araç: {VEHICLE_LABELS[result.recommendedVehicle] || result.recommendedVehicle}

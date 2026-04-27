@@ -21,12 +21,14 @@ import {
   CreateConverterSessionRequestDto,
   EstimateConverterRequestDto,
   EstimateConverterResponseDto,
+  ConverterItemCatalogDto,
   GetConverterResultResponseDto,
 } from '../dto';
 import { CONVERTER_TO_VEHICLE_TYPE_NAME } from './converter/vehicleTypeMapping';
 
 const roundDown1 = (value: number): number => Math.floor(value * 10) / 10;
 const roundUp1 = (value: number): number => Math.ceil(value * 10) / 10;
+const estimateWeightKgFromVolume = (minM3: number, maxM3: number): number => Math.round(((minM3 + maxM3) / 2) * 200);
 const EDITABLE_SHIPMENT_STATUSES = new Set<ShipmentStatus>([
   ShipmentStatus.PENDING,
   ShipmentStatus.OFFER_RECEIVED,
@@ -108,6 +110,23 @@ export class ConverterService {
     };
   }
 
+  async listActiveItems(): Promise<ConverterItemCatalogDto[]> {
+    const items = await this.catalogRepo.find({
+      where: { isActive: true },
+      order: { sortOrder: 'ASC', label: 'ASC' },
+    });
+
+    return items.map((item) => ({
+      itemCode: item.itemCode,
+      label: item.label,
+      category: item.category,
+      unitVolumeMin: item.unitVolumeMin,
+      unitVolumeMax: item.unitVolumeMax,
+      isSpecial: item.isSpecial,
+      sortOrder: item.sortOrder,
+    }));
+  }
+
   async estimate(sessionId: string, userId: string | null, payload: EstimateConverterRequestDto): Promise<EstimateConverterResponseDto> {
     const session = await this.sessionRepo.findOne({ where: { id: sessionId } });
     if (!session) {
@@ -145,6 +164,7 @@ export class ConverterService {
 
     const estimatedVolumeMin = roundDown1(totalMin);
     const estimatedVolumeMax = roundUp1(totalMax);
+    const estimatedWeightKg = estimateWeightKgFromVolume(estimatedVolumeMin, estimatedVolumeMax);
 
     const warnings: string[] = [];
     const specialItems = Array.isArray(payload.specialItems) ? payload.specialItems : [];
@@ -232,6 +252,7 @@ export class ConverterService {
     return {
       estimatedVolumeMin,
       estimatedVolumeMax,
+      estimatedWeightKg,
       recommendedVehicle: result.recommendedVehicle,
       confidence,
       warnings,
@@ -289,6 +310,7 @@ export class ConverterService {
         ? {
             estimatedVolumeMin: result.estimatedVolumeMin ?? 0,
             estimatedVolumeMax: result.estimatedVolumeMax ?? 0,
+            estimatedWeightKg: estimateWeightKgFromVolume(result.estimatedVolumeMin ?? 0, result.estimatedVolumeMax ?? 0),
             recommendedVehicle: (result.recommendedVehicle ?? 'panelvan') as any,
             confidence: (result.confidence ?? 'low') as any,
             warnings: result.warningsJson ?? [],
@@ -370,7 +392,7 @@ export class ConverterService {
       skippedFields.push(field);
     };
 
-    applyIfEmpty('estimatedWeight', shipment.estimatedWeight, result.estimatedVolumeMax, (value) => {
+    applyIfEmpty('estimatedWeight', shipment.estimatedWeight, estimateWeightKgFromVolume(result.estimatedVolumeMin ?? 0, result.estimatedVolumeMax ?? 0), (value) => {
       shipment.estimatedWeight = Number(value);
     });
     applyIfEmpty('loadDetails', shipment.loadDetails, result.summaryText, (value) => {
