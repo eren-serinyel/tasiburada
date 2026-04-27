@@ -1,5 +1,5 @@
 import { createHash } from 'crypto';
-import { In, MoreThan } from 'typeorm';
+import { In, LessThanOrEqual, MoreThan } from 'typeorm';
 import {
   ContactFilterAction,
   ContactFilterLog,
@@ -44,10 +44,21 @@ export class PlatformPolicyService {
     return Boolean(cooldown);
   }
 
+  async expireStaleCooldowns(now: Date = new Date()): Promise<number> {
+    const repo = AppDataSource.getRepository(MatchCooldown);
+    const result = await repo.update(
+      { status: MatchCooldownStatus.ACTIVE, activeUntil: LessThanOrEqual(now) },
+      { status: MatchCooldownStatus.EXPIRED }
+    );
+    return result.affected ?? 0;
+  }
+
   async getActiveCooldownCustomerIdsForCarrier(carrierId: string, customerIds: string[]): Promise<Set<string>> {
     if (!carrierId || customerIds.length === 0) {
       return new Set<string>();
     }
+
+    await this.expireStaleCooldowns();
 
     const uniqueCustomerIds = Array.from(new Set(customerIds.filter(Boolean)));
     if (uniqueCustomerIds.length === 0) {

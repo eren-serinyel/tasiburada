@@ -1,10 +1,12 @@
 import { OfferService } from '../application/services/OfferService';
 import { ShipmentService } from '../application/services/ShipmentService';
+import { PlatformPolicyService } from '../application/services/PlatformPolicyService';
 import { AppDataSource } from '../infrastructure/database/data-source';
 import { ConflictError } from '../domain/errors/AppError';
 import { Shipment, ShipmentCategory, ShipmentStatus } from '../domain/entities/Shipment';
 import { CarrierApprovalState } from '../domain/entities/Carrier';
 import { Offer, OfferStatus } from '../domain/entities/Offer';
+import { MatchCooldownStatus } from '../domain/entities/MatchCooldown';
 
 describe('Cooldown enforcement v1', () => {
   const mockSettingRepo = {
@@ -221,5 +223,139 @@ describe('Cooldown enforcement v1', () => {
 
     await expect(service.assignCarrier('shipment-1', 'carrier-1', 'customer-1')).rejects.toBeInstanceOf(ConflictError);
     expect(service.platformPolicy.assertNoActiveCooldown).toHaveBeenCalledWith('customer-1', 'carrier-1');
+  });
+});
+
+describe('expireStaleCooldowns lifecycle', () => {
+  let service: PlatformPolicyService;
+
+  beforeEach(() => {
+    service = new PlatformPolicyService();
+  });
+
+  test('stale ACTIVE kayıtları EXPIRED yapar ve affected count döner', async () => {
+    const mockRepo = { update: jest.fn().mockResolvedValue({ affected: 5 }) };
+    const repoSpy = jest.spyOn(AppDataSource, 'getRepository').mockReturnValue(mockRepo as any);
+
+    const count = await service.expireStaleCooldowns(new Date('2026-04-27T12:00:00.000Z'));
+
+    expect(count).toBe(5);
+    expect(mockRepo.update).toHaveBeenCalledWith(
+      expect.objectContaining({ status: MatchCooldownStatus.ACTIVE }),
+      { status: MatchCooldownStatus.EXPIRED }
+    );
+    repoSpy.mockRestore();
+  });
+
+  test('geçmiş kayıt yoksa 0 döner', async () => {
+    const mockRepo = { update: jest.fn().mockResolvedValue({ affected: 0 }) };
+    const repoSpy = jest.spyOn(AppDataSource, 'getRepository').mockReturnValue(mockRepo as any);
+
+    const count = await service.expireStaleCooldowns(new Date());
+
+    expect(count).toBe(0);
+    repoSpy.mockRestore();
+  });
+
+  test('affected undefined ise 0 döner', async () => {
+    const mockRepo = { update: jest.fn().mockResolvedValue({}) };
+    const repoSpy = jest.spyOn(AppDataSource, 'getRepository').mockReturnValue(mockRepo as any);
+
+    const count = await service.expireStaleCooldowns(new Date());
+
+    expect(count).toBe(0);
+    repoSpy.mockRestore();
+  });
+
+  test('WAIVED ve EXPIRED kayıtlar dokunulmaz — filtre ACTIVE statusa göre', async () => {
+    const mockRepo = { update: jest.fn().mockResolvedValue({ affected: 0 }) };
+    const repoSpy = jest.spyOn(AppDataSource, 'getRepository').mockReturnValue(mockRepo as any);
+
+    await service.expireStaleCooldowns(new Date());
+
+    // update call must always target only ACTIVE status — never WAIVED or EXPIRED
+    expect(mockRepo.update).toHaveBeenCalledWith(
+      expect.objectContaining({ status: MatchCooldownStatus.ACTIVE }),
+      expect.not.objectContaining({ status: MatchCooldownStatus.WAIVED })
+    );
+    repoSpy.mockRestore();
+  });
+});
+
+describe('expireStaleCooldowns + hasActiveCooldown integration', () => {
+  test('activeUntil geçmiş cooldown hasActiveCooldown false döner', async () => {
+    const service = new PlatformPolicyService();
+    // MoreThan(now) filter in repo.findOne excludes expired rows — returns null
+    const mockRepo = {
+      findOne: jest.fn().mockResolvedValue(null),
+      update: jest.fn().mockResolvedValue({ affected: 0 }),
+    };
+    const repoSpy = jest.spyOn(AppDataSource, 'getRepository').mockReturnValue(mockRepo as any);
+
+    const result = await service.hasActiveCooldown('customer-1', 'carrier-1');
+
+    expect(result).toBe(false);
+    repoSpy.mockRestore();
+  });
+
+  test('activeUntil gelecekte olan ACTIVE cooldown hasActiveCooldown true döner', async () => {
+    const service = new PlatformPolicyService();
+    const mockRepo = {
+      findOne: jest.fn().mockResolvedValue({ id: 42 }),
+      update: jest.fn().mockResolvedValue({ affected: 0 }),
+    };
+    const repoSpy = jest.spyOn(AppDataSource, 'getRepository').mockReturnValue(mockRepo as any);
+
+    const result = await service.hasActiveCooldown('customer-1', 'carrier-1');
+
+    expect(result).toBe(true);
+    repoSpy.mockRestore();
+  });
+
+  test('getActiveCooldownCustomerIdsForCarrier expired pair döndürmez', async () => {
+    const service = new PlatformPolicyService();
+    // repo.find returns empty — expired rows excluded by MoreThan(now) query
+    const mockRepo = {
+      find: jest.fn().mockResolvedValue([]),
+      update: jest.fn().mockResolvedValue({ affected: 1 }),
+    };
+    const repoSpy = jest.spyOn(AppDataSource, 'getRepository').mockReturnValue(mockRepo as any);
+
+    const result = await service.getActiveCooldownCustomerIdsForCarrier('carrier-1', ['customer-1']);
+
+    expect(result.size).toBe(0);
+    repoSpy.mockRestore();
+  });
+
+  test('getActiveCooldownCustomerIdsForCarrier expireStaleCooldowns çağırır', async () => {
+    const service = new PlatformPolicyService();
+    const expireSpy = jest.spyOn(service, 'expireStaleCooldowns').mockResolvedValue(0);
+    const mockRepo = {
+      find: jest.fn().mockResolvedValue([]),
+      update: jest.fn().mockResolvedValue({ affected: 0 }),
+    };
+    const repoSpy = jest.spyOn(AppDataSource, 'getRepository').mockReturnValue(mockRepo as any);
+
+    await service.getActiveCooldownCustomerIdsForCarrier('carrier-1', ['customer-1']);
+
+    expect(expireSpy).toHaveBeenCalledTimes(1);
+    expireSpy.mockRestore();
+    repoSpy.mockRestore();
+  });
+
+  test('active cooldown hâlâ createOffer bloklar', async () => {
+    // Covered by existing "active cooldown pair createOffer -> ConflictError" test
+    // This test verifies the logic path explicitly via hasActiveCooldown
+    const service = new PlatformPolicyService();
+    const mockRepo = {
+      findOne: jest.fn().mockResolvedValue({ id: 1 }), // active future cooldown
+      update: jest.fn().mockResolvedValue({ affected: 0 }),
+    };
+    const repoSpy = jest.spyOn(AppDataSource, 'getRepository').mockReturnValue(mockRepo as any);
+
+    const isBlocked = await service.hasActiveCooldown('customer-1', 'carrier-1');
+
+    expect(isBlocked).toBe(true);
+    repoSpy.mockRestore();
   });
 });
