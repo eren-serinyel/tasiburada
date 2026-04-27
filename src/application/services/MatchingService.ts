@@ -1,4 +1,5 @@
-import { Carrier } from '../../domain/entities/Carrier';
+import { Carrier, CarrierApprovalState } from '../../domain/entities/Carrier';
+import { inferExtraServiceLoadTypeFromShipmentCategory } from './extra-services/extraServiceApplicability';
 import { Shipment } from '../../domain/entities/Shipment';
 import { AppDataSource } from '../../infrastructure/database/data-source';
 
@@ -10,7 +11,10 @@ type MatchFailureReason =
   | 'carrier_not_found'
   | 'carrier_inactive'
   | 'carrier_unverified'
+  | 'carrier_not_approved'
   | 'scope_mismatch'
+  | 'city_mismatch'
+  | 'load_type_mismatch'
   | 'vehicle_type_mismatch'
   | 'availability_mismatch';
 
@@ -22,6 +26,7 @@ export class MatchingService {
         'activity',
         'scopeLinks',
         'scopeLinks.scope',
+        'loadTypeCapabilities',
         'vehicleTypeLinks',
         'vehicleTypeLinks.vehicleType',
       ],
@@ -49,6 +54,7 @@ export class MatchingService {
         'activity',
         'scopeLinks',
         'scopeLinks.scope',
+        'loadTypeCapabilities',
         'vehicleTypeLinks',
         'vehicleTypeLinks.vehicleType',
       ],
@@ -61,7 +67,11 @@ export class MatchingService {
     if (!carrier) return 'carrier_not_found';
     if (!carrier.isActive) return 'carrier_inactive';
     if (!carrier.verifiedByAdmin) return 'carrier_unverified';
+    // Legacy fallback: if approvalState is absent, preserve previous behavior.
+    if (carrier.approvalState && carrier.approvalState !== CarrierApprovalState.APPROVED) return 'carrier_not_approved';
     if (!this.hasMatchingScope(shipment, carrier)) return 'scope_mismatch';
+    if (!this.hasMatchingCity(shipment, carrier)) return 'city_mismatch';
+    if (!this.hasMatchingLoadTypeCapability(shipment, carrier)) return 'load_type_mismatch';
     if (!this.hasMatchingVehicleType(shipment, carrier)) return 'vehicle_type_mismatch';
     if (!this.isCarrierAvailableForShipmentDate(shipment, carrier)) return 'availability_mismatch';
     return null;
@@ -97,6 +107,35 @@ export class MatchingService {
     return Boolean(
       carrier.vehicleTypeLinks?.some(link => link.vehicleTypeId === shipment.vehicleTypePreferenceId)
     );
+  }
+
+  private hasMatchingLoadTypeCapability(shipment: Shipment, carrier: Carrier): boolean {
+    const loadType = inferExtraServiceLoadTypeFromShipmentCategory(shipment.shipmentCategory);
+    if (!loadType) {
+      // LoadType inferredilemediginde mevcut davranisi koru.
+      return true;
+    }
+
+    return Boolean(
+      carrier.loadTypeCapabilities?.some(capability => capability.loadType === loadType && capability.isActive)
+    );
+  }
+
+  private hasMatchingCity(shipment: Shipment, carrier: Carrier): boolean {
+    const requiredScope = this.getRequiredScopeName(shipment);
+    if (requiredScope !== SCOPE_INTRA_CITY) {
+      return true;
+    }
+
+    const carrierCity = this.normalizeCity(carrier.activityCity);
+    const shipmentOriginCity = this.normalizeCity(shipment.originCity);
+
+    // Sehir verisi eksikse hard fail yapma; mevcut davranisi koru.
+    if (!carrierCity || !shipmentOriginCity) {
+      return true;
+    }
+
+    return carrierCity === shipmentOriginCity;
   }
 
   private isCarrierAvailableForShipmentDate(shipment: Shipment, carrier: Carrier): boolean {
@@ -138,7 +177,15 @@ export class MatchingService {
   }
 
   private normalizeCity(value?: string | null): string {
-    return (value ?? '').trim().toLocaleLowerCase('tr-TR');
+    const normalized = (value ?? '').trim().toLocaleLowerCase('tr-TR');
+
+    return normalized
+      .replace(/ç/g, 'c')
+      .replace(/ğ/g, 'g')
+      .replace(/ı/g, 'i')
+      .replace(/ö/g, 'o')
+      .replace(/ş/g, 's')
+      .replace(/ü/g, 'u');
   }
 
   private logMismatch(shipmentId: string | undefined, carrierId: string | undefined, reason: MatchFailureReason): void {
