@@ -23,10 +23,11 @@ export class OfferRepository extends BaseRepository<Offer> {
     super(Offer);
   }
 
-  async findByCustomerShipments(customerId: string): Promise<Offer[]> {
-    return await this.repository
+  async findByCustomerShipments(customerId: string, shipmentId?: string): Promise<Offer[]> {
+    const query = this.repository
       .createQueryBuilder('offer')
       .innerJoinAndSelect('offer.shipment', 'shipment')
+      .leftJoinAndSelect('shipment.extraServices', 'shipmentExtraService')
       .leftJoinAndSelect('offer.carrier', 'carrier')
       .leftJoinAndSelect('carrier.carrierVehicles', 'vehicles')
       .leftJoinAndSelect('vehicles.vehicleType', 'vt')
@@ -50,9 +51,15 @@ export class OfferRepository extends BaseRepository<Offer> {
         'shipment.destinationDistrict',
         'shipment.loadDetails',
         'shipment.weight',
+        'shipment.estimatedWeight',
+        'shipment.shipmentCategory',
+        'shipment.converterEstimatedVolumeMin',
+        'shipment.converterEstimatedVolumeMax',
         'shipment.shipmentDate',
         'shipment.createdAt',
         'shipment.updatedAt',
+        'shipmentExtraService.id',
+        'shipmentExtraService.name',
         ...SAFE_CARRIER_SELECT,
         'vehicles.id',
         'vehicles.plate',
@@ -61,8 +68,13 @@ export class OfferRepository extends BaseRepository<Offer> {
         'vt.name',
       ])
       .where('shipment.customerId = :customerId', { customerId })
-      .orderBy('offer.offeredAt', 'DESC')
-      .getMany();
+      .orderBy('offer.offeredAt', 'DESC');
+
+    if (shipmentId) {
+      query.andWhere('shipment.id = :shipmentId', { shipmentId });
+    }
+
+    return await query.getMany();
   }
 
   async findByCarrierId(carrierId: string): Promise<Offer[]> {

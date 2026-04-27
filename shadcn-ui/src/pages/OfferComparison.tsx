@@ -51,7 +51,10 @@ export default function OfferComparison() {
 
   const fetchOffers = async () => {
     try {
-      const res = await apiClient('/api/v1/customers/offers');
+      const endpoint = shipmentId
+        ? `/api/v1/customers/offers?shipmentId=${encodeURIComponent(shipmentId)}`
+        : '/api/v1/customers/offers';
+      const res = await apiClient(endpoint);
       const json = await res.json();
       if (res.ok && json?.success && Array.isArray(json.data)) {
         setOffers((json.data as CustomerOffer[]).filter(o => !shipmentId || o.shipmentId === shipmentId));
@@ -297,6 +300,16 @@ function ComparisonTable({ offers, onChoose }: { offers: CustomerOffer[]; onChoo
     ['Arac', (o: CustomerOffer) => [o.carrier?.vehicleBrand, o.carrier?.vehicleModel].filter(Boolean).join(' ') || o.carrier?.vehicleType || '-'],
     ['Sigorta', (o: CustomerOffer) => o.carrier?.hasInsurance ? 'Var' : '-'],
     ['Yanit', (o: CustomerOffer) => o.carrier?.averageResponseTimeMin ? `${o.carrier.averageResponseTimeMin} dk` : 'Yeni'],
+    ['Ek hizmet', (o: CustomerOffer) => {
+      if (!o.extraServiceCompatibility || o.extraServiceCompatibility.requestedCount === 0) return 'Gerekmiyor';
+      if (o.extraServiceCompatibility.isFullyCompatible) return 'Uyumlu';
+      const missing = o.extraServiceCompatibility.missing.slice(0, 2).join(', ');
+      return `Eksik: ${missing}${o.extraServiceCompatibility.missing.length > 2 ? '...' : ''}`;
+    }],
+    ['Kapasite', (o: CustomerOffer) => {
+      if (!o.capacityFit || o.capacityFit.status === 'uncertain') return 'Belirsiz';
+      return o.capacityFit.status === 'fit' ? 'Uygun' : 'Dusuk olabilir';
+    }],
   ];
 
   return (

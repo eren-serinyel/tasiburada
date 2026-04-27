@@ -4,6 +4,7 @@ import { CarrierRepository } from '../../infrastructure/repositories/CarrierRepo
 import { ReviewRepository } from '../../infrastructure/repositories/ReviewRepository';
 import { ShipmentRepository } from '../../infrastructure/repositories/ShipmentRepository';
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from '../../domain/errors/AppError';
+import { analyzeContactInfo } from '../../utils/security';
 
 export interface CarrierReviewResponse {
   id: string;
@@ -48,6 +49,18 @@ export class ReviewService {
   private shipmentRepository = new ShipmentRepository();
   private carrierRepository = new CarrierRepository();
 
+  private sanitizeReviewComment(comment?: string | null): string | undefined {
+    const normalized = comment?.trim();
+    if (!normalized) return undefined;
+
+    const analysis = analyzeContactInfo(normalized);
+    if (analysis.hasContactInfo) {
+      throw new ValidationError('Guvenlik nedeniyle yorum icerisinde telefon, e-posta, link veya platform disi iletisim bilgisi paylasilamaz.');
+    }
+
+    return normalized;
+  }
+
   private ensureValidRating(value: number): number {
     if (!Number.isInteger(value) || value < 1 || value > 5) {
       throw new ValidationError('rating 1-5 arasinda integer olmalidir.');
@@ -90,7 +103,7 @@ export class ReviewService {
       carrierId: shipment.carrierId,
       customerId,
       rating,
-      comment: payload.comment?.trim() || undefined
+      comment: this.sanitizeReviewComment(payload.comment)
     });
 
     const averageRating = await this.reviewRepository.getCarrierAverageRating(shipment.carrierId);
@@ -156,7 +169,7 @@ export class ReviewService {
       carrierId,
       customerId,
       rating,
-      comment: comment?.trim() || undefined
+      comment: this.sanitizeReviewComment(comment)
     });
 
     const averageRating = await this.reviewRepository.getCarrierAverageRating(carrierId);
@@ -193,7 +206,7 @@ export class ReviewService {
 
     const updateData: Partial<Review> = {};
     if (data.rating !== undefined) updateData.rating = this.ensureValidRating(data.rating);
-    if (data.comment !== undefined) updateData.comment = data.comment.trim();
+    if (data.comment !== undefined) updateData.comment = this.sanitizeReviewComment(data.comment);
 
     const updated = await this.reviewRepository.update(reviewId, updateData as any);
     if (!updated) throw new NotFoundError('Yorum güncellenemedi.');

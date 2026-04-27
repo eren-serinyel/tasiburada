@@ -7,6 +7,7 @@ export class CustomerOfferController {
   getMyOffers = async (req: Request, res: Response): Promise<void> => {
     try {
       const customerId = req.user?.customerId;
+      const shipmentId = typeof req.query.shipmentId === 'string' ? req.query.shipmentId : undefined;
       if (!customerId) {
         res.status(401).json({
           success: false,
@@ -15,7 +16,7 @@ export class CustomerOfferController {
         return;
       }
 
-      const offers = await this.customerOfferService.getMyOffers(customerId);
+      const offers = await this.customerOfferService.getMyOffers(customerId, shipmentId);
       res.status(200).json({
         success: true,
         data: offers

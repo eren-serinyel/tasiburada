@@ -6,6 +6,24 @@ import { CustomerPreference, DefaultOfferSort } from '../../domain/entities/Cust
 import { CarrierDocument, CarrierDocumentType } from '../../domain/entities/CarrierDocument';
 import { CarrierVehicle } from '../../domain/entities/CarrierVehicle';
 import { Review } from '../../domain/entities/Review';
+import { CarrierExtraServiceCapability } from '../../domain/entities/CarrierExtraServiceCapability';
+import { inferExtraServiceLoadTypeFromShipmentCategory } from './extra-services/extraServiceApplicability';
+import { analyzeContactInfo } from '../../utils/security';
+
+interface ExtraServiceCompatibility {
+  requestedCount: number;
+  matchedCount: number;
+  missing: string[];
+  isFullyCompatible: boolean;
+}
+
+interface CapacityFit {
+  status: 'fit' | 'uncertain' | 'low_possible';
+  shipmentWeightKg: number | null;
+  shipmentVolumeM3: number | null;
+  vehicleCapacityKg: number | null;
+  vehicleCapacityM3: number | null;
+}
 
 interface CarrierOfferInsights {
   ratingCount: number;
@@ -23,7 +41,7 @@ interface CarrierOfferInsights {
 export class CustomerOfferService {
   private offerRepository = new OfferRepository();
 
-  async getMyOffers(customerId: string): Promise<any[]> {
+  async getMyOffers(customerId: string, shipmentId?: string): Promise<any[]> {
     let preferVerified = false;
     let defaultSort = DefaultOfferSort.RATING_DESC;
     try {
@@ -36,8 +54,9 @@ export class CustomerOfferService {
       defaultSort = DefaultOfferSort.RATING_DESC;
     }
 
-    let rawOffers = await this.offerRepository.findByCustomerShipments(customerId) || [];
+    let rawOffers = await this.offerRepository.findByCustomerShipments(customerId, shipmentId) || [];
     const insights = await this.getCarrierInsights(rawOffers.map(offer => offer.carrierId));
+    const compatibilityByOfferId = await this.getExtraServiceCompatibility(rawOffers);
 
     if (preferVerified) {
       rawOffers = rawOffers.filter(offer => offer.carrier?.verifiedByAdmin === true);
@@ -74,6 +93,13 @@ export class CustomerOfferService {
         const isHighestRating = isPending && (offer.carrier?.rating || 0) === maxRating && maxRating > 0;
         const carrierInsights = insights.get(offer.carrierId) ?? this.emptyCarrierInsights();
         const isVerified = Boolean(offer.carrier?.verifiedByAdmin);
+        const compatibility = compatibilityByOfferId.get(offer.id) ?? {
+          requestedCount: 0,
+          matchedCount: 0,
+          missing: [],
+          isFullyCompatible: true,
+        };
+        const capacityFit = this.getCapacityFit(offer, carrierInsights);
 
         const carrier = offer.carrier
           ? {
@@ -98,8 +124,28 @@ export class CustomerOfferService {
             }
           : null;
 
+        const sanitizedOfferMessage = this.redactContactText(offer.message);
+        const sanitizedLatestReview = carrier?.latestReview
+          ? {
+              ...carrier.latestReview,
+              comment: this.redactContactText(carrier.latestReview.comment) ?? '',
+            }
+          : null;
+        const sanitizedLatestPositiveReview = carrier?.latestPositiveReview
+          ? {
+              ...carrier.latestPositiveReview,
+              comment: this.redactContactText(carrier.latestPositiveReview.comment) ?? '',
+            }
+          : null;
+
+        if (carrier) {
+          carrier.latestReview = sanitizedLatestReview;
+          carrier.latestPositiveReview = sanitizedLatestPositiveReview;
+        }
+
         decoratedOffers.push({
           ...offer,
+          message: sanitizedOfferMessage,
           carrier,
           currency: 'TRY',
           createdAt: offer.offeredAt,
@@ -112,6 +158,8 @@ export class CustomerOfferService {
           isLowestPrice,
           isHighestRating,
           isRecommended: (isLowestPrice && isHighestRating) || isHighestRating || (isLowestPrice && isVerified),
+          extraServiceCompatibility: compatibility,
+          capacityFit,
         });
       });
     });
@@ -139,6 +187,112 @@ export class CustomerOfferService {
 
   async getOffersByCustomerId(customerId: string): Promise<any[]> {
     return this.getMyOffers(customerId);
+  }
+
+  private async getExtraServiceCompatibility(offers: Offer[]): Promise<Map<string, ExtraServiceCompatibility>> {
+    const map = new Map<string, ExtraServiceCompatibility>();
+    if (!offers.length) return map;
+
+    const carrierIds = Array.from(new Set(offers.map((offer) => offer.carrierId).filter(Boolean)));
+    const capabilities = await AppDataSource.getRepository(CarrierExtraServiceCapability).find({
+      where: { carrierId: In(carrierIds), isActive: true },
+      relations: ['extraService'],
+    });
+
+    const capabilityMap = new Map<string, Set<string>>();
+    capabilities.forEach((capability) => {
+      const key = `${capability.carrierId}:${capability.loadType}`;
+      if (!capabilityMap.has(key)) capabilityMap.set(key, new Set<string>());
+      capabilityMap.get(key)!.add(capability.extraService?.name || capability.extraServiceId);
+
+      const fallbackKey = `${capability.carrierId}:ALL`;
+      if (!capabilityMap.has(fallbackKey)) capabilityMap.set(fallbackKey, new Set<string>());
+      capabilityMap.get(fallbackKey)!.add(capability.extraService?.name || capability.extraServiceId);
+    });
+
+    offers.forEach((offer) => {
+      const shipment = (offer as any).shipment;
+      const requestedNames: string[] = Array.isArray(shipment?.extraServices)
+        ? shipment.extraServices
+            .map((service: any) => service?.name || service?.id)
+            .filter(Boolean)
+        : [];
+
+      if (!requestedNames.length) {
+        map.set(offer.id, {
+          requestedCount: 0,
+          matchedCount: 0,
+          missing: [],
+          isFullyCompatible: true,
+        });
+        return;
+      }
+
+      const loadType = inferExtraServiceLoadTypeFromShipmentCategory(shipment?.shipmentCategory);
+      const scopedKey = `${offer.carrierId}:${loadType ?? 'ALL'}`;
+      const fallbackKey = `${offer.carrierId}:ALL`;
+      const carrierCapabilities = capabilityMap.get(scopedKey) ?? capabilityMap.get(fallbackKey) ?? new Set<string>();
+
+      const missing = requestedNames.filter((name) => !carrierCapabilities.has(name));
+      const matchedCount = requestedNames.length - missing.length;
+      map.set(offer.id, {
+        requestedCount: requestedNames.length,
+        matchedCount,
+        missing,
+        isFullyCompatible: missing.length === 0,
+      });
+    });
+
+    return map;
+  }
+
+  private getCapacityFit(offer: Offer, insights: CarrierOfferInsights): CapacityFit {
+    const shipment = (offer as any).shipment;
+    const shipmentWeight = shipment?.estimatedWeight != null
+      ? Number(shipment.estimatedWeight)
+      : shipment?.weight != null
+        ? Number(shipment.weight)
+        : null;
+    const shipmentVolume = shipment?.converterEstimatedVolumeMax != null
+      ? Number(shipment.converterEstimatedVolumeMax)
+      : null;
+    const vehicleCapacityKg = insights.primaryVehicle.vehicleCapacityKg ?? null;
+    const vehicleCapacityM3 = insights.primaryVehicle.vehicleCapacityM3 ?? null;
+
+    if (shipmentWeight && shipmentWeight > 0 && vehicleCapacityKg && vehicleCapacityKg > 0) {
+      return {
+        status: vehicleCapacityKg >= shipmentWeight ? 'fit' : 'low_possible',
+        shipmentWeightKg: shipmentWeight,
+        shipmentVolumeM3: shipmentVolume,
+        vehicleCapacityKg,
+        vehicleCapacityM3,
+      };
+    }
+
+    if (shipmentVolume && shipmentVolume > 0 && vehicleCapacityM3 && vehicleCapacityM3 > 0) {
+      return {
+        status: vehicleCapacityM3 >= shipmentVolume ? 'fit' : 'low_possible',
+        shipmentWeightKg: shipmentWeight,
+        shipmentVolumeM3: shipmentVolume,
+        vehicleCapacityKg,
+        vehicleCapacityM3,
+      };
+    }
+
+    return {
+      status: 'uncertain',
+      shipmentWeightKg: shipmentWeight,
+      shipmentVolumeM3: shipmentVolume,
+      vehicleCapacityKg,
+      vehicleCapacityM3,
+    };
+  }
+
+  private redactContactText(text?: string | null): string | undefined {
+    if (!text?.trim()) return undefined;
+    const analysis = analyzeContactInfo(text);
+    if (!analysis.hasContactInfo) return text;
+    return 'Icerik guvenlik nedeniyle gizlendi.';
   }
 
   private async getCarrierInsights(carrierIds: string[]): Promise<Map<string, CarrierOfferInsights>> {

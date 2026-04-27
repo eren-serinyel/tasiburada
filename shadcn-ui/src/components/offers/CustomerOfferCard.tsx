@@ -63,6 +63,19 @@ export interface CustomerOffer {
   isLowestPrice?: boolean;
   isHighestRating?: boolean;
   isRecommended?: boolean;
+  extraServiceCompatibility?: {
+    requestedCount: number;
+    matchedCount: number;
+    missing: string[];
+    isFullyCompatible: boolean;
+  };
+  capacityFit?: {
+    status: 'fit' | 'uncertain' | 'low_possible';
+    shipmentWeightKg: number | null;
+    shipmentVolumeM3: number | null;
+    vehicleCapacityKg: number | null;
+    vehicleCapacityM3: number | null;
+  };
 }
 
 interface CustomerOfferCardProps {
@@ -101,6 +114,19 @@ const durationLabel = (hours?: number): string => {
   return `${days} gun`;
 };
 
+const redactUiText = (text?: string | null): string | undefined => {
+  if (!text?.trim()) return undefined;
+  const patterns = [
+    /(?:\+?90|0)?[\s().-]*5\d{2}[\s().-]*\d{3}[\s().-]*\d{2}[\s().-]*\d{2}/giu,
+    /[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}/giu,
+    /\b(?:https?:\/\/|www\.|wa\.me\/|t\.me\/|[a-z0-9-]+\.(?:com|net|org|com\.tr|info|co|io)(?:\/\S*)?)/giu,
+    /\b(whatsapp|watsapp|wp|wa\.me|telegram|telgraf)\b/giu,
+  ];
+  const hasSensitive = patterns.some((pattern) => pattern.test(text));
+  if (!hasSensitive) return text;
+  return 'Icerik guvenlik nedeniyle gizlendi.';
+};
+
 const statusLabel: Record<string, string> = {
   pending: 'Yeni',
   accepted: 'Kabul Edildi',
@@ -129,6 +155,19 @@ export function CustomerOfferCard({
     : carrier?.vehicleCapacityM3
       ? `${carrier.vehicleCapacityM3} m3`
       : 'Kapasite yok';
+  const safeOfferMessage = redactUiText(offer.message);
+  const safeReviewComment = redactUiText(review?.comment);
+
+  const compatibilityBadge = offer.extraServiceCompatibility?.requestedCount
+    ? offer.extraServiceCompatibility.isFullyCompatible
+      ? 'Ek hizmetler uyumlu'
+      : `Eksik ek hizmet: ${offer.extraServiceCompatibility.missing.slice(0, 2).join(', ')}${offer.extraServiceCompatibility.missing.length > 2 ? '...' : ''}`
+    : null;
+  const capacityBadge = offer.capacityFit?.status === 'fit'
+    ? 'Kapasite uygun'
+    : offer.capacityFit?.status === 'low_possible'
+      ? 'Kapasite dusuk olabilir'
+      : 'Kapasite belirsiz';
 
   return (
     <article
@@ -197,6 +236,26 @@ export function CustomerOfferCard({
         {carrier?.hasInsurance && (
           <Badge variant="outline" className="gap-1"><PackageCheck className="h-3 w-3" /> Sigortali</Badge>
         )}
+        {compatibilityBadge && (
+          <Badge
+            variant="outline"
+            className={offer.extraServiceCompatibility?.isFullyCompatible
+              ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+              : 'border-amber-200 bg-amber-50 text-amber-700'}
+          >
+            {compatibilityBadge}
+          </Badge>
+        )}
+        <Badge
+          variant="outline"
+          className={offer.capacityFit?.status === 'fit'
+            ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+            : offer.capacityFit?.status === 'low_possible'
+              ? 'border-rose-200 bg-rose-50 text-rose-700'
+              : 'border-slate-200 bg-slate-50 text-slate-600'}
+        >
+          {capacityBadge}
+        </Badge>
       </div>
 
       <div className={cn('grid gap-2', compact ? 'grid-cols-1' : 'grid-cols-2')}>
@@ -211,9 +270,9 @@ export function CustomerOfferCard({
         </div>
       </div>
 
-      {offer.message && (
+      {safeOfferMessage && (
         <p className="mt-3 line-clamp-2 rounded-md border-l-2 border-slate-200 pl-3 text-sm leading-6 text-slate-600">
-          {offer.message}
+          {safeOfferMessage}
         </p>
       )}
 
@@ -228,14 +287,14 @@ export function CustomerOfferCard({
         </span>
       </div>
 
-      {review?.comment && (
+      {safeReviewComment && (
         <div className="mt-3 rounded-lg border border-slate-100 bg-slate-50 p-3">
           <div className="mb-1 flex items-center gap-1 text-amber-500">
             {Array.from({ length: Math.max(1, Math.min(5, review.rating)) }).map((_, index) => (
               <Star key={index} className="h-3 w-3 fill-current" />
             ))}
           </div>
-          <p className="line-clamp-2 text-xs leading-5 text-slate-600">"{review.comment}"</p>
+          <p className="line-clamp-2 text-xs leading-5 text-slate-600">"{safeReviewComment}"</p>
         </div>
       )}
 

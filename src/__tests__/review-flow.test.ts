@@ -5,6 +5,9 @@
  */
 import request from 'supertest';
 import { testApp } from './helpers/testApp';
+import { randomUUID } from 'node:crypto';
+import { AppDataSource } from '../infrastructure/database/data-source';
+import { Shipment, ShipmentStatus, ShipmentCategory } from '../domain/entities/Shipment';
 
 const skipDB = () => process.env.SKIP_DB_TESTS === 'true';
 
@@ -14,16 +17,57 @@ const CARRIER  = { email: 'info@silenakliyat.com',   password: 'Maviface2141' };
 describe('Review Akışı', () => {
   let customerToken: string;
   let carrierToken: string;
+  let customerId: string;
+  let carrierId: string;
+  const createdShipmentIds: string[] = [];
+
+  const createCompletedShipmentForReview = async (): Promise<string | null> => {
+    if (!customerId || !carrierId) return null;
+
+    const shipmentRepo = AppDataSource.getRepository(Shipment);
+    const shipment = shipmentRepo.create({
+      id: randomUUID(),
+      customerId,
+      carrierId,
+      status: ShipmentStatus.COMPLETED,
+      shipmentCategory: ShipmentCategory.HOME_MOVE,
+      originCity: 'Istanbul',
+      originDistrict: 'Kadikoy',
+      destinationCity: 'Ankara',
+      destinationDistrict: 'Cankaya',
+      loadDetails: 'Test yorum akisi',
+      shipmentDate: new Date(),
+      matchedAt: new Date(),
+      weight: 100,
+      estimatedWeight: 100,
+      contactPhone: null,
+    });
+
+    await shipmentRepo.save(shipment, { reload: false });
+    createdShipmentIds.push(shipment.id);
+    return shipment.id;
+  };
 
   // ── Setup: Token al ────────────────────────────────────────────────────────
   beforeAll(async () => {
     if (skipDB()) return;
 
     const cRes = await request(testApp).post('/api/v1/customers/login').send(CUSTOMER);
-    if (cRes.status === 200) customerToken = cRes.body.data?.token;
+    if (cRes.status === 200) {
+      customerToken = cRes.body.data?.token;
+      customerId = cRes.body.data?.customer?.id;
+    }
 
     const rRes = await request(testApp).post('/api/v1/carriers/login').send(CARRIER);
-    if (rRes.status === 200) carrierToken = rRes.body.data?.token;
+    if (rRes.status === 200) {
+      carrierToken = rRes.body.data?.token;
+      carrierId = rRes.body.data?.carrier?.id;
+    }
+  });
+
+  afterAll(async () => {
+    if (skipDB() || !createdShipmentIds.length) return;
+    await AppDataSource.getRepository(Shipment).delete(createdShipmentIds);
   });
 
   // ── Auth guard: Token yok ──────────────────────────────────────────────────
@@ -197,5 +241,62 @@ describe('Review Akışı', () => {
       expect(review.rating).toBeGreaterThanOrEqual(1);
       expect(review.rating).toBeLessThanOrEqual(5);
     }
+  });
+
+  test('18. Review comment içinde telefon numarasi engellenmeli', async () => {
+    if (skipDB() || !customerToken) return;
+    const shipmentId = await createCompletedShipmentForReview();
+    if (!shipmentId) return;
+
+    const res = await request(testApp)
+      .post('/api/v1/reviews')
+      .set('Authorization', `Bearer ${customerToken}`)
+      .send({ shipmentId, rating: 5, comment: 'Bana 0532 123 45 67 den ulasin' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.success).toBe(false);
+  });
+
+  test('19. Review comment içinde e-posta engellenmeli', async () => {
+    if (skipDB() || !customerToken) return;
+    const shipmentId = await createCompletedShipmentForReview();
+    if (!shipmentId) return;
+
+    const res = await request(testApp)
+      .post('/api/v1/reviews')
+      .set('Authorization', `Bearer ${customerToken}`)
+      .send({ shipmentId, rating: 4, comment: 'iletisim: test@example.com' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.success).toBe(false);
+  });
+
+  test('20. Review comment içinde whatsapp/url engellenmeli', async () => {
+    if (skipDB() || !customerToken) return;
+    const shipmentId = await createCompletedShipmentForReview();
+    if (!shipmentId) return;
+
+    const res = await request(testApp)
+      .post('/api/v1/reviews')
+      .set('Authorization', `Bearer ${customerToken}`)
+      .send({ shipmentId, rating: 4, comment: 'whatsapp: https://wa.me/905321234567' });
+
+    expect(res.status).toBe(400);
+    expect(res.body.success).toBe(false);
+  });
+
+  test('21. Normal review comment kabul edilmeli', async () => {
+    if (skipDB() || !customerToken) return;
+    const shipmentId = await createCompletedShipmentForReview();
+    if (!shipmentId) return;
+
+    const res = await request(testApp)
+      .post('/api/v1/reviews')
+      .set('Authorization', `Bearer ${customerToken}`)
+      .send({ shipmentId, rating: 5, comment: 'Tasima sureci cok duzenliydi, tesekkurler.' });
+
+    expect(res.status).toBe(201);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data?.comment).toContain('Tasima sureci');
   });
 });
