@@ -9,7 +9,7 @@ import {
   Shipment,
   ShipmentStatus,
 } from '../../domain/entities';
-import { ValidationError, ConflictError } from '../../domain/errors/AppError';
+import { ValidationError, ConflictError, NotFoundError } from '../../domain/errors/AppError';
 import { AppDataSource } from '../../infrastructure/database/data-source';
 import { analyzeContactInfo } from '../../utils/security';
 
@@ -156,6 +156,28 @@ export class PlatformPolicyService {
     const matchedAt = shipment.matchedAt ?? shipment.updatedAt ?? shipment.createdAt;
     const matchedForMs = Date.now() - new Date(matchedAt).getTime();
     return matchedForMs >= 48 * 60 * 60 * 1000;
+  }
+
+  async waiveCooldown(cooldownId: number, adminNote?: string | null): Promise<MatchCooldown> {
+    const repo = AppDataSource.getRepository(MatchCooldown);
+    const cooldown = await repo.findOne({ where: { id: cooldownId } });
+
+    if (!cooldown) {
+      throw new NotFoundError('Cooldown kaydı bulunamadı.');
+    }
+
+    if (cooldown.status !== MatchCooldownStatus.ACTIVE) {
+      throw new ConflictError(
+        `Cooldown zaten ${cooldown.status} durumunda. Sadece ACTIVE kayıtlar waive edilebilir.`
+      );
+    }
+
+    cooldown.status = MatchCooldownStatus.WAIVED;
+    if (adminNote !== undefined) {
+      cooldown.reason = adminNote ?? cooldown.reason;
+    }
+
+    return repo.save(cooldown);
   }
 
   async createCancellationCooldown(shipment: Shipment, reason?: string | null): Promise<void> {

@@ -8,6 +8,7 @@ import { CarrierDocument, CarrierDocumentStatus } from '../../domain/entities/Ca
 import { Admin } from '../../domain/entities/Admin';
 import { PlatformSetting } from '../../domain/entities/PlatformSetting';
 import { ContactFilterLog } from '../../domain/entities/ContactFilterLog';
+import { MatchCooldown, MatchCooldownStatus } from '../../domain/entities/MatchCooldown';
 import { AuditLogRepository } from '../../infrastructure/repositories/AuditLogRepository';
 import { NotificationService } from './NotificationService';
 import { CarrierApprovalService } from './carrier/CarrierApprovalService';
@@ -976,5 +977,41 @@ export class AdminService {
     });
 
     return { success: true };
+  }
+
+  // ─── Match Cooldowns ────────────────────────────────────────────────────────
+
+  async getCooldowns(params: {
+    page?: number;
+    limit?: number;
+    status?: string;
+    carrierId?: string;
+    customerId?: string;
+  }) {
+    const { page = 1, limit = 30, status, carrierId, customerId } = params;
+
+    const safeLimit = Math.min(Math.max(1, limit), 100);
+    const safePage = Math.max(1, page);
+    const offset = (safePage - 1) * safeLimit;
+
+    const repo = AppDataSource.getRepository(MatchCooldown);
+    const qb = repo
+      .createQueryBuilder('c')
+      .orderBy('c.activeUntil', 'DESC')
+      .skip(offset)
+      .take(safeLimit);
+
+    if (status) {
+      qb.andWhere('c.status = :status', { status });
+    }
+    if (carrierId) {
+      qb.andWhere('c.carrierId = :carrierId', { carrierId });
+    }
+    if (customerId) {
+      qb.andWhere('c.customerId = :customerId', { customerId });
+    }
+
+    const [rows, total] = await qb.getManyAndCount();
+    return { data: rows, total, page: safePage, limit: safeLimit };
   }
 }

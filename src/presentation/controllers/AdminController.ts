@@ -1,14 +1,18 @@
 import { Request, Response } from 'express';
 import { AdminService } from '../../application/services/AdminService';
 import { CarrierApprovalService } from '../../application/services/carrier/CarrierApprovalService';
+import { PlatformPolicyService } from '../../application/services/PlatformPolicyService';
+import { NotFoundError, ConflictError } from '../../domain/errors/AppError';
 
 export class AdminController {
   private adminService: AdminService;
   private carrierApprovalService: CarrierApprovalService;
+  private platformPolicyService: PlatformPolicyService;
 
   constructor() {
     this.adminService = new AdminService();
     this.carrierApprovalService = new CarrierApprovalService();
+    this.platformPolicyService = new PlatformPolicyService();
   }
 
   // ─── Dashboard ─────────────────────────────────────────────────────────────
@@ -603,6 +607,54 @@ export class AdminController {
       res.status(201).json({ success: true, message: 'Log kaydedildi.' });
     } catch (error: any) {
       res.status(500).json({ success: false, message: error.message || 'Log kaydedilemedi.' });
+    }
+  };
+
+  // ─── Match Cooldowns ────────────────────────────────────────────────────────
+
+  getCooldowns = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { page, limit, status, carrierId, customerId } = req.query;
+      const result = await this.adminService.getCooldowns({
+        page: page ? Number(page) : 1,
+        limit: limit ? Number(limit) : 30,
+        status: status as string | undefined,
+        carrierId: carrierId as string | undefined,
+        customerId: customerId as string | undefined,
+      });
+      res.status(200).json({ success: true, data: result });
+    } catch (error: any) {
+      res.status(500).json({ success: false, message: error.message || 'Cooldown listesi alınamadı.' });
+    }
+  };
+
+  waiveCooldown = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const adminId = req.user?.adminId;
+      if (!adminId) { res.status(401).json({ success: false, message: 'Yetkisiz erişim.' }); return; }
+
+      const cooldownId = Number(req.params.cooldownId);
+      if (!Number.isInteger(cooldownId) || cooldownId <= 0) {
+        res.status(400).json({ success: false, message: 'Geçersiz cooldown ID.' });
+        return;
+      }
+
+      const { note } = req.body;
+      const updated = await this.platformPolicyService.waiveCooldown(cooldownId, note ?? null);
+
+      res.status(200).json({
+        success: true,
+        message: 'Cooldown waive edildi.',
+        data: updated,
+      });
+    } catch (error: any) {
+      if (error instanceof NotFoundError) {
+        res.status(404).json({ success: false, message: error.message });
+      } else if (error instanceof ConflictError) {
+        res.status(409).json({ success: false, message: error.message });
+      } else {
+        res.status(500).json({ success: false, message: error.message || 'Cooldown waive edilemedi.' });
+      }
     }
   };
 }

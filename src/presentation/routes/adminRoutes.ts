@@ -70,6 +70,10 @@ router.post('/audit-log', adminController.createAuditLog);
 // Contact Filter Logs (read-only)
 router.get('/contact-filter-logs', adminController.getContactFilterLogs);
 
+// Match Cooldowns
+router.get('/match-cooldowns', adminController.getCooldowns);
+router.post('/match-cooldowns/:cooldownId/waive', adminController.waiveCooldown);
+
 // Platform Settings (superadmin only)
 router.get('/settings', adminController.getSettings);
 router.put('/settings', requireSuperadmin as any, adminController.updateSettings);
