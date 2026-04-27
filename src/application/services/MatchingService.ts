@@ -15,6 +15,7 @@ type MatchFailureReason =
   | 'scope_mismatch'
   | 'city_mismatch'
   | 'load_type_mismatch'
+  | 'extra_service_mismatch'
   | 'vehicle_type_mismatch'
   | 'availability_mismatch';
 
@@ -27,6 +28,7 @@ export class MatchingService {
         'scopeLinks',
         'scopeLinks.scope',
         'loadTypeCapabilities',
+        'extraServiceCapabilities',
         'vehicleTypeLinks',
         'vehicleTypeLinks.vehicleType',
       ],
@@ -45,6 +47,7 @@ export class MatchingService {
   async getMatchingCarrierCount(shipmentId: string): Promise<number> {
     const shipment = await AppDataSource.getRepository(Shipment).findOne({
       where: { id: shipmentId },
+      relations: ['extraServices'],
     });
     if (!shipment) return 0;
 
@@ -55,6 +58,7 @@ export class MatchingService {
         'scopeLinks',
         'scopeLinks.scope',
         'loadTypeCapabilities',
+        'extraServiceCapabilities',
         'vehicleTypeLinks',
         'vehicleTypeLinks.vehicleType',
       ],
@@ -72,6 +76,7 @@ export class MatchingService {
     if (!this.hasMatchingScope(shipment, carrier)) return 'scope_mismatch';
     if (!this.hasMatchingCity(shipment, carrier)) return 'city_mismatch';
     if (!this.hasMatchingLoadTypeCapability(shipment, carrier)) return 'load_type_mismatch';
+    if (!this.hasMatchingExtraServices(shipment, carrier)) return 'extra_service_mismatch';
     if (!this.hasMatchingVehicleType(shipment, carrier)) return 'vehicle_type_mismatch';
     if (!this.isCarrierAvailableForShipmentDate(shipment, carrier)) return 'availability_mismatch';
     return null;
@@ -119,6 +124,41 @@ export class MatchingService {
     return Boolean(
       carrier.loadTypeCapabilities?.some(capability => capability.loadType === loadType && capability.isActive)
     );
+  }
+
+  private hasMatchingExtraServices(shipment: Shipment, carrier: Carrier): boolean {
+    const requestedExtraServices = Array.isArray((shipment as any).extraServices)
+      ? (shipment as any).extraServices
+      : [];
+
+    if (requestedExtraServices.length === 0) {
+      return true;
+    }
+
+    const loadType = inferExtraServiceLoadTypeFromShipmentCategory(shipment.shipmentCategory);
+    if (!loadType) {
+      // LoadType inferredilemediginde mevcut davranisi koru.
+      return true;
+    }
+
+    const requestedExtraServiceIds = requestedExtraServices
+      .map((service: any) => service?.id)
+      .filter((id: any) => Boolean(id));
+
+    if (requestedExtraServiceIds.length === 0) {
+      return true;
+    }
+
+    const activeCapabilityIds = new Set(
+      (carrier.extraServiceCapabilities ?? [])
+        .filter((capability: any) => capability?.isActive && capability?.loadType === loadType)
+        .map((capability: any) => capability?.extraServiceId)
+        .filter((id: any) => Boolean(id))
+    );
+
+    // getCarrierForMatching ve getMatchingCarrierCount, extraServiceCapabilities relation'ini yukleyerek
+    // bu kontrolun ek DB sorgusu olmadan guvenli calismasini saglar.
+    return requestedExtraServiceIds.every((id: string) => activeCapabilityIds.has(id));
   }
 
   private hasMatchingCity(shipment: Shipment, carrier: Carrier): boolean {

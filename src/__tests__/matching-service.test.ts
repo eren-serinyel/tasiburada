@@ -12,6 +12,7 @@ function buildCarrier(overrides: Partial<Carrier> = {}): Carrier {
     activityCity: 'Istanbul',
     scopeLinks: [{ scope: { name: 'Şehir İçi' } }] as any,
     loadTypeCapabilities: [{ loadType: ExtraServiceLoadType.HOME, isActive: true }] as any,
+    extraServiceCapabilities: [{ extraServiceId: 'es-1', loadType: ExtraServiceLoadType.HOME, isActive: true }] as any,
     vehicleTypeLinks: [{ vehicleTypeId: 'vt-1' }] as any,
     activity: { availableDates: [] } as any,
     ...overrides,
@@ -25,12 +26,13 @@ function buildShipment(overrides: Partial<Shipment> = {}): Shipment {
     destinationCity: 'Istanbul',
     shipmentDate: new Date('2026-05-01T12:00:00.000Z'),
     shipmentCategory: ShipmentCategory.HOME_MOVE,
+    extraServices: [] as any,
     vehicleTypePreferenceId: 'vt-1',
     ...overrides,
   } as Shipment;
 }
 
-describe('MatchingService MVP v1 hardening', () => {
+describe('MatchingService MVP hardening', () => {
   let service: MatchingService;
 
   beforeEach(() => {
@@ -128,5 +130,71 @@ describe('MatchingService MVP v1 hardening', () => {
     const shipment = buildShipment();
 
     expect(service.isShipmentMatchingCarrier(shipment, carrier)).toBe(true);
+  });
+
+  test('shipment extra service istemiyorsa pass', () => {
+    const carrier = buildCarrier();
+    const shipment = buildShipment({ extraServices: [] as any });
+
+    expect(service.isShipmentMatchingCarrier(shipment, carrier)).toBe(true);
+  });
+
+  test('shipment extra service istiyor ve carrier capability varsa true', () => {
+    const carrier = buildCarrier({
+      extraServiceCapabilities: [
+        { extraServiceId: 'es-1', loadType: ExtraServiceLoadType.HOME, isActive: true },
+      ] as any,
+    });
+    const shipment = buildShipment({ extraServices: [{ id: 'es-1' }] as any });
+
+    expect(service.isShipmentMatchingCarrier(shipment, carrier)).toBe(true);
+  });
+
+  test('shipment extra service istiyor ama carrier capability yoksa false', () => {
+    const carrier = buildCarrier({ extraServiceCapabilities: [] as any });
+    const shipment = buildShipment({ extraServices: [{ id: 'es-1' }] as any });
+
+    expect(service.isShipmentMatchingCarrier(shipment, carrier)).toBe(false);
+  });
+
+  test('carrier extra service capability inactive ise false', () => {
+    const carrier = buildCarrier({
+      extraServiceCapabilities: [
+        { extraServiceId: 'es-1', loadType: ExtraServiceLoadType.HOME, isActive: false },
+      ] as any,
+    });
+    const shipment = buildShipment({ extraServices: [{ id: 'es-1' }] as any });
+
+    expect(service.isShipmentMatchingCarrier(shipment, carrier)).toBe(false);
+  });
+
+  test('birden fazla extra service isteniyorsa ve biri eksikse false', () => {
+    const carrier = buildCarrier({
+      extraServiceCapabilities: [
+        { extraServiceId: 'es-1', loadType: ExtraServiceLoadType.HOME, isActive: true },
+      ] as any,
+    });
+    const shipment = buildShipment({ extraServices: [{ id: 'es-1' }, { id: 'es-2' }] as any });
+
+    expect(service.isShipmentMatchingCarrier(shipment, carrier)).toBe(false);
+  });
+
+  test('loadType infer edilemiyorsa extra service pre-filter mevcut davranisi korur', () => {
+    const carrier = buildCarrier({ extraServiceCapabilities: [] as any });
+    const shipment = buildShipment({
+      shipmentCategory: null as any,
+      extraServices: [{ id: 'es-1' }] as any,
+    });
+
+    expect(service.isShipmentMatchingCarrier(shipment, carrier)).toBe(true);
+  });
+
+  test('getMismatchReason extra_service_mismatch döner', () => {
+    const carrier = buildCarrier({ extraServiceCapabilities: [] as any });
+    const shipment = buildShipment({ extraServices: [{ id: 'es-1' }] as any });
+
+    const reason = (service as any).getMismatchReason(shipment, carrier);
+
+    expect(reason).toBe('extra_service_mismatch');
   });
 });
