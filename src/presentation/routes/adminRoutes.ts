@@ -67,6 +67,9 @@ router.get('/reports/popular-routes', adminController.getPopularRoutes);
 router.get('/audit-log', adminController.getAuditLogs);
 router.post('/audit-log', adminController.createAuditLog);
 
+// Contact Filter Logs (read-only)
+router.get('/contact-filter-logs', adminController.getContactFilterLogs);
+
 // Platform Settings (superadmin only)
 router.get('/settings', adminController.getSettings);
 router.put('/settings', requireSuperadmin as any, adminController.updateSettings);

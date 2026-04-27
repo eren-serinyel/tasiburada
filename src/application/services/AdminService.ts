@@ -7,11 +7,38 @@ import { Offer, OfferStatus } from '../../domain/entities/Offer';
 import { CarrierDocument, CarrierDocumentStatus } from '../../domain/entities/CarrierDocument';
 import { Admin } from '../../domain/entities/Admin';
 import { PlatformSetting } from '../../domain/entities/PlatformSetting';
+import { ContactFilterLog } from '../../domain/entities/ContactFilterLog';
 import { AuditLogRepository } from '../../infrastructure/repositories/AuditLogRepository';
 import { NotificationService } from './NotificationService';
 import { CarrierApprovalService } from './carrier/CarrierApprovalService';
 import * as bcrypt from 'bcryptjs';
 import { ValidationError } from '../../domain/errors/AppError';
+
+export interface ContactFilterLogDto {
+  id: number;
+  createdAt: Date;
+  actorType: string;
+  actorId: string | null;
+  surface: string;
+  shipmentId: string | null;
+  offerId: string | null;
+  action: string;
+  matchedRules: string[];
+  /** Partial hash — 12 hex chars + '…' — raw text is never stored */
+  textHashPreview: string;
+}
+
+interface ContactFilterLogsParams {
+  page?: number;
+  limit?: number;
+  dateFrom?: string;
+  dateTo?: string;
+  surface?: string;
+  actorType?: string;
+  action?: string;
+  shipmentId?: string;
+  actorId?: string;
+}
 
 export class AdminService {
   private auditLogRepository: AuditLogRepository;
@@ -312,6 +339,80 @@ export class AdminService {
     const { page = 1, limit = 30, search } = params;
     const logs = await this.auditLogRepository.findPaginated({ page, limit, search });
     return logs;
+  }
+
+  // ─── Contact Filter Logs ───────────────────────────────────────────────────
+
+  async getContactFilterLogs(params: ContactFilterLogsParams): Promise<{
+    data: ContactFilterLogDto[];
+    total: number;
+    page: number;
+    limit: number;
+  }> {
+    const {
+      page = 1,
+      limit = 30,
+      dateFrom,
+      dateTo,
+      surface,
+      actorType,
+      action,
+      shipmentId,
+      actorId,
+    } = params;
+
+    const safeLimit = Math.min(Math.max(1, limit), 100);
+    const safePage = Math.max(1, page);
+    const offset = (safePage - 1) * safeLimit;
+
+    const repo = AppDataSource.getRepository(ContactFilterLog);
+    const qb = repo
+      .createQueryBuilder('log')
+      .orderBy('log.createdAt', 'DESC')
+      .skip(offset)
+      .take(safeLimit);
+
+    if (dateFrom) {
+      qb.andWhere('log.createdAt >= :dateFrom', { dateFrom: new Date(dateFrom) });
+    }
+    if (dateTo) {
+      const to = new Date(dateTo);
+      to.setHours(23, 59, 59, 999);
+      qb.andWhere('log.createdAt <= :dateTo', { dateTo: to });
+    }
+    if (surface) {
+      qb.andWhere('log.surface = :surface', { surface });
+    }
+    if (actorType) {
+      qb.andWhere('log.actorType = :actorType', { actorType });
+    }
+    if (action) {
+      qb.andWhere('log.action = :action', { action });
+    }
+    if (shipmentId) {
+      qb.andWhere('log.shipmentId = :shipmentId', { shipmentId });
+    }
+    if (actorId) {
+      qb.andWhere('log.actorId = :actorId', { actorId });
+    }
+
+    const [rows, total] = await qb.getManyAndCount();
+
+    const data: ContactFilterLogDto[] = rows.map((row) => ({
+      id: row.id,
+      createdAt: row.createdAt,
+      actorType: row.actorType,
+      actorId: row.actorId,
+      surface: row.surface,
+      shipmentId: row.shipmentId,
+      offerId: row.offerId,
+      action: row.action,
+      matchedRules: Array.isArray(row.matchedRules) ? row.matchedRules : [],
+      // Expose only first 12 hex chars — raw text is never stored
+      textHashPreview: row.textHash ? `${row.textHash.slice(0, 12)}…` : '',
+    }));
+
+    return { data, total, page: safePage, limit: safeLimit };
   }
 
   async writeAuditLog(data: {

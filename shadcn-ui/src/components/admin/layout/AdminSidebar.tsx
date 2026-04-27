@@ -15,6 +15,7 @@ import {
   HandCoins,
   ChevronLeft,
   ChevronRight,
+  ShieldAlert,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -69,6 +70,12 @@ const navGroups = (pendingCount: number): NavGroup[] => [
     items: [
       { to: '/admin/raporlar', label: 'Raporlar', icon: BarChart3 },
       { to: '/admin/audit-log', label: 'Audit Log', icon: ScrollText },
+    ],
+  },
+  {
+    title: 'Güvenlik',
+    items: [
+      { to: '/admin/kaçak-iletisim', label: 'Kaçak İletişim', icon: ShieldAlert },
     ],
   },
   {

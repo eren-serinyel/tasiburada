@@ -189,6 +189,28 @@ export class AdminController {
     }
   };
 
+  // ─── Contact Filter Logs ───────────────────────────────────────────────────
+
+  getContactFilterLogs = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { page, limit, dateFrom, dateTo, surface, actorType, action, shipmentId, actorId } = req.query;
+      const result = await this.adminService.getContactFilterLogs({
+        page: page ? Number(page) : 1,
+        limit: limit ? Number(limit) : 30,
+        dateFrom: dateFrom as string | undefined,
+        dateTo: dateTo as string | undefined,
+        surface: surface as string | undefined,
+        actorType: actorType as string | undefined,
+        action: action as string | undefined,
+        shipmentId: shipmentId as string | undefined,
+        actorId: actorId as string | undefined,
+      });
+      res.status(200).json({ success: true, data: result });
+    } catch (error: any) {
+      res.status(500).json({ success: false, message: error.message || 'Kaçak iletişim logları alınamadı.' });
+    }
+  };
+
   // ─── Dashboard Trends ──────────────────────────────────────────────────────
 
   getStatsTrends = async (req: Request, res: Response): Promise<void> => {

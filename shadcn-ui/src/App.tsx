@@ -15,6 +15,7 @@ import AdminShipments from '@/pages/admin/AdminShipments';
 import AdminReviews from '@/pages/admin/AdminReviews';
 import AdminApprovalQueue from '@/pages/admin/AdminApprovalQueue';
 import AdminAuditLog from '@/pages/admin/AdminAuditLog';
+import AdminContactFilterLogs from '@/pages/admin/AdminContactFilterLogs';
 import AdminOffers from '@/pages/admin/AdminOffers';
 import AdminDocuments from '@/pages/admin/AdminDocuments';
 import AdminReports from '@/pages/admin/AdminReports';
@@ -100,6 +101,7 @@ const App = () => (
             <Route path="yorumlar" element={<AdminReviews />} />
             <Route path="onay-kuyrugu" element={<AdminApprovalQueue />} />
             <Route path="audit-log" element={<AdminAuditLog />} />
+            <Route path="kaçak-iletisim" element={<AdminContactFilterLogs />} />
             <Route path="teklifler" element={<AdminOffers />} />
             <Route path="belgeler" element={<AdminDocuments />} />
             <Route path="raporlar" element={<AdminReports />} />
