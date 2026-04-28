@@ -69,6 +69,12 @@ export default function AdminCarriers() {
     setLoading(true);
     setError(false);
     try {
+      const expectedStatesByStatus: Partial<Record<CarrierStatusFilter, CarrierApprovalState[]>> = {
+        draft: ['DRAFT'],
+        rejected: ['REJECTED'],
+        suspended: ['SUSPENDED'],
+      };
+
       const params = new URLSearchParams({
         status,
         page: String(page),
@@ -82,8 +88,38 @@ export default function AdminCarriers() {
         setError(true);
         return;
       }
-      setCarriers(data.data?.carriers ?? []);
-      setTotal(data.data?.pagination?.total ?? 0);
+
+      const apiCarriers: CarrierListItem[] = data.data?.carriers ?? [];
+      const expectedStates = expectedStatesByStatus[status];
+
+      if (!expectedStates || apiCarriers.length === 0) {
+        setCarriers(apiCarriers);
+        setTotal(data.data?.pagination?.total ?? 0);
+        return;
+      }
+
+      const hasMismatch = apiCarriers.some((carrier) => !expectedStates.includes(resolveApprovalState(carrier)));
+      if (!hasMismatch) {
+        setCarriers(apiCarriers);
+        setTotal(data.data?.pagination?.total ?? 0);
+        return;
+      }
+
+      // Backend eski sürümse status filtresi uygulanmayabilir; bu durumda all listesinden strict client-side filtre uygula.
+      const fallbackParams = new URLSearchParams({
+        status: 'all',
+        page: '1',
+        limit: '1000',
+        ...(search ? { search } : {}),
+      });
+      const fallbackRes = await adminApiClient(`/admin/carriers?${fallbackParams.toString()}`);
+      const fallbackData = await fallbackRes.json();
+      const allCarriers: CarrierListItem[] = fallbackData.data?.carriers ?? [];
+      const filtered = allCarriers.filter((carrier) => expectedStates.includes(resolveApprovalState(carrier)));
+      const pageStart = (page - 1) * limit;
+      const pageSlice = filtered.slice(pageStart, pageStart + limit);
+      setCarriers(pageSlice);
+      setTotal(filtered.length);
     } catch {
       toast.error('Nakliyeci listesi yuklenemedi.');
       setError(true);

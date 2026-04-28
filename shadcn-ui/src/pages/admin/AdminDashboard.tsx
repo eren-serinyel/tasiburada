@@ -11,6 +11,7 @@ import { toast } from '@/components/ui/sonner';
 import { PageHeader, StatCard, EmptyState, ErrorState } from '@/components/admin/shared';
 import { formatDistanceToNow } from 'date-fns';
 import { tr } from 'date-fns/locale';
+import { resolveApprovalState } from '@/lib/admin-approval';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip,
   ResponsiveContainer, PieChart, Pie, Cell,
@@ -32,6 +33,24 @@ interface Stats {
   totalOffers: number;
   totalReviews: number;
   avgRating: number;
+}
+
+function normalizeStats(raw: Partial<Stats> | null | undefined): Stats {
+  return {
+    totalCarriers: Number(raw?.totalCarriers ?? 0),
+    pendingCarriers: Number(raw?.pendingCarriers ?? 0),
+    verifiedCarriers: Number(raw?.verifiedCarriers ?? 0),
+    draftCarriers: Number(raw?.draftCarriers ?? 0),
+    rejectedCarriers: Number(raw?.rejectedCarriers ?? 0),
+    suspendedCarriers: Number(raw?.suspendedCarriers ?? 0),
+    totalCustomers: Number(raw?.totalCustomers ?? 0),
+    totalShipments: Number(raw?.totalShipments ?? 0),
+    activeShipments: Number(raw?.activeShipments ?? 0),
+    completedShipments: Number(raw?.completedShipments ?? 0),
+    totalOffers: Number(raw?.totalOffers ?? 0),
+    totalReviews: Number(raw?.totalReviews ?? 0),
+    avgRating: Number(raw?.avgRating ?? 0),
+  };
 }
 
 interface PendingCarrier {
@@ -71,13 +90,36 @@ export default function AdminDashboard() {
     setLoading(true);
     setError(false);
     try {
-      const [statsRes, carriersRes, reviewsRes] = await Promise.all([
+      const [statsRes, carriersRes, reviewsRes, allCarriersRes] = await Promise.all([
         adminApiClient('/admin/stats').then((r) => r.json()),
         adminApiClient('/admin/carriers?status=pending&limit=5').then((r) => r.json()),
         adminApiClient('/admin/reviews?limit=5').then((r) => r.json()),
+        adminApiClient('/admin/carriers?status=all&limit=1000').then((r) => r.json()),
       ]);
-      if (statsRes.success) setStats(statsRes.data);
-      else setError(true);
+
+      if (statsRes.success) {
+        const normalized = normalizeStats(statsRes.data);
+        const allCarriers = allCarriersRes?.success ? (allCarriersRes?.data?.carriers ?? []) : [];
+        const distribution = allCarriers.reduce((acc: Record<string, number>, carrier: any) => {
+          const state = resolveApprovalState(carrier);
+          acc[state] = (acc[state] ?? 0) + 1;
+          return acc;
+        }, {});
+
+        const draftTotal = distribution.DRAFT ?? normalized.draftCarriers;
+        const rejectedTotal = distribution.REJECTED ?? normalized.rejectedCarriers;
+        const suspendedTotal = distribution.SUSPENDED ?? normalized.suspendedCarriers;
+
+        setStats({
+          ...normalized,
+          draftCarriers: draftTotal,
+          rejectedCarriers: rejectedTotal,
+          suspendedCarriers: suspendedTotal,
+        });
+      } else {
+        setError(true);
+      }
+
       if (carriersRes.success) setPendingCarriers(carriersRes.data?.carriers ?? []);
       if (reviewsRes.success) setRecentReviews(reviewsRes.data?.reviews ?? []);
     } catch {
