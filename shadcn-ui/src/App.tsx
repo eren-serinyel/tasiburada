@@ -21,6 +21,7 @@ import AdminDocuments from '@/pages/admin/AdminDocuments';
 import AdminReports from '@/pages/admin/AdminReports';
 import AdminSettings from '@/pages/admin/AdminSettings';
 import AdminManagement from '@/pages/admin/AdminManagement';
+import AdminMatchCooldowns from './pages/admin/AdminMatchCooldowns';
 // Payment routes
 import Payment from './pages/Payment';
 import Payments from './pages/Payments';
@@ -107,6 +108,8 @@ const App = () => (
             <Route path="raporlar" element={<AdminReports />} />
             <Route path="ayarlar" element={<AdminSettings />} />
             <Route path="yonetim" element={<AdminManagement />} />
+            <Route path="cooldowns" element={<AdminMatchCooldowns />} />
+            <Route path="match-cooldowns" element={<AdminMatchCooldowns />} />
           </Route>
 
           {/* ─── Regular Routes (inside Layout) ──────────────────── */}

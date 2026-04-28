@@ -16,6 +16,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ShieldAlert,
+  Clock3,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -76,6 +77,7 @@ const navGroups = (pendingCount: number): NavGroup[] => [
     title: 'Güvenlik',
     items: [
       { to: '/admin/kaçak-iletisim', label: 'Kaçak İletişim', icon: ShieldAlert },
+      { to: '/admin/cooldowns', label: 'Cooldown Yönetimi', icon: Clock3 },
     ],
   },
   {
