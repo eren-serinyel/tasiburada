@@ -276,7 +276,13 @@ export class AdminService {
       .leftJoinAndSelect('shipment.customer', 'customer');
 
     if (status && status !== 'all') {
-      query.andWhere('shipment.status = :status', { status });
+      if (status === 'active') {
+        query.andWhere('shipment.status IN (:...statuses)', {
+          statuses: [ShipmentStatus.MATCHED, ShipmentStatus.IN_TRANSIT],
+        });
+      } else {
+        query.andWhere('shipment.status = :status', { status });
+      }
     }
 
     if (search) {

@@ -663,7 +663,7 @@ describe('Admin Panel — İlan Yönetimi', () => {
 
   test('İlan listesi tüm durumları kapsayabilmeli', async () => {
     if (!adminToken) return;
-    const statuses = ['pending', 'matched', 'completed', 'cancelled'];
+    const statuses = ['pending', 'active', 'matched', 'completed', 'cancelled'];
     for (const status of statuses) {
       const res = await request(testApp)
         .get(`${BASE}/admin/shipments`)
@@ -671,6 +671,78 @@ describe('Admin Panel — İlan Yönetimi', () => {
         .set('Authorization', `Bearer ${adminToken}`);
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
+    }
+  });
+
+  test('İlan active filtresi sadece MATCHED ve IN_TRANSIT döndürmeli', async () => {
+    if (!adminToken) return;
+    const res = await request(testApp)
+      .get(`${BASE}/admin/shipments`)
+      .query({ status: 'active', limit: 200 })
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+
+    const shipments = res.body.data?.shipments ?? [];
+    for (const shipment of shipments) {
+      expect(['matched', 'in_transit']).toContain(shipment.status);
+    }
+  });
+
+  test('İlan pending filtresi mevcut contractını korumalı', async () => {
+    if (!adminToken) return;
+    const res = await request(testApp)
+      .get(`${BASE}/admin/shipments`)
+      .query({ status: 'pending', limit: 200 })
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+
+    const shipments = res.body.data?.shipments ?? [];
+    for (const shipment of shipments) {
+      expect(shipment.status).toBe('pending');
+    }
+  });
+
+  test('İlan all filtresi birden fazla durumu döndürebilmeli', async () => {
+    if (!adminToken) return;
+    const res = await request(testApp)
+      .get(`${BASE}/admin/shipments`)
+      .query({ status: 'all', limit: 200 })
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+
+    const statuses = new Set((res.body.data?.shipments ?? []).map((shipment: any) => shipment.status));
+    expect(statuses.size).toBeGreaterThanOrEqual(2);
+  });
+
+  test('İlan completed ve cancelled filtreleri etkilenmemeli', async () => {
+    if (!adminToken) return;
+
+    const [completedRes, cancelledRes] = await Promise.all([
+      request(testApp)
+        .get(`${BASE}/admin/shipments`)
+        .query({ status: 'completed', limit: 200 })
+        .set('Authorization', `Bearer ${adminToken}`),
+      request(testApp)
+        .get(`${BASE}/admin/shipments`)
+        .query({ status: 'cancelled', limit: 200 })
+        .set('Authorization', `Bearer ${adminToken}`),
+    ]);
+
+    expect(completedRes.status).toBe(200);
+    expect(cancelledRes.status).toBe(200);
+
+    for (const shipment of completedRes.body.data?.shipments ?? []) {
+      expect(shipment.status).toBe('completed');
+    }
+
+    for (const shipment of cancelledRes.body.data?.shipments ?? []) {
+      expect(shipment.status).toBe('cancelled');
     }
   });
 
