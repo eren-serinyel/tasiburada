@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import {
   Truck, Users, Package, Star, CheckCircle, Clock, HandCoins,
-  ArrowRight, AlertTriangle, BarChart3,
+  ArrowRight, AlertTriangle, BarChart3, CircleX, PauseCircle,
 } from 'lucide-react';
 import { toast } from '@/components/ui/sonner';
 import { PageHeader, StatCard, EmptyState, ErrorState } from '@/components/admin/shared';
@@ -23,6 +23,8 @@ interface Stats {
   pendingCarriers: number;
   verifiedCarriers: number;
   draftCarriers: number;
+  rejectedCarriers: number;
+  suspendedCarriers: number;
   totalCustomers: number;
   totalShipments: number;
   activeShipments: number;
@@ -165,10 +167,12 @@ export default function AdminDashboard() {
       </div>
 
       {/* KPI Row 2 */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-4">
         <StatCard label="Onay Bekleyen" value={stats.pendingCarriers} icon={Clock} iconColor="text-amber-500" accentBorder={stats.pendingCarriers > 0 ? 'bg-amber-500' : undefined} onClick={() => navigate('/admin/onay-kuyrugu')} />
         <StatCard label="Onaylı Nakliyeci" value={stats.verifiedCarriers} icon={CheckCircle} iconColor="text-emerald-600" />
         <StatCard label="Taslak Nakliyeci" value={stats.draftCarriers} icon={Truck} iconColor="text-slate-600" onClick={() => navigate('/admin/nakliyeciler?tab=taslak')} />
+        <StatCard label="Reddedilen Nakliyeci" value={stats.rejectedCarriers} icon={CircleX} iconColor="text-rose-600" onClick={() => navigate('/admin/nakliyeciler?tab=reddedilen')} />
+        <StatCard label="Askıya Alınan Nakliyeci" value={stats.suspendedCarriers} icon={PauseCircle} iconColor="text-orange-600" onClick={() => navigate('/admin/nakliyeciler?tab=askida')} />
         <StatCard label="Ortalama Puan" value={stats.avgRating > 0 ? stats.avgRating.toFixed(1) : '—'} icon={Star} iconColor="text-yellow-500" subtitle={`${stats.totalReviews} yorum`} onClick={() => navigate('/admin/yorumlar')} />
         <StatCard label="Eşleşme Oranı" value={`%${matchRate}`} icon={BarChart3} iconColor="text-indigo-600" subtitle={`${stats.completedShipments} tamamlanan`} />
       </div>

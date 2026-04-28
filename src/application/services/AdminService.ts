@@ -67,6 +67,8 @@ export class AdminService {
       verifiedCarriers,
       pendingVerification,
       draftCarriers,
+      rejectedCarriers,
+      suspendedCarriers,
       totalShipments,
       activeShipments,
       completedShipments,
@@ -85,6 +87,8 @@ export class AdminService {
         ],
       }),
       carrierRepo.count({ where: { approvalState: CarrierApprovalState.DRAFT } }),
+      carrierRepo.count({ where: { approvalState: CarrierApprovalState.REJECTED } }),
+      carrierRepo.count({ where: { approvalState: CarrierApprovalState.SUSPENDED } }),
       shipmentRepo.count(),
       shipmentRepo.count({ where: { status: ShipmentStatus.IN_TRANSIT } }),
       shipmentRepo.count({ where: { status: ShipmentStatus.COMPLETED } }),
@@ -107,6 +111,8 @@ export class AdminService {
       verifiedCarriers,
       pendingCarriers: pendingVerification,
       draftCarriers,
+      rejectedCarriers,
+      suspendedCarriers,
       totalShipments,
       activeShipments,
       completedShipments,
@@ -134,9 +140,9 @@ export class AdminService {
     } else if (status === 'draft') {
       query.andWhere('carrier.approvalState = :state', { state: CarrierApprovalState.DRAFT });
     } else if (status === 'rejected') {
-      query.andWhere('carrier.approvalState IN (:...states)', {
-        states: [CarrierApprovalState.REJECTED, CarrierApprovalState.SUSPENDED],
-      });
+      query.andWhere('carrier.approvalState = :state', { state: CarrierApprovalState.REJECTED });
+    } else if (status === 'suspended') {
+      query.andWhere('carrier.approvalState = :state', { state: CarrierApprovalState.SUSPENDED });
     }
 
     if (search) {

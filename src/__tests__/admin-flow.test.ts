@@ -996,7 +996,7 @@ describe('Admin Panel — Dashboard Tutarlılık', () => {
     expect(res.body.success).toBe(true);
   });
 
-  test('Stats draftCarriers alanını döndürmeli ve pendingCarriers DRAFT saymamalı', async () => {
+  test('Stats draft/rejected/suspended alanlarını döndürmeli ve pendingCarriers sadece pending state saymalı', async () => {
     if (!adminToken) return;
 
     const [statsRes, pendingRes] = await Promise.all([
@@ -1012,10 +1012,14 @@ describe('Admin Panel — Dashboard Tutarlılık', () => {
     expect(statsRes.status).toBe(200);
     expect(statsRes.body.success).toBe(true);
     expect(typeof statsRes.body.data?.draftCarriers).toBe('number');
+    expect(typeof statsRes.body.data?.rejectedCarriers).toBe('number');
+    expect(typeof statsRes.body.data?.suspendedCarriers).toBe('number');
 
     const pendingCarriers = pendingRes.body.data?.carriers ?? [];
     for (const carrier of pendingCarriers) {
       expect(carrier.approvalState).not.toBe('DRAFT');
+      expect(carrier.approvalState).not.toBe('REJECTED');
+      expect(carrier.approvalState).not.toBe('SUSPENDED');
     }
   });
 
@@ -1033,6 +1037,40 @@ describe('Admin Panel — Dashboard Tutarlılık', () => {
     const carriers = res.body.data?.carriers ?? [];
     for (const carrier of carriers) {
       expect(carrier.approvalState).toBe('DRAFT');
+    }
+  });
+
+  test('status=rejected sadece REJECTED carrierları döndürmeli', async () => {
+    if (!adminToken) return;
+
+    const res = await request(testApp)
+      .get(`${BASE}/admin/carriers`)
+      .query({ status: 'rejected', limit: 1000 })
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+
+    const carriers = res.body.data?.carriers ?? [];
+    for (const carrier of carriers) {
+      expect(carrier.approvalState).toBe('REJECTED');
+    }
+  });
+
+  test('status=suspended sadece SUSPENDED carrierları döndürmeli', async () => {
+    if (!adminToken) return;
+
+    const res = await request(testApp)
+      .get(`${BASE}/admin/carriers`)
+      .query({ status: 'suspended', limit: 1000 })
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+
+    const carriers = res.body.data?.carriers ?? [];
+    for (const carrier of carriers) {
+      expect(carrier.approvalState).toBe('SUSPENDED');
     }
   });
 
@@ -1067,6 +1105,8 @@ describe('Admin Panel — Dashboard Tutarlılık', () => {
     expect(data.totalShipments).toBeDefined();
     expect(data.totalOffers).toBeDefined();
     expect(data.draftCarriers).toBeDefined();
+    expect(data.rejectedCarriers).toBeDefined();
+    expect(data.suspendedCarriers).toBeDefined();
   });
 });
 
