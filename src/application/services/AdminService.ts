@@ -66,6 +66,7 @@ export class AdminService {
       totalCarriers,
       verifiedCarriers,
       pendingVerification,
+      draftCarriers,
       totalShipments,
       activeShipments,
       completedShipments,
@@ -83,6 +84,7 @@ export class AdminService {
           { approvalState: CarrierApprovalState.IN_REVIEW },
         ],
       }),
+      carrierRepo.count({ where: { approvalState: CarrierApprovalState.DRAFT } }),
       shipmentRepo.count(),
       shipmentRepo.count({ where: { status: ShipmentStatus.IN_TRANSIT } }),
       shipmentRepo.count({ where: { status: ShipmentStatus.COMPLETED } }),
@@ -104,6 +106,7 @@ export class AdminService {
       totalCarriers,
       verifiedCarriers,
       pendingCarriers: pendingVerification,
+      draftCarriers,
       totalShipments,
       activeShipments,
       completedShipments,
@@ -128,6 +131,8 @@ export class AdminService {
       query.andWhere('carrier.approvalState IN (:...states)', {
         states: [CarrierApprovalState.SUBMITTED, CarrierApprovalState.IN_REVIEW],
       });
+    } else if (status === 'draft') {
+      query.andWhere('carrier.approvalState = :state', { state: CarrierApprovalState.DRAFT });
     } else if (status === 'rejected') {
       query.andWhere('carrier.approvalState IN (:...states)', {
         states: [CarrierApprovalState.REJECTED, CarrierApprovalState.SUSPENDED],

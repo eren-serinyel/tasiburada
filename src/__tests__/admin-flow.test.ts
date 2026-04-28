@@ -996,6 +996,64 @@ describe('Admin Panel — Dashboard Tutarlılık', () => {
     expect(res.body.success).toBe(true);
   });
 
+  test('Stats draftCarriers alanını döndürmeli ve pendingCarriers DRAFT saymamalı', async () => {
+    if (!adminToken) return;
+
+    const [statsRes, pendingRes] = await Promise.all([
+      request(testApp)
+        .get(`${BASE}/admin/stats`)
+        .set('Authorization', `Bearer ${adminToken}`),
+      request(testApp)
+        .get(`${BASE}/admin/carriers`)
+        .query({ status: 'pending', limit: 1000 })
+        .set('Authorization', `Bearer ${adminToken}`),
+    ]);
+
+    expect(statsRes.status).toBe(200);
+    expect(statsRes.body.success).toBe(true);
+    expect(typeof statsRes.body.data?.draftCarriers).toBe('number');
+
+    const pendingCarriers = pendingRes.body.data?.carriers ?? [];
+    for (const carrier of pendingCarriers) {
+      expect(carrier.approvalState).not.toBe('DRAFT');
+    }
+  });
+
+  test('status=draft sadece DRAFT carrierları döndürmeli', async () => {
+    if (!adminToken) return;
+
+    const res = await request(testApp)
+      .get(`${BASE}/admin/carriers`)
+      .query({ status: 'draft', limit: 1000 })
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+
+    const carriers = res.body.data?.carriers ?? [];
+    for (const carrier of carriers) {
+      expect(carrier.approvalState).toBe('DRAFT');
+    }
+  });
+
+  test('status=pending DRAFT carrierları döndürmemeli', async () => {
+    if (!adminToken) return;
+
+    const res = await request(testApp)
+      .get(`${BASE}/admin/carriers`)
+      .query({ status: 'pending', limit: 1000 })
+      .set('Authorization', `Bearer ${adminToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+
+    const carriers = res.body.data?.carriers ?? [];
+    for (const carrier of carriers) {
+      expect(['SUBMITTED', 'IN_REVIEW']).toContain(carrier.approvalState);
+      expect(carrier.approvalState).not.toBe('DRAFT');
+    }
+  });
+
   test('Tüm istatistik alanları tanımlı olmalı', async () => {
     if (!adminToken) return;
     const res = await request(testApp)
@@ -1008,6 +1066,7 @@ describe('Admin Panel — Dashboard Tutarlılık', () => {
     expect(data.totalCustomers).toBeDefined();
     expect(data.totalShipments).toBeDefined();
     expect(data.totalOffers).toBeDefined();
+    expect(data.draftCarriers).toBeDefined();
   });
 });
 

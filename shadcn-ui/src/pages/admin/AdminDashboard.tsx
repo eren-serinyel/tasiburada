@@ -22,6 +22,7 @@ interface Stats {
   totalCarriers: number;
   pendingCarriers: number;
   verifiedCarriers: number;
+  draftCarriers: number;
   totalCustomers: number;
   totalShipments: number;
   activeShipments: number;
@@ -164,9 +165,10 @@ export default function AdminDashboard() {
       </div>
 
       {/* KPI Row 2 */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <StatCard label="Onay Bekleyen" value={stats.pendingCarriers} icon={Clock} iconColor="text-amber-500" accentBorder={stats.pendingCarriers > 0 ? 'bg-amber-500' : undefined} onClick={() => navigate('/admin/onay-kuyrugu')} />
         <StatCard label="Onaylı Nakliyeci" value={stats.verifiedCarriers} icon={CheckCircle} iconColor="text-emerald-600" />
+        <StatCard label="Taslak Nakliyeci" value={stats.draftCarriers} icon={Truck} iconColor="text-slate-600" onClick={() => navigate('/admin/nakliyeciler?tab=taslak')} />
         <StatCard label="Ortalama Puan" value={stats.avgRating > 0 ? stats.avgRating.toFixed(1) : '—'} icon={Star} iconColor="text-yellow-500" subtitle={`${stats.totalReviews} yorum`} onClick={() => navigate('/admin/yorumlar')} />
         <StatCard label="Eşleşme Oranı" value={`%${matchRate}`} icon={BarChart3} iconColor="text-indigo-600" subtitle={`${stats.completedShipments} tamamlanan`} />
       </div>

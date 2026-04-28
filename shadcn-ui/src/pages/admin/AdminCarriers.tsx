@@ -14,7 +14,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { EmptyState, ErrorState, PageHeader, StatusBadge } from '@/components/admin/shared';
 
-type CarrierStatusFilter = 'all' | 'pending' | 'verified' | 'rejected';
+type CarrierStatusFilter = 'all' | 'pending' | 'verified' | 'draft' | 'rejected';
 
 interface CarrierListItem {
   id: string;
@@ -36,13 +36,20 @@ const statusTabs: Array<{ value: CarrierStatusFilter; label: string }> = [
   { value: 'all', label: 'Tumu' },
   { value: 'pending', label: 'Bekleyen' },
   { value: 'verified', label: 'Onayli' },
+  { value: 'draft', label: 'Taslak' },
   { value: 'rejected', label: 'Reddedilen' },
 ];
 
 export default function AdminCarriers() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const initialStatus = (searchParams.get('tab') === 'bekleyen' ? 'pending' : 'all') as CarrierStatusFilter;
+  const initialStatus = (
+    searchParams.get('tab') === 'bekleyen'
+      ? 'pending'
+      : searchParams.get('tab') === 'taslak'
+        ? 'draft'
+        : 'all'
+  ) as CarrierStatusFilter;
   const [status, setStatus] = useState<CarrierStatusFilter>(initialStatus);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
