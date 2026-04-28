@@ -42,6 +42,11 @@ export default function AdminCustomers() {
     setLoading(true);
     setError(false);
     try {
+      const expectedActiveByFilter: Partial<Record<StatusFilter, boolean>> = {
+        active: true,
+        inactive: false,
+      };
+
       const params = new URLSearchParams({
         page: String(page),
         limit: String(limit),
@@ -51,8 +56,35 @@ export default function AdminCustomers() {
       const res = await adminApiClient(`/admin/customers?${params}`);
       const data = await res.json();
       if (data.success) {
-        setCustomers(data.data?.data ?? data.data?.customers ?? []);
-        setTotal(data.data?.total ?? data.data?.pagination?.total ?? 0);
+        const apiCustomers: Customer[] = data.data?.data ?? data.data?.customers ?? [];
+        const expectedActive = expectedActiveByFilter[statusFilter];
+
+        if (expectedActive === undefined || apiCustomers.length === 0) {
+          setCustomers(apiCustomers);
+          setTotal(data.data?.total ?? data.data?.pagination?.total ?? 0);
+          return;
+        }
+
+        const hasMismatch = apiCustomers.some((customer) => customer.isActive !== expectedActive);
+        if (!hasMismatch) {
+          setCustomers(apiCustomers);
+          setTotal(data.data?.total ?? data.data?.pagination?.total ?? 0);
+          return;
+        }
+
+        // Backend eski sürümse status filtresi uygulanmayabilir; tüm listeyi alıp client-side strict filtre uygula.
+        const fallbackParams = new URLSearchParams({
+          page: '1',
+          limit: '5000',
+          ...(search ? { search } : {}),
+        });
+        const fallbackRes = await adminApiClient(`/admin/customers?${fallbackParams}`);
+        const fallbackData = await fallbackRes.json();
+        const allCustomers: Customer[] = fallbackData.data?.data ?? fallbackData.data?.customers ?? [];
+        const filtered = allCustomers.filter((customer) => customer.isActive === expectedActive);
+        const pageStart = (page - 1) * limit;
+        setCustomers(filtered.slice(pageStart, pageStart + limit));
+        setTotal(filtered.length);
       } else {
         toast.error(data.message);
         setError(true);
@@ -77,9 +109,8 @@ export default function AdminCustomers() {
       const data = await res.json();
       if (data.success) {
         toast.success(data.message);
-        setCustomers((prev) =>
-          prev.map((c) => (c.id === customerId ? { ...c, isActive: data.data.isActive } : c)),
-        );
+        // Toggle sonrası kayıt aktif/pasif tabları arasında doğru şekilde taşınsın.
+        await fetchCustomers();
       } else {
         toast.error(data.message);
       }
