@@ -1,6 +1,7 @@
 import request from 'supertest';
 import { AppDataSource } from '../infrastructure/database/data-source';
 import { testApp } from './helpers/testApp';
+import { restoreSilenCarrierBaseline } from './setup/seedContract';
 import { seedExtraServices } from '../database/seed/seeders/extraServiceSeeder';
 import { ExtraService, ExtraServiceApplicability, ExtraServiceLoadType } from '../domain/entities';
 import { ConverterService } from '../application/services/ConverterService';
@@ -194,5 +195,11 @@ describe('extra service applicability', () => {
 
     expect(offerResponse.status).toBe(403);
     expect(offerResponse.body.success).toBe(false);
+  });
+
+  // Restore Silen baseline after capability mutations to prevent fixture drift
+  afterAll(async () => {
+    if (skipDB()) return;
+    await restoreSilenCarrierBaseline();
   });
 });

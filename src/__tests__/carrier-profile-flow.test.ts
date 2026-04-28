@@ -5,6 +5,7 @@
  */
 import request from 'supertest';
 import { testApp } from './helpers/testApp';
+import { restoreSilenCarrierBaseline } from './setup/seedContract';
 
 const skipDB = () => process.env.SKIP_DB_TESTS === 'true';
 const CARRIER = { email: 'info@silenakliyat.com', password: 'Maviface2141' };
@@ -288,5 +289,11 @@ describe('CarrierProfileController', () => {
 
     expect(deleteRes.status).toBe(200);
     expect(deleteRes.body.success).toBe(true);
+  });
+
+  // Restore Silen baseline after profile mutations to prevent fixture drift
+  afterAll(async () => {
+    if (skipDB()) return;
+    await restoreSilenCarrierBaseline();
   });
 });

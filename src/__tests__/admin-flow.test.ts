@@ -6,6 +6,7 @@
  */
 import request from 'supertest';
 import { testApp } from './helpers/testApp';
+import { restoreSilenCarrierBaseline } from './setup/seedContract';
 
 const skipDB = () => process.env.SKIP_DB_TESTS === 'true';
 
@@ -576,6 +577,12 @@ describe('Admin Panel — Nakliyeci Detay', () => {
       .get(`${BASE}/admin/carriers/00000000-0000-0000-0000-000000000000`)
       .set('Authorization', `Bearer ${adminToken}`);
     expect([404, 400]).toContain(res.status);
+  });
+
+  // Restore Silen baseline after mutations to prevent fixture drift
+  afterAll(async () => {
+    if (process.env.SKIP_DB_TESTS === 'true') return;
+    await restoreSilenCarrierBaseline();
   });
 });
 
