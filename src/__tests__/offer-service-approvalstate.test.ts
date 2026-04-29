@@ -1,57 +1,210 @@
 import { OfferService } from '../application/services/OfferService';
-import { ForbiddenError } from '../domain/errors/AppError';
+import { ConflictError, ForbiddenError } from '../domain/errors/AppError';
 import { ShipmentCategory, ShipmentStatus } from '../domain/entities/Shipment';
 import { CarrierApprovalState } from '../domain/entities/Carrier';
+import { OfferStatus } from '../domain/entities/Offer';
 import { AppDataSource } from '../infrastructure/database/data-source';
 
 describe('OfferService approvalState alignment', () => {
-  test('approvalState APPROVED olmayan carrier teklif veremez', async () => {
+  const shipment = {
+    id: 'shipment-1',
+    customerId: 'customer-1',
+    status: ShipmentStatus.PENDING,
+    shipmentCategory: ShipmentCategory.HOME_MOVE,
+    estimatedWeight: null,
+    extraServices: [],
+  };
+
+  const approvedCarrier = {
+    id: 'carrier-1',
+    isActive: true,
+    verifiedByAdmin: true,
+    approvalState: CarrierApprovalState.APPROVED,
+    carrierVehicles: [],
+  };
+
+  const existingOffer = {
+    id: 'offer-1',
+    shipmentId: 'shipment-1',
+    carrierId: 'carrier-1',
+    price: 1000,
+    message: 'old message',
+    estimatedDuration: 2,
+    status: OfferStatus.PENDING,
+    hasSuspiciousContent: false,
+  };
+
+  const updatedOffer = {
+    ...existingOffer,
+    price: 1500,
+    message: 'updated message',
+    estimatedDuration: 3,
+    carrier: { companyName: 'Test Carrier' },
+  };
+
+  let settingSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    settingSpy = jest.spyOn(AppDataSource, 'getRepository').mockReturnValue({
+      findOne: jest.fn().mockResolvedValue({ value: '100' }),
+    } as any);
+  });
+
+  afterEach(() => {
+    settingSpy.mockRestore();
+    jest.restoreAllMocks();
+  });
+
+  function buildService(options: {
+    carrier?: any;
+    hasActiveCooldown?: boolean;
+    capabilityError?: Error;
+    contactError?: Error;
+  } = {}) {
     const service = new OfferService() as any;
 
-    service.assertCarrierCapabilityForShipment = jest.fn().mockResolvedValue(undefined);
     service.shipmentRepository = {
-      findById: jest.fn().mockResolvedValue({
-        id: 'shipment-1',
-        customerId: 'customer-1',
-        status: ShipmentStatus.PENDING,
-        shipmentCategory: ShipmentCategory.HOME_MOVE,
-        estimatedWeight: null,
-        extraServices: [],
-      }),
+      findById: jest.fn().mockResolvedValue(shipment),
     };
     service.offerRepository = {
-      findActiveByShipmentAndCarrier: jest.fn().mockResolvedValue(null),
+      findActiveByShipmentAndCarrier: jest.fn().mockResolvedValue(existingOffer),
+      update: jest.fn().mockResolvedValue({ ...existingOffer, price: 1500 }),
+      findByIdWithShipmentAndCarrier: jest.fn().mockResolvedValue(updatedOffer),
     };
     service.platformPolicy = {
-      hasActiveCooldown: jest.fn().mockResolvedValue(false),
-      enforceNoContactInfo: jest.fn().mockResolvedValue(undefined),
+      hasActiveCooldown: jest.fn().mockResolvedValue(options.hasActiveCooldown ?? false),
+      enforceNoContactInfo: options.contactError
+        ? jest.fn().mockRejectedValue(options.contactError)
+        : jest.fn().mockResolvedValue(undefined),
     };
     service.carrierRepository = {
-      findById: jest
-        .fn()
-        .mockResolvedValueOnce({ carrierVehicles: [] })
-        .mockResolvedValueOnce({
-          id: 'carrier-1',
-          isActive: true,
-          verifiedByAdmin: true,
-          approvalState: CarrierApprovalState.DRAFT,
-        }),
+      findById: jest.fn().mockResolvedValue(options.carrier ?? approvedCarrier),
+      incrementTotalOffers: jest.fn().mockResolvedValue(undefined),
     };
+    service.notificationService = {
+      createNotification: jest.fn().mockResolvedValue(undefined),
+    };
+    service.assertCarrierCapabilityForShipment = options.capabilityError
+      ? jest.fn().mockRejectedValue(options.capabilityError)
+      : jest.fn().mockResolvedValue(undefined);
 
-    const settingSpy = jest
-      .spyOn(AppDataSource, 'getRepository')
-      .mockReturnValue({
-        findOne: jest.fn().mockResolvedValue({ value: '100' }),
-      } as any);
+    return service;
+  }
 
-    try {
-      await service.createOffer('carrier-1', { shipmentId: 'shipment-1', price: 1000 });
-      throw new Error('Expected createOffer to throw for non-approved carrier');
-    } catch (error) {
-      expect(error).toBeInstanceOf(ForbiddenError);
-      expect((error as Error).message).toContain('APPROVED');
-    }
+  test('approvalState APPROVED olmayan carrier teklif veremez', async () => {
+    const service = buildService({
+      carrier: {
+        ...approvedCarrier,
+        approvalState: CarrierApprovalState.DRAFT,
+      },
+    });
 
-    settingSpy.mockRestore();
+    await expect(
+      service.createOffer('carrier-1', { shipmentId: 'shipment-1', price: 1000 })
+    ).rejects.toThrow(ForbiddenError);
+    await expect(
+      service.createOffer('carrier-1', { shipmentId: 'shipment-1', price: 1000 })
+    ).rejects.toThrow('APPROVED');
+  });
+
+  test('APPROVED carrier existing offer update yapabilir', async () => {
+    const service = buildService();
+
+    const result = await service.createOffer('carrier-1', {
+      shipmentId: 'shipment-1',
+      price: 1500,
+      message: 'updated message',
+      estimatedDuration: 3,
+    });
+
+    expect(result.isNew).toBe(false);
+    expect(result.offer.id).toBe('offer-1');
+    expect(service.offerRepository.update).toHaveBeenCalledWith('offer-1', {
+      price: 1500,
+      message: 'updated message',
+      estimatedDuration: 3,
+      hasSuspiciousContent: false,
+    });
+  });
+
+  test.each([
+    ['SUSPENDED', CarrierApprovalState.SUSPENDED],
+    ['REJECTED', CarrierApprovalState.REJECTED],
+    ['DRAFT', CarrierApprovalState.DRAFT],
+  ])('%s carrier existing offer update yapamaz', async (_label, approvalState) => {
+    const service = buildService({
+      carrier: {
+        ...approvedCarrier,
+        approvalState,
+      },
+    });
+
+    await expect(
+      service.createOffer('carrier-1', { shipmentId: 'shipment-1', price: 1500 })
+    ).rejects.toThrow(ForbiddenError);
+    expect(service.offerRepository.update).not.toHaveBeenCalled();
+  });
+
+  test('inactive carrier existing offer update yapamaz', async () => {
+    const service = buildService({
+      carrier: {
+        ...approvedCarrier,
+        isActive: false,
+      },
+    });
+
+    await expect(
+      service.createOffer('carrier-1', { shipmentId: 'shipment-1', price: 1500 })
+    ).rejects.toThrow(ForbiddenError);
+    expect(service.offerRepository.update).not.toHaveBeenCalled();
+  });
+
+  test('unverified carrier existing offer update yapamaz', async () => {
+    const service = buildService({
+      carrier: {
+        ...approvedCarrier,
+        verifiedByAdmin: false,
+      },
+    });
+
+    await expect(
+      service.createOffer('carrier-1', { shipmentId: 'shipment-1', price: 1500 })
+    ).rejects.toThrow(ForbiddenError);
+    expect(service.offerRepository.update).not.toHaveBeenCalled();
+  });
+
+  test('capability kaybi sonrasi existing offer update yapamaz', async () => {
+    const service = buildService({
+      capabilityError: new ForbiddenError('Bu yuk turu icin teklif veremezsiniz.'),
+    });
+
+    await expect(
+      service.createOffer('carrier-1', { shipmentId: 'shipment-1', price: 1500 })
+    ).rejects.toThrow(ForbiddenError);
+    expect(service.offerRepository.update).not.toHaveBeenCalled();
+  });
+
+  test('active cooldown varsa existing offer update yapamaz', async () => {
+    const service = buildService({ hasActiveCooldown: true });
+
+    await expect(
+      service.createOffer('carrier-1', { shipmentId: 'shipment-1', price: 1500 })
+    ).rejects.toThrow(ConflictError);
+    expect(service.offerRepository.update).not.toHaveBeenCalled();
+  });
+
+  test('contact info iceren message existing offer update yapamaz', async () => {
+    const service = buildService({
+      contactError: new ForbiddenError('Teklif mesajinda iletisim bilgisi paylasilamaz.'),
+    });
+
+    await expect(
+      service.createOffer('carrier-1', {
+        shipmentId: 'shipment-1',
+        price: 1500,
+        message: 'Bana 0532 123 45 67 numaradan ulasin',
+      })
+    ).rejects.toThrow(ForbiddenError);
+    expect(service.offerRepository.update).not.toHaveBeenCalled();
   });
 });

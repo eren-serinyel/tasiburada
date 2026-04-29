@@ -12,7 +12,7 @@ import { PlatformPolicyService } from './PlatformPolicyService';
 import { ContactFilterSurface } from '../../domain/entities';
 import { CarrierLoadTypeCapability } from '../../domain/entities/CarrierLoadTypeCapability';
 import { CarrierExtraServiceCapability } from '../../domain/entities/CarrierExtraServiceCapability';
-import { CarrierApprovalState } from '../../domain/entities/Carrier';
+import { Carrier, CarrierApprovalState } from '../../domain/entities/Carrier';
 import { inferExtraServiceLoadTypeFromShipmentCategory } from './extra-services/extraServiceApplicability';
 
 interface CreateOfferPayload {
@@ -106,6 +106,37 @@ export class OfferService {
     }
   }
 
+  private async assertCarrierCanCreateOrUpdateOffer(carrierId: string, shipment: Shipment, payload: CreateOfferPayload): Promise<Carrier> {
+    const carrier = await this.carrierRepository.findById(carrierId, { relations: ['carrierVehicles'] } as any);
+    if (!carrier || !carrier.isActive) {
+      throw new ForbiddenError('Hesab\u0131n\u0131z aktif de\u011fil. L\u00fctfen destekle ileti\u015fime ge\u00e7in.');
+    }
+
+    if (!carrier.verifiedByAdmin) {
+      throw new ForbiddenError('Teklif verebilmek i\u00e7in hesab\u0131n\u0131z\u0131n admin taraf\u0131ndan onaylanmas\u0131 gerekmektedir.');
+    }
+
+    if (carrier.approvalState !== CarrierApprovalState.APPROVED) {
+      throw new ForbiddenError('Teklif verebilmek i\u00e7in hesab\u0131n\u0131z\u0131n onay durumunun APPROVED olmas\u0131 gerekmektedir.');
+    }
+
+    if (await this.platformPolicy.hasActiveCooldown(shipment.customerId, carrierId)) {
+      throw new ConflictError('Bu m\u00fc\u015fteri ile aktif e\u015fle\u015fme bekleme s\u00fcresi bulundu\u011fu i\u00e7in teklif verilemez.');
+    }
+
+    await this.assertCarrierCapabilityForShipment(carrierId, shipment);
+
+    await this.platformPolicy.enforceNoContactInfo({
+      actorType: 'carrier',
+      actorId: carrierId,
+      surface: ContactFilterSurface.OFFER_MESSAGE,
+      text: payload.message,
+      shipmentId: shipment.id,
+    });
+
+    return carrier;
+  }
+
   async createOffer(carrierId: string, payload: CreateOfferPayload): Promise<{ offer: Offer, isNew: boolean, warnings?: any[] }> {
     if (!payload.shipmentId || typeof payload.price !== 'number') {
       throw new ValidationError('shipmentId ve price alanları zorunludur.');
@@ -139,27 +170,14 @@ export class OfferService {
       throw new ValidationError('Sadece teklif almaya açık taşıma taleplerine teklif verilebilir.');
     }
 
-    if (await this.platformPolicy.hasActiveCooldown(shipment.customerId, carrierId)) {
-      throw new ConflictError('Bu müşteri ile aktif eşleşme bekleme süresi bulunduğu için teklif verilemez.');
-    }
-
-    await this.assertCarrierCapabilityForShipment(carrierId, shipment);
-
-    await this.platformPolicy.enforceNoContactInfo({
-      actorType: 'carrier',
-      actorId: carrierId,
-      surface: ContactFilterSurface.OFFER_MESSAGE,
-      text: payload.message,
-      shipmentId: shipment.id,
-    });
+    const eligibleCarrier = await this.assertCarrierCanCreateOrUpdateOffer(carrierId, shipment, payload);
 
     const hasSuspiciousContent = payload.message ? this.checkSuspiciousContent(payload.message) : false;
 
     // BR11 — Araç Uygunluk Soft Warning:
     const warnings: any[] = [];
-    const carrierWithVehicles = await this.carrierRepository.findById(carrierId, { relations: ['carrierVehicles'] } as any);
-    if (shipment.estimatedWeight && carrierWithVehicles?.carrierVehicles?.length) {
-      const maxCapacity = Math.max(...carrierWithVehicles.carrierVehicles.map(v => Number(v.capacityKg || 0)));
+    if (shipment.estimatedWeight && eligibleCarrier.carrierVehicles?.length) {
+      const maxCapacity = Math.max(...eligibleCarrier.carrierVehicles.map((v: any) => Number(v.capacityKg || 0)));
       if (maxCapacity < shipment.estimatedWeight) {
         warnings.push({
           code: 'CAPACITY_MISMATCH',
@@ -183,20 +201,6 @@ export class OfferService {
         throw new NotFoundError('Teklif güncellendi ancak getirilemedi.');
       }
       return { offer: this.sanitizeOffer(updated), isNew: false, warnings };
-    }
-
-    // CARRIER ELIGIBILITY CHECK: Must be verified by admin
-    const carrier = await this.carrierRepository.findById(carrierId);
-    if (!carrier || !carrier.isActive) {
-      throw new ForbiddenError('Hesabınız aktif değil. Lütfen destekle iletişime geçin.');
-    }
-
-    if (!carrier.verifiedByAdmin) {
-      throw new ForbiddenError('Teklif verebilmek için hesabınızın admin tarafından onaylanması gerekmektedir.');
-    }
-
-    if (carrier.approvalState !== CarrierApprovalState.APPROVED) {
-      throw new ForbiddenError('Teklif verebilmek için hesabınızın onay durumunun APPROVED olması gerekmektedir.');
     }
 
     const offer = await this.offerRepository.create({

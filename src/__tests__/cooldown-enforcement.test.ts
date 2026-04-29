@@ -43,15 +43,13 @@ describe('Cooldown enforcement v1', () => {
       enforceNoContactInfo: jest.fn().mockResolvedValue(undefined),
     };
     service.carrierRepository = {
-      findById: jest
-        .fn()
-        .mockResolvedValueOnce({ carrierVehicles: [] })
-        .mockResolvedValueOnce({
-          id: 'carrier-1',
-          isActive: true,
-          verifiedByAdmin: true,
-          approvalState: CarrierApprovalState.APPROVED,
-        }),
+      findById: jest.fn().mockResolvedValue({
+        id: 'carrier-1',
+        isActive: true,
+        verifiedByAdmin: true,
+        approvalState: CarrierApprovalState.APPROVED,
+        carrierVehicles: [],
+      }),
       incrementTotalOffers: jest.fn().mockResolvedValue(undefined),
     };
     service.notificationService = {
