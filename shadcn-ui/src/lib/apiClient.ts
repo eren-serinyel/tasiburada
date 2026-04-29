@@ -3,8 +3,13 @@ import { APP_CONFIG } from './config';
 
 let redirectInProgress = false;
 
-export async function apiClient(input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> {
-  const headers = new Headers(init.headers || {});
+type ApiClientInit = RequestInit & {
+  suppressErrorToast?: boolean;
+};
+
+export async function apiClient(input: RequestInfo | URL, init: ApiClientInit = {}): Promise<Response> {
+  const { suppressErrorToast = false, ...requestInit } = init;
+  const headers = new Headers(requestInit.headers || {});
   const token = typeof window !== 'undefined' ? localStorage.getItem(APP_CONFIG.tokenKey) : null;
 
   const resolvedInput = (() => {
@@ -32,7 +37,7 @@ export async function apiClient(input: RequestInfo | URL, init: RequestInit = {}
 
   try {
     const response = await fetch(resolvedInput, {
-      ...init,
+      ...requestInit,
       headers
     });
 
@@ -54,15 +59,17 @@ export async function apiClient(input: RequestInfo | URL, init: RequestInit = {}
       }
 
       // Automatically show toast for other errors if message exists
-      try {
-        const errorData = await response.clone().json();
-        if (errorData && errorData.message) {
-          toast.error(errorData.message);
-        }
-      } catch (e) {
-        // Fallback if not JSON
-        if (response.status >= 500) {
-          toast.error('Sunucu hatası oluştu.');
+      if (!suppressErrorToast) {
+        try {
+          const errorData = await response.clone().json();
+          if (errorData && errorData.message) {
+            toast.error(errorData.message);
+          }
+        } catch (e) {
+          // Fallback if not JSON
+          if (response.status >= 500) {
+            toast.error('Sunucu hatası oluştu.');
+          }
         }
       }
     }
