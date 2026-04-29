@@ -52,6 +52,7 @@ type BackendShipment = {
 type ShipmentListItem = Shipment & {
   customerDisplayName: string;
   rawStatus: string;
+  offerCount?: number;
   originDistrict?: string;
   destinationDistrict?: string;
   isAssured?: boolean;
@@ -121,6 +122,29 @@ const normalizeStatus = (status?: string): Shipment['status'] => {
   }
 };
 
+const getCustomerNextStep = (shipment: ShipmentListItem): string => {
+  const offerCount = shipment.offerCount ?? 0;
+
+  switch (shipment.rawStatus || shipment.status) {
+    case 'pending':
+      return offerCount > 0
+        ? 'Teklifleri karsilastirin ve en uygun tasiyiciyi secin.'
+        : 'Teklif gelmesini bekleyin veya ilan detayini guncelleyin.';
+    case 'offer_received':
+      return 'Teklifleri karsilastirin ve kabul etmeden once detaylari inceleyin.';
+    case 'matched':
+      return 'Secilen tasiyici ile sureci platform uzerinden ilerletin.';
+    case 'in_transit':
+      return 'Tasima durumunu takip edin, sureci platform icinden yonetin.';
+    case 'completed':
+      return 'Surec tamamlandi. Dilerseniz benzer bir ilan yeniden olusturabilirsiniz.';
+    case 'cancelled':
+      return 'Ihtiyaciniz devam ediyorsa yeni bir ilan olusturabilirsiniz.';
+    default:
+      return 'Ilan detaylarini kontrol ederek bir sonraki adimi belirleyin.';
+  }
+};
+
 const toUiShipment = (shipment: BackendShipment): ShipmentListItem => {
   const originText = shipment.origin || '';
   const destinationText = shipment.destination || '';
@@ -151,6 +175,7 @@ const toUiShipment = (shipment: BackendShipment): ShipmentListItem => {
     description: shipment.loadDetails || '',
     status: normalizeStatus(shipment.status),
     rawStatus: shipment.status || 'pending',
+    offerCount: Number(shipment.offerCount || 0),
     price: Number(shipment.price || 0),
     originDistrict: shipment.originDistrict,
     destinationDistrict: shipment.destinationDistrict,
@@ -270,8 +295,11 @@ export default function ShipmentList() {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'pending': return 'bg-yellow-100 text-yellow-800';
+      case 'offer_received': return 'bg-blue-100 text-blue-800';
       case 'matched': return 'bg-blue-100 text-blue-800';
+      case 'in_transit': return 'bg-orange-100 text-orange-800';
       case 'delivered': return 'bg-green-100 text-green-800';
+      case 'completed': return 'bg-green-100 text-green-800';
       case 'cancelled': return 'bg-red-100 text-red-800';
       default: return 'bg-gray-100 text-gray-800';
     }
@@ -280,8 +308,11 @@ export default function ShipmentList() {
   const getStatusText = (status: string) => {
     switch (status) {
       case 'pending': return 'Bekliyor';
+      case 'offer_received': return 'Teklif Geldi';
       case 'matched': return 'Eşleşti';
+      case 'in_transit': return 'Tasiniyor';
       case 'delivered': return 'Teslim Edildi';
+      case 'completed': return 'Tamamlandi';
       case 'cancelled': return 'İptal Edildi';
       default: return status;
     }
@@ -430,14 +461,20 @@ export default function ShipmentList() {
       ) : (
         <div className="space-y-6">
           {filteredShipments.map((shipment) => {
+            const statusKey = shipment.rawStatus || shipment.status;
             return (
               <Card key={shipment.id} className="hover:shadow-md transition-shadow border-gray-200">
                 <CardHeader className="pb-3">
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">
-                      <Badge className={`${getStatusColor(shipment.status)} font-semibold text-[10px] uppercase tracking-wider`}>
-                        {getStatusText(shipment.status)}
+                      <Badge className={`${getStatusColor(statusKey)} font-semibold text-[10px] uppercase tracking-wider`}>
+                        {getStatusText(statusKey)}
                       </Badge>
+                      {user.type === 'customer' && (
+                        <Badge variant="outline" className="text-[10px] border-slate-200 text-slate-600">
+                          {shipment.offerCount ?? 0} teklif
+                        </Badge>
+                      )}
                       <span className="text-[11px] text-gray-400 font-mono">#{shipment.id.slice(0, 8)}</span>
                     </div>
                     <div className="flex items-center gap-1 text-[11px] text-gray-500">
@@ -495,6 +532,13 @@ export default function ShipmentList() {
                         </Badge>
                       )}
                    </div>
+
+                  {user.type === 'customer' && (
+                    <div className="mb-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Sonraki adim</p>
+                      <p className="mt-1 text-xs text-slate-700">{getCustomerNextStep(shipment)}</p>
+                    </div>
+                  )}
                   
                   <div className="flex items-center justify-between mt-2 pt-3 border-t">
                     <div className="text-xs text-gray-400">

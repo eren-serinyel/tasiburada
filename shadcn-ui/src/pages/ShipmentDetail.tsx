@@ -406,6 +406,28 @@ export default function ShipmentDetail() {
     { label: 'Oluşturulma', value: fmtDate(shipment.createdAt) },
   ];
 
+  const nextStepText = (() => {
+    if (userType !== 'customer') return null;
+    switch (shipment.status) {
+      case 'pending':
+        return offers.length > 0
+          ? 'Teklifleri karsilastirarak en uygun tasiyiciyi secin.'
+          : 'Tekliflerin gelmesini bekleyin; gerekirse ilan detaylarini guncelleyin.';
+      case 'offer_received':
+        return 'Teklifleri karsilastirip kabul oncesi karar sinyallerini kontrol edin.';
+      case 'matched':
+        return 'Secilen tasiyici ile sureci platform uzerinden yurutun.';
+      case 'in_transit':
+        return 'Tasimanin ilerleyisini takip edin ve iletisimi platform icinde tutun.';
+      case 'completed':
+        return 'Tasima tamamlandi. Deneyimi degerlendirebilir veya benzer ilan acabilirsiniz.';
+      case 'cancelled':
+        return 'Ihtiyaciniz suruyorsa tek tikla benzer ilan olusturabilirsiniz.';
+      default:
+        return 'Ilan durumunu kontrol ederek uygun aksiyonu alin.';
+    }
+  })();
+
   return (
     <div style={{ background: '#F8FAFC', minHeight: '100vh' }}>
       <div style={{ maxWidth: '1020px', margin: '0 auto', padding: '20px 24px' }}>
@@ -516,6 +538,21 @@ export default function ShipmentDetail() {
                 <span style={{ fontSize: '13px', fontWeight: 500, color: '#0F172A', textAlign: 'right' }}>{row.value}</span>
               </div>
             ))}
+
+            {nextStepText && (
+              <div style={{ marginTop: '12px', padding: '10px 12px', border: '0.5px solid #E2E8F0', borderRadius: '8px', background: '#F8FAFC' }}>
+                <div style={{ fontSize: '11px', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>Sonraki Adim</div>
+                <div style={{ marginTop: '4px', fontSize: '12px', color: '#0F172A', lineHeight: 1.45 }}>{nextStepText}</div>
+              </div>
+            )}
+
+            {userType === 'customer' && (
+              <div style={{ marginTop: '10px', padding: '9px 11px', border: '0.5px solid #FDE68A', borderRadius: '8px', background: '#FFFBEB' }}>
+                <div style={{ fontSize: '11px', color: '#92400E', lineHeight: 1.4 }}>
+                  Iletisim ve odeme sureclerini platform uzerinden surdurun.
+                </div>
+              </div>
+            )}
 
             {showContactGate && (
               <div style={{ marginTop: '12px', padding: '10px 12px', border: '0.5px solid #E2E8F0', borderRadius: '8px', background: directPhone ? '#F0FDF4' : '#F8FAFC', display: 'flex', alignItems: 'center', gap: '8px' }}>
