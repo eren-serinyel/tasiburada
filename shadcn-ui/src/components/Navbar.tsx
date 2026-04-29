@@ -77,6 +77,7 @@ export default function Navbar() {
               {[
                 { to: user ? '/home' : '/', label: 'Ana Sayfa', match: ['/home', '/'] },
                 { to: '/nakliyeciler', label: 'Nakliyeciler', match: ['/nakliyeciler'] },
+                { to: '/nakliye-hacmi-hesapla', label: 'Hacim Hesapla', match: ['/nakliye-hacmi-hesapla', '/hacim-hesaplama'] },
                 ...(userRole === 'customer' ? [{ to: '/teklif-talebi', label: 'Teklif Talebi', match: ['/teklif-talebi'] }] : []),
               ].map(link => {
                 const isActive = link.match.some(m => location.pathname === m || (m !== '/' && location.pathname.startsWith(m)));
@@ -335,6 +336,15 @@ export default function Navbar() {
                   </Link>
 
                   <Link
+                    to="/nakliye-hacmi-hesapla"
+                    className="flex items-center space-x-3 text-gray-700 hover:text-blue-600 transition-colors py-2 px-3 rounded-lg hover:bg-blue-50"
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    <Package className="h-4 w-4" />
+                    <span>Hacim Hesapla</span>
+                  </Link>
+
+                  <Link
                     to={userRole === 'carrier' ? '/nasil-calisir-nakliyeci' : '/nasil-calisir-musteri'}
                     className="flex items-center space-x-3 text-gray-700 hover:text-blue-600 transition-colors py-2 px-3 rounded-lg hover:bg-blue-50"
                     onClick={() => setIsMenuOpen(false)}
@@ -435,6 +445,14 @@ export default function Navbar() {
                   >
                     <Users className="h-4 w-4" />
                     <span>Nakliyeciler</span>
+                  </Link>
+                  <Link
+                    to="/nakliye-hacmi-hesapla"
+                    className="flex items-center space-x-3 text-gray-700 hover:text-blue-600 transition-colors py-2 px-3 rounded-lg hover:bg-blue-50"
+                    onClick={() => setIsMenuOpen(false)}
+                  >
+                    <Package className="h-4 w-4" />
+                    <span>Hacim Hesapla</span>
                   </Link>
                   <Link
                     to="/nasil-calisir-musteri"

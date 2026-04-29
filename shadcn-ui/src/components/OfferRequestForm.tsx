@@ -535,6 +535,12 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
   };
 
   useEffect(() => {
+    if (searchParams.get('calculator') === '1') {
+      setIsVolumeCalculatorOpen(true);
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
     if (!altOptions.length && form.placeType) handleChange('placeType', '');
   }, [altOptions.length]);
 

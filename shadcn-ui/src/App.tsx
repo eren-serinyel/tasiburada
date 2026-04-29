@@ -53,6 +53,7 @@ import HowItWorksCustomer from './pages/HowItWorksCustomer';
 import HowItWorksCarrier from './pages/HowItWorksCarrier';
 import RoleHome from './pages/RoleHome';
 import OfferRequest from './pages/OfferRequest';
+import VolumeCalculatorLanding from './pages/VolumeCalculatorLanding';
 import History from './pages/History';
 import Campaigns from './pages/Campaigns';
 import Loyalty from './pages/Loyalty';
@@ -181,6 +182,8 @@ const App = () => (
             <Route path="/cerez-politikasi" element={<CookiesPolicy />} />
             <Route path="/yardim" element={<Help />} />
             <Route path="/nakliyeci-bilgi" element={<CarrierInfo />} />
+            <Route path="/nakliye-hacmi-hesapla" element={<VolumeCalculatorLanding />} />
+            <Route path="/hacim-hesaplama" element={<Navigate to="/nakliye-hacmi-hesapla" replace />} />
             <Route path="/teklifler/:shipmentId" element={
               <ProtectedRoute requiredRole="customer">
                 <OfferComparison />
