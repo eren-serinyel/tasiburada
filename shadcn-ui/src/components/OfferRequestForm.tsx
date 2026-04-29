@@ -34,6 +34,12 @@ import {
   reconcileSelectedExtraServiceIds,
   type ExtraServiceOption,
 } from '@/lib/extraServices';
+import {
+  CONTACT_SAFETY_WARNING,
+  buildShipmentPayloadFromForm,
+  getConverterAppliedSummary,
+  type ConverterAppliedSummary,
+} from '@/lib/customerShipmentForm';
 
 type Step = 1 | 2 | 3;
 
@@ -77,6 +83,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
   const [inviteCarrierId, setInviteCarrierId] = useState<string | null>(null);
   const [inviteCarrierName, setInviteCarrierName] = useState<string | null>(null);
   const [isVolumeCalculatorOpen, setIsVolumeCalculatorOpen] = useState(false);
+  const [appliedConverterSummary, setAppliedConverterSummary] = useState<ConverterAppliedSummary | null>(null);
   const [availableExtraServices, setAvailableExtraServices] = useState<ExtraServiceOption[]>([]);
   const [vehicleTypeOptions, setVehicleTypeOptions] = useState<VehicleTypeOption[]>([]);
   const [form, setForm] = useState({
@@ -93,6 +100,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
     weightKg: '',
     floor: '',
     hasElevator: false,
+    dateFlexibility: 'EXACT' as 'EXACT' | 'FLEXIBLE' | 'WITHIN_WEEK',
     timeWindow: '',
     insurance: 'none' as 'none' | 'basic' | 'premium',
     extras: { asansor: false, sigorta: false, ambalaj: false },
@@ -361,6 +369,9 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
   const applyConverterEstimateToForm = (result: EstimateConverterResponse) => {
     const weightKg = result.estimatedWeightKg;
     const mappedVehicleTypeId = mapRecommendedVehicleToVehicleTypeId(result.recommendedVehicle);
+    const recommendedVehicleLabel = mappedVehicleTypeId
+      ? getVehicleTypeLabel(mappedVehicleTypeId)
+      : CONVERTER_TO_VEHICLE_TYPE_NAME[result.recommendedVehicle] || result.recommendedVehicle;
     setForm((prev) => {
       const currentIds = currentServiceGroup ? (prev.serviceOptions?.[currentServiceGroup] || []) : [];
       const mergedIds = currentServiceGroup
@@ -374,6 +385,12 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
         serviceOptions: currentServiceGroup ? { [currentServiceGroup]: mergedIds } : prev.serviceOptions,
         extraServices: mapSelectedExtraServiceNames(mergedIds, availableExtraServices),
       };
+    });
+    setAppliedConverterSummary({
+      estimatedVolumeMin: result.estimatedVolumeMin,
+      estimatedVolumeMax: result.estimatedVolumeMax,
+      estimatedWeightKg: result.estimatedWeightKg,
+      recommendedVehicle: recommendedVehicleLabel,
     });
     toast({
       title: 'Ağırlık güncellendi',
@@ -556,27 +573,11 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
 
   // Tüm form verilerinden shipment payload'u üretir
   const buildShipmentPayload = () => {
-    // serviceOptions içindeki seçimleri düz array'e çevir
-    const extraServicesFromOptions = Object.values(form.serviceOptions || {}).flat();
-    const contactPhone = phone.trim() || undefined;
-
-    return {
-      origin: [form.originCity, form.originDistrict].filter(Boolean).join(', '),
-      destination: [form.destinationCity, form.destinationDistrict].filter(Boolean).join(', '),
-      loadDetails: [form.transportType, form.placeType].filter(Boolean).join(' / ') || 'Belirtilmedi',
-      transportType: form.transportType || undefined,
-      placeType: form.placeType || undefined,
-      hasElevator: form.hasElevator || undefined,
-      floor: form.floor ? Number(form.floor) : undefined,
-      insuranceType: form.insurance !== 'none' ? form.insurance : undefined,
-      timePreference: form.timeWindow || undefined,
-      extraServices: extraServicesFromOptions.length ? extraServicesFromOptions : undefined,
-      weight: form.weightKg ? Number(form.weightKg) : (form.placeType && TEMPLATE_WEIGHTS[form.placeType]) ? TEMPLATE_WEIGHTS[form.placeType] : undefined,
-      vehicleTypePreferenceId: vehicleTypeOptions.some((item) => item.id === form.vehicleType) ? form.vehicleType : undefined,
-      note: form.note || undefined,
-      shipmentDate: form.date || new Date().toISOString().split('T')[0],
-      contactPhone,
-    };
+    return buildShipmentPayloadFromForm(form, {
+      phone,
+      templateWeights: TEMPLATE_WEIGHTS,
+      vehicleTypeOptions,
+    });
   };
 
   // Profil telefonunu güncelle (opsiyonel, sadece numara yoksa)
@@ -735,6 +736,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
     transition: 'border-color 150ms, box-shadow 150ms', outline: 'none', width: '100%',
   };
   const labelStyle: React.CSSProperties = { display: 'block', fontSize: '13px', fontWeight: 500, color: '#374151', marginBottom: '6px' };
+  const converterAppliedRows = getConverterAppliedSummary(appliedConverterSummary);
 
   return (
     <div style={{ background: '#F8FAFC', minHeight: '100vh' }}>
@@ -1202,6 +1204,10 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
                 </div>
               </div>
 
+              <div style={{ marginBottom: '16px', padding: '12px 14px', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: '12px', color: '#92400E', fontSize: '13px', lineHeight: 1.5 }}>
+                {CONTACT_SAFETY_WARNING}
+              </div>
+
               {/* Summary cards – 2 col */}
               <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
                 {/* Rota Bilgileri */}
@@ -1317,6 +1323,19 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
                   </div>
                 </div>
               </div>
+
+              {converterAppliedRows.length > 0 && (
+                <div style={{ marginBottom: '16px', padding: '12px 16px', background: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: '12px' }}>
+                  <div style={{ fontSize: '13px', fontWeight: 600, color: '#047857', marginBottom: '6px' }}>Hacim hesaplayıcı forma uygulandı</div>
+                  <div className="flex flex-wrap" style={{ gap: '6px' }}>
+                    {converterAppliedRows.map((row) => (
+                      <span key={row} style={{ background: 'white', border: '1px solid #D1FAE5', borderRadius: '8px', padding: '4px 10px', fontSize: '12px', color: '#065F46' }}>
+                        {row}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Invite banner */}
               {inviteCarrierId && inviteCarrierName && (

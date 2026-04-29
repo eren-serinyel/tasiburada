@@ -10,6 +10,7 @@ import { Shipment, User, Carrier, LOAD_TYPES } from '@/lib/types';
 import { getCarrierProfileTasks } from '@/lib/utils';
 import { getSessionUser } from '@/lib/storage';
 import { apiClient } from '@/lib/apiClient';
+import { getCustomerShipmentDetailPath } from '@/lib/customerShipmentForm';
 
 const API_BASE_URL = '/api/v1';
 const ALL_FILTER_VALUE = '__all__';
@@ -503,7 +504,7 @@ export default function ShipmentList() {
                     <div className="flex items-center space-x-2">
                       {user.type === 'customer' ? (
                         <>
-                           <Button size="sm" variant="ghost" onClick={() => navigate(`/sevkiyat/${shipment.id}`)}>Detaylar</Button>
+                           <Button size="sm" variant="ghost" onClick={() => navigate(getCustomerShipmentDetailPath(shipment.id))}>Detaylar</Button>
                           {shipment.status === 'pending' && (
                             <Badge variant="secondary" className="bg-gray-100 text-gray-600">Teklif Bekleniyor</Badge>
                           )}
