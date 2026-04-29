@@ -89,6 +89,49 @@ interface CustomerOfferCardProps {
   onBookmark?: (offer: CustomerOffer) => void;
 }
 
+export const getExtraServiceCompatibilityText = (offer: CustomerOffer): string | null => {
+  if (!offer.extraServiceCompatibility || offer.extraServiceCompatibility.requestedCount === 0) {
+    return null;
+  }
+
+  if (offer.extraServiceCompatibility.isFullyCompatible) {
+    return 'Tum ek hizmetler karsilaniyor';
+  }
+
+  const missing = offer.extraServiceCompatibility.missing.slice(0, 2).join(', ');
+  const suffix = offer.extraServiceCompatibility.missing.length > 2 ? '...' : '';
+  return `Eksik ek hizmet: ${missing}${suffix}`;
+};
+
+export const getCapacityDecisionText = (offer: CustomerOffer): string => {
+  if (!offer.capacityFit || offer.capacityFit.status === 'uncertain') {
+    return 'Kapasite bilgisi belirsiz';
+  }
+
+  if (offer.capacityFit.status === 'fit') {
+    return 'Arac kapasitesi uygun';
+  }
+
+  return 'Kapasite dusuk olabilir';
+};
+
+export const getOfferDecisionSignals = (offer: CustomerOffer): string[] => {
+  const signals: string[] = [];
+
+  if (offer.isLowestPrice) signals.push('En dusuk fiyat');
+  if (offer.isHighestRating) signals.push('Yuksek puanli tasiyici');
+
+  if (offer.extraServiceCompatibility?.requestedCount && offer.extraServiceCompatibility.isFullyCompatible) {
+    signals.push('Ek hizmetler uyumlu');
+  }
+
+  if ((offer.estimatedDuration || 0) > 0 && (offer.estimatedDuration || 0) <= 24) {
+    signals.push('Hizli teslimat');
+  }
+
+  return signals;
+};
+
 const fmtPrice = (n: number) =>
   new Intl.NumberFormat('tr-TR', { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(n);
 
@@ -157,17 +200,9 @@ export function CustomerOfferCard({
       : 'Kapasite yok';
   const safeOfferMessage = redactUiText(offer.message);
   const safeReviewComment = redactUiText(review?.comment);
-
-  const compatibilityBadge = offer.extraServiceCompatibility?.requestedCount
-    ? offer.extraServiceCompatibility.isFullyCompatible
-      ? 'Ek hizmetler uyumlu'
-      : `Eksik ek hizmet: ${offer.extraServiceCompatibility.missing.slice(0, 2).join(', ')}${offer.extraServiceCompatibility.missing.length > 2 ? '...' : ''}`
-    : null;
-  const capacityBadge = offer.capacityFit?.status === 'fit'
-    ? 'Kapasite uygun'
-    : offer.capacityFit?.status === 'low_possible'
-      ? 'Kapasite dusuk olabilir'
-      : 'Kapasite belirsiz';
+  const compatibilityBadge = getExtraServiceCompatibilityText(offer);
+  const capacityBadge = getCapacityDecisionText(offer);
+  const decisionSignals = getOfferDecisionSignals(offer);
 
   return (
     <article
@@ -197,6 +232,7 @@ export function CustomerOfferCard({
                 {rating > 0 ? rating.toFixed(1) : 'Yeni'}
                 {carrier?.ratingCount ? ` (${carrier.ratingCount})` : ''}
               </span>
+              <span>{rating > 0 ? `${rating.toFixed(1)} puan` : 'Puan yok'} • {carrier?.ratingCount ?? 0} yorum</span>
               <span>{carrier?.completedShipments ?? 0} is</span>
               {carrier?.localnessLabel && <span>{carrier.localnessLabel}</span>}
             </div>
@@ -231,10 +267,10 @@ export function CustomerOfferCard({
           <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700">En yuksek puan</Badge>
         )}
         {carrier?.isVerified && (
-          <Badge variant="outline" className="gap-1"><ShieldCheck className="h-3 w-3" /> Onayli</Badge>
+          <Badge className="gap-1 bg-blue-100 text-blue-800 hover:bg-blue-100"><ShieldCheck className="h-3 w-3" /> Dogrulanmis Tasiyici</Badge>
         )}
         {carrier?.hasInsurance && (
-          <Badge variant="outline" className="gap-1"><PackageCheck className="h-3 w-3" /> Sigortali</Badge>
+          <Badge className="gap-1 bg-emerald-100 text-emerald-800 hover:bg-emerald-100"><PackageCheck className="h-3 w-3" /> Sigorta Mevcut</Badge>
         )}
         {compatibilityBadge && (
           <Badge
@@ -257,6 +293,13 @@ export function CustomerOfferCard({
           {capacityBadge}
         </Badge>
       </div>
+
+      {decisionSignals.length > 0 && (
+        <div className="mb-3 rounded-md border border-slate-200 bg-slate-50 p-2.5">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Neden bu teklif?</p>
+          <p className="mt-1 text-xs text-slate-700">{decisionSignals.join(' • ')}</p>
+        </div>
+      )}
 
       <div className={cn('grid gap-2', compact ? 'grid-cols-1' : 'grid-cols-2')}>
         <div className="rounded-lg bg-slate-50 p-3">
@@ -297,6 +340,10 @@ export function CustomerOfferCard({
           <p className="line-clamp-2 text-xs leading-5 text-slate-600">"{safeReviewComment}"</p>
         </div>
       )}
+
+      <p className="mt-3 text-[11px] text-slate-500">
+        Tasiyiciyla iletisim ve odeme sureclerini platform uzerinden surdurun.
+      </p>
 
       <div className="mt-4 flex gap-2">
         <Button variant="outline" className="flex-1" onClick={() => onDetails?.(offer)}>

@@ -12,7 +12,12 @@ import {
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { CustomerOffer, CustomerOfferCard } from '@/components/offers/CustomerOfferCard';
+import {
+  CustomerOffer,
+  CustomerOfferCard,
+  getCapacityDecisionText,
+  getExtraServiceCompatibilityText,
+} from '@/components/offers/CustomerOfferCard';
 import { Bookmark, PackageOpen, Rows3, ShieldCheck } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { apiClient } from '@/lib/apiClient';
@@ -226,6 +231,10 @@ export default function MyOffers() {
         </div>
       )}
 
+      <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+        Tasiyiciyla iletisim ve odeme sureclerini platform uzerinden surdurun.
+      </div>
+
       {offers.length === 0 ? (
         <EmptyState />
       ) : grouped.length === 0 ? (
@@ -308,11 +317,16 @@ export default function MyOffers() {
             <AlertDialogTitle>Teklifi kabul et</AlertDialogTitle>
             <AlertDialogDescription>
               {confirmOffer && (
-                <>
-                  <strong>{confirmOffer.carrier?.displayName || confirmOffer.carrier?.companyName || 'Nakliyeci'}</strong>
-                  {' '}firmasinin <strong>₺{fmtPrice(Number(confirmOffer.price))}</strong> tutarindaki teklifini kabul etmek istiyor musunuz?
-                  Diger teklifler otomatik reddedilecek, iletisim platform kurallarina gore acilacak.
-                </>
+                <div className="space-y-2 text-slate-700">
+                  <p>
+                    <strong>{confirmOffer.carrier?.displayName || confirmOffer.carrier?.companyName || 'Nakliyeci'}</strong>
+                    {' '}teklifi kabul edilecek.
+                  </p>
+                  <p><strong>Fiyat:</strong> ₺{fmtPrice(Number(confirmOffer.price))}</p>
+                  <p><strong>Ek hizmet uyumu:</strong> {getExtraServiceCompatibilityText(confirmOffer) || 'Ek hizmet gerekmiyor'}</p>
+                  <p><strong>Kapasite durumu:</strong> {getCapacityDecisionText(confirmOffer)}</p>
+                  <p>Diger teklifler otomatik reddedilecek, iletisim platform kurallarina gore acilacak.</p>
+                </div>
               )}
             </AlertDialogDescription>
           </AlertDialogHeader>

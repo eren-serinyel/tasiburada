@@ -12,7 +12,12 @@ import {
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { CustomerOffer, CustomerOfferCard } from '@/components/offers/CustomerOfferCard';
+import {
+  CustomerOffer,
+  CustomerOfferCard,
+  getCapacityDecisionText,
+  getExtraServiceCompatibilityText,
+} from '@/components/offers/CustomerOfferCard';
 import { ArrowLeft, BarChart2, PackageOpen, SlidersHorizontal } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { apiClient } from '@/lib/apiClient';
@@ -195,6 +200,10 @@ export default function OfferComparison() {
         </div>
       )}
 
+      <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+        Tasiyiciyla iletisim ve odeme sureclerini platform uzerinden surdurun.
+      </div>
+
       {sortedOffers.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <PackageOpen className="mb-4 h-12 w-12 text-gray-300" />
@@ -262,11 +271,16 @@ export default function OfferComparison() {
             <AlertDialogTitle>Teklifi kabul et</AlertDialogTitle>
             <AlertDialogDescription>
               {confirmOffer && (
-                <>
-                  <strong>{confirmOffer.carrier?.displayName || confirmOffer.carrier?.companyName || 'Nakliyeci'}</strong>
-                  {' '}firmasinin <strong>₺{fmtPrice(Number(confirmOffer.price))}</strong> tutarindaki teklifini kabul etmek istiyor musunuz?
-                  Diger teklifler otomatik reddedilecek, iletisim platform kurallarina gore acilacak.
-                </>
+                <div className="space-y-2 text-slate-700">
+                  <p>
+                    <strong>{confirmOffer.carrier?.displayName || confirmOffer.carrier?.companyName || 'Nakliyeci'}</strong>
+                    {' '}teklifi kabul edilecek.
+                  </p>
+                  <p><strong>Fiyat:</strong> ₺{fmtPrice(Number(confirmOffer.price))}</p>
+                  <p><strong>Ek hizmet uyumu:</strong> {getExtraServiceCompatibilityText(confirmOffer) || 'Ek hizmet gerekmiyor'}</p>
+                  <p><strong>Kapasite durumu:</strong> {getCapacityDecisionText(confirmOffer)}</p>
+                  <p>Diger teklifler otomatik reddedilecek, iletisim platform kurallarina gore acilacak.</p>
+                </div>
               )}
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -294,21 +308,19 @@ function Metric({ label, value }: { label: string; value: string }) {
 function ComparisonTable({ offers, onChoose }: { offers: CustomerOffer[]; onChoose: (offer: CustomerOffer) => void }) {
   const rows = [
     ['Fiyat', (o: CustomerOffer) => `₺${fmtPrice(Number(o.price))}`],
-    ['Puan', (o: CustomerOffer) => o.carrier?.rating ? `${Number(o.carrier.rating).toFixed(1)} / 5` : 'Yeni'],
-    ['Yorum', (o: CustomerOffer) => `${o.carrier?.ratingCount ?? 0}`],
-    ['Tamamlanan', (o: CustomerOffer) => `${o.carrier?.completedShipments ?? 0} is`],
-    ['Arac', (o: CustomerOffer) => [o.carrier?.vehicleBrand, o.carrier?.vehicleModel].filter(Boolean).join(' ') || o.carrier?.vehicleType || '-'],
-    ['Sigorta', (o: CustomerOffer) => o.carrier?.hasInsurance ? 'Var' : '-'],
-    ['Yanit', (o: CustomerOffer) => o.carrier?.averageResponseTimeMin ? `${o.carrier.averageResponseTimeMin} dk` : 'Yeni'],
-    ['Ek hizmet', (o: CustomerOffer) => {
-      if (!o.extraServiceCompatibility || o.extraServiceCompatibility.requestedCount === 0) return 'Gerekmiyor';
-      if (o.extraServiceCompatibility.isFullyCompatible) return 'Uyumlu';
-      const missing = o.extraServiceCompatibility.missing.slice(0, 2).join(', ');
-      return `Eksik: ${missing}${o.extraServiceCompatibility.missing.length > 2 ? '...' : ''}`;
+    ['Sure', (o: CustomerOffer) => o.estimatedDuration ? `${o.estimatedDuration} saat` : 'Belirtilmedi'],
+    ['Puan', (o: CustomerOffer) => o.carrier?.rating ? `${Number(o.carrier.rating).toFixed(1)} / 5 (${o.carrier?.ratingCount ?? 0} yorum)` : 'Yeni / yorum yok'],
+    ['Ek hizmet uyumu', (o: CustomerOffer) => getExtraServiceCompatibilityText(o) || 'Gerekmiyor'],
+    ['Kapasite', (o: CustomerOffer) => getCapacityDecisionText(o)],
+    ['Sigorta / dogrulama', (o: CustomerOffer) => {
+      const sigorta = o.carrier?.hasInsurance ? 'Sigorta var' : 'Sigorta bilgisi yok';
+      const verify = (o.carrier?.isVerified || o.carrier?.verifiedByAdmin) ? 'Dogrulanmis' : 'Dogrulama yok';
+      return `${sigorta} • ${verify}`;
     }],
-    ['Kapasite', (o: CustomerOffer) => {
-      if (!o.capacityFit || o.capacityFit.status === 'uncertain') return 'Belirsiz';
-      return o.capacityFit.status === 'fit' ? 'Uygun' : 'Dusuk olabilir';
+    ['Son yorum', (o: CustomerOffer) => {
+      const comment = o.carrier?.latestPositiveReview?.comment || o.carrier?.latestReview?.comment;
+      if (!comment) return 'Yorum yok';
+      return comment.length > 70 ? `${comment.slice(0, 70)}...` : comment;
     }],
   ];
 
