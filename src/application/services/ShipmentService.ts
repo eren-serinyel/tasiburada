@@ -117,6 +117,7 @@ interface PendingShipmentListItem {
   status: ShipmentStatus;
   price: number | null;
   weight: number | null;
+  estimatedWeight: number | null;
   shipmentDate: Date;
   createdAt: Date;
   origin: string;
@@ -125,6 +126,17 @@ interface PendingShipmentListItem {
   originDistrict: string | null;
   destinationCity: string | null;
   destinationDistrict: string | null;
+  shipmentCategory: ShipmentCategory | null;
+  insuranceType: InsuranceType | null;
+  dateFlexibility: DateFlexibility | null;
+  originPlaceType: PlaceType | null;
+  destinationPlaceType: PlaceType | null;
+  originFloor: number | null;
+  destinationFloor: number | null;
+  originHasElevator: boolean | null;
+  destinationHasElevator: boolean | null;
+  extraServices: string[];
+  converter: ShipmentConverterSummary;
   loadDetails: string;
   customerDisplayName: string;
 }
@@ -480,6 +492,7 @@ export class ShipmentService {
         status: s.status,
         price: s.price,
         weight: s.weight,
+        estimatedWeight: s.estimatedWeight,
         shipmentDate: s.shipmentDate,
         createdAt: s.createdAt,
         origin: this.buildLocationLabel(s.originCity, s.originDistrict),
@@ -488,6 +501,17 @@ export class ShipmentService {
         originDistrict: s.originDistrict,
         destinationCity: s.destinationCity,
         destinationDistrict: s.destinationDistrict,
+        shipmentCategory: s.shipmentCategory,
+        insuranceType: s.insuranceType,
+        dateFlexibility: s.dateFlexibility,
+        originPlaceType: s.originPlaceType,
+        destinationPlaceType: s.destinationPlaceType,
+        originFloor: s.originFloor,
+        destinationFloor: s.destinationFloor,
+        originHasElevator: s.originHasElevator,
+        destinationHasElevator: s.destinationHasElevator,
+        extraServices: Array.isArray(s.extraServices) ? (s.extraServices as unknown as string[]) : [],
+        converter: this.buildShipmentConverterSummary(s),
         loadDetails: s.loadDetails,
         customerDisplayName: this.buildDisplayName(s.customer?.firstName, s.customer?.lastName),
       };

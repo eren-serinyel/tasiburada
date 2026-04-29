@@ -29,11 +29,23 @@ type BackendShipment = {
   insuranceType?: string;
   hasElevator?: boolean;
   weight?: number | string | null;
+  estimatedWeight?: number | string | null;
   shipmentDate?: string;
   createdAt?: string;
   status?: string;
   price?: number | string | null;
   offerCount?: number;
+  shipmentCategory?: 'HOME_MOVE' | 'OFFICE_MOVE' | 'PARTIAL_ITEM' | 'STORAGE' | null;
+  extraServices?: string[];
+  originFloor?: number | null;
+  destinationFloor?: number | null;
+  originHasElevator?: boolean | null;
+  destinationHasElevator?: boolean | null;
+  dateFlexibility?: string | null;
+  converter?: {
+    converterEstimatedVolumeMin?: number | null;
+    converterEstimatedVolumeMax?: number | null;
+  } | null;
 };
 
 type ShipmentListItem = Shipment & {
@@ -43,6 +55,47 @@ type ShipmentListItem = Shipment & {
   destinationDistrict?: string;
   isAssured?: boolean;
   hasElevator?: boolean;
+  extraServices?: string[];
+  shipmentCategory?: BackendShipment['shipmentCategory'];
+  converterEstimatedVolumeMin?: number | null;
+  converterEstimatedVolumeMax?: number | null;
+  estimatedWeight?: number;
+  originFloor?: number | null;
+  destinationFloor?: number | null;
+};
+
+const mapShipmentCategoryToLoadType = (shipmentCategory?: BackendShipment['shipmentCategory']): Shipment['loadType'] => {
+  switch (shipmentCategory) {
+    case 'HOME_MOVE':
+      return 'ev-esyasi';
+    case 'OFFICE_MOVE':
+      return 'mobilya';
+    case 'PARTIAL_ITEM':
+      return 'hassas-yuk';
+    case 'STORAGE':
+      return 'mobilya';
+    default:
+      return 'ev-esyasi';
+  }
+};
+
+const resolveLoadType = (shipment: BackendShipment): Shipment['loadType'] => {
+  const raw = String(shipment.transportType || '').trim().toLowerCase();
+  const transportTypeMap: Record<string, Shipment['loadType']> = {
+    'evden-eve': 'ev-esyasi',
+    'ofis-tasima': 'mobilya',
+    'parca': 'hassas-yuk',
+    'depolama': 'mobilya',
+    'ev-esyasi': 'ev-esyasi',
+    'beyaz-esya': 'beyaz-esya',
+    'mobilya': 'mobilya',
+    'makina': 'makina',
+    'hassas-yuk': 'hassas-yuk',
+    'gida': 'gida',
+    'tekstil': 'tekstil',
+  };
+
+  return transportTypeMap[raw] || mapShipmentCategoryToLoadType(shipment.shipmentCategory);
 };
 
 const formatLoadSummary = (loadDetails?: string, weight?: number) => {
@@ -89,7 +142,7 @@ const toUiShipment = (shipment: BackendShipment): ShipmentListItem => {
       lat: 0,
       lng: 0
     },
-    loadType: (shipment.transportType as Shipment['loadType']) || 'ev-esyasi',
+    loadType: resolveLoadType(shipment),
     weight: Number(shipment.weight || 0),
     date: shipment.shipmentDate ? new Date(shipment.shipmentDate) : new Date(),
     requestedDate: shipment.shipmentDate ? new Date(shipment.shipmentDate) : new Date(),
@@ -101,7 +154,14 @@ const toUiShipment = (shipment: BackendShipment): ShipmentListItem => {
     originDistrict: shipment.originDistrict,
     destinationDistrict: shipment.destinationDistrict,
     isAssured: String(shipment.insuranceType || '').trim().toLowerCase() !== 'none' && Boolean(shipment.insuranceType),
-    hasElevator: Boolean(shipment.hasElevator),
+    hasElevator: Boolean(shipment.hasElevator || shipment.originHasElevator || shipment.destinationHasElevator),
+    extraServices: Array.isArray(shipment.extraServices) ? shipment.extraServices : [],
+    shipmentCategory: shipment.shipmentCategory,
+    converterEstimatedVolumeMin: shipment.converter?.converterEstimatedVolumeMin ?? null,
+    converterEstimatedVolumeMax: shipment.converter?.converterEstimatedVolumeMax ?? null,
+    estimatedWeight: Number(shipment.estimatedWeight || 0),
+    originFloor: shipment.originFloor ?? null,
+    destinationFloor: shipment.destinationFloor ?? null,
     createdAt: shipment.createdAt ? new Date(shipment.createdAt) : new Date(),
     customerDisplayName: shipment.customerDisplayName || 'Müşteri'
   };
@@ -398,6 +458,18 @@ export default function ShipmentList() {
                         <span className="flex items-center gap-1"><Package className="h-3.5 w-3.5" /> {LOAD_TYPES[shipment.loadType]}</span>
                         {shipment.weight > 0 && <span className="text-gray-300">|</span>}
                         {shipment.weight > 0 && <span>{shipment.weight} kg</span>}
+                        {!shipment.weight && shipment.estimatedWeight && shipment.estimatedWeight > 0 && (
+                          <>
+                            <span className="text-gray-300">|</span>
+                            <span>Tahmini {shipment.estimatedWeight} kg</span>
+                          </>
+                        )}
+                        {shipment.converterEstimatedVolumeMin != null && shipment.converterEstimatedVolumeMax != null && (
+                          <>
+                            <span className="text-gray-300">|</span>
+                            <span>{shipment.converterEstimatedVolumeMin}-{shipment.converterEstimatedVolumeMax} m³</span>
+                          </>
+                        )}
                       </div>
                     </div>
                     <div className="text-right">
@@ -411,6 +483,16 @@ export default function ShipmentList() {
                       {shipment.rawStatus === 'pending' && <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-100 text-[10px]">Yeni İlan</Badge>}
                       {shipment.isAssured && <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-100 text-[10px]">Sigortalı</Badge>}
                       {shipment.hasElevator && <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-100 text-[10px]">Asansörlü</Badge>}
+                      {(shipment.originFloor || shipment.destinationFloor) && (
+                        <Badge variant="outline" className="bg-slate-50 text-slate-700 border-slate-200 text-[10px]">
+                          Kat: {shipment.originFloor ?? 0} → {shipment.destinationFloor ?? 0}
+                        </Badge>
+                      )}
+                      {shipment.extraServices && shipment.extraServices.length > 0 && (
+                        <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-100 text-[10px]">
+                          +{shipment.extraServices.length} Ek Hizmet
+                        </Badge>
+                      )}
                    </div>
                   
                   <div className="flex items-center justify-between mt-2 pt-3 border-t">
