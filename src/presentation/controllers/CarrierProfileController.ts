@@ -84,7 +84,7 @@ export class CarrierProfileController {
     }
 
     try {
-      const overview = await this.profileQueryService.getCarrierOverview(carrierId);
+      const overview = await this.profileQueryService.getCarrierOverview(carrierId, { enforcePublicTrustGate: true });
       if (!overview) {
         res.status(404).json({ success: false, message: 'Nakliyeci bulunamadı.' });
         return;

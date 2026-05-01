@@ -1,6 +1,6 @@
 import { BaseRepository } from './BaseRepository';
-import { Carrier } from '../../domain/entities/Carrier';
-import { Brackets } from 'typeorm';
+import { Carrier, CarrierApprovalState } from '../../domain/entities/Carrier';
+import { Brackets, SelectQueryBuilder } from 'typeorm';
 
 export type CarrierSearchSort = 'rating' | 'price' | 'experience' | 'profile' | 'recent';
 
@@ -39,7 +39,14 @@ export class CarrierRepository extends BaseRepository<Carrier> {
     super(Carrier);
   }
 
-    async findFullById(id: string): Promise<Carrier | null> {
+  private applyPublicTrustGate(qb: SelectQueryBuilder<Carrier>): SelectQueryBuilder<Carrier> {
+    return qb
+      .andWhere('carrier.isActive = :isActive', { isActive: true })
+      .andWhere('carrier.verifiedByAdmin = :verifiedByAdmin', { verifiedByAdmin: true })
+      .andWhere('carrier.approvalState = :approvalState', { approvalState: CarrierApprovalState.APPROVED });
+  }
+
+  async findFullById(id: string): Promise<Carrier | null> {
     return await this.repository.findOne({
       where: { id },
       relations: [
@@ -59,7 +66,7 @@ export class CarrierRepository extends BaseRepository<Carrier> {
   }
 
   async findPublicById(carrierId: string): Promise<Carrier | null> {
-    return await this.repository
+    const qb = this.repository
       .createQueryBuilder('carrier')
       .select([
         'carrier.id',
@@ -72,7 +79,9 @@ export class CarrierRepository extends BaseRepository<Carrier> {
         'carrier.completedShipments',
         'carrier.isActive'
       ])
-      .where('carrier.id = :carrierId', { carrierId })
+      .where('carrier.id = :carrierId', { carrierId });
+
+    return await this.applyPublicTrustGate(qb)
       .getOne();
   }
 
@@ -90,23 +99,25 @@ export class CarrierRepository extends BaseRepository<Carrier> {
   }
 
   async findByCity(city: string): Promise<Carrier[]> {
-    return this.repository
+    const queryBuilder = this.repository
       .createQueryBuilder('carrier')
       .innerJoinAndSelect('carrier.activity', 'activity')
       .leftJoinAndSelect('carrier.carrierVehicles', 'vehicles')
-      .where('activity.city = :city', { city })
-      .andWhere('carrier.isActive = :isActive', { isActive: true })
+      .where('activity.city = :city', { city });
+
+    return this.applyPublicTrustGate(queryBuilder)
       .orderBy('carrier.rating', 'DESC')
       .addOrderBy('carrier.completedShipments', 'DESC')
       .getMany();
   }
 
   async findByVehicleType(vehicleTypeId: string): Promise<Carrier[]> {
-    return await this.repository
+    const queryBuilder = this.repository
       .createQueryBuilder('carrier')
       .leftJoinAndSelect('carrier.carrierVehicles', 'vehicles')
-      .where('vehicles.vehicleTypeId = :vehicleTypeId', { vehicleTypeId })
-      .andWhere('carrier.isActive = :isActive', { isActive: true })
+      .where('vehicles.vehicleTypeId = :vehicleTypeId', { vehicleTypeId });
+
+    return await this.applyPublicTrustGate(queryBuilder)
       .orderBy('carrier.rating', 'DESC')
       .addOrderBy('carrier.completedShipments', 'DESC')
       .getMany();
@@ -117,8 +128,9 @@ export class CarrierRepository extends BaseRepository<Carrier> {
       .createQueryBuilder('carrier')
       .innerJoinAndSelect('carrier.activity', 'activity')
       .leftJoinAndSelect('carrier.carrierVehicles', 'vehicles', 'vehicles.isActive = :vehicleActive', { vehicleActive: true })
-      .where('activity.city = :city', { city })
-      .andWhere('carrier.isActive = :isActive', { isActive: true });
+      .where('activity.city = :city', { city });
+
+    this.applyPublicTrustGate(queryBuilder);
 
     if (vehicleTypeIds.length > 0) {
       queryBuilder.andWhere('vehicles.vehicleTypeId IN (:...vehicleTypeIds)', { vehicleTypeIds });
@@ -184,15 +196,15 @@ export class CarrierRepository extends BaseRepository<Carrier> {
   }
 
   async getTopCarriers(limit: number = 10): Promise<Carrier[]> {
-    return await this.repository.find({
-      where: { isActive: true },
-      order: {
-        rating: 'DESC',
-        completedShipments: 'DESC'
-      },
-      take: limit,
-      relations: ['carrierVehicles']
-    });
+    return await this.applyPublicTrustGate(
+      this.repository
+        .createQueryBuilder('carrier')
+        .leftJoinAndSelect('carrier.carrierVehicles', 'carrierVehicles')
+    )
+      .orderBy('carrier.rating', 'DESC')
+      .addOrderBy('carrier.completedShipments', 'DESC')
+      .take(limit)
+      .getMany();
   }
 
   async searchCarriers(filters: CarrierSearchFilters): Promise<{ total: number; items: CarrierSearchRepositoryItem[] }> {
@@ -202,8 +214,10 @@ export class CarrierRepository extends BaseRepository<Carrier> {
       .leftJoinAndSelect('carrier.profileStatus', 'profileStatus')
       .leftJoinAndSelect('carrier.vehicleTypeLinks', 'vehicleLink')
       .leftJoinAndSelect('vehicleLink.vehicleType', 'vehicleType')
-      .where('carrier.isActive = :isActive', { isActive: true })
+      .where('1 = 1')
       .distinct(true);
+
+    this.applyPublicTrustGate(qb);
 
     if (filters.city) {
       qb.andWhere('activity.city = :city', { city: filters.city });
@@ -290,10 +304,6 @@ export class CarrierRepository extends BaseRepository<Carrier> {
       );
     }
 
-    if (filters.isVerified) {
-      qb.andWhere('carrier.verifiedByAdmin = :verified', { verified: true });
-    }
-
     if (filters.maxCapacityKg !== undefined) {
       qb.andWhere(
         `(
@@ -340,13 +350,19 @@ export class CarrierRepository extends BaseRepository<Carrier> {
   async countByAvailableDate(date: string): Promise<{ total: number; available: number }> {
     const totalCount = await this.repository
       .createQueryBuilder('carrier')
-      .where('carrier.isActive = :isActive', { isActive: true })
+      .where('1 = 1')
+      .andWhere('carrier.isActive = :isActive', { isActive: true })
+      .andWhere('carrier.verifiedByAdmin = :verifiedByAdmin', { verifiedByAdmin: true })
+      .andWhere('carrier.approvalState = :approvalState', { approvalState: CarrierApprovalState.APPROVED })
       .getCount();
 
     const availableCount = await this.repository
       .createQueryBuilder('carrier')
       .leftJoin('carrier.activity', 'activity')
-      .where('carrier.isActive = :isActive', { isActive: true })
+      .where('1 = 1')
+      .andWhere('carrier.isActive = :isActive', { isActive: true })
+      .andWhere('carrier.verifiedByAdmin = :verifiedByAdmin', { verifiedByAdmin: true })
+      .andWhere('carrier.approvalState = :approvalState', { approvalState: CarrierApprovalState.APPROVED })
       .andWhere(
         "(activity.availableDates IS NOT NULL AND JSON_SEARCH(activity.availableDates, 'one', :date) IS NOT NULL)",
         { date }

@@ -1,6 +1,6 @@
 import { BaseRepository } from './BaseRepository';
 import { AppDataSource } from '../database/data-source';
-import { Carrier } from '../../domain/entities/Carrier';
+import { Carrier, CarrierApprovalState } from '../../domain/entities/Carrier';
 import { Offer } from '../../domain/entities/Offer';
 import { CarrierDocument, CarrierDocumentStatus } from '../../domain/entities/CarrierDocument';
 import { CarrierVehicleType } from '../../domain/entities/CarrierVehicleType';
@@ -97,6 +97,9 @@ export class CarrierDetailRepository extends BaseRepository<Carrier> {
         'pricing.carrierId = carrier.id'
       )
       .where('carrier.id = :carrierId', { carrierId })
+      .andWhere('carrier.isActive = :isActive', { isActive: true })
+      .andWhere('carrier.verifiedByAdmin = :verifiedByAdmin', { verifiedByAdmin: true })
+      .andWhere('carrier.approvalState = :approvalState', { approvalState: CarrierApprovalState.APPROVED })
       .addSelect('pricing.minPrice', 'pricing_minPrice')
       .addSelect('pricing.offerCount', 'pricing_offerCount');
 
