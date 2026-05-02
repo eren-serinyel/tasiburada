@@ -25,7 +25,7 @@ import { getCarrierEligibilityComparisonText, isOfferAcceptDisabled } from '@/li
 import { toast } from '@/components/ui/sonner';
 import { cn } from '@/lib/utils';
 
-type SortMode = 'recommended' | 'rating_desc' | 'price_asc' | 'duration_asc';
+type SortMode = 'backend' | 'recommended' | 'rating_desc' | 'price_asc' | 'duration_asc';
 
 const shipmentStatusConfig: Record<string, { label: string; bg: string; text: string }> = {
   pending: { label: 'Teklif Bekleniyor', bg: 'bg-amber-50', text: 'text-amber-700' },
@@ -51,7 +51,7 @@ export default function OfferComparison() {
   const [confirmOffer, setConfirmOffer] = useState<CustomerOffer | null>(null);
   const [detailsOffer, setDetailsOffer] = useState<CustomerOffer | null>(null);
   const [compareMode, setCompareMode] = useState(false);
-  const [sortMode, setSortMode] = useState<SortMode>('recommended');
+  const [sortMode, setSortMode] = useState<SortMode>('backend');
   const [verifiedOnly, setVerifiedOnly] = useState(false);
   const [selectedForCompare, setSelectedForCompare] = useState<string[]>([]);
 
@@ -114,6 +114,10 @@ export default function OfferComparison() {
 
   const sortedOffers = useMemo(() => {
     const filtered = verifiedOnly ? offers.filter(o => Boolean(o.carrier?.isVerified || o.carrier?.verifiedByAdmin)) : offers;
+    if (sortMode === 'backend') {
+      return filtered;
+    }
+
     return [...filtered].sort((a, b) => {
       if (sortMode === 'recommended') {
         const recommended = Number(Boolean(b.isRecommended)) - Number(Boolean(a.isRecommended));
@@ -202,6 +206,7 @@ export default function OfferComparison() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="backend">Varsayilan</SelectItem>
                 <SelectItem value="recommended">Onerilen</SelectItem>
                 <SelectItem value="rating_desc">Puan yuksek</SelectItem>
                 <SelectItem value="price_asc">Fiyat dusuk</SelectItem>
