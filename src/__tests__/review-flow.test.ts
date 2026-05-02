@@ -8,6 +8,7 @@ import { testApp } from './helpers/testApp';
 import { randomUUID } from 'node:crypto';
 import { AppDataSource } from '../infrastructure/database/data-source';
 import { Shipment, ShipmentStatus, ShipmentCategory } from '../domain/entities/Shipment';
+import { ContactFilterLog } from '../domain/entities/ContactFilterLog';
 
 const skipDB = () => process.env.SKIP_DB_TESTS === 'true';
 
@@ -255,6 +256,20 @@ describe('Review Akışı', () => {
 
     expect(res.status).toBe(400);
     expect(res.body.success).toBe(false);
+
+    const log = await AppDataSource.getRepository(ContactFilterLog).findOne({
+      where: {
+        actorType: 'customer',
+        actorId: customerId,
+        shipmentId,
+        surface: 'review_comment' as any,
+      },
+      order: { id: 'DESC' },
+    });
+    expect(log).toBeTruthy();
+    expect(log?.severity).toBe('high');
+    expect(log?.action).toBe('blocked');
+    expect(log?.riskScore).toBeGreaterThanOrEqual(80);
   });
 
   test('19. Review comment içinde e-posta engellenmeli', async () => {
@@ -269,6 +284,20 @@ describe('Review Akışı', () => {
 
     expect(res.status).toBe(400);
     expect(res.body.success).toBe(false);
+
+    const log = await AppDataSource.getRepository(ContactFilterLog).findOne({
+      where: {
+        actorType: 'customer',
+        actorId: customerId,
+        shipmentId,
+        surface: 'review_comment' as any,
+      },
+      order: { id: 'DESC' },
+    });
+    expect(log).toBeTruthy();
+    expect(log?.severity).toBe('high');
+    expect(log?.action).toBe('blocked');
+    expect(log?.riskScore).toBeGreaterThanOrEqual(80);
   });
 
   test('20. Review comment içinde whatsapp/url engellenmeli', async () => {
@@ -283,6 +312,20 @@ describe('Review Akışı', () => {
 
     expect(res.status).toBe(400);
     expect(res.body.success).toBe(false);
+
+    const log = await AppDataSource.getRepository(ContactFilterLog).findOne({
+      where: {
+        actorType: 'customer',
+        actorId: customerId,
+        shipmentId,
+        surface: 'review_comment' as any,
+      },
+      order: { id: 'DESC' },
+    });
+    expect(log).toBeTruthy();
+    expect(log?.severity).toBe('high');
+    expect(log?.action).toBe('blocked');
+    expect(log?.riskScore).toBeGreaterThanOrEqual(80);
   });
 
   test('21. Normal review comment kabul edilmeli', async () => {

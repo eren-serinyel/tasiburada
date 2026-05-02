@@ -7,7 +7,11 @@ import { Offer, OfferStatus } from '../../domain/entities/Offer';
 import { CarrierDocument, CarrierDocumentStatus } from '../../domain/entities/CarrierDocument';
 import { Admin } from '../../domain/entities/Admin';
 import { PlatformSetting } from '../../domain/entities/PlatformSetting';
-import { ContactFilterLog } from '../../domain/entities/ContactFilterLog';
+import {
+  ContactFilterLog,
+  ContactFilterReviewStatus,
+  ContactFilterSeverity,
+} from '../../domain/entities/ContactFilterLog';
 import { MatchCooldown, MatchCooldownStatus } from '../../domain/entities/MatchCooldown';
 import { AuditLogRepository } from '../../infrastructure/repositories/AuditLogRepository';
 import { NotificationService } from './NotificationService';
@@ -24,6 +28,9 @@ export interface ContactFilterLogDto {
   shipmentId: string | null;
   offerId: string | null;
   action: string;
+  severity: ContactFilterSeverity;
+  riskScore: number;
+  reviewStatus: ContactFilterReviewStatus;
   matchedRules: string[];
   /** Partial hash — 12 hex chars + '…' — raw text is never stored */
   textHashPreview: string;
@@ -37,6 +44,8 @@ interface ContactFilterLogsParams {
   surface?: string;
   actorType?: string;
   action?: string;
+  severity?: string;
+  reviewStatus?: string;
   shipmentId?: string;
   actorId?: string;
 }
@@ -396,6 +405,8 @@ export class AdminService {
       surface,
       actorType,
       action,
+      severity,
+      reviewStatus,
       shipmentId,
       actorId,
     } = params;
@@ -428,6 +439,12 @@ export class AdminService {
     if (action) {
       qb.andWhere('log.action = :action', { action });
     }
+    if (severity) {
+      qb.andWhere('log.severity = :severity', { severity });
+    }
+    if (reviewStatus) {
+      qb.andWhere('log.reviewStatus = :reviewStatus', { reviewStatus });
+    }
     if (shipmentId) {
       qb.andWhere('log.shipmentId = :shipmentId', { shipmentId });
     }
@@ -446,6 +463,9 @@ export class AdminService {
       shipmentId: row.shipmentId,
       offerId: row.offerId,
       action: row.action,
+      severity: row.severity,
+      riskScore: row.riskScore,
+      reviewStatus: row.reviewStatus,
       matchedRules: Array.isArray(row.matchedRules) ? row.matchedRules : [],
       // Expose only first 12 hex chars — raw text is never stored
       textHashPreview: row.textHash ? `${row.textHash.slice(0, 12)}…` : '',

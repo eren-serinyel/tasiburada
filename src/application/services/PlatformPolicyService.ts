@@ -1,8 +1,6 @@
-import { createHash } from 'crypto';
 import { In, LessThanOrEqual, MoreThan } from 'typeorm';
 import {
   ContactFilterAction,
-  ContactFilterLog,
   ContactFilterSurface,
   MatchCooldown,
   MatchCooldownStatus,
@@ -11,7 +9,7 @@ import {
 } from '../../domain/entities';
 import { ValidationError, ConflictError, NotFoundError } from '../../domain/errors/AppError';
 import { AppDataSource } from '../../infrastructure/database/data-source';
-import { analyzeContactInfo } from '../../utils/security';
+import { ContactSafetyService } from './contact-safety/ContactSafetyService';
 
 type ActorType = 'customer' | 'carrier' | 'admin' | 'system';
 
@@ -29,6 +27,8 @@ const DIRECT_CONTACT_MESSAGE =
   'Guvenliginiz icin telefon, e-posta, link veya platform disi iletisim yonlendirmesi paylasilamaz.';
 
 export class PlatformPolicyService {
+  private contactSafetyService = new ContactSafetyService();
+
   async hasActiveCooldown(customerId: string, carrierId: string): Promise<boolean> {
     const repo = AppDataSource.getRepository(MatchCooldown);
     const cooldown = await repo.findOne({
@@ -82,39 +82,36 @@ export class PlatformPolicyService {
   async enforceNoContactInfo(input: ContactPolicyInput): Promise<void> {
     if (!input.text?.trim()) return;
 
-    const analysis = analyzeContactInfo(input.text);
-    if (!analysis.hasContactInfo) return;
-
-    await this.logContactPolicyHit({
-      ...input,
-      action: input.action ?? ContactFilterAction.BLOCKED,
-      rules: analysis.rules,
+    const result = await this.contactSafetyService.enforce({
+      actorType: input.actorType,
+      actorId: input.actorId ?? null,
+      surface: input.surface,
+      entityType: input.surface,
+      entityId: input.offerId ?? input.shipmentId ?? null,
+      shipmentId: input.shipmentId ?? null,
+      offerId: input.offerId ?? null,
+      text: input.text,
+      policy: input.action === ContactFilterAction.FLAGGED ? 'flag' : 'block',
     });
+    if (!result.isViolation) return;
 
-    throw new ValidationError(DIRECT_CONTACT_MESSAGE);
+    if (result.action === ContactFilterAction.BLOCKED) {
+      throw new ValidationError(DIRECT_CONTACT_MESSAGE);
+    }
   }
 
   async logContactPolicyHit(input: ContactPolicyInput & { rules: string[] }): Promise<void> {
-    try {
-      const repo = AppDataSource.getRepository(ContactFilterLog);
-      const textHash = createHash('sha256')
-        .update(input.text ?? '')
-        .digest('hex');
-
-      const log = repo.create({
-        actorType: input.actorType,
-        actorId: input.actorId ?? null,
-        surface: input.surface,
-        shipmentId: input.shipmentId ?? null,
-        offerId: input.offerId ?? null,
-        action: input.action ?? ContactFilterAction.BLOCKED,
-        matchedRules: input.rules,
-        textHash,
-      });
-      await repo.save(log);
-    } catch (err) {
-      console.error('[PlatformPolicyService] contact filter log failed:', err);
-    }
+    await this.contactSafetyService.enforce({
+      actorType: input.actorType,
+      actorId: input.actorId ?? null,
+      surface: input.surface,
+      entityType: input.surface,
+      entityId: input.offerId ?? input.shipmentId ?? null,
+      shipmentId: input.shipmentId ?? null,
+      offerId: input.offerId ?? null,
+      text: input.text,
+      policy: input.action === ContactFilterAction.BLOCKED ? 'block' : 'flag',
+    });
   }
 
   shouldRevealDirectContact(shipment: Shipment, viewerType: 'customer' | 'carrier' | 'admin', viewerId: string): boolean {

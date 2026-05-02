@@ -5,6 +5,9 @@
  */
 import request from 'supertest';
 import { testApp } from './helpers/testApp';
+import { createHash } from 'crypto';
+import { AppDataSource } from '../infrastructure/database/data-source';
+import { ContactFilterLog } from '../domain/entities/ContactFilterLog';
 
 const skipDB = () => process.env.SKIP_DB_TESTS === 'true';
 
@@ -89,17 +92,28 @@ describe('Offer + Shipment Akışı', () => {
 
   test('8. loadDetails içinde telefon numarası olan shipment reddedilmeli', async () => {
     if (skipDB() || !customerToken) return;
+    const payload = {
+      origin: 'İstanbul',
+      destination: 'Ankara',
+      loadDetails: 'Mobilya, beni ara: 05321234567',
+      shipmentDate: new Date(Date.now() + 86400000).toISOString()
+    };
     const res = await request(testApp)
       .post('/api/v1/shipments')
       .set('Authorization', `Bearer ${customerToken}`)
-      .send({
-        origin: 'İstanbul',
-        destination: 'Ankara',
-        loadDetails: 'Mobilya, beni ara: 05321234567',
-        shipmentDate: new Date(Date.now() + 86400000).toISOString()
-      });
+      .send(payload);
     expect(res.status).toBe(400);
     expect(res.body.success).toBe(false);
+
+    const textHash = createHash('sha256').update(payload.loadDetails).digest('hex');
+    const log = await AppDataSource.getRepository(ContactFilterLog).findOne({
+      where: { textHash, surface: 'shipment_load_details' as any },
+      order: { id: 'DESC' },
+    });
+    expect(log).toBeTruthy();
+    expect(log?.severity).toBe('high');
+    expect(log?.action).toBe('blocked');
+    expect(log?.riskScore).toBeGreaterThanOrEqual(80);
   });
 
   // ── Shipment: Müşteri kendi ilanlarını listeler ───────────────────────────
@@ -189,17 +203,39 @@ describe('Offer + Shipment Akışı', () => {
 
   // ── Offer: mesajda iletişim bilgisi yasak ─────────────────────────────────
   test('17. Teklif mesajında telefon numarası olan teklif reddedilmeli', async () => {
-    if (skipDB() || !carrierToken) return;
+    if (skipDB() || !carrierToken || !customerToken) return;
+    const shipmentRes = await request(testApp)
+      .post('/api/v1/shipments')
+      .set('Authorization', `Bearer ${customerToken}`)
+      .send({
+        origin: 'Istanbul',
+        destination: 'Ankara',
+        loadDetails: 'Teklif test yuk detayi',
+        shipmentDate: new Date(Date.now() + 2 * 86400000).toISOString(),
+      });
+    if (shipmentRes.status !== 201 || !shipmentRes.body?.data?.id) return;
+
+    const payload = {
+      shipmentId: shipmentRes.body.data.id,
+      price: 500,
+      message: 'Beni arayın: 05321234567'
+    };
     const res = await request(testApp)
       .post('/api/v1/offers')
       .set('Authorization', `Bearer ${carrierToken}`)
-      .send({
-        shipmentId: '00000000-0000-0000-0000-000000000000',
-        price: 500,
-        message: 'Beni arayın: 05321234567'
-      });
-    expect([400, 404]).toContain(res.status);
+      .send(payload);
+    expect(res.status).toBe(400);
     expect(res.body.success).toBe(false);
+
+    const textHash = createHash('sha256').update(payload.message).digest('hex');
+    const log = await AppDataSource.getRepository(ContactFilterLog).findOne({
+      where: { textHash, surface: 'offer_message' as any },
+      order: { id: 'DESC' },
+    });
+    expect(log).toBeTruthy();
+    expect(log?.severity).toBe('high');
+    expect(log?.action).toBe('blocked');
+    expect(log?.riskScore).toBeGreaterThanOrEqual(80);
   });
 
   // ── Offer: Olmayan teklifi kabul et ──────────────────────────────────────

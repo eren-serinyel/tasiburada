@@ -40,6 +40,11 @@ describe('Admin — Kaçak İletişim Logları (ContactFilterLogs)', () => {
     expect(data).toHaveProperty('page');
     expect(data).toHaveProperty('limit');
     expect(Array.isArray(data.data)).toBe(true);
+    if (data.data.length > 0) {
+      expect(data.data[0]).toHaveProperty('severity');
+      expect(data.data[0]).toHaveProperty('riskScore');
+      expect(data.data[0]).toHaveProperty('reviewStatus');
+    }
   });
 
   // ── Ham metin asla açıklanmaz ────────────────────────────────────────────
@@ -58,7 +63,7 @@ describe('Admin — Kaçak İletişim Logları (ContactFilterLogs)', () => {
         expect(typeof entry.textHashPreview).toBe('string');
         const preview = entry.textHashPreview as string;
         // Son karakter ellipsis, önceki 12 karakter hex
-        expect(preview.length).toBeLessThanOrEqual(13 + 1); // 12 hex + '…' (1 unicode char)
+        expect(preview.length).toBeLessThanOrEqual(13); // 12 hex + '…' (1 unicode char)
         if (preview.length > 0) {
           expect(preview.endsWith('…')).toBe(true);
         }
@@ -102,6 +107,32 @@ describe('Admin — Kaçak İletişim Logları (ContactFilterLogs)', () => {
     const entries: Record<string, unknown>[] = res.body.data?.data ?? [];
     for (const entry of entries) {
       expect(entry.action).toBe('blocked');
+    }
+  });
+
+  // ── Severity filtresi ────────────────────────────────────────────────────
+  test('6.1 Severity filtresi çalışmalı', async () => {
+    if (skipDB() || !adminToken) return;
+    const res = await request(testApp)
+      .get('/api/v1/admin/contact-filter-logs?severity=high')
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(res.status).toBe(200);
+    const entries: Record<string, unknown>[] = res.body.data?.data ?? [];
+    for (const entry of entries) {
+      expect(entry.severity).toBe('high');
+    }
+  });
+
+  // ── Review status filtresi ───────────────────────────────────────────────
+  test('6.2 ReviewStatus filtresi çalışmalı', async () => {
+    if (skipDB() || !adminToken) return;
+    const res = await request(testApp)
+      .get('/api/v1/admin/contact-filter-logs?reviewStatus=unreviewed')
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(res.status).toBe(200);
+    const entries: Record<string, unknown>[] = res.body.data?.data ?? [];
+    for (const entry of entries) {
+      expect(entry.reviewStatus).toBe('unreviewed');
     }
   });
 

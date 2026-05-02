@@ -31,7 +31,13 @@ export {
 } from './Notification';
 export { Admin } from './Admin';
 export { AuditLog } from './AuditLog';
-export { ContactFilterLog, ContactFilterAction, ContactFilterSurface } from './ContactFilterLog';
+export {
+	ContactFilterLog,
+	ContactFilterAction,
+	ContactFilterSurface,
+	ContactFilterSeverity,
+	ContactFilterReviewStatus,
+} from './ContactFilterLog';
 export { MatchCooldown, MatchCooldownStatus } from './MatchCooldown';
 export { ConverterSession, ConverterFlowType, ConverterSessionStatus } from './ConverterSession';
 export { ConverterAnswer, ConverterMoveType, ConverterPropertyType } from './ConverterAnswer';

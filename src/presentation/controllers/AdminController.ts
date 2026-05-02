@@ -197,7 +197,7 @@ export class AdminController {
 
   getContactFilterLogs = async (req: Request, res: Response): Promise<void> => {
     try {
-      const { page, limit, dateFrom, dateTo, surface, actorType, action, shipmentId, actorId } = req.query;
+      const { page, limit, dateFrom, dateTo, surface, actorType, action, severity, reviewStatus, shipmentId, actorId } = req.query;
       const result = await this.adminService.getContactFilterLogs({
         page: page ? Number(page) : 1,
         limit: limit ? Number(limit) : 30,
@@ -206,6 +206,8 @@ export class AdminController {
         surface: surface as string | undefined,
         actorType: actorType as string | undefined,
         action: action as string | undefined,
+        severity: severity as string | undefined,
+        reviewStatus: reviewStatus as string | undefined,
         shipmentId: shipmentId as string | undefined,
         actorId: actorId as string | undefined,
       });

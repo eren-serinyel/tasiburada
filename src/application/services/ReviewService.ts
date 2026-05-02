@@ -4,7 +4,8 @@ import { CarrierRepository } from '../../infrastructure/repositories/CarrierRepo
 import { ReviewRepository } from '../../infrastructure/repositories/ReviewRepository';
 import { ShipmentRepository } from '../../infrastructure/repositories/ShipmentRepository';
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from '../../domain/errors/AppError';
-import { analyzeContactInfo } from '../../utils/security';
+import { ContactFilterSurface } from '../../domain/entities/ContactFilterLog';
+import { ContactSafetyService } from './contact-safety/ContactSafetyService';
 
 export interface CarrierReviewResponse {
   id: string;
@@ -48,14 +49,31 @@ export class ReviewService {
   private reviewRepository = new ReviewRepository();
   private shipmentRepository = new ShipmentRepository();
   private carrierRepository = new CarrierRepository();
+  private contactSafetyService = new ContactSafetyService();
 
-  private sanitizeReviewComment(comment?: string | null): string | undefined {
+  private async sanitizeReviewComment(
+    comment: string | null | undefined,
+    context: { customerId: string; shipmentId: string },
+  ): Promise<string | undefined> {
     const normalized = comment?.trim();
     if (!normalized) return undefined;
 
-    const analysis = analyzeContactInfo(normalized);
-    if (analysis.hasContactInfo) {
-      throw new ValidationError('Guvenlik nedeniyle yorum icerisinde telefon, e-posta, link veya platform disi iletisim bilgisi paylasilamaz.');
+    const result = await this.contactSafetyService.enforce({
+      actorType: 'customer',
+      actorId: context.customerId,
+      surface: ContactFilterSurface.REVIEW_COMMENT,
+      entityType: 'review',
+      entityId: context.shipmentId,
+      shipmentId: context.shipmentId,
+      text: normalized,
+      policy: 'block',
+      metadata: {
+        source: 'review_service',
+      },
+    });
+
+    if (result.isViolation && result.action === 'blocked') {
+      throw new ValidationError(result.userMessage);
     }
 
     return normalized;
@@ -103,7 +121,10 @@ export class ReviewService {
       carrierId: shipment.carrierId,
       customerId,
       rating,
-      comment: this.sanitizeReviewComment(payload.comment)
+      comment: await this.sanitizeReviewComment(payload.comment, {
+        customerId,
+        shipmentId: payload.shipmentId,
+      })
     });
 
     const averageRating = await this.reviewRepository.getCarrierAverageRating(shipment.carrierId);
@@ -169,7 +190,10 @@ export class ReviewService {
       carrierId,
       customerId,
       rating,
-      comment: this.sanitizeReviewComment(comment)
+      comment: await this.sanitizeReviewComment(comment, {
+        customerId,
+        shipmentId: shipment.id,
+      })
     });
 
     const averageRating = await this.reviewRepository.getCarrierAverageRating(carrierId);
@@ -206,7 +230,12 @@ export class ReviewService {
 
     const updateData: Partial<Review> = {};
     if (data.rating !== undefined) updateData.rating = this.ensureValidRating(data.rating);
-    if (data.comment !== undefined) updateData.comment = this.sanitizeReviewComment(data.comment);
+    if (data.comment !== undefined) {
+      updateData.comment = await this.sanitizeReviewComment(data.comment, {
+        customerId,
+        shipmentId: review.shipmentId,
+      });
+    }
 
     const updated = await this.reviewRepository.update(reviewId, updateData as any);
     if (!updated) throw new NotFoundError('Yorum güncellenemedi.');

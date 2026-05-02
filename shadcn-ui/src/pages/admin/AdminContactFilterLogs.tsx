@@ -22,6 +22,9 @@ interface ContactFilterLogItem {
   shipmentId: string | null;
   offerId: string | null;
   action: string;
+  severity: 'low' | 'medium' | 'high';
+  riskScore: number;
+  reviewStatus: 'unreviewed' | 'false_positive' | 'confirmed' | 'ignored';
   matchedRules: string[];
   textHashPreview: string;
 }
@@ -36,6 +39,19 @@ const SURFACE_LABELS: Record<string, string> = {
 const ACTION_CLASS: Record<string, string> = {
   blocked: 'bg-rose-100 text-rose-700',
   flagged: 'bg-amber-100 text-amber-700',
+};
+
+const SEVERITY_CLASS: Record<string, string> = {
+  high: 'bg-rose-100 text-rose-700',
+  medium: 'bg-amber-100 text-amber-700',
+  low: 'bg-emerald-100 text-emerald-700',
+};
+
+const REVIEW_STATUS_LABELS: Record<string, string> = {
+  unreviewed: 'İncelenmedi',
+  false_positive: 'Yanlış Pozitif',
+  confirmed: 'Doğrulandı',
+  ignored: 'Yok Sayıldı',
 };
 
 const ACTOR_TYPE_CLASS: Record<string, string> = {
@@ -53,6 +69,8 @@ export default function AdminContactFilterLogs() {
   const [surface, setSurface] = useState(ALL_VALUE);
   const [actorType, setActorType] = useState(ALL_VALUE);
   const [action, setAction] = useState(ALL_VALUE);
+  const [severity, setSeverity] = useState(ALL_VALUE);
+  const [reviewStatus, setReviewStatus] = useState(ALL_VALUE);
   const [actorIdFilter, setActorIdFilter] = useState('');
   const [shipmentIdFilter, setShipmentIdFilter] = useState('');
   const [page, setPage] = useState(1);
@@ -72,6 +90,8 @@ export default function AdminContactFilterLogs() {
       if (surface && surface !== ALL_VALUE) params.set('surface', surface);
       if (actorType && actorType !== ALL_VALUE) params.set('actorType', actorType);
       if (action && action !== ALL_VALUE) params.set('action', action);
+      if (severity && severity !== ALL_VALUE) params.set('severity', severity);
+      if (reviewStatus && reviewStatus !== ALL_VALUE) params.set('reviewStatus', reviewStatus);
       if (actorIdFilter.trim()) params.set('actorId', actorIdFilter.trim());
       if (shipmentIdFilter.trim()) params.set('shipmentId', shipmentIdFilter.trim());
 
@@ -88,9 +108,9 @@ export default function AdminContactFilterLogs() {
     } finally {
       setLoading(false);
     }
-  }, [page, dateFrom, dateTo, surface, actorType, action, actorIdFilter, shipmentIdFilter]);
+  }, [page, dateFrom, dateTo, surface, actorType, action, severity, reviewStatus, actorIdFilter, shipmentIdFilter]);
 
-  useEffect(() => { setPage(1); }, [dateFrom, dateTo, surface, actorType, action, actorIdFilter, shipmentIdFilter]);
+  useEffect(() => { setPage(1); }, [dateFrom, dateTo, surface, actorType, action, severity, reviewStatus, actorIdFilter, shipmentIdFilter]);
   useEffect(() => { fetchLogs(); }, [fetchLogs]);
 
   const totalPages = Math.ceil(total / limit);
@@ -205,6 +225,31 @@ export default function AdminContactFilterLogs() {
               <SelectItem value="flagged">İşaretlendi</SelectItem>
             </SelectContent>
           </Select>
+
+          <Select value={severity} onValueChange={setSeverity}>
+            <SelectTrigger className="h-9 text-xs w-36">
+              <SelectValue placeholder="Seviye" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL_VALUE}>Tüm seviyeler</SelectItem>
+              <SelectItem value="high">Yüksek</SelectItem>
+              <SelectItem value="medium">Orta</SelectItem>
+              <SelectItem value="low">Düşük</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Select value={reviewStatus} onValueChange={setReviewStatus}>
+            <SelectTrigger className="h-9 text-xs w-40">
+              <SelectValue placeholder="İnceleme" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={ALL_VALUE}>Tüm durumlar</SelectItem>
+              <SelectItem value="unreviewed">İncelenmedi</SelectItem>
+              <SelectItem value="false_positive">Yanlış Pozitif</SelectItem>
+              <SelectItem value="confirmed">Doğrulandı</SelectItem>
+              <SelectItem value="ignored">Yok Sayıldı</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
@@ -220,7 +265,7 @@ export default function AdminContactFilterLogs() {
             onChange={(e) => setShipmentIdFilter(e.target.value)}
             className="h-9 text-xs w-72 font-mono"
           />
-          {(dateFrom || dateTo || (surface && surface !== ALL_VALUE) || (actorType && actorType !== ALL_VALUE) || (action && action !== ALL_VALUE) || actorIdFilter || shipmentIdFilter) && (
+          {(dateFrom || dateTo || (surface && surface !== ALL_VALUE) || (actorType && actorType !== ALL_VALUE) || (action && action !== ALL_VALUE) || (severity && severity !== ALL_VALUE) || (reviewStatus && reviewStatus !== ALL_VALUE) || actorIdFilter || shipmentIdFilter) && (
             <Button
               variant="ghost"
               size="sm"
@@ -228,6 +273,7 @@ export default function AdminContactFilterLogs() {
               onClick={() => {
                 setDateFrom(''); setDateTo(''); setSurface(ALL_VALUE);
                 setActorType(ALL_VALUE); setAction(ALL_VALUE);
+                setSeverity(ALL_VALUE); setReviewStatus(ALL_VALUE);
                 setActorIdFilter(''); setShipmentIdFilter('');
               }}
             >
@@ -252,7 +298,10 @@ export default function AdminContactFilterLogs() {
                 <TableHead className="text-xs font-semibold">Aktör</TableHead>
                 <TableHead className="text-xs font-semibold">Kaynak</TableHead>
                 <TableHead className="text-xs font-semibold">Tespit Türü</TableHead>
+                <TableHead className="text-xs font-semibold">Seviye</TableHead>
+                <TableHead className="text-xs font-semibold">Risk</TableHead>
                 <TableHead className="text-xs font-semibold">İşlem</TableHead>
+                <TableHead className="text-xs font-semibold">İnceleme</TableHead>
                 <TableHead className="text-xs font-semibold">Hash (kısmi)</TableHead>
                 <TableHead className="text-xs font-semibold">İlan</TableHead>
               </TableRow>
@@ -290,8 +339,19 @@ export default function AdminContactFilterLogs() {
                     )}
                   </TableCell>
                   <TableCell>
+                    <Badge className={`text-[10px] px-1.5 py-0 ${SEVERITY_CLASS[entry.severity] ?? 'bg-slate-100 text-slate-600'}`}>
+                      {entry.severity === 'high' ? 'Yüksek' : entry.severity === 'medium' ? 'Orta' : 'Düşük'}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-xs font-mono text-slate-600">{entry.riskScore ?? 0}</TableCell>
+                  <TableCell>
                     <Badge className={`text-[10px] px-1.5 py-0 ${ACTION_CLASS[entry.action] ?? 'bg-slate-100 text-slate-600'}`}>
                       {entry.action === 'blocked' ? 'Engellendi' : entry.action === 'flagged' ? 'İşaretlendi' : entry.action}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <Badge className="text-[10px] px-1.5 py-0 bg-slate-100 text-slate-700">
+                      {REVIEW_STATUS_LABELS[entry.reviewStatus] ?? entry.reviewStatus}
                     </Badge>
                   </TableCell>
                   <TableCell className="text-xs font-mono text-slate-400 select-none" title="Ham metin saklanmaz — sadece SHA-256 hash kısmi gösterilir">
