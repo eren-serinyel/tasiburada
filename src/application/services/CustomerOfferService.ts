@@ -7,6 +7,7 @@ import { CarrierDocument, CarrierDocumentType } from '../../domain/entities/Carr
 import { CarrierVehicle } from '../../domain/entities/CarrierVehicle';
 import { Review } from '../../domain/entities/Review';
 import { CarrierExtraServiceCapability } from '../../domain/entities/CarrierExtraServiceCapability';
+import { getCarrierEligibility } from './carrier/carrierEligibility';
 import { inferExtraServiceLoadTypeFromShipmentCategory } from './extra-services/extraServiceApplicability';
 import { analyzeContactInfo } from '../../utils/security';
 
@@ -93,6 +94,7 @@ export class CustomerOfferService {
         const isHighestRating = isPending && (offer.carrier?.rating || 0) === maxRating && maxRating > 0;
         const carrierInsights = insights.get(offer.carrierId) ?? this.emptyCarrierInsights();
         const isVerified = Boolean(offer.carrier?.verifiedByAdmin);
+        const carrierEligibility = getCarrierEligibility(offer.carrier ?? null);
         const compatibility = compatibilityByOfferId.get(offer.id) ?? {
           requestedCount: 0,
           matchedCount: 0,
@@ -112,6 +114,9 @@ export class CustomerOfferService {
               ratingCount: carrierInsights.ratingCount,
               completedShipments: Number(offer.carrier.completedShipments || 0),
               isVerified,
+              isActive: Boolean(offer.carrier.isActive),
+              verifiedByAdmin: Boolean(offer.carrier.verifiedByAdmin),
+              approvalState: offer.carrier.approvalState,
               hasInsurance: carrierInsights.hasInsurance,
               activityCity: offer.carrier.activityCity,
               averageResponseTimeMin: this.estimateResponseTimeMin(offer.carrier.totalOffers, offer.carrier.completedShipments),
@@ -147,6 +152,7 @@ export class CustomerOfferService {
           ...offer,
           message: sanitizedOfferMessage,
           carrier,
+          carrierEligibility,
           currency: 'TRY',
           createdAt: offer.offeredAt,
           trustSignals: {

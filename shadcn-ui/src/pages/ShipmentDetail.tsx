@@ -4,6 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Check, Star, Phone, ChevronRight, User, RotateCcw, Copy } from 'lucide-react';
 import { apiClient } from '@/lib/apiClient';
+import type { CarrierEligibility } from '@/lib/customerOfferTrust';
+import { getCarrierEligibilityWarning, isOfferAcceptDisabled } from '@/lib/customerOfferTrust';
 import { toast } from '@/components/ui/sonner';
 import { getUserType, getUserId } from '@/lib/auth';
 import {
@@ -24,7 +26,11 @@ interface BackendOffer {
     rating?: number;
     pictureUrl?: string | null;
     phone?: string;
+    isActive?: boolean;
+    verifiedByAdmin?: boolean;
+    approvalState?: string | null;
   };
+  carrierEligibility?: CarrierEligibility;
   price: number;
   message?: string;
   estimatedDuration?: number;
@@ -62,6 +68,9 @@ interface BackendShipment {
     rating?: number;
     pictureUrl?: string | null;
     phone?: string;
+    isActive?: boolean;
+    verifiedByAdmin?: boolean;
+    approvalState?: string | null;
   };
   customer?: { firstName: string; lastName: string; phone?: string; email?: string };
   contactPhone?: string | null;
@@ -188,10 +197,15 @@ export default function ShipmentDetail() {
     }
   };
 
-  const handleAcceptOffer = async (offerId: string) => {
+  const handleAcceptOffer = async (offer: BackendOffer) => {
+    if (isOfferAcceptDisabled(offer)) {
+      toast.error('Bu tasiyici artik teklif kabulu icin uygun degil.');
+      return;
+    }
+
     setUpdating(true);
     try {
-      const res = await apiClient(`${API_BASE_URL}/offers/${offerId}/accept`, { method: 'PUT' });
+      const res = await apiClient(`${API_BASE_URL}/offers/${offer.id}/accept`, { method: 'PUT' });
       const json = await res.json();
       if (res.ok && json?.success) {
         toast.success('Teklif kabul edildi!');
@@ -406,28 +420,6 @@ export default function ShipmentDetail() {
     { label: 'Oluşturulma', value: fmtDate(shipment.createdAt) },
   ];
 
-  const nextStepText = (() => {
-    if (userType !== 'customer') return null;
-    switch (shipment.status) {
-      case 'pending':
-        return offers.length > 0
-          ? 'Teklifleri karsilastirarak en uygun tasiyiciyi secin.'
-          : 'Tekliflerin gelmesini bekleyin; gerekirse ilan detaylarini guncelleyin.';
-      case 'offer_received':
-        return 'Teklifleri karsilastirip kabul oncesi karar sinyallerini kontrol edin.';
-      case 'matched':
-        return 'Secilen tasiyici ile sureci platform uzerinden yurutun.';
-      case 'in_transit':
-        return 'Tasimanin ilerleyisini takip edin ve iletisimi platform icinde tutun.';
-      case 'completed':
-        return 'Tasima tamamlandi. Deneyimi degerlendirebilir veya benzer ilan acabilirsiniz.';
-      case 'cancelled':
-        return 'Ihtiyaciniz suruyorsa tek tikla benzer ilan olusturabilirsiniz.';
-      default:
-        return 'Ilan durumunu kontrol ederek uygun aksiyonu alin.';
-    }
-  })();
-
   return (
     <div style={{ background: '#F8FAFC', minHeight: '100vh' }}>
       <div style={{ maxWidth: '1020px', margin: '0 auto', padding: '20px 24px' }}>
@@ -539,21 +531,6 @@ export default function ShipmentDetail() {
               </div>
             ))}
 
-            {nextStepText && (
-              <div style={{ marginTop: '12px', padding: '10px 12px', border: '0.5px solid #E2E8F0', borderRadius: '8px', background: '#F8FAFC' }}>
-                <div style={{ fontSize: '11px', color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>Sonraki Adim</div>
-                <div style={{ marginTop: '4px', fontSize: '12px', color: '#0F172A', lineHeight: 1.45 }}>{nextStepText}</div>
-              </div>
-            )}
-
-            {userType === 'customer' && (
-              <div style={{ marginTop: '10px', padding: '9px 11px', border: '0.5px solid #FDE68A', borderRadius: '8px', background: '#FFFBEB' }}>
-                <div style={{ fontSize: '11px', color: '#92400E', lineHeight: 1.4 }}>
-                  Iletisim ve odeme sureclerini platform uzerinden surdurun.
-                </div>
-              </div>
-            )}
-
             {showContactGate && (
               <div style={{ marginTop: '12px', padding: '10px 12px', border: '0.5px solid #E2E8F0', borderRadius: '8px', background: directPhone ? '#F0FDF4' : '#F8FAFC', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <Phone style={{ width: '14px', height: '14px', color: directPhone ? '#15803D' : '#64748B', flexShrink: 0 }} />
@@ -662,6 +639,8 @@ export default function ShipmentDetail() {
               {offers.map(offer => {
                 const isCheapest = Number(offer.price) === lowestPrice && offer.status === 'pending';
                 const initials = (offer.carrier?.companyName || 'N').slice(0, 2).toUpperCase();
+                const eligibilityWarning = getCarrierEligibilityWarning(offer);
+                const acceptDisabled = isOfferAcceptDisabled(offer, updating);
                 return (
                   <div key={offer.id} style={{ border: isCheapest ? '1.5px solid #2563EB' : '0.5px solid #E2E8F0', borderRadius: '10px', padding: '16px', display: 'flex', flexDirection: 'column', gap: '12px', position: 'relative', overflow: 'hidden', cursor: 'pointer', transition: 'border-color 150ms' }}>
                     {/* Cheapest bar + tag */}
@@ -697,6 +676,13 @@ export default function ShipmentDetail() {
                       )}
                     </div>
 
+                    {eligibilityWarning && (
+                      <div style={{ background: '#FFF1F2', border: '0.5px solid #FECDD3', borderRadius: '8px', padding: '10px 12px' }}>
+                        <div style={{ fontSize: '11px', fontWeight: 600, color: '#BE123C', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{eligibilityWarning.title}</div>
+                        <div style={{ marginTop: '4px', fontSize: '12px', color: '#9F1239', lineHeight: 1.45 }}>{eligibilityWarning.detail}</div>
+                      </div>
+                    )}
+
                     {/* Buttons / Status */}
                     {offer.status === 'accepted' ? (
                       <div style={{ background: '#F0FDF4', color: '#15803D', fontSize: '12px', fontWeight: 600, textAlign: 'center', borderRadius: '7px', padding: '10px' }}>✓ Kabul Edildi</div>
@@ -704,7 +690,7 @@ export default function ShipmentDetail() {
                       <div style={{ background: '#F8FAFC', color: '#94A3B8', fontSize: '12px', textAlign: 'center', borderRadius: '7px', padding: '10px' }}>✗ Reddedildi</div>
                     ) : (
                       <div style={{ display: 'flex', gap: '6px' }}>
-                        <button disabled={updating} onClick={() => handleAcceptOffer(offer.id)} style={{ flex: 1, background: '#2563EB', color: 'white', border: 'none', borderRadius: '7px', padding: '8px 0', fontSize: '12px', fontWeight: 500, cursor: 'pointer' }}>
+                        <button disabled={acceptDisabled} onClick={() => handleAcceptOffer(offer)} style={{ flex: 1, background: acceptDisabled ? '#94A3B8' : '#2563EB', color: 'white', border: 'none', borderRadius: '7px', padding: '8px 0', fontSize: '12px', fontWeight: 500, cursor: acceptDisabled ? 'not-allowed' : 'pointer' }}>
                           Kabul Et
                         </button>
                         <button disabled={updating} onClick={() => handleRejectOffer(offer.id)} style={{ flex: 1, background: 'transparent', color: '#DC2626', border: '0.5px solid #FECACA', borderRadius: '7px', padding: '8px 0', fontSize: '12px', cursor: 'pointer' }}>

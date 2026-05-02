@@ -4,6 +4,7 @@ import { testApp } from './helpers/testApp';
 import { AppDataSource } from '../infrastructure/database/data-source';
 import { Shipment, ShipmentCategory, ShipmentStatus } from '../domain/entities/Shipment';
 import { Offer, OfferStatus } from '../domain/entities/Offer';
+import { Carrier, CarrierApprovalState } from '../domain/entities/Carrier';
 import { ExtraService } from '../domain/entities/ExtraService';
 import { CarrierExtraServiceCapability } from '../domain/entities/CarrierExtraServiceCapability';
 import { ExtraServiceLoadType } from '../domain/entities/ExtraServiceLoadType';
@@ -231,5 +232,47 @@ describe('Customer Offers Enhancements', () => {
     offers.forEach((offer) => {
       expect(offer.shipmentId).toBe(fixture.shipmentOne.id);
     });
+  });
+
+  test('4. eski offer gorunur ama suspended carrier icin carrierEligibility false doner', async () => {
+    if (skipDB() || !customerToken || !carrierId) return;
+
+    const fixture = await createOfferFixture();
+    if (!fixture) return;
+
+    const carrierRepo = AppDataSource.getRepository(Carrier);
+    const originalCarrier = await carrierRepo.findOne({ where: { id: carrierId } });
+    expect(originalCarrier).toBeTruthy();
+
+    await carrierRepo.update(carrierId, {
+      approvalState: CarrierApprovalState.SUSPENDED,
+      isActive: false,
+      verifiedByAdmin: false,
+    });
+
+    try {
+      const res = await request(testApp)
+        .get(`/api/v1/customers/offers?shipmentId=${fixture.shipmentOne.id}`)
+        .set('Authorization', `Bearer ${customerToken}`);
+
+      expect(res.status).toBe(200);
+      const offers: any[] = Array.isArray(res.body.data) ? res.body.data : [];
+      const target = offers.find((item) => item.id === fixture.offerOne.id);
+
+      expect(target).toBeDefined();
+      expect(target.carrierEligibility).toMatchObject({
+        isEligible: false,
+        reason: 'suspended',
+        label: 'Askiya alinmis',
+      });
+    } finally {
+      if (originalCarrier) {
+        await carrierRepo.update(carrierId, {
+          approvalState: originalCarrier.approvalState,
+          isActive: originalCarrier.isActive,
+          verifiedByAdmin: originalCarrier.verifiedByAdmin,
+        });
+      }
+    }
   });
 });

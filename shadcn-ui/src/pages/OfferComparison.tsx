@@ -21,6 +21,7 @@ import {
 import { ArrowLeft, BarChart2, PackageOpen, SlidersHorizontal } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { apiClient } from '@/lib/apiClient';
+import { getCarrierEligibilityComparisonText, isOfferAcceptDisabled } from '@/lib/customerOfferTrust';
 import { toast } from '@/components/ui/sonner';
 import { cn } from '@/lib/utils';
 
@@ -75,7 +76,22 @@ export default function OfferComparison() {
 
   useEffect(() => { fetchOffers(); }, [shipmentId]);
 
+  const openAcceptConfirm = (offer: CustomerOffer) => {
+    if (isOfferAcceptDisabled(offer)) {
+      toast.error('Bu tasiyici artik teklif kabulu icin uygun degil.');
+      return;
+    }
+
+    setConfirmOffer(offer);
+  };
+
   const decide = async (offerId: string, accept: boolean) => {
+    const targetOffer = offers.find((offer) => offer.id === offerId);
+    if (accept && targetOffer && isOfferAcceptDisabled(targetOffer)) {
+      toast.error('Bu tasiyici artik teklif kabulu icin uygun degil.');
+      return;
+    }
+
     setDecidingId(offerId);
     try {
       const action = accept ? 'accept' : 'reject';
@@ -230,7 +246,7 @@ export default function OfferComparison() {
               <CustomerOfferCard
                 offer={offer}
                 disabled={decidingId === offer.id}
-                onAccept={setConfirmOffer}
+                onAccept={openAcceptConfirm}
                 onReject={(item) => decide(item.id, false)}
                 onDetails={setDetailsOffer}
               />
@@ -258,7 +274,7 @@ export default function OfferComparison() {
               offer={detailsOffer}
               compact
               disabled={decidingId === detailsOffer.id}
-              onAccept={setConfirmOffer}
+              onAccept={openAcceptConfirm}
               onReject={(item) => decide(item.id, false)}
             />
           )}
@@ -286,7 +302,7 @@ export default function OfferComparison() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={decidingId === confirmOffer?.id}>Vazgec</AlertDialogCancel>
-            <AlertDialogAction disabled={decidingId === confirmOffer?.id} className="bg-blue-600 text-white hover:bg-blue-700" onClick={() => confirmOffer && decide(confirmOffer.id, true)}>
+            <AlertDialogAction disabled={!confirmOffer || isOfferAcceptDisabled(confirmOffer, decidingId === confirmOffer.id)} className="bg-blue-600 text-white hover:bg-blue-700" onClick={() => confirmOffer && decide(confirmOffer.id, true)}>
               Kabul Et
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -310,6 +326,7 @@ function ComparisonTable({ offers, onChoose }: { offers: CustomerOffer[]; onChoo
     ['Fiyat', (o: CustomerOffer) => `₺${fmtPrice(Number(o.price))}`],
     ['Sure', (o: CustomerOffer) => o.estimatedDuration ? `${o.estimatedDuration} saat` : 'Belirtilmedi'],
     ['Puan', (o: CustomerOffer) => o.carrier?.rating ? `${Number(o.carrier.rating).toFixed(1)} / 5 (${o.carrier?.ratingCount ?? 0} yorum)` : 'Yeni / yorum yok'],
+    ['Tasiyici uygunlugu', (o: CustomerOffer) => getCarrierEligibilityComparisonText(o)],
     ['Ek hizmet uyumu', (o: CustomerOffer) => getExtraServiceCompatibilityText(o) || 'Gerekmiyor'],
     ['Kapasite', (o: CustomerOffer) => getCapacityDecisionText(o)],
     ['Sigorta / dogrulama', (o: CustomerOffer) => {
@@ -353,7 +370,7 @@ function ComparisonTable({ offers, onChoose }: { offers: CustomerOffer[]; onChoo
             {offers.map(offer => (
               <td key={offer.id} className="p-2">
                 {offer.status === 'pending' && (
-                  <Button className="w-full" size="sm" onClick={() => onChoose(offer)}>
+                  <Button className="w-full" size="sm" disabled={isOfferAcceptDisabled(offer)} onClick={() => onChoose(offer)}>
                     Sec
                   </Button>
                 )}

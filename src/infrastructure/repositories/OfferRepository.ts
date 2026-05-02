@@ -13,6 +13,7 @@ const SAFE_CARRIER_SELECT = [
 
   'carrier.isActive',
   'carrier.verifiedByAdmin',
+  'carrier.approvalState',
   'carrier.hasUploadedDocuments',
   'carrier.foundedYear',
   'carrier.activityCity',

@@ -18,6 +18,7 @@ import { CustomerAddress } from '../../domain/entities/CustomerAddress';
 import { PlatformPolicyService } from './PlatformPolicyService';
 import { ContactFilterSurface } from '../../domain/entities';
 import { MatchingService } from './MatchingService';
+import { getCarrierEligibility } from './carrier/carrierEligibility';
 import {
   EXTRA_SERVICE_NAME_ALIASES,
   inferExtraServiceLoadTypeFromShipmentCategory,
@@ -297,6 +298,7 @@ export class ShipmentService {
       if (offer?.carrier) {
         this.maskCarrierDirectContact(offer.carrier);
       }
+      offer.carrierEligibility = getCarrierEligibility(offer?.carrier ?? null);
       return offer;
     });
   }

@@ -21,6 +21,7 @@ import {
 import { Bookmark, PackageOpen, Rows3, ShieldCheck } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { apiClient } from '@/lib/apiClient';
+import { isOfferAcceptDisabled } from '@/lib/customerOfferTrust';
 import { toast } from '@/components/ui/sonner';
 import { formatLocation } from '@/utils/formatLocation';
 import { cn } from '@/lib/utils';
@@ -82,7 +83,22 @@ export default function MyOffers() {
 
   useEffect(() => { fetchOffers(); }, []);
 
+  const openAcceptConfirm = (offer: CustomerOffer) => {
+    if (isOfferAcceptDisabled(offer)) {
+      toast.error('Bu tasiyici artik teklif kabulu icin uygun degil.');
+      return;
+    }
+
+    setConfirmOffer(offer);
+  };
+
   const decide = async (offerId: string, accept: boolean) => {
+    const targetOffer = offers.find((offer) => offer.id === offerId);
+    if (accept && targetOffer && isOfferAcceptDisabled(targetOffer)) {
+      toast.error('Bu tasiyici artik teklif kabulu icin uygun degil.');
+      return;
+    }
+
     setDecidingId(offerId);
     try {
       const action = accept ? 'accept' : 'reject';
@@ -235,6 +251,10 @@ export default function MyOffers() {
         Tasiyiciyla iletisim ve odeme sureclerini platform uzerinden surdurun.
       </div>
 
+      <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-700">
+        Uygun olmayan tasiyicilarin teklifleri gecmis icin gorunur, ancak kabul edilemez.
+      </div>
+
       {offers.length === 0 ? (
         <EmptyState />
       ) : grouped.length === 0 ? (
@@ -279,7 +299,7 @@ export default function MyOffers() {
                       offer={offer}
                       bookmarked={bookmarked.includes(offer.id)}
                       disabled={decidingId === offer.id}
-                      onAccept={setConfirmOffer}
+                      onAccept={openAcceptConfirm}
                       onReject={(item) => decide(item.id, false)}
                       onDetails={setDetailsOffer}
                       onBookmark={toggleBookmark}
@@ -303,7 +323,7 @@ export default function MyOffers() {
               compact
               bookmarked={bookmarked.includes(detailsOffer.id)}
               disabled={decidingId === detailsOffer.id}
-              onAccept={setConfirmOffer}
+              onAccept={openAcceptConfirm}
               onReject={(item) => decide(item.id, false)}
               onBookmark={toggleBookmark}
             />
@@ -333,7 +353,7 @@ export default function MyOffers() {
           <AlertDialogFooter>
             <AlertDialogCancel disabled={decidingId === confirmOffer?.id}>Vazgec</AlertDialogCancel>
             <AlertDialogAction
-              disabled={decidingId === confirmOffer?.id}
+              disabled={!confirmOffer || isOfferAcceptDisabled(confirmOffer, decidingId === confirmOffer.id)}
               className="bg-blue-600 text-white hover:bg-blue-700"
               onClick={() => confirmOffer && decide(confirmOffer.id, true)}
             >

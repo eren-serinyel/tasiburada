@@ -13,6 +13,7 @@ import { ContactFilterSurface } from '../../domain/entities';
 import { CarrierLoadTypeCapability } from '../../domain/entities/CarrierLoadTypeCapability';
 import { CarrierExtraServiceCapability } from '../../domain/entities/CarrierExtraServiceCapability';
 import { Carrier, CarrierApprovalState } from '../../domain/entities/Carrier';
+import { getCarrierEligibility } from './carrier/carrierEligibility';
 import { inferExtraServiceLoadTypeFromShipmentCategory } from './extra-services/extraServiceApplicability';
 
 interface CreateOfferPayload {
@@ -291,6 +292,14 @@ export class OfferService {
 
       if (shipment.status !== ShipmentStatus.PENDING && shipment.status !== ShipmentStatus.OFFER_RECEIVED) {
         throw new ConflictError('Bu taşıma talebi artık teklif kabulüne açık değil.');
+      }
+
+      const carrier = await transactionalEntityManager.findOne(Carrier, {
+        where: { id: offer.carrierId },
+      });
+      const carrierEligibility = getCarrierEligibility(carrier);
+      if (!carrierEligibility.isEligible) {
+        throw new ConflictError('Bu taşıyıcı artık teklif kabulü için uygun değil.');
       }
 
       await this.platformPolicy.assertNoActiveCooldown(shipment.customerId, offer.carrierId);

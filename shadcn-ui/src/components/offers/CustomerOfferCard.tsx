@@ -1,5 +1,7 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import type { CarrierEligibility } from '@/lib/customerOfferTrust';
+import { getCarrierEligibilityWarning, isOfferAcceptDisabled, resolveCarrierEligibility } from '@/lib/customerOfferTrust';
 import { cn } from '@/lib/utils';
 import {
   BadgeCheck,
@@ -24,6 +26,8 @@ export interface CustomerOfferCarrier {
   completedShipments?: number;
   isVerified?: boolean;
   verifiedByAdmin?: boolean;
+  isActive?: boolean;
+  approvalState?: string | null;
   hasInsurance?: boolean;
   pictureUrl?: string | null;
   vehicleType?: string | null;
@@ -60,6 +64,7 @@ export interface CustomerOffer {
   estimatedDuration?: number;
   status: 'pending' | 'accepted' | 'rejected' | 'withdrawn' | 'cancelled';
   offeredAt: string;
+  carrierEligibility?: CarrierEligibility;
   isLowestPrice?: boolean;
   isHighestRating?: boolean;
   isRecommended?: boolean;
@@ -203,6 +208,9 @@ export function CustomerOfferCard({
   const compatibilityBadge = getExtraServiceCompatibilityText(offer);
   const capacityBadge = getCapacityDecisionText(offer);
   const decisionSignals = getOfferDecisionSignals(offer);
+  const carrierEligibility = resolveCarrierEligibility(offer);
+  const eligibilityWarning = getCarrierEligibilityWarning(offer);
+  const acceptDisabled = isOfferAcceptDisabled(offer, disabled);
 
   return (
     <article
@@ -266,6 +274,12 @@ export function CustomerOfferCard({
         {offer.isHighestRating && offer.status === 'pending' && (
           <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700">En yuksek puan</Badge>
         )}
+        {!carrierEligibility.isEligible && (
+          <Badge className="bg-rose-100 text-rose-800 hover:bg-rose-100">Tasiyici artik uygun degil</Badge>
+        )}
+        {!carrierEligibility.isEligible && (
+          <Badge variant="outline" className="border-rose-200 bg-rose-50 text-rose-700">{carrierEligibility.label}</Badge>
+        )}
         {carrier?.isVerified && (
           <Badge className="gap-1 bg-blue-100 text-blue-800 hover:bg-blue-100"><ShieldCheck className="h-3 w-3" /> Dogrulanmis Tasiyici</Badge>
         )}
@@ -298,6 +312,13 @@ export function CustomerOfferCard({
         <div className="mb-3 rounded-md border border-slate-200 bg-slate-50 p-2.5">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Neden bu teklif?</p>
           <p className="mt-1 text-xs text-slate-700">{decisionSignals.join(' • ')}</p>
+        </div>
+      )}
+
+      {eligibilityWarning && (
+        <div className="mb-3 rounded-md border border-rose-200 bg-rose-50 p-2.5">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-rose-700">{eligibilityWarning.title}</p>
+          <p className="mt-1 text-xs text-rose-800">{eligibilityWarning.detail}</p>
         </div>
       )}
 
@@ -361,7 +382,7 @@ export function CustomerOfferCard({
               <XCircle className="mr-1.5 h-4 w-4" />
               Reddet
             </Button>
-            <Button className="flex-1 bg-blue-600 text-white hover:bg-blue-700" disabled={disabled} onClick={() => onAccept?.(offer)}>
+            <Button className="flex-1 bg-blue-600 text-white hover:bg-blue-700" disabled={acceptDisabled} onClick={() => onAccept?.(offer)}>
               <CheckCircle2 className="mr-1.5 h-4 w-4" />
               Kabul
             </Button>

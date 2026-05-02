@@ -194,7 +194,12 @@ describe('Cooldown enforcement v1', () => {
           };
         }),
         save: jest.fn(),
-        findOne: jest.fn(),
+        findOne: jest.fn().mockResolvedValue({
+          id: 'carrier-1',
+          isActive: true,
+          verifiedByAdmin: true,
+          approvalState: CarrierApprovalState.APPROVED,
+        }),
       };
 
       return cb(manager);
