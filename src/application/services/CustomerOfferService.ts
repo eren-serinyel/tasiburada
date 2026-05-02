@@ -7,6 +7,8 @@ import { CarrierDocument, CarrierDocumentType } from '../../domain/entities/Carr
 import { CarrierVehicle } from '../../domain/entities/CarrierVehicle';
 import { Review } from '../../domain/entities/Review';
 import { CarrierExtraServiceCapability } from '../../domain/entities/CarrierExtraServiceCapability';
+import { CarrierLoadTypeCapability } from '../../domain/entities/CarrierLoadTypeCapability';
+import { ExtraServiceLoadType } from '../../domain/entities/ExtraServiceLoadType';
 import { getCarrierEligibility } from './carrier/carrierEligibility';
 import { inferExtraServiceLoadTypeFromShipmentCategory } from './extra-services/extraServiceApplicability';
 import { analyzeContactInfo } from '../../utils/security';
@@ -16,6 +18,28 @@ interface ExtraServiceCompatibility {
   matchedCount: number;
   missing: string[];
   isFullyCompatible: boolean;
+}
+
+interface MatchDetails {
+  loadTypeCompatible: boolean;
+  loadType: ExtraServiceLoadType | null;
+  extraServicesCovered: number;
+  extraServicesTotal: number;
+  missingExtraServices: string[];
+}
+
+interface CarrierMatchResult {
+  extraServiceCompatibility: ExtraServiceCompatibility;
+  matchScore: number;
+  matchDetails: MatchDetails;
+}
+
+interface CalculateOfferMatchScoreInput {
+  carrierHasAnyCapability: boolean;
+  loadType: ExtraServiceLoadType | null;
+  carrierLoadTypes: Set<ExtraServiceLoadType>;
+  requestedExtraServices: string[];
+  carrierExtraServices: Set<string>;
 }
 
 interface CapacityFit {
@@ -39,25 +63,80 @@ interface CarrierOfferInsights {
   };
 }
 
+export function calculateOfferMatchScore(input: CalculateOfferMatchScoreInput): CarrierMatchResult {
+  const {
+    carrierHasAnyCapability,
+    loadType,
+    carrierLoadTypes,
+    requestedExtraServices,
+    carrierExtraServices,
+  } = input;
+
+  const uniqueRequested = Array.from(new Set(requestedExtraServices.filter(Boolean)));
+  if (!carrierHasAnyCapability) {
+    return {
+      extraServiceCompatibility: {
+        requestedCount: uniqueRequested.length,
+        matchedCount: 0,
+        missing: uniqueRequested,
+        isFullyCompatible: uniqueRequested.length === 0,
+      },
+      matchScore: 0,
+      matchDetails: {
+        loadTypeCompatible: false,
+        loadType,
+        extraServicesCovered: 0,
+        extraServicesTotal: uniqueRequested.length,
+        missingExtraServices: uniqueRequested,
+      },
+    };
+  }
+
+  const loadTypeCompatible = Boolean(loadType && carrierLoadTypes.has(loadType));
+  const missingExtraServices = uniqueRequested.filter((name) => !carrierExtraServices.has(name));
+  const extraServicesCovered = uniqueRequested.length - missingExtraServices.length;
+  const extraServiceMatch = uniqueRequested.length === 0 ? 1 : extraServicesCovered / uniqueRequested.length;
+  const loadTypeMatch = loadTypeCompatible ? 1 : 0;
+
+  return {
+    extraServiceCompatibility: {
+      requestedCount: uniqueRequested.length,
+      matchedCount: extraServicesCovered,
+      missing: missingExtraServices,
+      isFullyCompatible: missingExtraServices.length === 0,
+    },
+    matchScore: Math.round((loadTypeMatch * 0.6 + extraServiceMatch * 0.4) * 100),
+    matchDetails: {
+      loadTypeCompatible,
+      loadType,
+      extraServicesCovered,
+      extraServicesTotal: uniqueRequested.length,
+      missingExtraServices,
+    },
+  };
+}
+
 export class CustomerOfferService {
   private offerRepository = new OfferRepository();
 
-  async getMyOffers(customerId: string, shipmentId?: string): Promise<any[]> {
+  async getMyOffers(customerId: string, shipmentId?: string, useCustomerPreferenceSort = false): Promise<any[]> {
     let preferVerified = false;
-    let defaultSort = DefaultOfferSort.RATING_DESC;
+    let defaultSort: DefaultOfferSort | null = null;
     try {
       const prefRepo = AppDataSource.getRepository(CustomerPreference);
       const preference = await prefRepo.findOne({ where: { customerId } });
       preferVerified = preference?.preferVerifiedCarriers ?? false;
-      defaultSort = (preference?.defaultOfferSort as DefaultOfferSort) ?? DefaultOfferSort.RATING_DESC;
+      defaultSort = useCustomerPreferenceSort
+        ? (preference?.defaultOfferSort as DefaultOfferSort) ?? DefaultOfferSort.PRICE_ASC
+        : null;
     } catch {
       preferVerified = false;
-      defaultSort = DefaultOfferSort.RATING_DESC;
+      defaultSort = null;
     }
 
     let rawOffers = await this.offerRepository.findByCustomerShipments(customerId, shipmentId) || [];
     const insights = await this.getCarrierInsights(rawOffers.map(offer => offer.carrierId));
-    const compatibilityByOfferId = await this.getExtraServiceCompatibility(rawOffers);
+    const matchByOfferId = await this.getOfferMatchResults(rawOffers);
 
     if (preferVerified) {
       rawOffers = rawOffers.filter(offer => offer.carrier?.verifiedByAdmin === true);
@@ -95,12 +174,13 @@ export class CustomerOfferService {
         const carrierInsights = insights.get(offer.carrierId) ?? this.emptyCarrierInsights();
         const isVerified = Boolean(offer.carrier?.verifiedByAdmin);
         const carrierEligibility = getCarrierEligibility(offer.carrier ?? null);
-        const compatibility = compatibilityByOfferId.get(offer.id) ?? {
-          requestedCount: 0,
-          matchedCount: 0,
-          missing: [],
-          isFullyCompatible: true,
-        };
+        const match = matchByOfferId.get(offer.id) ?? calculateOfferMatchScore({
+          carrierHasAnyCapability: false,
+          loadType: inferExtraServiceLoadTypeFromShipmentCategory((offer as any).shipment?.shipmentCategory),
+          carrierLoadTypes: new Set<ExtraServiceLoadType>(),
+          requestedExtraServices: [],
+          carrierExtraServices: new Set<string>(),
+        });
         const capacityFit = this.getCapacityFit(offer, carrierInsights);
 
         const carrier = offer.carrier
@@ -164,28 +244,34 @@ export class CustomerOfferService {
           isLowestPrice,
           isHighestRating,
           isRecommended: (isLowestPrice && isHighestRating) || isHighestRating || (isLowestPrice && isVerified),
-          extraServiceCompatibility: compatibility,
+          extraServiceCompatibility: match.extraServiceCompatibility,
+          matchScore: match.matchScore,
+          matchDetails: match.matchDetails,
           capacityFit,
         });
       });
     });
 
-    switch (defaultSort) {
-      case DefaultOfferSort.PRICE_ASC:
-        decoratedOffers.sort((a, b) => Number(a.price) - Number(b.price));
-        break;
-      case DefaultOfferSort.RATING_DESC:
-        decoratedOffers.sort((a, b) => (b.carrier?.rating || 0) - (a.carrier?.rating || 0));
-        break;
-      case DefaultOfferSort.BALANCED:
-        decoratedOffers.sort((a, b) => {
-          const ratingDiff = (b.carrier?.rating || 0) - (a.carrier?.rating || 0);
-          return ratingDiff !== 0 ? ratingDiff : Number(a.price) - Number(b.price);
-        });
-        break;
-      default:
-        decoratedOffers.sort((a, b) => new Date(b.offeredAt).getTime() - new Date(a.offeredAt).getTime());
-        break;
+    if (defaultSort) {
+      switch (defaultSort) {
+        case DefaultOfferSort.PRICE_ASC:
+          decoratedOffers.sort((a, b) => Number(a.price) - Number(b.price));
+          break;
+        case DefaultOfferSort.RATING_DESC:
+          decoratedOffers.sort((a, b) => (b.carrier?.rating || 0) - (a.carrier?.rating || 0));
+          break;
+        case DefaultOfferSort.BALANCED:
+          decoratedOffers.sort((a, b) => {
+            const ratingDiff = (b.carrier?.rating || 0) - (a.carrier?.rating || 0);
+            return ratingDiff !== 0 ? ratingDiff : Number(a.price) - Number(b.price);
+          });
+          break;
+        default:
+          decoratedOffers.sort((a, b) => Number(b.matchScore || 0) - Number(a.matchScore || 0) || Number(a.price) - Number(b.price));
+          break;
+      }
+    } else {
+      decoratedOffers.sort((a, b) => Number(b.matchScore || 0) - Number(a.matchScore || 0) || Number(a.price) - Number(b.price));
     }
 
     return decoratedOffers;
@@ -195,25 +281,36 @@ export class CustomerOfferService {
     return this.getMyOffers(customerId);
   }
 
-  private async getExtraServiceCompatibility(offers: Offer[]): Promise<Map<string, ExtraServiceCompatibility>> {
-    const map = new Map<string, ExtraServiceCompatibility>();
+  private async getOfferMatchResults(offers: Offer[]): Promise<Map<string, CarrierMatchResult>> {
+    const map = new Map<string, CarrierMatchResult>();
     if (!offers.length) return map;
 
     const carrierIds = Array.from(new Set(offers.map((offer) => offer.carrierId).filter(Boolean)));
-    const capabilities = await AppDataSource.getRepository(CarrierExtraServiceCapability).find({
-      where: { carrierId: In(carrierIds), isActive: true },
-      relations: ['extraService'],
+    const [loadTypeCapabilities, extraServiceCapabilities] = await Promise.all([
+      AppDataSource.getRepository(CarrierLoadTypeCapability).find({
+        where: { carrierId: In(carrierIds), isActive: true },
+      }),
+      AppDataSource.getRepository(CarrierExtraServiceCapability).find({
+        where: { carrierId: In(carrierIds), isActive: true },
+        relations: ['extraService'],
+      }),
+    ]);
+
+    const loadTypeMap = new Map<string, Set<ExtraServiceLoadType>>();
+    loadTypeCapabilities.forEach((capability) => {
+      if (!loadTypeMap.has(capability.carrierId)) loadTypeMap.set(capability.carrierId, new Set<ExtraServiceLoadType>());
+      loadTypeMap.get(capability.carrierId)!.add(capability.loadType);
     });
 
-    const capabilityMap = new Map<string, Set<string>>();
-    capabilities.forEach((capability) => {
+    const extraServiceMap = new Map<string, Set<string>>();
+    extraServiceCapabilities.forEach((capability) => {
       const key = `${capability.carrierId}:${capability.loadType}`;
-      if (!capabilityMap.has(key)) capabilityMap.set(key, new Set<string>());
-      capabilityMap.get(key)!.add(capability.extraService?.name || capability.extraServiceId);
+      if (!extraServiceMap.has(key)) extraServiceMap.set(key, new Set<string>());
+      extraServiceMap.get(key)!.add(capability.extraService?.name || capability.extraServiceId);
 
       const fallbackKey = `${capability.carrierId}:ALL`;
-      if (!capabilityMap.has(fallbackKey)) capabilityMap.set(fallbackKey, new Set<string>());
-      capabilityMap.get(fallbackKey)!.add(capability.extraService?.name || capability.extraServiceId);
+      if (!extraServiceMap.has(fallbackKey)) extraServiceMap.set(fallbackKey, new Set<string>());
+      extraServiceMap.get(fallbackKey)!.add(capability.extraService?.name || capability.extraServiceId);
     });
 
     offers.forEach((offer) => {
@@ -224,29 +321,20 @@ export class CustomerOfferService {
             .filter(Boolean)
         : [];
 
-      if (!requestedNames.length) {
-        map.set(offer.id, {
-          requestedCount: 0,
-          matchedCount: 0,
-          missing: [],
-          isFullyCompatible: true,
-        });
-        return;
-      }
-
       const loadType = inferExtraServiceLoadTypeFromShipmentCategory(shipment?.shipmentCategory);
       const scopedKey = `${offer.carrierId}:${loadType ?? 'ALL'}`;
       const fallbackKey = `${offer.carrierId}:ALL`;
-      const carrierCapabilities = capabilityMap.get(scopedKey) ?? capabilityMap.get(fallbackKey) ?? new Set<string>();
+      const carrierExtraServices = extraServiceMap.get(scopedKey) ?? extraServiceMap.get(fallbackKey) ?? new Set<string>();
+      const carrierLoadTypes = loadTypeMap.get(offer.carrierId) ?? new Set<ExtraServiceLoadType>();
+      const carrierHasAnyCapability = carrierLoadTypes.size > 0 || Array.from(extraServiceMap.keys()).some((key) => key.startsWith(`${offer.carrierId}:`));
 
-      const missing = requestedNames.filter((name) => !carrierCapabilities.has(name));
-      const matchedCount = requestedNames.length - missing.length;
-      map.set(offer.id, {
-        requestedCount: requestedNames.length,
-        matchedCount,
-        missing,
-        isFullyCompatible: missing.length === 0,
-      });
+      map.set(offer.id, calculateOfferMatchScore({
+        carrierHasAnyCapability,
+        loadType,
+        carrierLoadTypes,
+        requestedExtraServices: requestedNames,
+        carrierExtraServices,
+      }));
     });
 
     return map;

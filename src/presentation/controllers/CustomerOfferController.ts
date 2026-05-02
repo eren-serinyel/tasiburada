@@ -8,6 +8,7 @@ export class CustomerOfferController {
     try {
       const customerId = req.user?.customerId;
       const shipmentId = typeof req.query.shipmentId === 'string' ? req.query.shipmentId : undefined;
+      const useCustomerPreferenceSort = req.query.customerPreference === 'true';
       if (!customerId) {
         res.status(401).json({
           success: false,
@@ -16,7 +17,7 @@ export class CustomerOfferController {
         return;
       }
 
-      const offers = await this.customerOfferService.getMyOffers(customerId, shipmentId);
+      const offers = await this.customerOfferService.getMyOffers(customerId, shipmentId, useCustomerPreferenceSort);
       res.status(200).json({
         success: true,
         data: offers

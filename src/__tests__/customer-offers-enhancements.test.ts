@@ -7,8 +7,10 @@ import { Offer, OfferStatus } from '../domain/entities/Offer';
 import { Carrier, CarrierApprovalState } from '../domain/entities/Carrier';
 import { ExtraService } from '../domain/entities/ExtraService';
 import { CarrierExtraServiceCapability } from '../domain/entities/CarrierExtraServiceCapability';
+import { CarrierLoadTypeCapability } from '../domain/entities/CarrierLoadTypeCapability';
 import { ExtraServiceLoadType } from '../domain/entities/ExtraServiceLoadType';
 import { ExtraServiceApplicability } from '../domain/entities/ExtraServiceApplicability';
+import { calculateOfferMatchScore } from '../application/services/CustomerOfferService';
 
 const skipDB = () => process.env.SKIP_DB_TESTS === 'true';
 
@@ -24,6 +26,7 @@ describe('Customer Offers Enhancements', () => {
   const createdExtraServiceIds: string[] = [];
   const createdApplicabilityIds: string[] = [];
   const createdCapabilityIds: string[] = [];
+  const createdLoadTypeCapabilityIds: string[] = [];
 
   beforeAll(async () => {
     if (skipDB()) return;
@@ -50,6 +53,9 @@ describe('Customer Offers Enhancements', () => {
     if (createdCapabilityIds.length) {
       await AppDataSource.getRepository(CarrierExtraServiceCapability).delete(createdCapabilityIds);
     }
+    if (createdLoadTypeCapabilityIds.length) {
+      await AppDataSource.getRepository(CarrierLoadTypeCapability).delete(createdLoadTypeCapabilityIds);
+    }
     if (createdOfferIds.length) {
       await AppDataSource.getRepository(Offer).delete(createdOfferIds);
     }
@@ -71,6 +77,7 @@ describe('Customer Offers Enhancements', () => {
     const shipmentRepo = AppDataSource.getRepository(Shipment);
     const offerRepo = AppDataSource.getRepository(Offer);
     const capabilityRepo = AppDataSource.getRepository(CarrierExtraServiceCapability);
+    const loadTypeCapabilityRepo = AppDataSource.getRepository(CarrierLoadTypeCapability);
     const applicabilityRepo = AppDataSource.getRepository(ExtraServiceApplicability);
 
     const serviceA = await serviceRepo.save(serviceRepo.create({
@@ -173,7 +180,19 @@ describe('Customer Offers Enhancements', () => {
     }));
     createdCapabilityIds.push(cap.id);
 
-    return { shipmentOne, shipmentTwo, offerOne, serviceA, serviceB };
+    const existingLoadTypeCapability = await loadTypeCapabilityRepo.findOne({
+      where: { carrierId, loadType: ExtraServiceLoadType.HOME },
+    });
+    if (!existingLoadTypeCapability) {
+      const loadTypeCap = await loadTypeCapabilityRepo.save(loadTypeCapabilityRepo.create({
+        carrierId,
+        loadType: ExtraServiceLoadType.HOME,
+        isActive: true,
+      }));
+      createdLoadTypeCapabilityIds.push(loadTypeCap.id);
+    }
+
+    return { shipmentOne, shipmentTwo, offerOne, offerTwo, serviceA, serviceB };
   };
 
   test('1. customers/offers response carrier phone/email icermemeli', async () => {
@@ -214,6 +233,13 @@ describe('Customer Offers Enhancements', () => {
     expect(target.extraServiceCompatibility.matchedCount).toBe(1);
     expect(target.extraServiceCompatibility.isFullyCompatible).toBe(false);
     expect(target.extraServiceCompatibility.missing).toContain(fixture.serviceB.name);
+    expect(target.matchScore).toBe(80);
+    expect(target.matchDetails).toMatchObject({
+      loadTypeCompatible: true,
+      extraServicesCovered: 1,
+      extraServicesTotal: 2,
+    });
+    expect(target.matchDetails.missingExtraServices).toContain(fixture.serviceB.name);
   });
 
   test('3. shipmentId filter sadece ilgili shipment tekliflerini donmeli', async () => {
@@ -274,5 +300,63 @@ describe('Customer Offers Enhancements', () => {
         });
       }
     }
+  });
+
+  test('5. extra service yoksa load type uyumu ile matchScore 100 donmeli', async () => {
+    if (skipDB() || !customerToken) return;
+
+    const fixture = await createOfferFixture();
+    if (!fixture) return;
+
+    const res = await request(testApp)
+      .get(`/api/v1/customers/offers?shipmentId=${fixture.shipmentTwo.id}`)
+      .set('Authorization', `Bearer ${customerToken}`);
+
+    expect(res.status).toBe(200);
+    const offers: any[] = Array.isArray(res.body.data) ? res.body.data : [];
+    const target = offers.find((item) => item.id === fixture.offerTwo.id);
+
+    expect(target).toBeDefined();
+    expect(target.matchScore).toBe(100);
+    expect(target.matchDetails).toMatchObject({
+      loadTypeCompatible: true,
+      extraServicesCovered: 0,
+      extraServicesTotal: 0,
+      missingExtraServices: [],
+    });
+  });
+
+  test('6. matchScore helper capability yokken 0, tam uyumda 100 hesaplamali', () => {
+    const emptyCapability = calculateOfferMatchScore({
+      carrierHasAnyCapability: false,
+      loadType: ExtraServiceLoadType.HOME,
+      carrierLoadTypes: new Set<ExtraServiceLoadType>(),
+      requestedExtraServices: ['Piyano Tasima'],
+      carrierExtraServices: new Set<string>(),
+    });
+
+    expect(emptyCapability.matchScore).toBe(0);
+    expect(emptyCapability.matchDetails).toMatchObject({
+      loadTypeCompatible: false,
+      extraServicesCovered: 0,
+      extraServicesTotal: 1,
+      missingExtraServices: ['Piyano Tasima'],
+    });
+
+    const fullMatch = calculateOfferMatchScore({
+      carrierHasAnyCapability: true,
+      loadType: ExtraServiceLoadType.HOME,
+      carrierLoadTypes: new Set<ExtraServiceLoadType>([ExtraServiceLoadType.HOME]),
+      requestedExtraServices: ['Piyano Tasima', 'Gecici depolama'],
+      carrierExtraServices: new Set<string>(['Piyano Tasima', 'Gecici depolama']),
+    });
+
+    expect(fullMatch.matchScore).toBe(100);
+    expect(fullMatch.matchDetails).toMatchObject({
+      loadTypeCompatible: true,
+      extraServicesCovered: 2,
+      extraServicesTotal: 2,
+      missingExtraServices: [],
+    });
   });
 });
