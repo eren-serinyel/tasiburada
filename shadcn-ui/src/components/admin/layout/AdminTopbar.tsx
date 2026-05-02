@@ -1,5 +1,5 @@
 import { useLocation, Link } from 'react-router-dom';
-import { Bell, Menu, Search, LogOut, User } from 'lucide-react';
+import { Menu, Search, LogOut, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -16,9 +16,9 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from '@/components/ui/breadcrumb';
-import { clearAdminAuth, getAdminRole } from '@/lib/adminAuth';
+import { adminApiClient, clearAdminAuth, getAdminRole } from '@/lib/adminAuth';
 import { useNavigate } from 'react-router-dom';
-import { cn } from '@/lib/utils';
+import NotificationBell from '@/components/NotificationBell';
 
 interface AdminTopbarProps {
   onMenuClick: () => void;
@@ -121,9 +121,7 @@ export function AdminTopbar({ onMenuClick, onSearchOpen, sidebarCollapsed }: Adm
       </Button>
 
       {/* Notifications */}
-      <Button variant="ghost" size="icon" className="relative h-8 w-8 text-slate-500 hover:text-slate-700">
-        <Bell className="h-4 w-4" />
-      </Button>
+      <NotificationBell client={adminApiClient} notificationsPagePath="/admin/panel" />
 
       {/* Profile dropdown */}
       <DropdownMenu>

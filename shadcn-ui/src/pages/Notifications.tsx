@@ -4,12 +4,28 @@ import { useNavigate } from 'react-router-dom';
 import { Bell, Truck, Wallet, HandCoins, CheckCheck } from 'lucide-react';
 import { apiClient } from '@/lib/apiClient';
 
+interface ApiNotificationRaw {
+  id: string;
+  title?: string;
+  message?: string;
+  body?: string;
+  type: string;
+  isRead?: boolean;
+  status?: string;
+  entityType?: string | null;
+  entityId?: string | null;
+  relatedId?: string | null;
+  createdAt: string;
+}
+
 interface ApiNotification {
   id: string;
   title: string;
-  message: string;
+  body: string;
   type: string;
   isRead: boolean;
+  entityType?: string | null;
+  entityId?: string | null;
   relatedId?: string | null;
   createdAt: string;
 }
@@ -24,12 +40,49 @@ const TABS: { key: FilterTab; label: string }[] = [
   { key: 'system', label: 'Sistem' },
 ];
 
-function typeCategory(type: string): 'offer' | 'payment' | 'status' | 'system' {
+function typeCategory(type: string, entityType?: string | null): 'offer' | 'payment' | 'status' | 'system' {
   const t = type.toLowerCase();
+  const e = String(entityType || '').toLowerCase();
+  if (e === 'shipment') return 'status';
+  if (e === 'offer') return 'offer';
   if (t.includes('offer') || t.includes('teklif') || t.includes('bid')) return 'offer';
   if (t.includes('payment') || t.includes('ödeme') || t.includes('earning')) return 'payment';
   if (t.includes('status') || t.includes('shipment') || t.includes('transit')) return 'status';
   return 'system';
+}
+
+function normalizeNotification(raw: ApiNotificationRaw): ApiNotification {
+  const status = String(raw.status || '').toLowerCase();
+  const entityId = raw.entityId ?? raw.relatedId ?? null;
+  return {
+    id: raw.id,
+    title: raw.title || 'Bildirim',
+    body: raw.body || raw.message || '',
+    type: raw.type,
+    isRead: typeof raw.isRead === 'boolean' ? raw.isRead : status === 'read',
+    entityType: raw.entityType ?? null,
+    entityId,
+    relatedId: raw.relatedId ?? entityId,
+    createdAt: raw.createdAt,
+  };
+}
+
+function routeForNotification(n: ApiNotification): string | null {
+  const targetId = n.entityId || n.relatedId;
+  if (!targetId) return null;
+
+  switch ((n.entityType || '').toLowerCase()) {
+    case 'shipment':
+      return `/ilan/${targetId}`;
+    case 'carrier':
+      return `/nakliyeciler/${targetId}`;
+    case 'offer':
+      return `/teklifler/${targetId}`;
+    case 'carrier_document':
+      return '/admin/belgeler';
+    default:
+      return null;
+  }
 }
 
 function iconForType(cat: ReturnType<typeof typeCategory>) {
@@ -85,8 +138,13 @@ export default function Notifications() {
     try {
       const res = await apiClient('/notifications');
       const json = await res.json();
+      const rawItems = Array.isArray(json?.data)
+        ? json.data
+        : Array.isArray(json?.data?.items)
+          ? json.data.items
+          : [];
       if (res.ok && json?.success) {
-        setNotifs(Array.isArray(json.data) ? json.data : []);
+        setNotifs(rawItems.map((item: ApiNotificationRaw) => normalizeNotification(item)));
       } else {
         setNotifs([]);
         setError(json?.message || 'Bildirimler alınamadı.');
@@ -105,7 +163,7 @@ export default function Notifications() {
 
   const markAsRead = async (id: string) => {
     try {
-      const res = await apiClient(`/notifications/${id}/read`, { method: 'PUT' });
+      const res = await apiClient(`/notifications/${id}/read`, { method: 'PATCH' });
       if (res.ok) {
         setNotifs((prev) => prev.map((n) => (n.id === id ? { ...n, isRead: true } : n)));
       }
@@ -114,9 +172,10 @@ export default function Notifications() {
 
   const markAllRead = async () => {
     try {
-      const unread = notifs.filter((n) => !n.isRead);
-      await Promise.all(unread.map((n) => apiClient(`/notifications/${n.id}/read`, { method: 'PUT' })));
-      setNotifs((prev) => prev.map((n) => ({ ...n, isRead: true })));
+      const res = await apiClient('/notifications/read-all', { method: 'PATCH' });
+      if (res.ok) {
+        setNotifs((prev) => prev.map((n) => ({ ...n, isRead: true })));
+      }
     } catch {}
   };
 
@@ -125,9 +184,9 @@ export default function Notifications() {
   const filtered = useMemo(() => {
     return notifs.filter((n) => {
       if (tab === 'unread') return !n.isRead;
-      if (tab === 'offer') return typeCategory(n.type) === 'offer';
-      if (tab === 'payment') return typeCategory(n.type) === 'payment';
-      if (tab === 'system') return typeCategory(n.type) === 'system';
+      if (tab === 'offer') return typeCategory(n.type, n.entityType) === 'offer';
+      if (tab === 'payment') return typeCategory(n.type, n.entityType) === 'payment';
+      if (tab === 'system') return typeCategory(n.type, n.entityType) === 'system';
       return true;
     });
   }, [notifs, tab]);
@@ -217,8 +276,9 @@ export default function Notifications() {
             </div>
 
             {items.map((n) => {
-              const cat = typeCategory(n.type);
+              const cat = typeCategory(n.type, n.entityType);
               const { bg, fg, Icon } = iconForType(cat);
+              const targetRoute = routeForNotification(n);
 
               return (
                 <button
@@ -226,7 +286,7 @@ export default function Notifications() {
                   type="button"
                   onClick={() => {
                     if (!n.isRead) markAsRead(n.id);
-                    if (n.relatedId) navigate(`/ilan/${n.relatedId}`);
+                    if (targetRoute) navigate(targetRoute);
                   }}
                   className={`w-full text-left flex items-start gap-3 px-5 py-4 border-b border-gray-100 hover:bg-gray-50 transition-colors cursor-pointer ${
                     !n.isRead ? 'bg-blue-50/40 border-l-[3px] border-l-blue-600' : ''
@@ -243,9 +303,9 @@ export default function Notifications() {
                       {n.title}
                     </p>
                     <p className="text-[13px] text-gray-600 leading-relaxed line-clamp-2 mt-0.5">
-                      {n.message}
+                      {n.body}
                     </p>
-                    {n.relatedId && (
+                    {targetRoute && (
                       <span className="inline-block text-xs text-blue-600 mt-1">İlanı görüntüle →</span>
                     )}
                   </div>

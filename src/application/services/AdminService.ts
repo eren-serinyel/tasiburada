@@ -209,6 +209,27 @@ export class AdminService {
       );
     }
 
+    if (approved) {
+      const approvedCarrier = await carrierRepo.findOne({ where: { id: carrierId } });
+      if (typeof (this.notificationService as any).createFromEvent === 'function') {
+        this.notificationService.createFromEvent('carrier.profile_approved', {
+          recipientUserId: carrierId,
+          entityId: carrierId,
+          approvalVersion: approvedCarrier?.approvalVersion ?? 0,
+          reviewedByAdminId: adminId,
+        }).catch((err) => console.error('Carrier profile approved notification failed:', err));
+      } else {
+        this.notificationService.createNotification(
+          carrierId,
+          'carrier',
+          'CARRIER_APPROVED',
+          'Profiliniz Onaylandı',
+          'Başvurunuz onaylandı. Artık aktif olarak teklif verebilirsiniz.',
+          carrierId
+        ).catch((err) => console.error('Carrier profile approved notification failed:', err));
+      }
+    }
+
     return { success: true, approved };
   }
 

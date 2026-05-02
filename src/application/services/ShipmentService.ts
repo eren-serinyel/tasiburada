@@ -918,14 +918,23 @@ export class ShipmentService {
     }
 
     try {
-      await this.notificationService.createNotification(
-        updatedShipment.customerId,
-        'customer',
-        'SHIPMENT_STARTED',
-        'Taşımanız Başladı',
-        'Nakliyeci taşımanızı başlattı. Teslimatı takip edebilirsiniz.',
-        shipmentId
-      );
+      if (typeof (this.notificationService as any).createFromEvent === 'function') {
+        await this.notificationService.createFromEvent('customer.shipment_in_transit', {
+          recipientUserId: updatedShipment.customerId,
+          entityId: shipmentId,
+          carrierId,
+          shipmentStatus: ShipmentStatus.IN_TRANSIT,
+        });
+      } else {
+        await this.notificationService.createNotification(
+          updatedShipment.customerId,
+          'customer',
+          'SHIPMENT_STARTED',
+          'Taşımanız Başladı',
+          'Nakliyeci taşımanızı başlattı. Teslimatı takip edebilirsiniz.',
+          shipmentId
+        );
+      }
     } catch { /* bildirim hatası taşımayı etkilemesin */ }
 
     return updatedShipment;
@@ -1000,14 +1009,24 @@ export class ShipmentService {
     }
 
     try {
-      await this.notificationService.createNotification(
-        updatedShipment.customerId,
-        'customer',
-        'SHIPMENT_COMPLETED',
-        'Taşımanız Tamamlandı',
-        'Eşyalarınız teslim edildi. Lütfen nakliyeciyi değerlendirin.',
-        shipmentId
-      );
+      if (typeof (this.notificationService as any).createFromEvent === 'function') {
+        await this.notificationService.createFromEvent('customer.shipment_completed', {
+          recipientUserId: updatedShipment.customerId,
+          entityId: shipmentId,
+          carrierId,
+          shipmentStatus: ShipmentStatus.COMPLETED,
+          reviewSuggested: true,
+        });
+      } else {
+        await this.notificationService.createNotification(
+          updatedShipment.customerId,
+          'customer',
+          'SHIPMENT_COMPLETED',
+          'Taşımanız Tamamlandı',
+          'Eşyalarınız teslim edildi. Lütfen nakliyeciyi değerlendirin.',
+          shipmentId
+        );
+      }
     } catch { /* bildirim hatası taşımayı etkilemesin */ }
 
     return updatedShipment;

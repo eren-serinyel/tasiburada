@@ -227,14 +227,25 @@ export class OfferService {
       throw new NotFoundError('Teklif oluşturuldu ancak getirilemedi.');
     }
 
-    await this.notificationService.createNotification(
-      shipment.customerId,
-      'customer',
-      'NEW_OFFER',
-      'Yeni Teklif Aldınız',
-      `${createdOffer.carrier?.companyName || 'Nakliyeci'} taşımanız için teklif verdi.`,
-      shipment.id
-    );
+    if (typeof (this.notificationService as any).createFromEvent === 'function') {
+      await this.notificationService.createFromEvent('customer.offer_received', {
+        recipientUserId: shipment.customerId,
+        entityId: shipment.id,
+        offerId: createdOffer.id,
+        carrierId,
+        carrierName: createdOffer.carrier?.companyName || 'Nakliyeci',
+        offeredPrice: Number(createdOffer.price),
+      });
+    } else {
+      await this.notificationService.createNotification(
+        shipment.customerId,
+        'customer',
+        'NEW_OFFER',
+        'Yeni Teklif Aldınız',
+        `${createdOffer.carrier?.companyName || 'Nakliyeci'} taşımanız için teklif verdi.`,
+        shipment.id
+      );
+    }
 
     return { offer: this.sanitizeOffer(createdOffer), isNew: true, warnings };
   }
@@ -338,14 +349,24 @@ export class OfferService {
     }
 
     // Transaction sonrası (outside): notification create (best effort)
-    this.notificationService.createNotification(
-      result.carrierId,
-      'carrier',
-      'OFFER_ACCEPTED',
-      'Teklifiniz Kabul Edildi',
-      'Müşteri teklifinizi kabul etti. Taşımaya hazırlanın.',
-      result.shipmentId
-    ).catch(err => console.error('Accept notification failed:', err));
+    if (typeof (this.notificationService as any).createFromEvent === 'function') {
+      this.notificationService.createFromEvent('carrier.offer_accepted', {
+        recipientUserId: result.carrierId,
+        entityId: result.shipmentId,
+        offerId: result.id,
+        customerId,
+        acceptedPrice: Number(result.price),
+      }).catch(err => console.error('Accept notification failed:', err));
+    } else {
+      this.notificationService.createNotification(
+        result.carrierId,
+        'carrier',
+        'OFFER_ACCEPTED',
+        'Teklifiniz Kabul Edildi',
+        'Müşteri teklifinizi kabul etti. Taşımaya hazırlanın.',
+        result.shipmentId
+      ).catch(err => console.error('Accept notification failed:', err));
+    }
 
     return this.sanitizeOffer(result);
   }

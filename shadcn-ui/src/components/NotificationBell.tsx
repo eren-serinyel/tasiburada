@@ -1,23 +1,86 @@
 import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Bell, Package, TrendingUp, CheckCircle, X } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { apiClient } from '@/lib/apiClient';
 
+type NotificationApiClient = (input: string, init?: RequestInit) => Promise<Response>;
+
+interface ApiNotificationRaw {
+  id: string;
+  type: string;
+  title?: string;
+  message?: string;
+  body?: string;
+  isRead?: boolean;
+  status?: string;
+  createdAt: string;
+  entityType?: string | null;
+  entityId?: string | null;
+  relatedId?: string | null;
+}
+
 interface ApiNotification {
   id: string;
   type: string;
   title: string;
-  message: string;
+  body: string;
   isRead: boolean;
   createdAt: string;
+  entityType?: string | null;
+  entityId?: string | null;
   relatedId?: string | null;
 }
 
-export default function NotificationBell() {
+interface NotificationBellProps {
+  client?: NotificationApiClient;
+  notificationsPagePath?: string;
+}
+
+function normalizeNotification(raw: ApiNotificationRaw): ApiNotification {
+  const status = String(raw.status || '').toLowerCase();
+  const entityId = raw.entityId ?? raw.relatedId ?? null;
+  return {
+    id: raw.id,
+    type: raw.type,
+    title: raw.title || 'Bildirim',
+    body: raw.body || raw.message || '',
+    isRead: typeof raw.isRead === 'boolean' ? raw.isRead : status === 'read',
+    createdAt: raw.createdAt,
+    entityType: raw.entityType ?? null,
+    entityId,
+    relatedId: raw.relatedId ?? entityId,
+  };
+}
+
+function resolveNotificationPath(
+  notification: ApiNotification,
+  notificationsPagePath: string,
+): string {
+  const targetId = notification.entityId || notification.relatedId;
+  if (!targetId) return notificationsPagePath;
+
+  switch ((notification.entityType || '').toLowerCase()) {
+    case 'shipment':
+      return `/ilan/${targetId}`;
+    case 'carrier':
+      return `/nakliyeciler/${targetId}`;
+    case 'carrier_document':
+      return '/admin/belgeler';
+    case 'offer':
+      return `/teklifler/${targetId}`;
+    default:
+      return notificationsPagePath;
+  }
+}
+
+export default function NotificationBell({
+  client = apiClient,
+  notificationsPagePath = '/bildirimler',
+}: NotificationBellProps) {
   const [notifications, setNotifications] = useState<ApiNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isOpen, setIsOpen] = useState(false);
@@ -25,7 +88,7 @@ export default function NotificationBell() {
 
   const fetchUnreadCount = async () => {
     try {
-      const res = await apiClient('/notifications/unread-count');
+      const res = await client('/notifications/unread-count');
       const json = await res.json();
       if (res.ok && json?.success) {
         setUnreadCount(Number(json?.data?.unreadCount || 0));
@@ -38,10 +101,15 @@ export default function NotificationBell() {
   const fetchNotifications = async () => {
     setLoading(true);
     try {
-      const res = await apiClient('/notifications');
+      const res = await client('/notifications?limit=10');
       const json = await res.json();
+      const rawItems = Array.isArray(json?.data)
+        ? json.data
+        : Array.isArray(json?.data?.items)
+          ? json.data.items
+          : [];
       if (res.ok && json?.success) {
-        setNotifications(Array.isArray(json.data) ? json.data : []);
+        setNotifications(rawItems.map((item: ApiNotificationRaw) => normalizeNotification(item)));
       } else {
         setNotifications([]);
       }
@@ -67,7 +135,7 @@ export default function NotificationBell() {
 
   const markAsRead = async (notificationId: string) => {
     try {
-      const res = await apiClient(`/notifications/${notificationId}/read`, { method: 'PUT' });
+      const res = await client(`/notifications/${notificationId}/read`, { method: 'PATCH' });
       if (res.ok) {
         setNotifications(prev => prev.map(n => (n.id === notificationId ? { ...n, isRead: true } : n)));
         fetchUnreadCount();
@@ -79,7 +147,7 @@ export default function NotificationBell() {
 
   const markAllAsRead = async () => {
     try {
-      const res = await apiClient('/notifications/read-all', { method: 'PUT' });
+      const res = await client('/notifications/read-all', { method: 'PATCH' });
       if (res.ok) {
         setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
         setUnreadCount(0);
@@ -100,8 +168,17 @@ export default function NotificationBell() {
       case 'shipment_update':
       case 'shipment_started':
       case 'shipment_completed':
+      case 'customer.shipment_in_transit':
+      case 'customer.shipment_completed':
         return <Package className="h-4 w-4 text-purple-500" />;
       case 'rating_received':
+        return <Bell className="h-4 w-4 text-amber-500" />;
+      case 'customer.offer_received':
+      case 'carrier.offer_accepted':
+        return <TrendingUp className="h-4 w-4 text-blue-500" />;
+      case 'carrier.profile_approved':
+        return <CheckCircle className="h-4 w-4 text-green-500" />;
+      case 'admin.carrier_submitted_for_approval':
         return <Bell className="h-4 w-4 text-amber-500" />;
       default:
         return <Bell className="h-4 w-4 text-gray-500" />;
@@ -163,6 +240,9 @@ export default function NotificationBell() {
             ) : (
               <div className="max-h-96 overflow-y-auto">
                 {notifications.map((notification) => (
+                  (() => {
+                    const targetPath = resolveNotificationPath(notification, notificationsPagePath);
+                    return (
                   <div
                     key={notification.id}
                     className={`p-4 border-b last:border-b-0 hover:bg-gray-50 cursor-pointer ${
@@ -185,7 +265,7 @@ export default function NotificationBell() {
                           )}
                         </div>
                         <p className="text-sm text-gray-600 mt-1">
-                          {notification.message}
+                          {notification.body}
                         </p>
                         <p className="text-xs text-gray-500 mt-2">
                           {formatTimeAgo(notification.createdAt)}
@@ -193,10 +273,10 @@ export default function NotificationBell() {
                       </div>
                     </div>
                     
-                    {notification.relatedId && (
+                    {targetPath && (
                       <div className="mt-2 ml-7">
                         <Link
-                          to="/bildirimler"
+                          to={targetPath}
                           onClick={(e) => e.stopPropagation()}
                         >
                           <Button size="sm" variant="outline" className="text-xs">
@@ -206,6 +286,8 @@ export default function NotificationBell() {
                       </div>
                     )}
                   </div>
+                    );
+                  })()
                 ))}
               </div>
             )}

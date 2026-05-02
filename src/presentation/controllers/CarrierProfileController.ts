@@ -12,6 +12,9 @@ import { CarrierProfileStatusService } from '../../application/services/carrier/
 import { CarrierScopeOfWorkService } from '../../application/services/carrier/CarrierScopeOfWorkService';
 import { CarrierApprovalService } from '../../application/services/carrier/CarrierApprovalService';
 import { CarrierCapabilityService } from '../../application/services/carrier/CarrierCapabilityService';
+import { NotificationService } from '../../application/services/NotificationService';
+import { AppDataSource } from '../../infrastructure/database/data-source';
+import { Admin } from '../../domain/entities/Admin';
 
 export class CarrierProfileController {
   private companyInfoService = new CarrierCompanyInfoService();
@@ -27,6 +30,7 @@ export class CarrierProfileController {
   private profileStatusService = new CarrierProfileStatusService();
   private approvalService = new CarrierApprovalService();
   private capabilityService = new CarrierCapabilityService();
+  private eventNotificationService = new NotificationService();
 
   private ensureCarrier(req: Request, res: Response): string | null {
     if (!req.carrierId) {
@@ -415,6 +419,23 @@ export class CarrierProfileController {
       }
 
       const result = await this.approvalService.submitForReview(carrierId);
+
+      const adminRepo = AppDataSource.getRepository(Admin);
+      const activeAdmins = await adminRepo.find({
+        where: { isActive: true },
+        select: ['id'],
+      });
+      await Promise.all(
+        activeAdmins.map((admin) =>
+          this.eventNotificationService.createFromEvent('admin.carrier_submitted_for_approval', {
+            recipientUserId: admin.id,
+            entityId: carrierId,
+            approvalVersion: result.approvalVersion,
+            resubmissionCount: result.resubmissionCount,
+          }).catch(() => null),
+        ),
+      );
+
       res.status(200).json({
         success: true,
         message: 'Profiliniz incelemeye alındı.',
