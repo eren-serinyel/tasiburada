@@ -16,6 +16,7 @@ import { MatchCooldown, MatchCooldownStatus } from '../../domain/entities/MatchC
 import { AuditLogRepository } from '../../infrastructure/repositories/AuditLogRepository';
 import { NotificationService } from './NotificationService';
 import { CarrierApprovalService } from './carrier/CarrierApprovalService';
+import { ContactSafetyService } from './contact-safety/ContactSafetyService';
 import * as bcrypt from 'bcryptjs';
 import { ValidationError } from '../../domain/errors/AppError';
 
@@ -50,15 +51,111 @@ interface ContactFilterLogsParams {
   actorId?: string;
 }
 
+interface ContactFilterLogStatsParams {
+  dateFrom?: string;
+  dateTo?: string;
+  surface?: string;
+  actorType?: string;
+  action?: string;
+  severity?: string;
+  reviewStatus?: string;
+}
+
+interface ContactFilterLogStatsDto {
+  todayBlockedCount: number;
+  highRiskCount: number;
+  repeatedViolatorCount: number;
+  unreviewedCount: number;
+  topSurfaces: Array<{ surface: string; count: number }>;
+  actionDistribution: Array<{ action: string; count: number }>;
+  severityDistribution: Array<{ severity: string; count: number }>;
+  generatedAt: string;
+  window: { dateFrom: string; dateTo: string };
+}
+
 export class AdminService {
   private auditLogRepository: AuditLogRepository;
   private notificationService: NotificationService;
   private carrierApprovalService: CarrierApprovalService;
+  private contactSafetyService: ContactSafetyService;
 
   constructor() {
     this.auditLogRepository = new AuditLogRepository();
     this.notificationService = new NotificationService();
     this.carrierApprovalService = new CarrierApprovalService();
+    this.contactSafetyService = new ContactSafetyService();
+  }
+
+  private parseDateOrThrow(value: string | undefined, field: string): Date | undefined {
+    if (!value) return undefined;
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) {
+      throw new ValidationError(`${field} gecersiz tarih formatinda.`);
+    }
+    return parsed;
+  }
+
+  private resolveDateWindow(dateFrom?: string, dateTo?: string): { from: Date; to: Date } {
+    const parsedFrom = this.parseDateOrThrow(dateFrom, 'dateFrom');
+    const parsedTo = this.parseDateOrThrow(dateTo, 'dateTo');
+
+    const to = parsedTo ? new Date(parsedTo) : new Date();
+    to.setHours(23, 59, 59, 999);
+
+    const from = parsedFrom ? new Date(parsedFrom) : new Date(to);
+    if (!parsedFrom) {
+      from.setDate(from.getDate() - 7);
+      from.setHours(0, 0, 0, 0);
+    }
+
+    if (from > to) {
+      throw new ValidationError('dateFrom, dateTo degerinden buyuk olamaz.');
+    }
+
+    return { from, to };
+  }
+
+  private applyContactFilterLogFilters(
+    qb: any,
+    params: {
+      dateFrom?: Date;
+      dateTo?: Date;
+      surface?: string;
+      actorType?: string;
+      action?: string;
+      severity?: string;
+      reviewStatus?: string;
+      shipmentId?: string;
+      actorId?: string;
+    },
+  ): void {
+    if (params.dateFrom) {
+      qb.andWhere('log.createdAt >= :dateFrom', { dateFrom: params.dateFrom });
+    }
+    if (params.dateTo) {
+      qb.andWhere('log.createdAt <= :dateTo', { dateTo: params.dateTo });
+    }
+    if (params.surface) {
+      qb.andWhere('log.surface = :surface', { surface: params.surface });
+    }
+    if (params.actorType) {
+      qb.andWhere('log.actorType = :actorType', { actorType: params.actorType });
+    }
+    if (params.action) {
+      qb.andWhere('log.action = :action', { action: params.action });
+    }
+    if (params.severity) {
+      qb.andWhere('log.severity = :severity', { severity: params.severity });
+    }
+    if (params.reviewStatus) {
+      qb.andWhere('log.reviewStatus = :reviewStatus', { reviewStatus: params.reviewStatus });
+    }
+    if (params.shipmentId) {
+      qb.andWhere('log.shipmentId = :shipmentId', { shipmentId: params.shipmentId });
+    }
+    if (params.actorId) {
+      qb.andWhere('log.actorId = :actorId', { actorId: params.actorId });
+    }
   }
 
   // ─── Dashboard ─────────────────────────────────────────────────────────────
@@ -422,35 +519,24 @@ export class AdminService {
       .skip(offset)
       .take(safeLimit);
 
-    if (dateFrom) {
-      qb.andWhere('log.createdAt >= :dateFrom', { dateFrom: new Date(dateFrom) });
+    const parsedDateFrom = this.parseDateOrThrow(dateFrom, 'dateFrom');
+    const parsedDateTo = this.parseDateOrThrow(dateTo, 'dateTo');
+    const normalizedDateTo = parsedDateTo ? new Date(parsedDateTo) : undefined;
+    if (normalizedDateTo) {
+      normalizedDateTo.setHours(23, 59, 59, 999);
     }
-    if (dateTo) {
-      const to = new Date(dateTo);
-      to.setHours(23, 59, 59, 999);
-      qb.andWhere('log.createdAt <= :dateTo', { dateTo: to });
-    }
-    if (surface) {
-      qb.andWhere('log.surface = :surface', { surface });
-    }
-    if (actorType) {
-      qb.andWhere('log.actorType = :actorType', { actorType });
-    }
-    if (action) {
-      qb.andWhere('log.action = :action', { action });
-    }
-    if (severity) {
-      qb.andWhere('log.severity = :severity', { severity });
-    }
-    if (reviewStatus) {
-      qb.andWhere('log.reviewStatus = :reviewStatus', { reviewStatus });
-    }
-    if (shipmentId) {
-      qb.andWhere('log.shipmentId = :shipmentId', { shipmentId });
-    }
-    if (actorId) {
-      qb.andWhere('log.actorId = :actorId', { actorId });
-    }
+
+    this.applyContactFilterLogFilters(qb, {
+      dateFrom: parsedDateFrom,
+      dateTo: normalizedDateTo,
+      surface,
+      actorType,
+      action,
+      severity,
+      reviewStatus,
+      shipmentId,
+      actorId,
+    });
 
     const [rows, total] = await qb.getManyAndCount();
 
@@ -472,6 +558,114 @@ export class AdminService {
     }));
 
     return { data, total, page: safePage, limit: safeLimit };
+  }
+
+  async getContactFilterLogStats(params: ContactFilterLogStatsParams): Promise<ContactFilterLogStatsDto> {
+    const { dateFrom, dateTo, surface, actorType, action, severity, reviewStatus } = params;
+    const window = this.resolveDateWindow(dateFrom, dateTo);
+    const repo = AppDataSource.getRepository(ContactFilterLog);
+
+    const buildBaseQuery = () => {
+      const qb = repo.createQueryBuilder('log');
+      this.applyContactFilterLogFilters(qb, {
+        dateFrom: window.from,
+        dateTo: window.to,
+        surface,
+        actorType,
+        action,
+        severity,
+        reviewStatus,
+      });
+      return qb;
+    };
+
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
+
+    const [
+      todayBlockedCount,
+      highRiskCount,
+      unreviewedCount,
+      topSurfacesRaw,
+      actionDistributionRaw,
+      severityDistributionRaw,
+    ] = await Promise.all([
+      buildBaseQuery()
+        .andWhere('log.action = :blockedAction', { blockedAction: 'blocked' })
+        .andWhere('log.createdAt >= :todayStart AND log.createdAt <= :todayEnd', {
+          todayStart,
+          todayEnd,
+        })
+        .getCount(),
+      buildBaseQuery()
+        .andWhere('(log.severity = :highSeverity OR log.riskScore >= :highRiskScore)', {
+          highSeverity: ContactFilterSeverity.HIGH,
+          highRiskScore: 80,
+        })
+        .getCount(),
+      buildBaseQuery()
+        .andWhere('log.reviewStatus = :unreviewedStatus', { unreviewedStatus: ContactFilterReviewStatus.UNREVIEWED })
+        .getCount(),
+      buildBaseQuery()
+        .select('log.surface', 'surface')
+        .addSelect('COUNT(log.id)', 'count')
+        .groupBy('log.surface')
+        .orderBy('count', 'DESC')
+        .limit(5)
+        .getRawMany<{ surface: string; count: string }>(),
+      buildBaseQuery()
+        .select('log.action', 'action')
+        .addSelect('COUNT(log.id)', 'count')
+        .groupBy('log.action')
+        .orderBy('count', 'DESC')
+        .getRawMany<{ action: string; count: string }>(),
+      buildBaseQuery()
+        .select('log.severity', 'severity')
+        .addSelect('COUNT(log.id)', 'count')
+        .groupBy('log.severity')
+        .orderBy('count', 'DESC')
+        .getRawMany<{ severity: string; count: string }>(),
+    ]);
+
+    let repeatedViolatorCount = 0;
+    if (action !== 'flagged' && actorType !== 'system') {
+      const repeated = await this.contactSafetyService.getRepeatedViolations({
+        windowDays: 7,
+        threshold: 3,
+        endAt: window.to,
+        actorType: actorType as any,
+        surface: surface as any,
+        severity: severity as any,
+        reviewStatus: reviewStatus as any,
+      });
+      repeatedViolatorCount = repeated.length;
+    }
+
+    return {
+      todayBlockedCount,
+      highRiskCount,
+      repeatedViolatorCount,
+      unreviewedCount,
+      topSurfaces: topSurfacesRaw.map((row) => ({
+        surface: row.surface,
+        count: Number(row.count || 0),
+      })),
+      actionDistribution: actionDistributionRaw.map((row) => ({
+        action: row.action,
+        count: Number(row.count || 0),
+      })),
+      severityDistribution: severityDistributionRaw.map((row) => ({
+        severity: row.severity,
+        count: Number(row.count || 0),
+      })),
+      generatedAt: new Date().toISOString(),
+      window: {
+        dateFrom: window.from.toISOString(),
+        dateTo: window.to.toISOString(),
+      },
+    };
   }
 
   async writeAuditLog(data: {

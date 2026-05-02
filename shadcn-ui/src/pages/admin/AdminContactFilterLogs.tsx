@@ -12,6 +12,12 @@ import { PageHeader, EmptyState, ErrorState } from '@/components/admin/shared';
 import { ShieldAlert, ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react';
 import { format } from 'date-fns';
 import { tr } from 'date-fns/locale';
+import {
+  buildContactFilterMetricCards,
+  mapTopSurfaceLabels,
+  normalizeContactFilterStats,
+  type ContactFilterStats,
+} from '@/lib/contactFilterMetrics';
 
 interface ContactFilterLogItem {
   id: number;
@@ -34,6 +40,7 @@ const SURFACE_LABELS: Record<string, string> = {
   shipment_note: 'İlan Notu',
   offer_message: 'Teklif Mesajı',
   platform_message: 'Platform Mesajı',
+  review_comment: 'Yorum',
 };
 
 const ACTION_CLASS: Record<string, string> = {
@@ -76,6 +83,8 @@ export default function AdminContactFilterLogs() {
   const [page, setPage] = useState(1);
   const [entries, setEntries] = useState<ContactFilterLogItem[]>([]);
   const [total, setTotal] = useState(0);
+  const [stats, setStats] = useState<ContactFilterStats>(normalizeContactFilterStats(null));
+  const [statsLoading, setStatsLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
   const limit = 30;
@@ -110,8 +119,35 @@ export default function AdminContactFilterLogs() {
     }
   }, [page, dateFrom, dateTo, surface, actorType, action, severity, reviewStatus, actorIdFilter, shipmentIdFilter]);
 
+  const fetchStats = useCallback(async () => {
+    setStatsLoading(true);
+    try {
+      const params = new URLSearchParams();
+      if (dateFrom) params.set('dateFrom', dateFrom);
+      if (dateTo) params.set('dateTo', dateTo);
+      if (surface && surface !== ALL_VALUE) params.set('surface', surface);
+      if (actorType && actorType !== ALL_VALUE) params.set('actorType', actorType);
+      if (action && action !== ALL_VALUE) params.set('action', action);
+      if (severity && severity !== ALL_VALUE) params.set('severity', severity);
+      if (reviewStatus && reviewStatus !== ALL_VALUE) params.set('reviewStatus', reviewStatus);
+
+      const statsRes = await adminApiClient(`/admin/contact-filter-logs/stats?${params}`);
+      const payload = await statsRes.json();
+      if (payload?.success) {
+        setStats(normalizeContactFilterStats(payload.data));
+      } else {
+        setStats(normalizeContactFilterStats(null));
+      }
+    } catch {
+      setStats(normalizeContactFilterStats(null));
+    } finally {
+      setStatsLoading(false);
+    }
+  }, [dateFrom, dateTo, surface, actorType, action, severity, reviewStatus]);
+
   useEffect(() => { setPage(1); }, [dateFrom, dateTo, surface, actorType, action, severity, reviewStatus, actorIdFilter, shipmentIdFilter]);
   useEffect(() => { fetchLogs(); }, [fetchLogs]);
+  useEffect(() => { fetchStats(); }, [fetchStats]);
 
   const totalPages = Math.ceil(total / limit);
 
@@ -163,6 +199,34 @@ export default function AdminContactFilterLogs() {
           </div>
         }
       />
+
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
+        {buildContactFilterMetricCards(stats).map((card) => (
+          <div key={card.label} className="rounded-xl border border-slate-200 bg-white p-4">
+            <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">{card.label}</p>
+            <p className="mt-1 text-2xl font-semibold text-slate-800">
+              {statsLoading ? '…' : card.value.toLocaleString('tr-TR')}
+            </p>
+          </div>
+        ))}
+        <div className="rounded-xl border border-slate-200 bg-white p-4">
+          <p className="text-[11px] font-medium uppercase tracking-wide text-slate-500">Top kaynaklar</p>
+          <div className="mt-2 space-y-1">
+            {statsLoading ? (
+              <p className="text-xs text-slate-400">Yükleniyor…</p>
+            ) : mapTopSurfaceLabels(stats.topSurfaces.slice(0, 3), SURFACE_LABELS).length === 0 ? (
+              <p className="text-xs text-slate-400">Kayıt yok</p>
+            ) : (
+              mapTopSurfaceLabels(stats.topSurfaces.slice(0, 3), SURFACE_LABELS).map((item) => (
+                <div key={item.surface} className="flex items-center justify-between text-xs">
+                  <span className="text-slate-600">{item.label}</span>
+                  <span className="font-mono text-slate-800">{item.count}</span>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
 
       {/* Filters */}
       <div className="flex flex-col gap-3">

@@ -34,6 +34,14 @@ export type ContactSafetyResult = {
   userMessage: string;
 };
 
+export type RepeatedViolationResult = {
+  actorType: ContactSafetyActorType;
+  actorId: string;
+  blockedCountLast7d: number;
+  isRepeatedViolator: boolean;
+  latestViolationAt: Date;
+};
+
 const HARD_BLOCK_MESSAGE =
   'Guvenliginiz icin telefon, e-posta, link veya platform disi iletisim yonlendirmesi paylasilamaz.';
 
@@ -41,6 +49,70 @@ const SOFT_WARNING_MESSAGE =
   'Mesajiniz platform disi iletisim cagrisimi iceriyor olabilir. Lutfen iletisimi platform icinde tutun.';
 
 export class ContactSafetyService {
+  async getRepeatedViolations(input?: {
+    windowDays?: number;
+    threshold?: number;
+    endAt?: Date;
+    actorType?: ContactSafetyActorType;
+    actorId?: string;
+    surface?: ContactFilterSurface;
+    severity?: ContactFilterSeverity;
+    reviewStatus?: ContactFilterReviewStatus;
+  }): Promise<RepeatedViolationResult[]> {
+    const windowDays = Math.max(1, input?.windowDays ?? 7);
+    const threshold = Math.max(1, input?.threshold ?? 3);
+    const endAt = input?.endAt ?? new Date();
+    const from = new Date(endAt);
+    from.setDate(from.getDate() - windowDays);
+
+    const qb = AppDataSource.getRepository(ContactFilterLog)
+      .createQueryBuilder('log')
+      .select('log.actorType', 'actorType')
+      .addSelect('log.actorId', 'actorId')
+      .addSelect('COUNT(log.id)', 'blockedCount')
+      .addSelect('MAX(log.createdAt)', 'latestViolationAt')
+      .where('log.createdAt >= :from AND log.createdAt <= :to', { from, to: endAt })
+      .andWhere('log.action = :action', { action: ContactFilterAction.BLOCKED })
+      .andWhere('log.actorId IS NOT NULL')
+      .andWhere('log.actorType != :systemActor', { systemActor: 'system' });
+
+    if (input?.actorType) {
+      qb.andWhere('log.actorType = :actorType', { actorType: input.actorType });
+    }
+    if (input?.actorId) {
+      qb.andWhere('log.actorId = :actorId', { actorId: input.actorId });
+    }
+    if (input?.surface) {
+      qb.andWhere('log.surface = :surface', { surface: input.surface });
+    }
+    if (input?.severity) {
+      qb.andWhere('log.severity = :severity', { severity: input.severity });
+    }
+    if (input?.reviewStatus) {
+      qb.andWhere('log.reviewStatus = :reviewStatus', { reviewStatus: input.reviewStatus });
+    }
+
+    const rows = await qb
+      .groupBy('log.actorType')
+      .addGroupBy('log.actorId')
+      .having('COUNT(log.id) >= :threshold', { threshold })
+      .orderBy('blockedCount', 'DESC')
+      .getRawMany<{
+        actorType: ContactSafetyActorType;
+        actorId: string;
+        blockedCount: string;
+        latestViolationAt: string;
+      }>();
+
+    return rows.map((row) => ({
+      actorType: row.actorType,
+      actorId: row.actorId,
+      blockedCountLast7d: Number(row.blockedCount || 0),
+      isRepeatedViolator: Number(row.blockedCount || 0) >= threshold,
+      latestViolationAt: new Date(row.latestViolationAt),
+    }));
+  }
+
   analyze(text?: string | null): ContactSafetyResult {
     const analysis = analyzeContactInfo(text ?? '');
     if (!analysis.hasContactInfo) {

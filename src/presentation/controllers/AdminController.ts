@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import { AdminService } from '../../application/services/AdminService';
 import { CarrierApprovalService } from '../../application/services/carrier/CarrierApprovalService';
 import { PlatformPolicyService } from '../../application/services/PlatformPolicyService';
-import { NotFoundError, ConflictError } from '../../domain/errors/AppError';
+import { NotFoundError, ConflictError, ValidationError } from '../../domain/errors/AppError';
 
 export class AdminController {
   private adminService: AdminService;
@@ -214,6 +214,28 @@ export class AdminController {
       res.status(200).json({ success: true, data: result });
     } catch (error: any) {
       res.status(500).json({ success: false, message: error.message || 'Kaçak iletişim logları alınamadı.' });
+    }
+  };
+
+  getContactFilterLogStats = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { dateFrom, dateTo, surface, actorType, action, severity, reviewStatus } = req.query;
+      const result = await this.adminService.getContactFilterLogStats({
+        dateFrom: dateFrom as string | undefined,
+        dateTo: dateTo as string | undefined,
+        surface: surface as string | undefined,
+        actorType: actorType as string | undefined,
+        action: action as string | undefined,
+        severity: severity as string | undefined,
+        reviewStatus: reviewStatus as string | undefined,
+      });
+      res.status(200).json({ success: true, data: result });
+    } catch (error: any) {
+      if (error instanceof ValidationError) {
+        res.status(400).json({ success: false, message: error.message });
+        return;
+      }
+      res.status(500).json({ success: false, message: error.message || 'Kaçak iletişim istatistikleri alınamadı.' });
     }
   };
 

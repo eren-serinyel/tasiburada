@@ -68,6 +68,7 @@ router.get('/audit-log', adminController.getAuditLogs);
 router.post('/audit-log', adminController.createAuditLog);
 
 // Contact Filter Logs (read-only)
+router.get('/contact-filter-logs/stats', adminController.getContactFilterLogStats);
 router.get('/contact-filter-logs', adminController.getContactFilterLogs);
 
 // Match Cooldowns

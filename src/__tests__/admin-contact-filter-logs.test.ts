@@ -5,6 +5,15 @@
  */
 import request from 'supertest';
 import { testApp } from './helpers/testApp';
+import { randomUUID } from 'crypto';
+import { AppDataSource } from '../infrastructure/database/data-source';
+import {
+  ContactFilterAction,
+  ContactFilterLog,
+  ContactFilterReviewStatus,
+  ContactFilterSeverity,
+  ContactFilterSurface,
+} from '../domain/entities/ContactFilterLog';
 
 const skipDB = () => process.env.SKIP_DB_TESTS === 'true';
 
@@ -13,6 +22,145 @@ const CUSTOMER = { email: 'ahmet.acar34@gmail.com', password: 'Maviface2141' };
 
 describe('Admin — Kaçak İletişim Logları (ContactFilterLogs)', () => {
   let adminToken: string;
+  const seededLogIds: number[] = [];
+  let seededRangeFrom = '';
+  let seededRangeTo = '';
+  let seededRepeatedActorId = '';
+  let seededSecondActorId = '';
+
+  beforeAll(async () => {
+    if (skipDB()) return;
+
+    const start = new Date();
+    seededRepeatedActorId = randomUUID();
+    seededSecondActorId = randomUUID();
+
+    const repo = AppDataSource.getRepository(ContactFilterLog);
+    const seeded = await repo.save([
+      repo.create({
+        actorType: 'admin',
+        actorId: seededRepeatedActorId,
+        surface: ContactFilterSurface.OFFER_MESSAGE,
+        shipmentId: randomUUID(),
+        offerId: randomUUID(),
+        entityType: 'offer_message',
+        entityId: randomUUID(),
+        action: ContactFilterAction.BLOCKED,
+        severity: ContactFilterSeverity.HIGH,
+        riskScore: 90,
+        reviewStatus: ContactFilterReviewStatus.UNREVIEWED,
+        matchedRules: ['phone'],
+        textHash: randomUUID().replace(/-/g, '').padEnd(64, '0').slice(0, 64),
+        normalizedHash: randomUUID().replace(/-/g, '').padEnd(64, '1').slice(0, 64),
+        metadataJson: { source: 'stats-test' },
+        createdAt: new Date(),
+      }),
+      repo.create({
+        actorType: 'admin',
+        actorId: seededRepeatedActorId,
+        surface: ContactFilterSurface.OFFER_MESSAGE,
+        shipmentId: randomUUID(),
+        offerId: randomUUID(),
+        entityType: 'offer_message',
+        entityId: randomUUID(),
+        action: ContactFilterAction.BLOCKED,
+        severity: ContactFilterSeverity.HIGH,
+        riskScore: 85,
+        reviewStatus: ContactFilterReviewStatus.UNREVIEWED,
+        matchedRules: ['email'],
+        textHash: randomUUID().replace(/-/g, '').padEnd(64, '2').slice(0, 64),
+        normalizedHash: randomUUID().replace(/-/g, '').padEnd(64, '3').slice(0, 64),
+        metadataJson: { source: 'stats-test' },
+        createdAt: new Date(),
+      }),
+      repo.create({
+        actorType: 'admin',
+        actorId: seededRepeatedActorId,
+        surface: ContactFilterSurface.SHIPMENT_NOTE,
+        shipmentId: randomUUID(),
+        offerId: null,
+        entityType: 'shipment_note',
+        entityId: randomUUID(),
+        action: ContactFilterAction.BLOCKED,
+        severity: ContactFilterSeverity.HIGH,
+        riskScore: 82,
+        reviewStatus: ContactFilterReviewStatus.UNREVIEWED,
+        matchedRules: ['url'],
+        textHash: randomUUID().replace(/-/g, '').padEnd(64, '4').slice(0, 64),
+        normalizedHash: randomUUID().replace(/-/g, '').padEnd(64, '5').slice(0, 64),
+        metadataJson: { source: 'stats-test' },
+        createdAt: new Date(),
+      }),
+      repo.create({
+        actorType: 'admin',
+        actorId: seededSecondActorId,
+        surface: ContactFilterSurface.SHIPMENT_NOTE,
+        shipmentId: randomUUID(),
+        offerId: null,
+        entityType: 'shipment_note',
+        entityId: randomUUID(),
+        action: ContactFilterAction.BLOCKED,
+        severity: ContactFilterSeverity.MEDIUM,
+        riskScore: 60,
+        reviewStatus: ContactFilterReviewStatus.CONFIRMED,
+        matchedRules: ['direct_contact_keyword'],
+        textHash: randomUUID().replace(/-/g, '').padEnd(64, '6').slice(0, 64),
+        normalizedHash: randomUUID().replace(/-/g, '').padEnd(64, '7').slice(0, 64),
+        metadataJson: { source: 'stats-test' },
+        createdAt: new Date(),
+      }),
+      repo.create({
+        actorType: 'system',
+        actorId: randomUUID(),
+        surface: ContactFilterSurface.PLATFORM_MESSAGE,
+        shipmentId: null,
+        offerId: null,
+        entityType: 'platform_message',
+        entityId: randomUUID(),
+        action: ContactFilterAction.BLOCKED,
+        severity: ContactFilterSeverity.HIGH,
+        riskScore: 88,
+        reviewStatus: ContactFilterReviewStatus.UNREVIEWED,
+        matchedRules: ['phone'],
+        textHash: randomUUID().replace(/-/g, '').padEnd(64, '8').slice(0, 64),
+        normalizedHash: randomUUID().replace(/-/g, '').padEnd(64, '9').slice(0, 64),
+        metadataJson: { source: 'stats-test' },
+        createdAt: new Date(),
+      }),
+      repo.create({
+        actorType: 'admin',
+        actorId: null,
+        surface: ContactFilterSurface.PLATFORM_MESSAGE,
+        shipmentId: null,
+        offerId: null,
+        entityType: 'platform_message',
+        entityId: randomUUID(),
+        action: ContactFilterAction.BLOCKED,
+        severity: ContactFilterSeverity.HIGH,
+        riskScore: 89,
+        reviewStatus: ContactFilterReviewStatus.UNREVIEWED,
+        matchedRules: ['phone'],
+        textHash: randomUUID().replace(/-/g, '').padEnd(64, 'a').slice(0, 64),
+        normalizedHash: randomUUID().replace(/-/g, '').padEnd(64, 'b').slice(0, 64),
+        metadataJson: { source: 'stats-test' },
+        createdAt: new Date(),
+      }),
+    ]);
+
+    seededLogIds.push(...seeded.map((item) => item.id));
+    const end = new Date();
+    const rangeFrom = new Date(start);
+    rangeFrom.setMinutes(rangeFrom.getMinutes() - 1);
+    const rangeTo = new Date(end);
+    rangeTo.setMinutes(rangeTo.getMinutes() + 1);
+    seededRangeFrom = rangeFrom.toISOString();
+    seededRangeTo = rangeTo.toISOString();
+  });
+
+  afterAll(async () => {
+    if (skipDB() || seededLogIds.length === 0) return;
+    await AppDataSource.getRepository(ContactFilterLog).delete(seededLogIds);
+  });
 
   // ── Admin girişi ─────────────────────────────────────────────────────────
   test('1. Admin token alabilmeli', async () => {
@@ -169,5 +317,76 @@ describe('Admin — Kaçak İletişim Logları (ContactFilterLogs)', () => {
     expect(res.status).toBe(200);
     const data = res.body.data;
     expect(data.limit).toBeLessThanOrEqual(100);
+  });
+
+  test('10. Stats endpoint payload alanlarını dönmeli', async () => {
+    if (skipDB() || !adminToken) return;
+    const res = await request(testApp)
+      .get(`/api/v1/admin/contact-filter-logs/stats?dateFrom=${encodeURIComponent(seededRangeFrom)}&dateTo=${encodeURIComponent(seededRangeTo)}&actorType=admin`)
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data).toHaveProperty('todayBlockedCount');
+    expect(res.body.data).toHaveProperty('highRiskCount');
+    expect(res.body.data).toHaveProperty('repeatedViolatorCount');
+    expect(res.body.data).toHaveProperty('unreviewedCount');
+    expect(res.body.data).toHaveProperty('topSurfaces');
+    expect(res.body.data).toHaveProperty('actionDistribution');
+    expect(res.body.data).toHaveProperty('severityDistribution');
+    expect(res.body.data.window.dateFrom).toBeTruthy();
+    expect(res.body.data.window.dateTo).toBeTruthy();
+  });
+
+  test('11. Stats endpoint top surfaces sıralı ve limitli dönmeli', async () => {
+    if (skipDB() || !adminToken) return;
+    const res = await request(testApp)
+      .get(`/api/v1/admin/contact-filter-logs/stats?dateFrom=${encodeURIComponent(seededRangeFrom)}&dateTo=${encodeURIComponent(seededRangeTo)}&actorType=admin`)
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(res.status).toBe(200);
+    const topSurfaces = res.body.data?.topSurfaces ?? [];
+    expect(topSurfaces.length).toBeLessThanOrEqual(5);
+    if (topSurfaces.length > 1) {
+      expect(Number(topSurfaces[0].count)).toBeGreaterThanOrEqual(Number(topSurfaces[1].count));
+    }
+  });
+
+  test('12. Stats endpoint repeated/highRisk/unreviewed metriklerini doğru hesaplamalı', async () => {
+    if (skipDB() || !adminToken) return;
+    const res = await request(testApp)
+      .get(`/api/v1/admin/contact-filter-logs/stats?dateFrom=${encodeURIComponent(seededRangeFrom)}&dateTo=${encodeURIComponent(seededRangeTo)}&actorType=admin`)
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(res.status).toBe(200);
+
+    const data = res.body.data;
+    expect(data.repeatedViolatorCount).toBeGreaterThanOrEqual(1);
+    expect(data.highRiskCount).toBeGreaterThanOrEqual(3);
+    expect(data.unreviewedCount).toBeGreaterThanOrEqual(3);
+    expect(data).not.toHaveProperty('textHash');
+    expect(data).not.toHaveProperty('rawText');
+  });
+
+  test('13. Stats endpoint invalid date query için 400 dönmeli', async () => {
+    if (skipDB() || !adminToken) return;
+    const res = await request(testApp)
+      .get('/api/v1/admin/contact-filter-logs/stats?dateFrom=not-a-date')
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(res.status).toBe(400);
+    expect(res.body.success).toBe(false);
+  });
+
+  test('14. Stats endpoint auth guard çalışmalı', async () => {
+    if (skipDB()) return;
+    const res = await request(testApp)
+      .get('/api/v1/admin/contact-filter-logs/stats');
+    expect([401, 403]).toContain(res.status);
+  });
+
+  test('15. Stats endpoint action=flagged iken repeatedViolatorCount sıfır olmalı', async () => {
+    if (skipDB() || !adminToken) return;
+    const res = await request(testApp)
+      .get(`/api/v1/admin/contact-filter-logs/stats?dateFrom=${encodeURIComponent(seededRangeFrom)}&dateTo=${encodeURIComponent(seededRangeTo)}&actorType=admin&action=flagged`)
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.data.repeatedViolatorCount).toBe(0);
   });
 });
