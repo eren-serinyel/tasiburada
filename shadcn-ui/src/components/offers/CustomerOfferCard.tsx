@@ -10,6 +10,7 @@ import {
   Clock3,
   Eye,
   PackageCheck,
+  AlertTriangle,
   ShieldCheck,
   Star,
   Truck,
@@ -68,6 +69,14 @@ export interface CustomerOffer {
   isLowestPrice?: boolean;
   isHighestRating?: boolean;
   isRecommended?: boolean;
+  matchScore?: number;
+  matchDetails?: {
+    loadTypeCompatible: boolean;
+    loadType?: string | null;
+    extraServicesCovered: number;
+    extraServicesTotal: number;
+    missingExtraServices: string[];
+  };
   extraServiceCompatibility?: {
     requestedCount: number;
     matchedCount: number;
@@ -149,12 +158,6 @@ const initials = (name?: string | null): string =>
     .toUpperCase()
     .slice(0, 2) || 'N';
 
-const responseLabel = (minutes?: number | null): string => {
-  if (!minutes) return 'Yeni tasiyici';
-  if (minutes < 60) return `${minutes} dk yanit`;
-  return `${Math.round(minutes / 60)} saat yanit`;
-};
-
 const durationLabel = (hours?: number): string => {
   if (!hours) return 'Sure belirtilmedi';
   if (hours < 24) return `${hours} saat`;
@@ -181,6 +184,42 @@ const statusLabel: Record<string, string> = {
   rejected: 'Reddedildi',
   withdrawn: 'Geri Cekildi',
   cancelled: 'Iptal',
+};
+
+const loadTypeLabel = (loadType?: string | null): string => {
+  const labels: Record<string, string> = {
+    HOME: 'ev esyasi',
+    OFFICE: 'ofis',
+    PARTIAL: 'parca yuk',
+    STORAGE: 'depolama',
+  };
+
+  return loadType ? labels[loadType] || loadType : 'bu yuk tipi';
+};
+
+const getMatchBadge = (score?: number) => {
+  const normalized = Math.max(0, Math.min(100, Number(score ?? 0)));
+  if (normalized === 100) {
+    return {
+      label: 'Tam uyumlu',
+      className: 'gap-1 border-emerald-200 bg-emerald-50 text-emerald-700',
+      icon: <CheckCircle2 className="h-3 w-3" />,
+    };
+  }
+
+  if (normalized >= 67) {
+    return {
+      label: `Kismi uyum (${normalized}%)`,
+      className: 'gap-1 border-amber-200 bg-amber-50 text-amber-700',
+      icon: <AlertTriangle className="h-3 w-3" />,
+    };
+  }
+
+  return {
+    label: `Dusuk uyum (${normalized}%)`,
+    className: 'gap-1 border-rose-200 bg-rose-50 text-rose-700',
+    icon: <XCircle className="h-3 w-3" />,
+  };
 };
 
 export function CustomerOfferCard({
@@ -211,6 +250,16 @@ export function CustomerOfferCard({
   const carrierEligibility = resolveCarrierEligibility(offer);
   const eligibilityWarning = getCarrierEligibilityWarning(offer);
   const acceptDisabled = isOfferAcceptDisabled(offer, disabled);
+  const matchBadge = getMatchBadge(offer.matchScore);
+  const missingExtraServices = offer.matchDetails?.missingExtraServices ?? [];
+  const matchWarnings = [
+    ...(offer.matchDetails && !offer.matchDetails.loadTypeCompatible
+      ? [`Bu tasiyici ${loadTypeLabel(offer.matchDetails.loadType)} tasima yapmiyor`]
+      : []),
+    ...(missingExtraServices.length
+      ? [`Eksik ek hizmetler: ${missingExtraServices.join(', ')}`]
+      : []),
+  ];
 
   return (
     <article
@@ -265,6 +314,10 @@ export function CustomerOfferCard({
       </div>
 
       <div className="mb-3 flex flex-wrap gap-1.5">
+        <Badge variant="outline" className={matchBadge.className}>
+          {matchBadge.icon}
+          {matchBadge.label}
+        </Badge>
         {offer.isRecommended && offer.status === 'pending' && (
           <Badge className="bg-blue-50 text-blue-700 hover:bg-blue-50">Onerilen</Badge>
         )}
@@ -315,6 +368,14 @@ export function CustomerOfferCard({
         </div>
       )}
 
+      {matchWarnings.length > 0 && (
+        <div className="mb-3 rounded-md border border-amber-200 bg-amber-50 p-2.5">
+          {matchWarnings.map((warning) => (
+            <p key={warning} className="text-xs leading-5 text-amber-800">{warning}</p>
+          ))}
+        </div>
+      )}
+
       {eligibilityWarning && (
         <div className="mb-3 rounded-md border border-rose-200 bg-rose-50 p-2.5">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-rose-700">{eligibilityWarning.title}</p>
@@ -347,7 +408,7 @@ export function CustomerOfferCard({
         </span>
         <span className="inline-flex items-center gap-1.5">
           <Truck className="h-3.5 w-3.5" />
-          {responseLabel(carrier?.averageResponseTimeMin)}
+          {carrier?.isActive ? 'Aktif tasiyici' : 'Tasiyici durumu belirsiz'}
         </span>
       </div>
 
