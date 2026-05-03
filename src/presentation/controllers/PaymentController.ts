@@ -7,24 +7,24 @@ const paymentService = new PaymentService();
 export class PaymentController {
   static async createPayment(req: Request, res: Response) {
     try {
-      const { shipmentId, amount, method, note } = req.body;
+      const { offerId, method, note } = req.body;
       const customerId = req.user?.customerId;
 
-      if (!shipmentId || !amount) {
-        return res.status(400).json({ success: false, message: 'shipmentId ve amount zorunlu' });
+      if (!offerId) {
+        return res.status(400).json({ success: false, message: 'offerId zorunlu' });
       }
 
       const payment = await paymentService.createPayment({
-        shipmentId,
+        offerId,
         customerId: customerId!,
-        amount: Number(amount),
         method: method || PaymentMethod.CREDIT_CARD,
-        note
+        note,
       });
 
       return res.status(201).json({ success: true, data: payment });
     } catch (err: any) {
-      return res.status(400).json({ success: false, message: err.message });
+      const statusCode = err?.statusCode || 400;
+      return res.status(statusCode).json({ success: false, message: err.message });
     }
   }
 
