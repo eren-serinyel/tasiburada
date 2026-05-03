@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -16,6 +16,11 @@ interface PaymentShipment {
   shipmentDate: string;
   status: string;
   price?: number | null;
+  offers?: Array<{
+    id: string;
+    status: string;
+    price?: number | null;
+  }>;
   carrier?: {
     id: string;
     companyName?: string | null;
@@ -57,6 +62,7 @@ const BANK_INFO = {
 
 export default function Payment() {
   const { shipmentId } = useParams();
+  const location = useLocation();
   const navigate = useNavigate();
   const [shipment, setShipment] = useState<PaymentShipment | null>(null);
   const [card, setCard] = useState({ number: '', name: '', expiry: '', cvc: '' });
@@ -66,6 +72,9 @@ export default function Payment() {
   const [showInvoice, setShowInvoice] = useState(false);
   const [invoice, setInvoice] = useState({ fullName: '', address: '', taxNo: '' });
   const [showCvvTip, setShowCvvTip] = useState(false);
+
+  const stateOfferId = (location.state as { offerId?: string } | null)?.offerId;
+  const queryOfferId = useMemo(() => new URLSearchParams(location.search).get('offerId'), [location.search]);
 
   useEffect(() => {
     const fetchShipment = async () => {
@@ -95,7 +104,9 @@ export default function Payment() {
     fetchShipment();
   }, [shipmentId]);
 
-  const total = shipment?.price ?? 0;
+  const acceptedOffer = useMemo(() => shipment?.offers?.find((offer) => offer.status === 'accepted') ?? null, [shipment]);
+  const resolvedOfferId = stateOfferId || queryOfferId || acceptedOffer?.id || null;
+  const total = acceptedOffer?.price ?? shipment?.price ?? 0;
   const serviceFee = useMemo(() => Math.round(total * 0.9), [total]);
   const insurance = useMemo(() => total - serviceFee, [total, serviceFee]);
   const cardBrand = detectCardBrand(card.number);
@@ -104,6 +115,10 @@ export default function Payment() {
     event.preventDefault();
 
     if (!shipment) return;
+    if (!resolvedOfferId) {
+      toast.error('Odeme baslatmak icin kabul edilmis teklif bilgisi bulunamadi.');
+      return;
+    }
 
     if (method === 'card') {
       if (!card.number.trim() || !card.name.trim() || !card.expiry.trim() || !card.cvc.trim()) {
@@ -118,8 +133,7 @@ export default function Payment() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          shipmentId: shipment.id,
-          amount: total,
+          offerId: resolvedOfferId,
           method: method === 'card' ? 'CREDIT_CARD' : 'BANK_TRANSFER',
           note: showInvoice ? JSON.stringify(invoice) : undefined
         }),
@@ -127,6 +141,10 @@ export default function Payment() {
 
       const json = await res.json();
       if (!res.ok) {
+        if (res.status === 400) {
+          toast.error('Odeme baslatilamadi. Lutfen kabul ettiginiz teklifi tekrar kontrol edin.');
+          return;
+        }
         toast.error(json?.message || 'Ödeme işlemi başarısız oldu.');
         return;
       }
