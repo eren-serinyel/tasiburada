@@ -70,6 +70,12 @@ export class NotificationService {
     for (const key of whitelist) {
       if (!(key in payload)) continue;
       const value = payload[key];
+      const normalizedKey = key.toLowerCase();
+      // Identifier fields are safe by contract and should not be dropped by regex heuristics.
+      if (normalizedKey.endsWith('id')) {
+        metadata[key] = value;
+        continue;
+      }
       if (this.containsPII(value)) continue;
       metadata[key] = value;
     }

@@ -9,9 +9,18 @@ export type NotificationEventType =
   | 'customer.shipment_completed'
   | 'carrier.offer_accepted'
   | 'carrier.profile_approved'
-  | 'admin.carrier_submitted_for_approval';
+  | 'admin.carrier_submitted_for_approval'
+  | 'admin.high_risk_contact_filter_log'
+  | 'admin.repeated_contact_violation';
 
-export type NotificationEntityType = 'shipment' | 'carrier' | 'offer' | 'carrier_document' | 'generic';
+export type NotificationEntityType =
+  | 'shipment'
+  | 'carrier'
+  | 'offer'
+  | 'carrier_document'
+  | 'contact_filter_log'
+  | 'actor'
+  | 'generic';
 
 export type NotificationEventPayload = Record<string, unknown> & {
   entityId: string;
@@ -109,6 +118,45 @@ export const NOTIFICATION_EVENT_DEFINITIONS: Record<NotificationEventType, Notif
     buildDedupeKey: (payload) => {
       const approvalVersion = asNumber(payload.approvalVersion);
       return `admin:carrier_submitted_for_approval:${asString(payload.entityId)}:${approvalVersion ?? 'v0'}`;
+    },
+  },
+  'admin.high_risk_contact_filter_log': {
+    type: 'admin.high_risk_contact_filter_log',
+    recipientRole: NotificationRecipientRole.ADMIN,
+    severity: NotificationSeverity.HIGH,
+    entityType: 'contact_filter_log',
+    metadataWhitelist: [
+      'contactFilterLogId',
+      'actorType',
+      'actorId',
+      'surface',
+      'action',
+      'severity',
+      'riskScore',
+      'reasons',
+    ],
+    buildTitle: () => 'Yuksek riskli iletisim denemesi',
+    buildBody: () => 'Platform disi iletisim denemesi tespit edildi.',
+    buildDedupeKey: (payload) => {
+      const contactFilterLogId = asString(payload.contactFilterLogId, asString(payload.entityId));
+      const dedupeScope = asString(payload.dedupeScope);
+      return `admin:high_risk_contact_filter_log:${contactFilterLogId}${dedupeScope ? `:${dedupeScope}` : ''}`;
+    },
+  },
+  'admin.repeated_contact_violation': {
+    type: 'admin.repeated_contact_violation',
+    recipientRole: NotificationRecipientRole.ADMIN,
+    severity: NotificationSeverity.HIGH,
+    entityType: 'actor',
+    metadataWhitelist: ['actorType', 'actorId', 'windowDays', 'violationCount', 'latestViolationAt'],
+    buildTitle: () => 'Tekrarlayan iletisim ihlali',
+    buildBody: () => 'Bir kullanici kisa sure icinde birden fazla platform disi iletisim denemesi yapti.',
+    buildDedupeKey: (payload) => {
+      const actorType = asString(payload.actorType);
+      const actorId = asString(payload.actorId, asString(payload.entityId));
+      const windowBucket = asString(payload.windowBucket, 'w0');
+      const dedupeScope = asString(payload.dedupeScope);
+      return `admin:repeated_contact_violation:${actorType}:${actorId}:${windowBucket}${dedupeScope ? `:${dedupeScope}` : ''}`;
     },
   },
 };

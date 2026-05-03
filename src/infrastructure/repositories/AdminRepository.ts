@@ -17,4 +17,13 @@ export class AdminRepository extends BaseRepository<Admin> {
   async updateLastLogin(id: string): Promise<void> {
     await this.repository.update(id, { lastLogin: new Date() });
   }
+
+  async listActiveAdminIds(): Promise<string[]> {
+    const rows = await this.repository.find({
+      where: { isActive: true },
+      select: ['id'],
+    });
+
+    return rows.map((row) => row.id).filter(Boolean);
+  }
 }

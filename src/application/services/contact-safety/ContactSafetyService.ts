@@ -7,7 +7,9 @@ import {
   ContactFilterSurface,
 } from '../../../domain/entities/ContactFilterLog';
 import { AppDataSource } from '../../../infrastructure/database/data-source';
+import { AdminRepository } from '../../../infrastructure/repositories/AdminRepository';
 import { ContactRule, analyzeContactInfo } from '../../../utils/security';
+import { NotificationService } from '../NotificationService';
 
 export type ContactSafetyActorType = 'customer' | 'carrier' | 'admin' | 'system';
 export type ContactSafetyPolicy = 'block' | 'flag' | 'log_only';
@@ -49,6 +51,10 @@ const SOFT_WARNING_MESSAGE =
   'Mesajiniz platform disi iletisim cagrisimi iceriyor olabilir. Lutfen iletisimi platform icinde tutun.';
 
 export class ContactSafetyService {
+  private readonly adminRepository = new AdminRepository();
+
+  private readonly notificationService = new NotificationService();
+
   async getRepeatedViolations(input?: {
     windowDays?: number;
     threshold?: number;
@@ -164,13 +170,17 @@ export class ContactSafetyService {
 
     const action = input.policy === 'block' ? ContactFilterAction.BLOCKED : ContactFilterAction.FLAGGED;
 
-    await this.writeLog({
+    const log = await this.writeLog({
       ...input,
       action,
       severity: result.severity,
       riskScore: result.riskScore,
       matchedRules: result.matchedRules,
     });
+
+    if (log) {
+      await this.emitAdminNotifications(log);
+    }
 
     return {
       ...result,
@@ -203,7 +213,7 @@ export class ContactSafetyService {
     riskScore: number;
     matchedRules: ContactRule[];
     metadata?: Record<string, unknown> | null;
-  }): Promise<void> {
+  }): Promise<ContactFilterLog | null> {
     try {
       const text = input.text ?? '';
       const analysis = analyzeContactInfo(text);
@@ -228,9 +238,106 @@ export class ContactSafetyService {
         normalizedHash,
         metadataJson: input.metadata ?? null,
       });
-      await repo.save(log);
+      return await repo.save(log);
     } catch (err) {
       console.error('[ContactSafetyService] contact filter log failed:', err);
+      return null;
+    }
+  }
+
+  private isHighRiskLog(log: ContactFilterLog): boolean {
+    return log.action === ContactFilterAction.BLOCKED
+      && (log.severity === ContactFilterSeverity.HIGH || Number(log.riskScore || 0) >= 80);
+  }
+
+  private buildWindowBucket(reference: Date, windowDays: number): string {
+    const ms = Math.max(1, windowDays) * 24 * 60 * 60 * 1000;
+    return String(Math.floor(reference.getTime() / ms));
+  }
+
+  private async shouldEscalateRepeatedViolation(input: {
+    actorType: ContactSafetyActorType;
+    actorId: string;
+    latestViolationAt: Date;
+    windowDays: number;
+    threshold: number;
+  }): Promise<{ shouldNotify: boolean; violationCount: number; latestViolationAt: Date; windowBucket: string }> {
+    const repeated = await this.getRepeatedViolations({
+      actorType: input.actorType,
+      actorId: input.actorId,
+      windowDays: input.windowDays,
+      threshold: input.threshold,
+    });
+
+    const found = repeated.find((item) => item.actorType === input.actorType && item.actorId === input.actorId);
+    const latest = found?.latestViolationAt ?? input.latestViolationAt;
+    return {
+      shouldNotify: Boolean(found?.isRepeatedViolator),
+      violationCount: found?.blockedCountLast7d ?? 0,
+      latestViolationAt: latest,
+      windowBucket: this.buildWindowBucket(latest, input.windowDays),
+    };
+  }
+
+  private async emitAdminNotifications(log: ContactFilterLog): Promise<void> {
+    try {
+      const adminIds = await this.adminRepository.listActiveAdminIds();
+      if (!adminIds.length) return;
+
+      const repeatedActorEligible = Boolean(log.actorId)
+        && log.actorType !== 'system'
+        && log.action === ContactFilterAction.BLOCKED;
+
+      let repeatedContext: {
+        shouldNotify: boolean;
+        violationCount: number;
+        latestViolationAt: Date;
+        windowBucket: string;
+      } | null = null;
+
+      if (repeatedActorEligible) {
+        repeatedContext = await this.shouldEscalateRepeatedViolation({
+          actorType: log.actorType,
+          actorId: String(log.actorId),
+          latestViolationAt: log.createdAt,
+          windowDays: 7,
+          threshold: 3,
+        });
+      }
+
+      await Promise.all(adminIds.map(async (adminId) => {
+        if (this.isHighRiskLog(log)) {
+          await this.notificationService.createFromEvent('admin.high_risk_contact_filter_log', {
+            recipientUserId: adminId,
+            entityId: String(log.id),
+            contactFilterLogId: String(log.id),
+            actorType: log.actorType,
+            actorId: log.actorId,
+            surface: log.surface,
+            action: log.action,
+            severity: log.severity,
+            riskScore: log.riskScore,
+            reasons: Array.isArray(log.matchedRules) ? log.matchedRules : [],
+            dedupeScope: adminId,
+          });
+        }
+
+        if (repeatedActorEligible && repeatedContext?.shouldNotify) {
+          await this.notificationService.createFromEvent('admin.repeated_contact_violation', {
+            recipientUserId: adminId,
+            entityId: String(log.actorId),
+            actorType: log.actorType,
+            actorId: log.actorId,
+            windowDays: 7,
+            violationCount: repeatedContext.violationCount,
+            latestViolationAt: repeatedContext.latestViolationAt.toISOString(),
+            windowBucket: repeatedContext.windowBucket,
+            dedupeScope: adminId,
+          });
+        }
+      }));
+    } catch (err) {
+      console.error('[ContactSafetyService] admin notification failed:', err);
     }
   }
 }
