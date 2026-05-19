@@ -213,12 +213,22 @@ describe('Cooldown enforcement v1', () => {
 
   test('assign carrier cooldown regression: assertNoActiveCooldown çalışmaya devam eder', async () => {
     const service = new ShipmentService() as any;
+    const mockEligibleCarrier = {
+      id: 'carrier-1',
+      isActive: true,
+      verifiedByAdmin: true,
+      approvalState: CarrierApprovalState.APPROVED,
+    };
     service.shipmentRepository = {
       findById: jest.fn().mockResolvedValue({
         id: 'shipment-1',
         customerId: 'customer-1',
         status: ShipmentStatus.PENDING,
       }),
+    };
+    service.matchingService = {
+      getCarrierForMatching: jest.fn().mockResolvedValue(mockEligibleCarrier),
+      isShipmentMatchingCarrier: jest.fn().mockReturnValue(true),
     };
     service.platformPolicy = {
       assertNoActiveCooldown: jest.fn().mockRejectedValue(new ConflictError('active cooldown')),
