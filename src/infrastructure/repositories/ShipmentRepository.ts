@@ -67,13 +67,34 @@ export class ShipmentRepository extends BaseRepository<Shipment> {
       .leftJoinAndSelect('shipment.extraServices', 'extraServices')
       .leftJoin('carriers', 'matchingCarrier', 'matchingCarrier.id = :carrierId', { carrierId })
       .leftJoin('carrier_stats', 'carrierStats', 'carrierStats.carrierId = matchingCarrier.id')
-      .where('shipment.status = :pending', { pending: ShipmentStatus.PENDING })
+      .where('shipment.status IN (:...openStatuses)', {
+        openStatuses: [ShipmentStatus.PENDING, ShipmentStatus.OFFER_RECEIVED],
+      })
       .andWhere('shipment.shipmentDate >= :today', { today })
       .orderBy('carrierStats.averageRating', 'DESC')
       .addOrderBy('carrierStats.totalJobs', 'DESC')
       .addOrderBy('matchingCarrier.createdAt', 'ASC')
       .addOrderBy('shipment.createdAt', 'DESC')
       .getMany();
+  }
+
+  async assignCarrierIfOpen(shipmentId: string, carrierId: string): Promise<Shipment | null> {
+    const result = await this.repository
+      .createQueryBuilder()
+      .update(Shipment)
+      .set({
+        carrierId,
+        status: ShipmentStatus.MATCHED,
+        matchedAt: new Date(),
+      })
+      .where('id = :shipmentId', { shipmentId })
+      .andWhere('status IN (:...openStatuses)', {
+        openStatuses: [ShipmentStatus.PENDING, ShipmentStatus.OFFER_RECEIVED],
+      })
+      .execute();
+
+    if (!result.affected) return null;
+    return this.findById(shipmentId);
   }
 
   async findByCustomerIdWithOfferCount(customerId: string): Promise<Array<Shipment & { offerCount: number }>> {
@@ -136,8 +157,22 @@ export class ShipmentRepository extends BaseRepository<Shipment> {
     return count > 0;
   }
 
-  async updateShipmentStatus(shipmentId: string, status: ShipmentStatus): Promise<void> {
-    await this.repository.update(shipmentId, { status });
+  async transitionStatus(shipmentId: string, current: ShipmentStatus, next: ShipmentStatus): Promise<boolean> {
+    const validTransitions: Record<ShipmentStatus, ShipmentStatus[]> = {
+      [ShipmentStatus.PENDING]: [ShipmentStatus.OFFER_RECEIVED, ShipmentStatus.MATCHED, ShipmentStatus.CANCELLED],
+      [ShipmentStatus.OFFER_RECEIVED]: [ShipmentStatus.MATCHED, ShipmentStatus.CANCELLED],
+      [ShipmentStatus.MATCHED]: [ShipmentStatus.IN_TRANSIT, ShipmentStatus.CANCELLED],
+      [ShipmentStatus.IN_TRANSIT]: [ShipmentStatus.COMPLETED],
+      [ShipmentStatus.COMPLETED]: [],
+      [ShipmentStatus.CANCELLED]: []
+    };
+
+    const allowed = validTransitions[current] || [];
+    if (!allowed.includes(next)) {
+      return false;
+    }
+
+    return this.transitionStatusIfCurrent(shipmentId, current, next);
   }
 
   async transitionStatusIfCurrent(shipmentId: string, current: ShipmentStatus, next: ShipmentStatus): Promise<boolean> {
