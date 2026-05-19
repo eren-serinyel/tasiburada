@@ -1088,7 +1088,9 @@ export class ShipmentService {
     carrierId: string,
     requestingCustomerId: string
   ): Promise<Shipment> {
-    const shipment = await this.shipmentRepository.findById(shipmentId);
+    const shipment = await this.shipmentRepository.findById(shipmentId, {
+      relations: ['extraServices'],
+    });
     if (!shipment) throw new NotFoundError('Taşıma bulunamadı');
 
     // Ownership kontrolü
@@ -1096,15 +1098,23 @@ export class ShipmentService {
       throw new ForbiddenError('Bu gönderiye nakliyeci atama yetkiniz yok.');
     }
 
+    if (![ShipmentStatus.PENDING, ShipmentStatus.OFFER_RECEIVED].includes(shipment.status)) {
+      throw new ConflictError('Bu tasima talebi artik nakliyeci atamaya acik degil.');
+    }
+
+    const carrier = await this.matchingService.getCarrierForMatching(carrierId);
+    if (!this.matchingService.isShipmentMatchingCarrier(shipment, carrier)) {
+      throw new ForbiddenError('Bu nakliyeci bu tasima talebi icin uygun degil.');
+    }
+
     await this.platformPolicy.assertNoActiveCooldown(requestingCustomerId, carrierId);
 
-    const updated = await this.shipmentRepository.update(shipmentId, {
-      carrierId,
-      status: ShipmentStatus.MATCHED,
-      matchedAt: new Date()
-    });
+    const updated = await this.shipmentRepository.assignCarrierIfOpen(shipmentId, carrierId);
 
-    if (!updated) throw new Error('Taşıma güncellenemedi');
+    if (!updated) {
+      throw new ConflictError('Bu tasima talebi artik nakliyeci atamaya acik degil.');
+    }
+
     return updated;
   }
 
