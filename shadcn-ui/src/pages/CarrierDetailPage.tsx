@@ -1,7 +1,7 @@
 import { type ReactNode, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams, Navigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -13,7 +13,7 @@ import AuthModal from '@/components/AuthModal';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import {
-  ChevronLeft, MapPin, ShieldCheck, CheckCircle2, AlertTriangle, Star, Truck,
+  ChevronLeft, MapPin, ShieldCheck, CheckCircle2, Clock, XCircle, Star, Truck,
   MessageSquareText, ClipboardList, Phone, Mail, Calendar, Award,
   TrendingUp, Package, BadgeCheck, Lock, Pencil, Trash2, Loader2, Heart
 } from 'lucide-react';
@@ -520,6 +520,9 @@ const CarrierDetailPage = () => {
                     <Card>
                       <CardHeader className="pb-3">
                         <CardTitle className="text-base">Belgeler</CardTitle>
+                        <CardDescription>
+                          Belge dosyaları gizlilik için gösterilmiyor. Yalnızca onay durumu paylaşılır.
+                        </CardDescription>
                       </CardHeader>
                       <CardContent>
                         <div className="space-y-2.5">
@@ -1007,23 +1010,31 @@ const InfoItem = ({ label, value, icon }: { label: string; value: string; icon: 
 
 const DocumentRow = ({ document }: { document: CarrierDetailDocument }) => {
   const isApproved = document.isApproved;
-  const Icon = isApproved ? CheckCircle2 : document.isRequired ? AlertTriangle : ShieldCheck;
-  const iconClass = isApproved
-    ? 'text-emerald-500'
-    : document.isRequired
-      ? 'text-amber-500'
-      : 'text-muted-foreground';
+  const isRejected = !isApproved && document.status === 'REJECTED';
+  const Icon = isApproved ? CheckCircle2 : isRejected ? XCircle : Clock;
+  const iconClass = isApproved ? 'text-emerald-600' : isRejected ? 'text-destructive' : 'text-amber-600';
+  const rowClass = isApproved
+    ? 'bg-emerald-50/30'
+    : isRejected
+      ? 'bg-destructive/5'
+      : 'bg-amber-50/30';
+  const badgeClass = isApproved
+    ? 'border-transparent bg-emerald-100 text-emerald-700 hover:bg-emerald-100'
+    : undefined;
 
   return (
-    <div className="flex items-center justify-between rounded-lg border bg-background/60 p-3">
+    <div className={cn('flex items-center justify-between rounded-lg border p-3', rowClass)}>
       <div className="flex items-center gap-3">
         <Icon className={cn('h-5 w-5', iconClass)} />
         <div>
           <p className="font-medium text-foreground">{documentLabel(document.type)}</p>
-          <p className="text-xs text-muted-foreground">{document.isRequired ? 'Zorunlu belge' : 'İsteğe bağlı belge'}</p>
+          <p className="text-xs italic text-muted-foreground">{document.isRequired ? 'Zorunlu belge' : 'İsteğe bağlı belge'}</p>
         </div>
       </div>
-      <Badge variant={isApproved ? 'secondary' : 'outline'} className="text-xs">
+      <Badge
+        variant={isApproved ? 'secondary' : isRejected ? 'destructive' : 'secondary'}
+        className={cn('text-xs', badgeClass)}
+      >
         {friendlyStatus(document.status)}
       </Badge>
     </div>
