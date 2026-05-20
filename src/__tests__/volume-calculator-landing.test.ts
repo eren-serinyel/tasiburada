@@ -23,7 +23,7 @@ describe('volume calculator landing contract', () => {
   });
 
   test('landing content covers benefits steps and FAQs', () => {
-    expect(VOLUME_CALCULATOR_BENEFITS).toEqual([
+    expect(VOLUME_CALCULATOR_BENEFITS.map((b: { title: string }) => b.title)).toEqual([
       'Doğru araç önerisi',
       'Ek hizmet ihtiyacı',
       'Daha net fiyat teklifi',
@@ -58,7 +58,7 @@ describe('volume calculator landing contract', () => {
     const landingSource = fs.readFileSync(path.resolve(process.cwd(), 'shadcn-ui/src/pages/VolumeCalculatorLanding.tsx'), 'utf8');
     const offerFormSource = fs.readFileSync(path.resolve(process.cwd(), 'shadcn-ui/src/components/OfferRequestForm.tsx'), 'utf8');
 
-    expect(landingSource).toContain('/teklif-talebi?calculator=1');
+    expect(landingSource).toContain('/teklif-talebi?volumeEstimate=1');
     expect(landingSource).toContain('/teklif-talebi');
     expect(offerFormSource).toContain("searchParams.get('calculator') === '1'");
     expect(offerFormSource).toContain('setIsVolumeCalculatorOpen(true)');
