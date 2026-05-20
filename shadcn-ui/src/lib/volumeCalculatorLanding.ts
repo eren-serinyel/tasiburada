@@ -15,10 +15,26 @@ export const VOLUME_CALCULATOR_HERO = {
 };
 
 export const VOLUME_CALCULATOR_BENEFITS = [
-  'Doğru araç önerisi',
-  'Ek hizmet ihtiyacı',
-  'Daha net fiyat teklifi',
-  'Güvenli platform içi iletişim',
+  {
+    title: 'Doğru araç önerisi',
+    description:
+      'Eşya listesinden hacim ve ağırlık tahmini çıkarılır, uygun araç sınıfı önerilir. Nakliyeciler ilana daha doğru kapasiteyle teklif verir.',
+  },
+  {
+    title: 'Ek hizmet ihtiyacı',
+    description:
+      'Asansörlü taşıma, paketleme veya geçici depolama gibi ihtiyaçlar erken netleşir. Taşıma günü sürpriz maliyet riski azalır.',
+  },
+  {
+    title: 'Daha net fiyat teklifi',
+    description:
+      'Belirsiz yük tarifi yerine hacim, ağırlık ve araç bilgisi paylaşılır. Carrier tarafı kapsamı görerek daha karşılaştırılabilir teklif verir.',
+  },
+  {
+    title: 'Güvenli platform içi iletişim',
+    description:
+      'Teklif, mesajlaşma ve kapsam netleştirme platform içinde kalır. Anlaşmazlık halinde kayıtlı akış üzerinden takip yapılabilir.',
+  },
 ];
 
 export const VOLUME_CALCULATOR_STEPS = [

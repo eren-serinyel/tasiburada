@@ -84,6 +84,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
   const [inviteCarrierName, setInviteCarrierName] = useState<string | null>(null);
   const [isVolumeCalculatorOpen, setIsVolumeCalculatorOpen] = useState(false);
   const [appliedConverterSummary, setAppliedConverterSummary] = useState<ConverterAppliedSummary | null>(null);
+  const landingEstimateAppliedRef = useRef(false);
   const [availableExtraServices, setAvailableExtraServices] = useState<ExtraServiceOption[]>([]);
   const [vehicleTypeOptions, setVehicleTypeOptions] = useState<VehicleTypeOption[]>([]);
   const [form, setForm] = useState({
@@ -399,6 +400,47 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
         : `Tahmini ağırlık ${weightKg} kg olarak forma uygulandı. Araç önerisi metin olarak kaldı.`,
     });
   };
+
+  useEffect(() => {
+    if (landingEstimateAppliedRef.current) return;
+    const raw = sessionStorage.getItem('volumeCalculatorEstimate');
+    if (!raw) return;
+
+    try {
+      const payload = JSON.parse(raw) as { result?: EstimateConverterResponse };
+      const result = payload?.result;
+      if (!result) return;
+
+      landingEstimateAppliedRef.current = true;
+      sessionStorage.removeItem('volumeCalculatorEstimate');
+
+      const mappedVehicleTypeId = mapRecommendedVehicleToVehicleTypeId(result.recommendedVehicle);
+      const recommendedVehicleLabel = mappedVehicleTypeId
+        ? getVehicleTypeLabel(mappedVehicleTypeId)
+        : CONVERTER_TO_VEHICLE_TYPE_NAME[result.recommendedVehicle] || result.recommendedVehicle;
+
+      setForm((prev) => ({
+        ...prev,
+        transportType: prev.transportType || 'evden-eve',
+        placeType: prev.placeType || '2+1 ev',
+        weightKg: String(result.estimatedWeightKg),
+        vehicleType: mappedVehicleTypeId || prev.vehicleType,
+      }));
+      setAppliedConverterSummary({
+        estimatedVolumeMin: result.estimatedVolumeMin,
+        estimatedVolumeMax: result.estimatedVolumeMax,
+        estimatedWeightKg: result.estimatedWeightKg,
+        recommendedVehicle: recommendedVehicleLabel,
+      });
+      setStep(2);
+      toast({
+        title: 'Hacim hesabı aktarıldı',
+        description: 'Tahmini hacim, ağırlık ve araç önerisi forma eklendi.',
+      });
+    } catch {
+      sessionStorage.removeItem('volumeCalculatorEstimate');
+    }
+  }, [toast, vehicleTypeOptions]);
 
   const todayStr = useMemo(() => formatDateYYYYMMDD(new Date()), []);
   const maxDateStr = useMemo(() => { const d = new Date(); d.setDate(d.getDate() + 30); return formatDateYYYYMMDD(d); }, []);

@@ -1,10 +1,13 @@
-import { useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { ArrowRight, Boxes, Calculator, CheckCircle2, MessageCircle, ShieldCheck, Truck } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import VolumeCalculatorModal from '@/components/converter/VolumeCalculatorModal';
+import type { EstimateConverterResponse } from '@/lib/converterApi';
+import { getSessionUser } from '@/lib/storage';
 import {
   VOLUME_CALCULATOR_BENEFITS,
   VOLUME_CALCULATOR_FAQS,
@@ -14,8 +17,20 @@ import {
 } from '@/lib/volumeCalculatorLanding';
 
 const benefitIcons = [Truck, Boxes, Calculator, ShieldCheck];
+const OFFER_REQUEST_REDIRECT = '/teklif-talebi?volumeEstimate=1';
+
+const isLoggedIn = () => {
+  try {
+    return Boolean(localStorage.getItem('authToken') || localStorage.getItem('userToken') || getSessionUser());
+  } catch {
+    return Boolean(getSessionUser());
+  }
+};
 
 export default function VolumeCalculatorLanding() {
+  const navigate = useNavigate();
+  const [calculatorOpen, setCalculatorOpen] = useState(false);
+
   useEffect(() => {
     const previousTitle = document.title;
     const metaDescription = document.querySelector('meta[name="description"]');
@@ -29,6 +44,22 @@ export default function VolumeCalculatorLanding() {
       metaDescription?.setAttribute('content', previousDescription);
     };
   }, []);
+
+  const openCalculator = () => setCalculatorOpen(true);
+
+  const continueWithEstimate = (result: EstimateConverterResponse) => {
+    sessionStorage.setItem(
+      'volumeCalculatorEstimate',
+      JSON.stringify({ result, createdAt: new Date().toISOString() }),
+    );
+
+    if (isLoggedIn()) {
+      navigate(OFFER_REQUEST_REDIRECT);
+      return;
+    }
+
+    navigate(`/giris?type=customer&redirect=${encodeURIComponent(OFFER_REQUEST_REDIRECT)}`);
+  };
 
   return (
     <div className="bg-white text-slate-900">
@@ -56,11 +87,9 @@ export default function VolumeCalculatorLanding() {
               {VOLUME_CALCULATOR_HERO.description}
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              <Button asChild size="lg" className="bg-white text-slate-950 hover:bg-slate-100">
-                <Link to="/teklif-talebi?calculator=1">
-                  Hacmi Hesapla
-                  <Calculator className="ml-2 h-4 w-4" />
-                </Link>
+              <Button size="lg" className="bg-white text-slate-950 hover:bg-slate-100" onClick={openCalculator}>
+                Hacmi Hesapla
+                <Calculator className="ml-2 h-4 w-4" />
               </Button>
               <Button asChild size="lg" variant="outline" className="border-white/40 bg-transparent text-white hover:bg-white/10 hover:text-white">
                 <Link to="/teklif-talebi">
@@ -72,14 +101,17 @@ export default function VolumeCalculatorLanding() {
           </div>
 
           <div className="rounded-xl border border-white/15 bg-white/90 p-5 shadow-2xl backdrop-blur-sm">
-            <div className="flex items-center gap-3 border-b border-slate-200 pb-4">
-              <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-blue-600 text-white">
-                <Truck className="h-5 w-5" />
+            <div className="flex items-center justify-between gap-3 border-b border-slate-200 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-lg bg-blue-600 text-white">
+                  <Truck className="h-5 w-5" />
+                </div>
+                <div>
+                  <div className="text-sm font-semibold text-slate-500">Örnek sonuç</div>
+                  <div className="text-lg font-bold text-slate-950">2+1 ev taşıması</div>
+                </div>
               </div>
-              <div>
-                <div className="text-sm font-semibold text-slate-500">Örnek sonuç</div>
-                <div className="text-lg font-bold text-slate-950">2+1 ev taşıması</div>
-              </div>
+              <Badge variant="outline" className="border-blue-200 bg-blue-50 text-blue-700">Örnek</Badge>
             </div>
             <div className="grid grid-cols-2 gap-3 py-5">
               {[
@@ -95,8 +127,11 @@ export default function VolumeCalculatorLanding() {
               ))}
             </div>
             <div className="rounded-lg bg-blue-50 p-4 text-sm leading-6 text-blue-900">
-              Hacim tahmini ilanınıza uygulandığında nakliyeciler daha net kapasite ve hizmet kapsamı ile teklif verebilir.
+              Bu kart örnek bir taşıma senaryosudur. Kendi eşya listenizi girerek hacim, ağırlık ve araç önerisini hesaplayın.
             </div>
+            <Button className="mt-4 w-full" onClick={openCalculator}>
+              Kendi Hesabını Yap
+            </Button>
           </div>
         </div>
       </section>
@@ -107,13 +142,11 @@ export default function VolumeCalculatorLanding() {
             {VOLUME_CALCULATOR_BENEFITS.map((benefit, index) => {
               const Icon = benefitIcons[index] || CheckCircle2;
               return (
-                <Card key={benefit} className="border-slate-200 bg-white shadow-sm">
+                <Card key={benefit.title} className="border-slate-200 bg-white shadow-sm">
                   <CardContent className="p-5">
                     <Icon className="h-6 w-6 text-blue-600" />
-                    <div className="mt-4 text-base font-semibold text-slate-950">{benefit}</div>
-                    <p className="mt-2 text-sm leading-6 text-slate-600">
-                      Nakliye teklifi alırken karar vermeyi kolaylaştıran net bir operasyon sinyali sağlar.
-                    </p>
+                    <div className="mt-4 text-base font-semibold text-slate-950">{benefit.title}</div>
+                    <p className="mt-2 text-sm leading-6 text-slate-600">{benefit.description}</p>
                   </CardContent>
                 </Card>
               );
@@ -187,15 +220,20 @@ export default function VolumeCalculatorLanding() {
             </p>
           </div>
           <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
-            <Button asChild size="lg">
-              <Link to="/teklif-talebi?calculator=1">Hacmi Hesapla</Link>
-            </Button>
+            <Button size="lg" onClick={openCalculator}>Hacmi Hesapla</Button>
             <Button asChild size="lg" variant="outline">
               <Link to="/teklif-talebi">Nakliye Teklifi Al</Link>
             </Button>
           </div>
         </div>
       </section>
+
+      <VolumeCalculatorModal
+        open={calculatorOpen}
+        onOpenChange={setCalculatorOpen}
+        onApplyEstimate={continueWithEstimate}
+        applyLabel="Bu hesaplamayla ilan oluştur"
+      />
     </div>
   );
 }

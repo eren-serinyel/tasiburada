@@ -39,6 +39,7 @@ interface VolumeCalculatorModalProps {
   onApplyEstimate: (result: EstimateConverterResponse) => void;
   loadType?: ExtraServiceLoadType | null;
   initialValues?: VolumeCalculatorInitialValues;
+  applyLabel?: string;
 }
 
 const VEHICLE_LABELS: Record<string, string> = {
@@ -67,6 +68,7 @@ export default function VolumeCalculatorModal({
   onApplyEstimate,
   loadType,
   initialValues,
+  applyLabel = 'Forma Uygula',
 }: VolumeCalculatorModalProps) {
   const [moveType, setMoveType] = useState<ConverterMoveType>('household');
   const [propertyType, setPropertyType] = useState<ConverterPropertyType>('2+1');
@@ -354,7 +356,7 @@ export default function VolumeCalculatorModal({
             {loading ? 'Hesaplaniyor...' : 'Hesapla'}
           </Button>
           <Button type="button" onClick={handleApply} disabled={!result || loading}>
-            Forma Uygula
+            {applyLabel}
           </Button>
         </DialogFooter>
       </DialogContent>
