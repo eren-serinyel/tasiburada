@@ -157,7 +157,7 @@ export default function HowItWorksCustomer() {
           <AccordionItem value="a5">
             <AccordionTrigger>Ödemeyi nasıl yaparım?</AccordionTrigger>
             <AccordionContent>
-              Eşleşen taşıma için ödeme ekranında kart veya havale/EFT seçenekleri kullanılabilir. Tutar, seçtiğiniz teklif üzerinden gösterilir; emanet ödeme modeli platformun sonraki fazında genişletilecektir.
+              Eşleşen taşıma için ödeme ekranında kart veya havale/EFT seçenekleri kullanılabilir. Tutar, seçtiğiniz teklif üzerinden gösterilir; taşıma tamamlandıktan sonra ödemenin nakliyeciye aktarılmasını siz onaylarsınız.
             </AccordionContent>
           </AccordionItem>
           <AccordionItem value="a6">

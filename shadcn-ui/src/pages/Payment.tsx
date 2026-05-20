@@ -134,7 +134,7 @@ export default function Payment() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           offerId: resolvedOfferId,
-          method: method === 'card' ? 'CREDIT_CARD' : 'BANK_TRANSFER',
+          method: method === 'card' ? 'credit_card' : 'bank_transfer',
           note: showInvoice ? JSON.stringify(invoice) : undefined
         }),
       });
@@ -149,8 +149,8 @@ export default function Payment() {
         return;
       }
 
-      toast.success('Ödeme başarıyla alındı.');
-      navigate('/ilanlarim');
+      toast.success('Ödeme kaydı oluşturuldu. Teslimat tamamlandığında onaylayabilirsiniz.');
+      navigate('/odemeler');
     } catch {
       toast.error('Ödeme sistemine bağlanılamadı.');
     } finally {
@@ -425,7 +425,7 @@ export default function Payment() {
               <div className="border-t border-gray-100 pt-4 space-y-2">
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="h-3.5 w-3.5 text-gray-400" />
-                  <span className="text-xs text-gray-500">Para iadesi garantisi</span>
+                  <span className="text-xs text-gray-500">Teslimat sonrası müşteri onayı</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="h-3.5 w-3.5 text-gray-400" />

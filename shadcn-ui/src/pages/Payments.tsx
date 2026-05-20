@@ -2,11 +2,12 @@ import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { toast } from '@/components/ui/sonner';
 import { apiClient } from '@/lib/apiClient';
 
 const API_BASE = '/api/v1';
 
-type PaymentStatus = 'pending' | 'completed' | 'failed' | 'refunded' | string;
+type PaymentStatus = 'pending' | 'authorized' | 'captured' | 'completed' | 'failed' | 'refunded' | string;
 type PaymentMethod = 'credit_card' | 'bank_transfer' | 'cash' | string;
 
 interface PaymentItem {
@@ -23,6 +24,7 @@ interface PaymentItem {
     destination?: string | null;
     loadDetails?: string | null;
     shipmentDate?: string | null;
+    status?: string | null;
   } | null;
 }
 
@@ -44,6 +46,8 @@ const methodLabel: Record<string, string> = {
 
 const statusConfig: Record<string, { label: string; className: string }> = {
   pending: { label: 'Bekliyor', className: 'bg-amber-100 text-amber-800' },
+  authorized: { label: 'Onay Bekliyor', className: 'bg-amber-100 text-amber-800' },
+  captured: { label: 'Onay Bekliyor', className: 'bg-amber-100 text-amber-800' },
   completed: { label: 'Tamamlandı', className: 'bg-green-100 text-green-800' },
   failed: { label: 'Başarısız', className: 'bg-red-100 text-red-800' },
   refunded: { label: 'İade', className: 'bg-slate-100 text-slate-700' },
@@ -53,26 +57,51 @@ export default function Payments() {
   const [payments, setPayments] = useState<PaymentItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [releasingId, setReleasingId] = useState<string | null>(null);
+
+  const load = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await apiClient(`${API_BASE}/payments/my`);
+      const json = await res.json();
+      if (!res.ok || !json?.success) {
+        throw new Error(json?.message || 'Ödemeler alınamadı.');
+      }
+      setPayments(Array.isArray(json.data) ? json.data : []);
+    } catch (e: any) {
+      setError(e?.message || 'Ödemeler yüklenirken bağlantı hatası oluştu.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const load = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const res = await apiClient(`${API_BASE}/payments/my`);
-        const json = await res.json();
-        if (!res.ok || !json?.success) {
-          throw new Error(json?.message || 'Ödemeler alınamadı.');
-        }
-        setPayments(Array.isArray(json.data) ? json.data : []);
-      } catch (e: any) {
-        setError(e?.message || 'Ödemeler yüklenirken bağlantı hatası oluştu.');
-      } finally {
-        setLoading(false);
-      }
-    };
     load();
   }, []);
+
+  const confirmRelease = async (paymentId: string) => {
+    setReleasingId(paymentId);
+    try {
+      const res = await apiClient(`${API_BASE}/payments/${paymentId}/confirm-release`, {
+        method: 'POST',
+      });
+      const json = await res.json();
+
+      if (!res.ok || !json?.success) {
+        throw new Error(json?.message || 'Ödeme onaylanamadı.');
+      }
+
+      setPayments((items) => items.map((item) => (
+        item.id === paymentId ? { ...item, ...json.data } : item
+      )));
+      toast.success('Teslimat onaylandı, ödeme tamamlandı.');
+    } catch (e: any) {
+      toast.error(e?.message || 'Ödeme onaylanamadı.');
+    } finally {
+      setReleasingId(null);
+    }
+  };
 
   if (loading) {
     return (
@@ -118,6 +147,7 @@ export default function Payments() {
           {payments.map((payment) => {
             const status = statusConfig[payment.status] || { label: payment.status, className: 'bg-slate-100 text-slate-700' };
             const shipment = payment.shipment;
+            const canConfirmRelease = payment.status === 'pending' && shipment?.status === 'completed';
             return (
               <Card key={payment.id}>
                 <CardHeader className="flex-row items-center justify-between py-3">
@@ -144,6 +174,24 @@ export default function Payments() {
                     Yöntem: {methodLabel[payment.method] || payment.method}
                     {payment.transactionId ? ` · ${payment.transactionId}` : ''}
                   </p>
+                  {payment.status === 'pending' && (
+                    <div className="mt-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2">
+                      <p className="text-sm text-amber-800">
+                        {canConfirmRelease
+                          ? 'Teslimat tamamlandıysa ödemeyi nakliyeciye aktarabilirsiniz.'
+                          : 'Taşıma tamamlandığında ödeme onayı açılır.'}
+                      </p>
+                      {canConfirmRelease && (
+                        <Button
+                          size="sm"
+                          onClick={() => confirmRelease(payment.id)}
+                          disabled={releasingId === payment.id}
+                        >
+                          {releasingId === payment.id ? 'Onaylanıyor...' : 'Ödemeyi Onayla'}
+                        </Button>
+                      )}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             );

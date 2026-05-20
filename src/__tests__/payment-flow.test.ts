@@ -7,7 +7,7 @@ import request from 'supertest';
 import { testApp } from './helpers/testApp';
 import { AppDataSource } from '../infrastructure/database/data-source';
 import { Offer, OfferStatus } from '../domain/entities/Offer';
-import { Payment } from '../domain/entities/Payment';
+import { Payment, PaymentStatus } from '../domain/entities/Payment';
 import { Shipment, ShipmentStatus } from '../domain/entities/Shipment';
 
 const skipDB = () => process.env.SKIP_DB_TESTS === 'true';
@@ -246,5 +246,78 @@ describe('Payment Akışı', () => {
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
     expect(res.body.data).toBeDefined();
+  });
+
+  test('14. Tamamlanmamis tasima icin payment release 409 donmeli', async () => {
+    if (skipDB() || !customerToken || !acceptedOffer) return;
+
+    const create = await request(testApp)
+      .post('/api/v1/payments')
+      .set('Authorization', `Bearer ${customerToken}`)
+      .send({ offerId: acceptedOffer.id, method: 'CREDIT_CARD', note: 'release-before-complete' });
+    expect(create.status).toBe(201);
+
+    const release = await request(testApp)
+      .post(`/api/v1/payments/${create.body.data.id}/confirm-release`)
+      .set('Authorization', `Bearer ${customerToken}`);
+
+    expect(release.status).toBe(409);
+    expect(release.body.success).toBe(false);
+  });
+
+  test('15. Tamamlanan tasima icin musteri payment release edebilmeli', async () => {
+    if (skipDB() || !customerToken || !acceptedOffer) return;
+
+    const shipmentRepo = AppDataSource.getRepository(Shipment);
+    const paymentRepo = AppDataSource.getRepository(Payment);
+    const shipment = await shipmentRepo.findOne({ where: { id: acceptedOffer.shipmentId } });
+    if (!shipment) return;
+
+    const originalStatus = shipment.status;
+
+    try {
+      const create = await request(testApp)
+        .post('/api/v1/payments')
+        .set('Authorization', `Bearer ${customerToken}`)
+        .send({ offerId: acceptedOffer.id, method: 'CREDIT_CARD', note: 'release-after-complete' });
+      expect(create.status).toBe(201);
+      expect(create.body.data.status).toBe(PaymentStatus.PENDING);
+
+      shipment.status = ShipmentStatus.COMPLETED;
+      await shipmentRepo.save(shipment);
+
+      const release = await request(testApp)
+        .post(`/api/v1/payments/${create.body.data.id}/confirm-release`)
+        .set('Authorization', `Bearer ${customerToken}`);
+
+      expect(release.status).toBe(200);
+      expect(release.body.success).toBe(true);
+      expect(release.body.data.status).toBe(PaymentStatus.COMPLETED);
+      expect(release.body.data.completedAt).toBeTruthy();
+
+      const persisted = await paymentRepo.findOne({ where: { id: create.body.data.id } });
+      expect(persisted?.status).toBe(PaymentStatus.COMPLETED);
+      expect(persisted?.completedAt).toBeTruthy();
+    } finally {
+      shipment.status = originalStatus;
+      await shipmentRepo.save(shipment);
+    }
+  });
+
+  test('16. Baska musteri payment release edememeli', async () => {
+    if (skipDB() || !customerToken || !secondCustomerToken || !acceptedOffer) return;
+
+    const create = await request(testApp)
+      .post('/api/v1/payments')
+      .set('Authorization', `Bearer ${customerToken}`)
+      .send({ offerId: acceptedOffer.id, method: 'credit_card', note: 'release-ownership' });
+    expect(create.status).toBe(201);
+
+    const release = await request(testApp)
+      .post(`/api/v1/payments/${create.body.data.id}/confirm-release`)
+      .set('Authorization', `Bearer ${secondCustomerToken}`);
+
+    expect(release.status).toBe(403);
+    expect(release.body.success).toBe(false);
   });
 });

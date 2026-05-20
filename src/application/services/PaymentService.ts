@@ -1,8 +1,9 @@
 import { AppDataSource } from '../../infrastructure/database/data-source';
 import { Payment, PaymentStatus, PaymentMethod } from '../../domain/entities/Payment';
 import { Offer, OfferStatus } from '../../domain/entities/Offer';
-import { ShipmentStatus } from '../../domain/entities/Shipment';
+import { Shipment, ShipmentStatus } from '../../domain/entities/Shipment';
 import { NotFoundError, ConflictError, ForbiddenError } from '../../domain/errors/AppError';
+import { NotificationService } from './NotificationService';
 
 const DEFAULT_COMMISSION_RATE = 0.1;
 
@@ -10,6 +11,7 @@ const roundToTwo = (value: number): number => Math.round((value + Number.EPSILON
 
 export class PaymentService {
   private paymentRepo = AppDataSource.getRepository(Payment);
+  private notificationService = new NotificationService();
 
   async createPayment(data: {
     offerId: string;
@@ -93,11 +95,90 @@ export class PaymentService {
     });
   }
 
-  async getPaymentByShipment(shipmentId: string): Promise<Payment | null> {
-    return await this.paymentRepo.findOne({
+  async getPaymentsByCarrier(carrierId: string): Promise<Payment[]> {
+    return await this.paymentRepo.find({
+      where: { carrierId },
+      relations: ['shipment', 'customer'],
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  async getPaymentByShipment(shipmentId: string, customerId?: string): Promise<Payment | null> {
+    const payment = await this.paymentRepo.findOne({
       where: { shipmentId },
       relations: ['customer', 'shipment']
     });
+
+    if (payment && customerId && payment.customerId !== customerId) {
+      throw new ForbiddenError('Bu odeme kaydina erisim yetkiniz yok.');
+    }
+
+    return payment;
+  }
+
+  async confirmRelease(paymentId: string, customerId: string): Promise<Payment> {
+    const releasedPayment = await AppDataSource.manager.transaction(async (transactionalEntityManager) => {
+      const payment = await transactionalEntityManager.findOne(Payment, {
+        where: { id: paymentId },
+        relations: ['shipment'],
+      });
+
+      if (!payment) {
+        throw new NotFoundError('Odeme bulunamadi.');
+      }
+
+      if (payment.customerId !== customerId) {
+        throw new ForbiddenError('Bu odemeyi onaylama yetkiniz yok.');
+      }
+
+      if (payment.status === PaymentStatus.COMPLETED) {
+        return payment;
+      }
+
+      const releasableStatuses = [
+        PaymentStatus.PENDING,
+        PaymentStatus.AUTHORIZED,
+        PaymentStatus.CAPTURED,
+      ];
+
+      if (!releasableStatuses.includes(payment.status)) {
+        throw new ConflictError('Bu odeme mevcut durumunda tamamlanamaz.');
+      }
+
+      const shipment = payment.shipment || await transactionalEntityManager.findOne(Shipment, {
+        where: { id: payment.shipmentId },
+      });
+
+      if (!shipment) {
+        throw new NotFoundError('Tasima bulunamadi.');
+      }
+
+      if (shipment.status !== ShipmentStatus.COMPLETED) {
+        throw new ConflictError('Odeme yalnizca tasima tamamlandiktan sonra onaylanabilir.');
+      }
+
+      payment.status = PaymentStatus.COMPLETED;
+      payment.completedAt = new Date();
+
+      return transactionalEntityManager.save(payment);
+    });
+
+    if (releasedPayment.carrierId) {
+      try {
+        await this.notificationService.createFromEvent('carrier.payment_released', {
+          recipientUserId: releasedPayment.carrierId,
+          entityId: releasedPayment.shipmentId,
+          paymentId: releasedPayment.id,
+          customerId: releasedPayment.customerId,
+          amount: Number(releasedPayment.carrierAmount || releasedPayment.amount || 0),
+          currency: releasedPayment.currency || 'TRY',
+        });
+      } catch {
+        // Notification failure must not roll back a completed payment release.
+      }
+    }
+
+    return releasedPayment;
   }
 
   async getAllPayments(page: number = 1, limit: number = 20): Promise<{ payments: Payment[], total: number }> {

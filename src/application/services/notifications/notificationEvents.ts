@@ -8,6 +8,7 @@ export type NotificationEventType =
   | 'customer.shipment_in_transit'
   | 'customer.shipment_completed'
   | 'carrier.offer_accepted'
+  | 'carrier.payment_released'
   | 'carrier.profile_approved'
   | 'admin.carrier_submitted_for_approval'
   | 'admin.high_risk_contact_filter_log'
@@ -90,6 +91,22 @@ export const NOTIFICATION_EVENT_DEFINITIONS: Record<NotificationEventType, Notif
     buildTitle: () => 'Teklifiniz kabul edildi',
     buildBody: () => 'Musteri teklifinizi kabul etti. Tasimaya hazirlanin.',
     buildDedupeKey: (payload) => `carrier:offer_accepted:${asString(payload.offerId, asString(payload.entityId))}`,
+  },
+  'carrier.payment_released': {
+    type: 'carrier.payment_released',
+    recipientRole: NotificationRecipientRole.CARRIER,
+    severity: NotificationSeverity.HIGH,
+    entityType: 'shipment',
+    metadataWhitelist: ['paymentId', 'customerId', 'amount', 'currency'],
+    buildTitle: () => 'Odeme onaylandi',
+    buildBody: (payload) => {
+      const amount = asNumber(payload.amount);
+      const currency = asString(payload.currency, 'TRY');
+      return amount === null
+        ? 'Musteri teslimati onayladi. Odeme tamamlandi.'
+        : `Musteri teslimati onayladi. ${amount} ${currency} odeme tamamlandi.`;
+    },
+    buildDedupeKey: (payload) => `carrier:payment_released:${asString(payload.paymentId, asString(payload.entityId))}`,
   },
   'carrier.profile_approved': {
     type: 'carrier.profile_approved',
