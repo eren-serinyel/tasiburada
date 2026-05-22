@@ -20,6 +20,7 @@ export interface CarrierSearchFilters {
   searchText?: string;
   availableDate?: string;
   scopeIds?: string[];
+  scopeNames?: string[];
   serviceTypeIds?: string[];
   isVerified?: boolean;
   hasDocuments?: boolean;
@@ -314,9 +315,26 @@ export class CarrierRepository extends BaseRepository<Carrier> {
       );
     }
 
-    if (filters.scopeIds && filters.scopeIds.length > 0) {
-      qb.leftJoin('carrier.scopeLinks', 'scopeLink')
-        .andWhere('scopeLink.scopeId IN (:...scopeIds)', { scopeIds: filters.scopeIds });
+    if ((filters.scopeIds && filters.scopeIds.length > 0) || (filters.scopeNames && filters.scopeNames.length > 0)) {
+      qb.leftJoin('carrier.scopeLinks', 'scopeLink');
+
+      if (filters.scopeNames && filters.scopeNames.length > 0) {
+        qb.leftJoin('scopeLink.scope', 'scopeFilter');
+      }
+
+      qb.andWhere(new Brackets(scopeClause => {
+        if (filters.scopeIds && filters.scopeIds.length > 0) {
+          scopeClause.where('scopeLink.scopeId IN (:...scopeIds)', { scopeIds: filters.scopeIds });
+        }
+
+        if (filters.scopeNames && filters.scopeNames.length > 0) {
+          if (filters.scopeIds && filters.scopeIds.length > 0) {
+            scopeClause.orWhere('scopeFilter.name IN (:...scopeNames)', { scopeNames: filters.scopeNames });
+          } else {
+            scopeClause.where('scopeFilter.name IN (:...scopeNames)', { scopeNames: filters.scopeNames });
+          }
+        }
+      }));
     }
 
     if (filters.sortBy === 'experience') {

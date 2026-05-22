@@ -6,6 +6,8 @@ import { AppDataSource } from '../infrastructure/database/data-source';
 import { Carrier, CarrierApprovalState } from '../domain/entities/Carrier';
 import { CarrierActivity } from '../domain/entities/CarrierActivity';
 import { CarrierProfileStatus } from '../domain/entities/CarrierProfileStatus';
+import { CarrierScopeOfWork } from '../domain/entities/CarrierScopeOfWork';
+import { ScopeOfWork } from '../domain/entities/ScopeOfWork';
 
 const BASE = '/api/v1';
 const ADMIN = { email: 'admin@tasiburada.com', password: 'Maviface2141' };
@@ -17,6 +19,7 @@ describe('Public carrier trust gate', () => {
   const password = 'Maviface2141';
   const ids: string[] = [];
   const carrierIds: Partial<Record<'approved' | 'draft' | 'rejected' | 'suspended' | 'inactiveApproved', string>> = {};
+  let intercityScopeId: string | undefined;
 
   const createCarrier = async (
     key: keyof typeof carrierIds,
@@ -51,14 +54,23 @@ describe('Public carrier trust gate', () => {
       }),
     );
 
+    if (key === 'approved' && intercityScopeId) {
+      await AppDataSource.getRepository(CarrierScopeOfWork).save(
+        AppDataSource.getRepository(CarrierScopeOfWork).create({
+          carrierId: carrier.id,
+          scopeId: intercityScopeId,
+        }),
+      );
+    }
+
     ids.push(carrier.id);
     carrierIds[key] = carrier.id;
   };
 
-  const publicSearchIds = async () => {
+  const publicSearchIds = async (query: Record<string, unknown> = {}) => {
     const res = await request(testApp)
       .get(`${BASE}/carriers/search`)
-      .query({ searchText: marker, limit: 20 });
+      .query({ searchText: marker, limit: 20, ...query });
 
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
@@ -67,6 +79,11 @@ describe('Public carrier trust gate', () => {
 
   beforeAll(async () => {
     if (skipDB() || !AppDataSource.isInitialized) return;
+
+    const scopeRepo = AppDataSource.getRepository(ScopeOfWork);
+    const intercityScope = await scopeRepo.findOne({ where: { name: 'Şehirler Arası' } })
+      ?? await scopeRepo.save(scopeRepo.create({ name: 'Şehirler Arası' }));
+    intercityScopeId = intercityScope.id;
 
     await createCarrier('approved', CarrierApprovalState.APPROVED);
     await createCarrier('draft', CarrierApprovalState.DRAFT);
@@ -80,6 +97,7 @@ describe('Public carrier trust gate', () => {
 
     await AppDataSource.getRepository(CarrierActivity).delete({ carrierId: In(ids) });
     await AppDataSource.getRepository(CarrierProfileStatus).delete({ carrierId: In(ids) });
+    await AppDataSource.getRepository(CarrierScopeOfWork).delete({ carrierId: In(ids) });
     await AppDataSource.getRepository(Carrier).delete({ id: In(ids) });
   });
 
@@ -87,6 +105,13 @@ describe('Public carrier trust gate', () => {
     if (skipDB() || !carrierIds.approved) return;
 
     const resultIds = await publicSearchIds();
+    expect(resultIds).toContain(carrierIds.approved);
+  });
+
+  test('public/customer search accepts working-area scope slugs', async () => {
+    if (skipDB() || !carrierIds.approved) return;
+
+    const resultIds = await publicSearchIds({ scopes: 'sehirlerarasi' });
     expect(resultIds).toContain(carrierIds.approved);
   });
 

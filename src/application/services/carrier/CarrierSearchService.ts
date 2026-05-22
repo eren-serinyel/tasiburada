@@ -6,6 +6,8 @@ export interface CarrierSearchQuery {
 	serviceAreas?: string[];
 	vehicleTypeId?: string;
 	vehicleTypeIds?: string[];
+	scopes?: string[] | string;
+	scopeIds?: string[] | string;
 	minRating?: number;
 	minPrice?: number;
 	maxPrice?: number;
@@ -46,6 +48,11 @@ export class CarrierSearchService {
 	private carrierRepository = new CarrierRepository();
 	private readonly DEFAULT_LIMIT = 3;
 	private readonly MAX_LIMIT = 50;
+	private readonly SCOPE_SLUG_TO_NAME: Record<string, string> = {
+		sehirici: 'Şehir İçi',
+		sehirlerarasi: 'Şehirler Arası',
+		uluslararasi: 'Uluslararası',
+	};
 
 	async search(query: CarrierSearchQuery | Record<string, unknown>): Promise<CarrierSearchResponseDto> {
 		const filters = this.normalizeFilters(query);
@@ -138,7 +145,17 @@ export class CarrierSearchService {
 			return undefined;
 		};
 
-		const scopeIds = parseScopeIds((query as any).scopes ?? (query as any).scopeIds);
+		const scopeValues = parseScopeIds((query as any).scopes ?? (query as any).scopeIds) ?? [];
+		const isUuid = (value: string): boolean =>
+			/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+		const normalizedScopeNames = scopeValues
+			.filter(value => !isUuid(value))
+			.map(value => this.SCOPE_SLUG_TO_NAME[value] ?? value)
+			.filter(Boolean);
+		const scopeIds = scopeValues.filter(isUuid);
+		const scopeNames = normalizedScopeNames.length
+			? Array.from(new Set(normalizedScopeNames))
+			: undefined;
 
 		const isVerifiedRaw = (query as any).isVerified;
 		const isVerified = isVerifiedRaw === true || isVerifiedRaw === '1' || isVerifiedRaw === 'true'
@@ -160,7 +177,8 @@ export class CarrierSearchService {
 			maxCapacityKg: toInt((query as any).maxCapacityKg),
 			searchText: toText((query as any).searchText),
 			availableDate: toText((query as any).availableDate),
-			scopeIds,
+			scopeIds: scopeIds.length ? scopeIds : undefined,
+			scopeNames,
 			isVerified,
 			sortBy: this.parseSort((query as any).sortBy),
 			limit,
