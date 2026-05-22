@@ -47,8 +47,7 @@ const ANY_VALUE = '__all__';
 
 const SCOPE_OPTIONS = [
 	{ id: 'sehirici', label: 'Şehir İçi' },
-	{ id: 'sehirlerarasi', label: 'Şehirler Arası' },
-	{ id: 'uluslararasi', label: 'Uluslararası' }
+	{ id: 'sehirlerarasi', label: 'Şehirler Arası' }
 ];
 
 const LOAD_TYPE_OPTIONS = [

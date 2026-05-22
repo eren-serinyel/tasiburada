@@ -11,6 +11,8 @@ import MultiSelect from '@/components/ui/multi-select';
 import type { SectionProps, VehicleType } from './types';
 import { API_BASE } from './helpers';
 
+const ALLOWED_SCOPE_NAMES = ['Şehir İçi', 'Şehirler Arası'];
+
 interface CompanySectionProps extends SectionProps {
   onCompanyNameChange?: (name: string) => void;
 }
@@ -26,6 +28,10 @@ export default function CompanySection({ user, refreshProfileStatus, onCompanyNa
   const [serviceTypeOptions, setServiceTypeOptions] = useState<{ id: string; name: string }[]>([]);
   const [scopeOptions, setScopeOptions] = useState<{ id: string; name: string }[]>([]);
   const nameToId = useMemo(() => Object.fromEntries(vehicleTypesList.map(v => [v.name, v.id])), [vehicleTypesList]);
+  const workingScopeOptions = useMemo(() => {
+    const source = scopeOptions.length ? scopeOptions.map(x => x.name) : ALLOWED_SCOPE_NAMES;
+    return source.filter(name => ALLOWED_SCOPE_NAMES.includes(name));
+  }, [scopeOptions]);
 
   // Load master data + drafts + backend prefill
   useEffect(() => {
@@ -208,7 +214,7 @@ export default function CompanySection({ user, refreshProfileStatus, onCompanyNa
         </div>
         <div className="md:col-span-2">
           <Label>Çalışma Kapsamı</Label>
-          <MultiSelect label=" " placeholder="Seçiniz" options={scopeOptions.length ? scopeOptions.map(x => x.name) : ['Şehir İçi', 'Şehirler Arası']} selectedValues={company.scopes || []} onSelectionChange={(vals) => setCompany({ ...company, scopes: vals })} />
+          <MultiSelect label=" " placeholder="Seçiniz" options={workingScopeOptions} selectedValues={company.scopes || []} onSelectionChange={(vals) => setCompany({ ...company, scopes: vals })} />
         </div>
         <div className="md:col-span-2">
           <Label>Araç Türü</Label>

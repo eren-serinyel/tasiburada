@@ -16,7 +16,6 @@ import { apiClient } from '@/lib/apiClient';
 const SERVICE_AREA_OPTIONS: Record<string, string> = {
   sehirici: 'Şehiriçi Taşıma',
   sehirlerarasi: 'Şehirlerarası Taşıma',
-  uluslararasi: 'Uluslararası Taşıma',
 };
 
 const REQUIRED_DOC_KEYS = ['k_belgesi', 'src', 'ruhsat', 'vergi_levhasi'] as const;
