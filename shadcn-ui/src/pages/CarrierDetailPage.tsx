@@ -11,7 +11,6 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
 import AuthModal from '@/components/AuthModal';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   ChevronLeft, MapPin, ShieldCheck, CheckCircle2, Clock, XCircle, Star, Truck,
   MessageSquareText, ClipboardList, Phone, Mail, Calendar, Award,
@@ -48,37 +47,6 @@ const fetchCarrierDetail = async (carrierId: string, signal?: AbortSignal): Prom
   return json.data as CarrierDetail;
 };
 
-type MessagingEligibility = {
-  canMessage: boolean;
-  reason?: string;
-  conversationId?: string | null;
-};
-
-const fetchEligibility = async (carrierId: string, signal?: AbortSignal): Promise<MessagingEligibility> => {
-  const response = await apiClient(`${API_BASE_URL}/conversations/eligibility/${carrierId}`, {
-    signal,
-    headers: { accept: 'application/json' }
-  });
-  const json = await response.json().catch(() => ({}));
-  if (!response.ok || json?.success === false || !json?.data) {
-    return { canMessage: false, reason: json?.message || 'Teklif gerekli.' };
-  }
-  return json.data as MessagingEligibility;
-};
-
-const startConversation = async (carrierId: string): Promise<string> => {
-  const response = await apiClient(`${API_BASE_URL}/conversations`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', accept: 'application/json' },
-    body: JSON.stringify({ carrierId })
-  });
-  const json = await response.json().catch(() => ({}));
-  if (!response.ok || json?.success === false || !json?.data?.id) {
-    throw new Error(json?.message || 'Konuşma başlatılamadı.');
-  }
-  return String(json.data.id);
-};
-
 /* ─── Component ─── */
 
 const CarrierDetailPage = () => {
@@ -93,7 +61,6 @@ const CarrierDetailPage = () => {
     title: 'Giriş yapmanız gerekiyor',
     description: 'Devam etmek için giriş yapın veya hesap oluşturun.'
   });
-  const [startingConversation, setStartingConversation] = useState(false);
   const [reviewForm, setReviewForm] = useState({ rating: 5, comment: '' });
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const [reviewSubmitted, setReviewSubmitted] = useState(false);
@@ -190,12 +157,6 @@ const CarrierDetailPage = () => {
     queryKey: ['carrier-detail', carrierId],
     queryFn: ({ signal }) => fetchCarrierDetail(carrierId!, signal),
     enabled: Boolean(carrierId)
-  });
-
-  const { data: eligibility } = useQuery({
-    queryKey: ['carrier-eligibility', carrierId],
-    queryFn: ({ signal }) => fetchEligibility(carrierId!, signal),
-    enabled: false
   });
 
   /* ─── Rating distribution (computed from reviews) ─── */
@@ -302,33 +263,10 @@ const CarrierDetailPage = () => {
     navigate(`/teklif-talebi?carrierId=${encodeURIComponent(carrierId)}`);
   };
 
-  const canMessage = Boolean(eligibility?.canMessage);
-  const messageDisabledReason = 'Platform içi mesajlaşma backend servisi hazır olduğunda aktif olacak.';
-
-  const handleMessage = async () => {
-    if (!isLoggedIn) {
-      onRequireLogin('Mesaj göndermek için giriş yapın', 'Güvenli iletişim, teklif süreciyle birlikte açılır.');
-      return;
-    }
-    if (!isCustomer) {
-      onRequireLogin('Sadece müşteri hesabı', 'Mesajlaşma müşteri hesabı üzerinden ilerler.');
-      return;
-    }
-    if (!canMessage) return;
-
-    try {
-      setStartingConversation(true);
-      const conversationId = await startConversation(carrierId);
-      navigate(`/mesajlar?conversationId=${encodeURIComponent(conversationId)}`);
-    } finally {
-      setStartingConversation(false);
-    }
-  };
-
   /* ─── Render ─── */
 
   return (
-    <TooltipProvider>
+    <>
       <div className="min-h-screen bg-muted/30">
         {/* Breadcrumb */}
         <div className="max-w-7xl mx-auto px-4 pt-6 pb-2">
@@ -695,24 +633,15 @@ const CarrierDetailPage = () => {
                     Teklif İste
                   </Button>
 
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <span className="block">
-                        <Button
-                          variant="outline"
-                          onClick={handleMessage}
-                          disabled={!canMessage || startingConversation || !isCustomer || !isLoggedIn}
-                          className="w-full"
-                        >
-                          <MessageSquareText className="h-4 w-4 mr-2" />
-                          {startingConversation ? 'Açılıyor…' : 'Mesaj Gönder'}
-                        </Button>
-                      </span>
-                    </TooltipTrigger>
-                    {!canMessage && messageDisabledReason && (
-                      <TooltipContent><p>{messageDisabledReason}</p></TooltipContent>
-                    )}
-                  </Tooltip>
+                  <div className="flex items-start gap-2.5 rounded-lg border bg-background/70 p-3">
+                    <MessageSquareText className="mt-0.5 h-4 w-4 flex-shrink-0 text-muted-foreground" />
+                    <div className="space-y-0.5">
+                      <p className="text-sm font-medium text-foreground">Mesajlaşma teklif sonrası açılır</p>
+                      <p className="text-xs leading-relaxed text-muted-foreground">
+                        Güvenli iletişim teklif süreci başladığında kullanılır.
+                      </p>
+                    </div>
+                  </div>
 
                   <p className="text-xs text-center text-muted-foreground">
                     Başlangıç fiyatı:{' '}
@@ -888,7 +817,7 @@ const CarrierDetailPage = () => {
           </AlertDialogContent>
         </AlertDialog>
       </div>
-    </TooltipProvider>
+    </>
   );
 };
 
