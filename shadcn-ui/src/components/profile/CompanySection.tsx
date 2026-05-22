@@ -12,6 +12,7 @@ import type { SectionProps, VehicleType } from './types';
 import { API_BASE } from './helpers';
 
 const ALLOWED_SCOPE_NAMES = ['Şehir İçi', 'Şehirler Arası'];
+const normalizeScopeNames = (values: string[] = []) => values.filter(name => ALLOWED_SCOPE_NAMES.includes(name));
 
 interface CompanySectionProps extends SectionProps {
   onCompanyNameChange?: (name: string) => void;
@@ -45,6 +46,7 @@ export default function CompanySection({ user, refreshProfileStatus, onCompanyNa
       if (c) {
         const parsed = JSON.parse(c);
         if (parsed && !parsed.vehicleTypes) parsed.vehicleTypes = parsed.vehicleType ? [parsed.vehicleType] : [];
+        if (parsed && Array.isArray(parsed.scopes)) parsed.scopes = normalizeScopeNames(parsed.scopes);
         if (parsed && parsed.vehicleCapacity && (!parsed.vehicleCapacities || Object.keys(parsed.vehicleCapacities || {}).length === 0)) {
           const first = (parsed.vehicleTypes && parsed.vehicleTypes[0]) || parsed.vehicleType;
           if (first) parsed.vehicleCapacities = { [first]: String(parsed.vehicleCapacity) };
@@ -100,6 +102,8 @@ export default function CompanySection({ user, refreshProfileStatus, onCompanyNa
         }, {} as Record<string, string>);
 
         setCompany(prev => {
+          const resolvedScopeNames = normalizeScopeNames(resolveScopeNames());
+          const currentScopeNames = normalizeScopeNames(prev.scopes);
           const next = {
             ...prev,
             email: carrierData.email || prev.email,
@@ -107,7 +111,7 @@ export default function CompanySection({ user, refreshProfileStatus, onCompanyNa
             taxNumber: carrierData.taxNumber || prev.taxNumber,
             year: carrierData.foundedYear ? String(carrierData.foundedYear) : prev.year,
             services: resolveServiceNames().length ? resolveServiceNames() : prev.services,
-            scopes: resolveScopeNames().length ? resolveScopeNames() : prev.scopes,
+            scopes: resolvedScopeNames.length ? resolvedScopeNames : currentScopeNames,
             vehicleType: vehicleNames.length ? vehicleNames[0] : prev.vehicleType,
             vehicleTypes: vehicleNames.length ? vehicleNames : prev.vehicleTypes,
             vehicleCapacities: vehicleNames.length ? { ...(prev.vehicleCapacities || {}), ...backendCaps } : prev.vehicleCapacities,
@@ -151,6 +155,12 @@ export default function CompanySection({ user, refreshProfileStatus, onCompanyNa
   };
 
   const save = async () => {
+    const normalizedScopes = normalizeScopeNames(company.scopes || []);
+    if (!normalizedScopes.length) {
+      toast.error('Çalışma kapsamı seçmelisiniz.');
+      return;
+    }
+
     const capacityOverrides = (company.vehicleTypes || []).reduce((acc, name) => {
       const parsed = parseCapacity((company.vehicleCapacities || {})[name]);
       if (parsed !== undefined) acc[name] = parsed;
@@ -168,7 +178,7 @@ export default function CompanySection({ user, refreshProfileStatus, onCompanyNa
           companyName: company.name || undefined, taxNumber: company.taxNumber || undefined,
           email: company.email || undefined, foundedYear: company.year ? Number(company.year) : undefined,
           vehicleTypeNames: company.vehicleTypes || [], vehicleTypeCapacities: Object.keys(capacityOverrides).length ? capacityOverrides : undefined,
-          serviceTypeNames: company.services || [], scopeOfWorkNames: company.scopes || [],
+          serviceTypeNames: company.services || [], scopeOfWorkNames: normalizedScopes,
         }),
       });
       if (selectedVehicles.length > 0) {
@@ -214,7 +224,7 @@ export default function CompanySection({ user, refreshProfileStatus, onCompanyNa
         </div>
         <div className="md:col-span-2">
           <Label>Çalışma Kapsamı</Label>
-          <MultiSelect label=" " placeholder="Seçiniz" options={workingScopeOptions} selectedValues={company.scopes || []} onSelectionChange={(vals) => setCompany({ ...company, scopes: vals })} />
+          <MultiSelect label=" " placeholder="Seçiniz" options={workingScopeOptions} selectedValues={normalizeScopeNames(company.scopes || [])} onSelectionChange={(vals) => setCompany({ ...company, scopes: normalizeScopeNames(vals) })} />
         </div>
         <div className="md:col-span-2">
           <Label>Araç Türü</Label>
