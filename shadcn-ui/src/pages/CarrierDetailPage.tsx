@@ -10,6 +10,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
 import AuthModal from '@/components/AuthModal';
+import TrustChecklist from '@/components/carrier-detail/TrustChecklist';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   ChevronLeft, MapPin, ShieldCheck, CheckCircle2, Clock, XCircle, Star, Truck,
@@ -691,6 +692,8 @@ const CarrierDetailPage = () => {
                 </CardContent>
               </Card>
 
+              <TrustChecklist data={data} />
+
               {/* Trust badges */}
               <Card>
                 <CardHeader className="pb-3">
@@ -725,15 +728,20 @@ const CarrierDetailPage = () => {
                       </p>
                     </div>
                   ))}
+                </CardContent>
+              </Card>
 
-                  {/* Profile completion */}
-                  <div className="pt-2">
-                    <div className="flex items-center justify-between text-xs text-muted-foreground mb-1.5">
-                      <span>Profil Tamamlanma</span>
-                      <span className="font-medium">%{profilePercent}</span>
-                    </div>
-                    <Progress value={profilePercent} className="h-1.5" />
+              {/* Profile completion */}
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm">Profil Tamamlanma</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-center justify-between text-xs text-muted-foreground mb-1.5">
+                    <span>Genel durum</span>
+                    <span className="font-medium">%{profilePercent}</span>
                   </div>
+                  <Progress value={profilePercent} className="h-1.5" />
                 </CardContent>
               </Card>
             </div>
