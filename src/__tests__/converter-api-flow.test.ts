@@ -102,12 +102,14 @@ describe('Converter API Flow', () => {
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
     expect(Array.isArray(res.body.data)).toBe(true);
-    expect(res.body.data.length).toBeGreaterThanOrEqual(20);
-    expect(res.body.data.length).toBeLessThanOrEqual(25);
+    expect(res.body.data.length).toBeGreaterThanOrEqual(40);
+    expect(res.body.data.length).toBeLessThanOrEqual(45);
     const codes = res.body.data.map((item: any) => item.itemCode);
     expect(new Set(codes).size).toBe(codes.length);
     expect(codes).toContain('refrigerator');
     expect(codes).toContain('medium_box');
+    expect(codes).toContain('coffee_table');
+    expect(codes).toContain('aquarium');
   });
 
   test('3. Estimate öncesi result endpoint answer/result null dönebilmeli', async () => {
