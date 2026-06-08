@@ -61,19 +61,19 @@ export const validateEstimateConverterRequest = (req: Request, res: Response, ne
     }
   }
 
-  if (!Number.isInteger(originFloor) || originFloor < -5 || originFloor > 100) {
+  if (originFloor !== undefined && (!Number.isInteger(originFloor) || originFloor < -5 || originFloor > 100)) {
     res.status(400).json({ success: false, message: 'originFloor -5 ile 100 arasında tam sayı olmalıdır.' });
     return;
   }
-  if (!Number.isInteger(destinationFloor) || destinationFloor < -5 || destinationFloor > 100) {
+  if (destinationFloor !== undefined && (!Number.isInteger(destinationFloor) || destinationFloor < -5 || destinationFloor > 100)) {
     res.status(400).json({ success: false, message: 'destinationFloor -5 ile 100 arasında tam sayı olmalıdır.' });
     return;
   }
-  if (typeof buildingElevator !== 'boolean') {
+  if (buildingElevator !== undefined && typeof buildingElevator !== 'boolean') {
     res.status(400).json({ success: false, message: 'buildingElevator boolean olmalıdır.' });
     return;
   }
-  if (typeof externalLift !== 'boolean') {
+  if (externalLift !== undefined && typeof externalLift !== 'boolean') {
     res.status(400).json({ success: false, message: 'externalLift boolean olmalıdır.' });
     return;
   }

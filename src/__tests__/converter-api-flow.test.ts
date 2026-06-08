@@ -238,6 +238,47 @@ describe('Converter API Flow', () => {
     expect(resultRes.body.data.answer.customItems).toEqual(payload.customItems);
   });
 
+  test('5.1b Kat ve asansor bilgisi olmadan estimate alinabilmeli', async () => {
+    if (skipDB()) return;
+
+    const sessionRes = await request(testApp)
+      .post(`${BASE}/sessions`)
+      .set('Authorization', `Bearer ${customerToken}`)
+      .send({ flowType: 'household' });
+
+    const sessionId = sessionRes.body.data?.sessionId || '';
+    expect(sessionId).toBeTruthy();
+
+    const res = await request(testApp)
+      .post(`${BASE}/sessions/${sessionId}/estimate`)
+      .set('Authorization', `Bearer ${customerToken}`)
+      .send({
+        moveType: 'household',
+        propertyType: '2+1',
+        items: [
+          { itemCode: 'sofa_3_seat', quantity: 1 },
+          { itemCode: 'medium_box', quantity: 4 },
+        ],
+        specialItems: [],
+        customItems: [],
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.estimatedVolumeMin).toBeGreaterThan(0);
+    expect(res.body.data.confidence).toBe('medium');
+
+    const resultRes = await request(testApp)
+      .get(`${BASE}/sessions/${sessionId}/result`)
+      .set('Authorization', `Bearer ${customerToken}`);
+
+    expect(resultRes.status).toBe(200);
+    expect(resultRes.body.data.answer.originFloor).toBeNull();
+    expect(resultRes.body.data.answer.destinationFloor).toBeNull();
+    expect(resultRes.body.data.answer.buildingElevator).toBeNull();
+    expect(resultRes.body.data.answer.externalLift).toBeNull();
+  });
+
   test('5.2 Custom item bos isim validationdan dusmeli', async () => {
     if (skipDB()) return;
 

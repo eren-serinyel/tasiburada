@@ -68,9 +68,13 @@ export class ConverterService {
     const suggestedNames = new Set<string>();
     const totalItemCount = payload.items.reduce((sum, item) => sum + item.quantity, 0)
       + (payload.customItems ?? []).reduce((sum, item) => sum + item.quantity, 0);
-    const highFloorWithoutLift = Math.max(payload.originFloor, payload.destinationFloor) >= 4
-      && !payload.buildingElevator
-      && !payload.externalLift;
+    const hasFloorInfo = typeof payload.originFloor === 'number' && typeof payload.destinationFloor === 'number';
+    const hasElevatorInfo = typeof payload.buildingElevator === 'boolean';
+    const highFloorWithoutLift = hasFloorInfo && hasElevatorInfo
+      ? Math.max(payload.originFloor!, payload.destinationFloor!) >= 4
+        && !payload.buildingElevator
+        && !payload.externalLift
+      : false;
 
     if (highFloorWithoutLift && [ExtraServiceLoadType.HOME, ExtraServiceLoadType.OFFICE].includes(loadType)) {
       suggestedNames.add('Asansörlü Taşıma');
@@ -218,7 +222,7 @@ export class ConverterService {
     }
 
     const hasFloors = typeof payload.originFloor === 'number' && typeof payload.destinationFloor === 'number';
-    const hasElevatorInfo = typeof payload.buildingElevator === 'boolean' && typeof payload.externalLift === 'boolean';
+    const hasElevatorInfo = typeof payload.buildingElevator === 'boolean';
     const hasEnoughItems = payload.items.reduce((sum, item) => sum + item.quantity, 0)
       + customItems.reduce((sum, item) => sum + item.quantity, 0) >= 5;
     const hasProperty = payload.propertyType !== 'unknown';
@@ -226,8 +230,10 @@ export class ConverterService {
     let confidence: ConverterConfidence = ConverterConfidence.LOW;
     if (hasProperty && hasEnoughItems && hasFloors && hasElevatorInfo) {
       confidence = ConverterConfidence.HIGH;
-    } else if ((hasProperty && hasEnoughItems) || (hasFloors && hasElevatorInfo)) {
+    } else if (hasProperty && hasEnoughItems) {
       confidence = ConverterConfidence.MEDIUM;
+    } else if (hasFloors && hasElevatorInfo) {
+      confidence = ConverterConfidence.LOW;
     }
 
     if ((payload.items.length === 0 && customItems.length === 0) || !hasProperty) {
@@ -255,10 +261,10 @@ export class ConverterService {
     }
     answer.moveType = payload.moveType as any;
     answer.propertyType = payload.propertyType as any;
-    answer.originFloor = payload.originFloor;
-    answer.destinationFloor = payload.destinationFloor;
-    answer.buildingElevator = payload.buildingElevator;
-    answer.externalLift = payload.externalLift;
+    answer.originFloor = typeof payload.originFloor === 'number' ? payload.originFloor : null;
+    answer.destinationFloor = typeof payload.destinationFloor === 'number' ? payload.destinationFloor : null;
+    answer.buildingElevator = typeof payload.buildingElevator === 'boolean' ? payload.buildingElevator : null;
+    answer.externalLift = typeof payload.externalLift === 'boolean' ? payload.externalLift : null;
     answer.specialItemsJson = specialItems;
     answer.rawAnswersJson = {
       ...payload,
