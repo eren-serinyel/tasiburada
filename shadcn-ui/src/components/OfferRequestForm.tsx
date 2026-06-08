@@ -334,6 +334,19 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
 
   const handleChange = (field: string, value: any) => setForm((f) => ({ ...f, [field]: value }));
 
+  const requireLoginForSelection = (message?: string) => {
+    if (isAuthenticated || isLoggedIn) return true;
+
+    if (!showLoginModal) {
+      setShowLoginModal(true);
+      toast({
+        title: 'Giriş gerekli',
+        description: message ?? 'Teklif formunu doldurmak için giriş yapmalısınız.',
+      });
+    }
+    return false;
+  };
+
   const getVehicleTypeLabel = (value: string) => {
     return vehicleTypeOptions.find((item) => item.id === value)?.name
       || VEHICLE_TYPES[value as keyof typeof VEHICLE_TYPES]?.name
@@ -756,7 +769,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
 
   const closeLoginModal = () => {
     setShowLoginModal(false);
-    setStep(2);
+    if (step === 3) setStep(2);
   };
 
   /* ── step labels ── */
@@ -867,6 +880,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
                   <Select
                     value=""
                     onValueChange={(val) => {
+                      if (!requireLoginForSelection()) return;
                       const addr = savedAddresses.find((a) => String(a.id) === val);
                       if (addr) {
                         handleChange('originCity', addr.city);
@@ -900,14 +914,20 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
                   <div className="flex flex-col" style={{ gap: '10px' }}>
                     <div>
                       <label style={labelStyle}>Şehir <span style={{ color: '#EF4444' }}>*</span></label>
-                      <Select value={form.originCity} onValueChange={(v) => handleChange('originCity', v)}>
+                      <Select value={form.originCity} onValueChange={(v) => {
+                        if (!requireLoginForSelection()) return;
+                        handleChange('originCity', v);
+                      }}>
                         <SelectTrigger style={inputStyle}><SelectValue placeholder="Şehir seçin" /></SelectTrigger>
                         <SelectContent>{CITIES_TR.map((c) => (<SelectItem key={c} value={c}>{c}</SelectItem>))}</SelectContent>
                       </Select>
                     </div>
                     <div>
                       <label style={labelStyle}>İlçe <span style={{ color: '#EF4444' }}>*</span></label>
-                      <Select value={form.originDistrict} onValueChange={(v) => handleChange('originDistrict', v)}>
+                      <Select value={form.originDistrict} onValueChange={(v) => {
+                        if (!requireLoginForSelection()) return;
+                        handleChange('originDistrict', v);
+                      }}>
                         <SelectTrigger style={inputStyle}><SelectValue placeholder="İlçe seçin" /></SelectTrigger>
                         <SelectContent>{originDistricts.map((d) => (<SelectItem key={d} value={d}>{d}</SelectItem>))}</SelectContent>
                       </Select>
@@ -929,14 +949,20 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
                   <div className="flex flex-col" style={{ gap: '10px' }}>
                     <div>
                       <label style={labelStyle}>Şehir <span style={{ color: '#EF4444' }}>*</span></label>
-                      <Select value={form.destinationCity} onValueChange={(v) => handleChange('destinationCity', v)}>
+                      <Select value={form.destinationCity} onValueChange={(v) => {
+                        if (!requireLoginForSelection()) return;
+                        handleChange('destinationCity', v);
+                      }}>
                         <SelectTrigger style={inputStyle}><SelectValue placeholder="Şehir seçin" /></SelectTrigger>
                         <SelectContent>{CITIES_TR.map((c) => (<SelectItem key={c} value={c}>{c}</SelectItem>))}</SelectContent>
                       </Select>
                     </div>
                     <div>
                       <label style={labelStyle}>İlçe <span style={{ color: '#EF4444' }}>*</span></label>
-                      <Select value={form.destinationDistrict} onValueChange={(v) => handleChange('destinationDistrict', v)}>
+                      <Select value={form.destinationDistrict} onValueChange={(v) => {
+                        if (!requireLoginForSelection()) return;
+                        handleChange('destinationDistrict', v);
+                      }}>
                         <SelectTrigger style={inputStyle}><SelectValue placeholder="İlçe seçin" /></SelectTrigger>
                         <SelectContent>{destinationDistricts.map((d) => (<SelectItem key={d} value={d}>{d}</SelectItem>))}</SelectContent>
                       </Select>
@@ -954,7 +980,10 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
                     value={form.date}
                     min={todayStr}
                     max={maxDateStr}
-                    onChange={(e) => handleChange('date', e.target.value)}
+                    onChange={(e) => {
+                      if (!requireLoginForSelection()) return;
+                      handleChange('date', e.target.value);
+                    }}
                     aria-invalid={isDateTooFar}
                     required
                     style={inputStyle}
@@ -1012,7 +1041,10 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
                     return (
                       <div
                         key={tc.value}
-                        onClick={() => handleChange('transportType', tc.value)}
+                        onClick={() => {
+                          if (!requireLoginForSelection()) return;
+                          handleChange('transportType', tc.value);
+                        }}
                         className="cursor-pointer text-center transition-all duration-150"
                         style={{
                           border: sel ? '2px solid #2563EB' : '1px solid #E2E8F0',
@@ -1045,7 +1077,10 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
                 {altOptions.length > 0 && (
                   <div>
                     <label style={labelStyle}>Yer Tipi</label>
-                    <Select value={form.placeType} onValueChange={(v) => handleChange('placeType', v)}>
+                    <Select value={form.placeType} onValueChange={(v) => {
+                      if (!requireLoginForSelection()) return;
+                      handleChange('placeType', v);
+                    }}>
                       <SelectTrigger style={inputStyle}><SelectValue placeholder="Seçin" /></SelectTrigger>
                       <SelectContent>{altOptions.map((p) => (<SelectItem key={p} value={p}>{p}</SelectItem>))}</SelectContent>
                     </Select>
@@ -1054,7 +1089,10 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
                 {form.transportType === 'parca' && (
                   <div>
                     <label style={labelStyle}>Yük Türü (opsiyonel)</label>
-                    <Select value={form.loadType} onValueChange={(v) => handleChange('loadType', v)}>
+                    <Select value={form.loadType} onValueChange={(v) => {
+                      if (!requireLoginForSelection()) return;
+                      handleChange('loadType', v);
+                    }}>
                       <SelectTrigger style={inputStyle}><SelectValue placeholder="Seçin" /></SelectTrigger>
                       <SelectContent>{Object.entries(LOAD_TYPES).map(([k, v]) => (<SelectItem key={k} value={k}>{v}</SelectItem>))}</SelectContent>
                     </Select>
@@ -1062,7 +1100,10 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
                 )}
                 <div>
                   <label style={labelStyle}>Araç Tercihi (opsiyonel)</label>
-                  <Select value={form.vehicleType} onValueChange={(v) => handleChange('vehicleType', v)}>
+                  <Select value={form.vehicleType} onValueChange={(v) => {
+                    if (!requireLoginForSelection()) return;
+                    handleChange('vehicleType', v);
+                  }}>
                     <SelectTrigger style={inputStyle}><SelectValue placeholder="Araç seçin" /></SelectTrigger>
                     <SelectContent>
                       {vehicleTypeOptions.length > 0
@@ -1077,14 +1118,27 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
                     type="number"
                     min={0}
                     value={form.weightKg}
-                    onChange={(e) => handleChange('weightKg', e.target.value)}
+                    onChange={(e) => {
+                      if (!requireLoginForSelection()) return;
+                      handleChange('weightKg', e.target.value);
+                    }}
                     placeholder="Örn. 1200"
                     style={inputStyle}
                   />
                 </div>
                 <div>
                   <label style={labelStyle}>Kat</label>
-                  <Input type="number" min={0} value={form.floor} onChange={(e) => handleChange('floor', e.target.value)} placeholder="Örn. 3" style={inputStyle} />
+                  <Input
+                    type="number"
+                    min={0}
+                    value={form.floor}
+                    onChange={(e) => {
+                      if (!requireLoginForSelection()) return;
+                      handleChange('floor', e.target.value);
+                    }}
+                    placeholder="Örn. 3"
+                    style={inputStyle}
+                  />
                 </div>
                 {form.floor && (
                   <div className="flex items-end" style={{ paddingBottom: '8px' }}>
@@ -1092,7 +1146,10 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
                       <input
                         type="checkbox"
                         checked={form.hasElevator}
-                        onChange={(e) => handleChange('hasElevator', e.target.checked)}
+                        onChange={(e) => {
+                          if (!requireLoginForSelection()) return;
+                          handleChange('hasElevator', e.target.checked);
+                        }}
                         style={{ accentColor: '#2563EB', width: '16px', height: '16px' }}
                       />
                       <span style={{ fontSize: '13px', color: '#374151' }}>Bina Asansörü Var</span>
@@ -1101,7 +1158,10 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
                 )}
                 <div>
                   <label style={labelStyle}>Sigorta Türü</label>
-                  <Select value={form.insurance} onValueChange={(v) => handleChange('insurance', v)}>
+                  <Select value={form.insurance} onValueChange={(v) => {
+                    if (!requireLoginForSelection()) return;
+                    handleChange('insurance', v);
+                  }}>
                     <SelectTrigger style={inputStyle}><SelectValue placeholder="Seçin" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">İstemiyorum</SelectItem>
@@ -1112,7 +1172,10 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
                 </div>
                 <div>
                   <label style={labelStyle}>Zaman Tercihi</label>
-                  <Select value={form.timeWindow} onValueChange={(v) => handleChange('timeWindow', v)}>
+                  <Select value={form.timeWindow} onValueChange={(v) => {
+                    if (!requireLoginForSelection()) return;
+                    handleChange('timeWindow', v);
+                  }}>
                     <SelectTrigger style={inputStyle}><SelectValue placeholder="Seçin" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="sabah">Sabah (08:00-12:00)</SelectItem>
@@ -1130,7 +1193,10 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
                     <div style={{ fontSize: '14px', fontWeight: 600, color: '#1D4ED8' }}>Hacmi Hesapla</div>
                     <div style={{ fontSize: '12px', color: '#475569' }}>Eşya listesi ile tahmini hacim ve ağırlık hesabı yapın.</div>
                   </div>
-                  <Button type="button" onClick={() => setIsVolumeCalculatorOpen(true)}>
+                  <Button type="button" onClick={() => {
+                    if (!requireLoginForSelection()) return;
+                    setIsVolumeCalculatorOpen(true);
+                  }}>
                     Hacmi Hesapla
                   </Button>
                 </div>
@@ -1153,15 +1219,18 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
                             borderRadius: '8px',
                             background: checked ? '#EFF6FF' : 'white',
                           }}
-                          onClick={() => setForm(prev => {
-                            const current = new Set(prev.serviceOptions?.[currentServiceGroup] || []);
-                            if (current.has(option.id)) current.delete(option.id); else current.add(option.id);
-                            return {
-                              ...prev,
-                              serviceOptions: { [currentServiceGroup]: Array.from(current) },
-                              extraServices: mapSelectedExtraServiceNames(Array.from(current), availableExtraServices),
-                            };
-                          })}
+                          onClick={() => {
+                            if (!requireLoginForSelection()) return;
+                            setForm(prev => {
+                              const current = new Set(prev.serviceOptions?.[currentServiceGroup] || []);
+                              if (current.has(option.id)) current.delete(option.id); else current.add(option.id);
+                              return {
+                                ...prev,
+                                serviceOptions: { [currentServiceGroup]: Array.from(current) },
+                                extraServices: mapSelectedExtraServiceNames(Array.from(current), availableExtraServices),
+                              };
+                            });
+                          }}
                         >
                           <input
                             type="checkbox"
@@ -1509,7 +1578,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
 
       {/* Login Required Modal */}
       <AnimatePresence>
-        {showLoginModal && step === 3 && !isLoggedIn && (
+        {showLoginModal && !isLoggedIn && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
