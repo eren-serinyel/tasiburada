@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Plus, X } from 'lucide-react';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -19,11 +20,14 @@ import {
   estimateConverter,
   fetchConverterItems,
   type ConverterCatalogItem,
+  type ConverterCustomItemInput,
+  type ConverterCustomItemSizeClass,
   type ConverterMoveType,
   type ConverterPropertyType,
   type EstimateConverterResponse,
 } from '@/lib/converterApi';
 import type { ExtraServiceLoadType } from '@/lib/extraServices';
+import { cn } from '@/lib/utils';
 
 export interface VolumeCalculatorInitialValues {
   moveType?: ConverterMoveType;
@@ -62,6 +66,24 @@ const CONFIDENCE_CLASS: Record<'low' | 'medium' | 'high', string> = {
   high: 'bg-emerald-100 text-emerald-700',
 };
 
+const SIZE_CLASSES: Array<{
+  value: ConverterCustomItemSizeClass;
+  label: string;
+  examples: string;
+}> = [
+  { value: 'small', label: 'Küçük', examples: 'Kutu, sandalye, küçük masa' },
+  { value: 'medium', label: 'Orta', examples: 'Çekmeceli dolap, ofis koltuğu' },
+  { value: 'large', label: 'Büyük', examples: 'Yatak, tek gardrop, büyük masa' },
+  { value: 'very_large', label: 'Çok büyük', examples: 'Çift gardrop, piyano boyutu' },
+];
+
+const SIZE_CLASS_LABELS: Record<ConverterCustomItemSizeClass, string> = {
+  small: 'Küçük',
+  medium: 'Orta',
+  large: 'Büyük',
+  very_large: 'Çok büyük',
+};
+
 export default function VolumeCalculatorModal({
   open,
   onOpenChange,
@@ -78,6 +100,11 @@ export default function VolumeCalculatorModal({
   const [externalLift, setExternalLift] = useState(false);
   const [selectedItems, setSelectedItems] = useState<Record<string, number>>({});
   const [specialItems, setSpecialItems] = useState<string[]>([]);
+  const [customItems, setCustomItems] = useState<ConverterCustomItemInput[]>([]);
+  const [showCustomForm, setShowCustomForm] = useState(false);
+  const [customName, setCustomName] = useState('');
+  const [customSizeClass, setCustomSizeClass] = useState<ConverterCustomItemSizeClass | null>(null);
+  const [customQty, setCustomQty] = useState(0);
   const [catalogItems, setCatalogItems] = useState<ConverterCatalogItem[]>([]);
   const [catalogLoading, setCatalogLoading] = useState(false);
   const [catalogError, setCatalogError] = useState('');
@@ -90,8 +117,8 @@ export default function VolumeCalculatorModal({
     [selectedItems],
   );
   const hasAnySelection = useMemo(
-    () => selectedItemEntries.length > 0 || specialItems.length > 0,
-    [selectedItemEntries, specialItems],
+    () => selectedItemEntries.length > 0 || specialItems.length > 0 || customItems.length > 0,
+    [selectedItemEntries, specialItems, customItems],
   );
 
   useEffect(() => {
@@ -103,6 +130,11 @@ export default function VolumeCalculatorModal({
     setDestinationFloor(initialValues?.destinationFloor ?? 0);
     setBuildingElevator(initialValues?.buildingElevator ?? false);
     setExternalLift(false);
+    setCustomItems([]);
+    setShowCustomForm(false);
+    setCustomName('');
+    setCustomSizeClass(null);
+    setCustomQty(0);
     setResult(null);
     setErrorMessage('');
   }, [open, initialValues]);
@@ -147,6 +179,39 @@ export default function VolumeCalculatorModal({
     [catalogItems],
   );
 
+  const resetCustomForm = () => {
+    setCustomName('');
+    setCustomSizeClass(null);
+    setCustomQty(0);
+  };
+
+  const cancelCustomForm = () => {
+    resetCustomForm();
+    setShowCustomForm(false);
+  };
+
+  const addCustomItem = () => {
+    const name = customName.trim();
+    if (!name || name.length < 2 || name.length > 50 || !customSizeClass || customQty < 1 || customItems.length >= 5) {
+      return;
+    }
+
+    setCustomItems((prev) => [
+      ...prev,
+      {
+        name,
+        sizeClass: customSizeClass,
+        quantity: customQty,
+      },
+    ]);
+    resetCustomForm();
+    setShowCustomForm(false);
+  };
+
+  const removeCustomItem = (indexToRemove: number) => {
+    setCustomItems((prev) => prev.filter((_, index) => index !== indexToRemove));
+  };
+
   const canCalculate = hasAnySelection && !loading && !catalogLoading && !catalogError;
 
   const handleCalculate = async () => {
@@ -171,6 +236,7 @@ export default function VolumeCalculatorModal({
         buildingElevator,
         externalLift,
         specialItems,
+        customItems,
       });
       setResult(estimate);
     } catch (error: any) {
@@ -290,6 +356,120 @@ export default function VolumeCalculatorModal({
                   setSelectedItems((prev) => ({ ...prev, [itemCode]: quantity }));
                 }}
               />
+            )}
+          </div>
+
+          <div className="space-y-3 border-t border-slate-200 pt-4">
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+              <Label>Diğer Eşyalar</Label>
+              <span className="text-xs text-slate-500">Listede yoksa buradan ekleyin (en fazla 5)</span>
+            </div>
+
+            {customItems.length > 0 && (
+              <div className="space-y-1.5">
+                {customItems.map((item, index) => (
+                  <div
+                    key={`${item.name}-${index}`}
+                    className="flex items-center gap-2 rounded-md border border-slate-200 bg-slate-50 p-2"
+                  >
+                    <div className="min-w-0 flex-1 text-sm">
+                      <span className="font-medium text-slate-800">{item.name}</span>
+                      <span className="ml-2 text-xs text-slate-500">
+                        ({SIZE_CLASS_LABELS[item.sizeClass]}, {item.quantity} adet)
+                      </span>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => removeCustomItem(index)}
+                      aria-label={`${item.name} eşyasını kaldır`}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {showCustomForm && (
+              <div className="space-y-3 rounded-md border border-slate-200 bg-white p-3">
+                <div className="space-y-2">
+                  <Label htmlFor="custom-name">Eşya adı</Label>
+                  <Input
+                    id="custom-name"
+                    placeholder="Örn. Antika dolap, vintage masa..."
+                    value={customName}
+                    onChange={(e) => setCustomName(e.target.value)}
+                    maxLength={50}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Boyut</Label>
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    {SIZE_CLASSES.map((sizeClass) => (
+                      <button
+                        key={sizeClass.value}
+                        type="button"
+                        onClick={() => setCustomSizeClass(sizeClass.value)}
+                        className={cn(
+                          'rounded-md border p-2 text-left text-sm transition',
+                          customSizeClass === sizeClass.value
+                            ? 'border-sky-500 bg-sky-50'
+                            : 'border-slate-200 hover:bg-slate-50',
+                        )}
+                      >
+                        <div className="font-medium text-slate-800">{sizeClass.label}</div>
+                        <div className="text-xs text-slate-500">{sizeClass.examples}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="custom-qty">Adet</Label>
+                  <Input
+                    id="custom-qty"
+                    type="number"
+                    min={1}
+                    max={50}
+                    value={customQty === 0 ? '' : customQty}
+                    placeholder="1"
+                    onChange={(e) => {
+                      const rawValue = e.target.value;
+                      if (rawValue === '') {
+                        setCustomQty(0);
+                        return;
+                      }
+                      const next = Number(rawValue);
+                      setCustomQty(Number.isFinite(next) ? Math.min(50, Math.max(1, next)) : 0);
+                    }}
+                    className="w-24"
+                  />
+                </div>
+
+                <div className="flex justify-end gap-2">
+                  <Button type="button" variant="ghost" size="sm" onClick={cancelCustomForm}>
+                    İptal
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={addCustomItem}
+                    disabled={!customName.trim() || customName.trim().length < 2 || !customSizeClass || customQty < 1}
+                  >
+                    Ekle
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {customItems.length < 5 && !showCustomForm && (
+              <Button type="button" variant="outline" size="sm" onClick={() => setShowCustomForm(true)} className="w-full">
+                <Plus className="mr-2 h-4 w-4" />
+                Diğer eşya ekle
+              </Button>
             )}
           </div>
 

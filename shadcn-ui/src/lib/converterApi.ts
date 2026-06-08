@@ -3,9 +3,16 @@ import type { ExtraServiceLoadType } from '@/lib/extraServices';
 
 export type ConverterMoveType = 'household' | 'partial_load';
 export type ConverterPropertyType = 'studio' | '1+1' | '2+1' | '3+1' | '4+1_plus' | 'unknown';
+export type ConverterCustomItemSizeClass = 'small' | 'medium' | 'large' | 'very_large';
 
 export interface ConverterEstimateItemInput {
   itemCode: string;
+  quantity: number;
+}
+
+export interface ConverterCustomItemInput {
+  name: string;
+  sizeClass: ConverterCustomItemSizeClass;
   quantity: number;
 }
 
@@ -25,6 +32,7 @@ export interface EstimateConverterRequest {
   buildingElevator: boolean;
   externalLift: boolean;
   specialItems?: string[];
+  customItems?: ConverterCustomItemInput[];
 }
 
 export interface EstimateConverterResponse {
