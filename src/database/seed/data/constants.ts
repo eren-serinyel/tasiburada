@@ -228,7 +228,6 @@ export const VEHICLE_TYPES = [
 export const SCOPE_OF_WORKS = [
   'Şehir İçi',
   'Şehirler Arası',
-  'Uluslararası',
 ];
 
 export const SERVICE_TYPES = [

@@ -21,7 +21,7 @@ router.get('/service-types', async (req, res) => {
 
 router.get('/scope-of-works', async (req, res) => {
     try {
-        const list = await scopeRepo.findAll();
+        const list = await scopeRepo.findActiveProductScopes();
         res.json({ success: true, data: list });
     } catch (error: any) {
         res.status(400).json({ success: false, message: error.message });

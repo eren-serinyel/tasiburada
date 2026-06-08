@@ -1,5 +1,6 @@
 import { Carrier } from '../../../domain/entities/Carrier';
 import { CarrierRepository, CarrierSearchFilters, CarrierSearchRepositoryItem, CarrierSearchSort } from '../../../infrastructure/repositories/CarrierRepository';
+import { PRODUCT_SCOPE_OF_WORK_NAMES } from '../../../infrastructure/repositories/ScopeOfWorkRepository';
 
 export interface CarrierSearchQuery {
 	city?: string;
@@ -51,8 +52,9 @@ export class CarrierSearchService {
 	private readonly SCOPE_SLUG_TO_NAME: Record<string, string> = {
 		sehirici: 'Şehir İçi',
 		sehirlerarasi: 'Şehirler Arası',
-		uluslararasi: 'Uluslararası',
 	};
+	private readonly PRODUCT_SCOPE_NAMES = new Set<string>(PRODUCT_SCOPE_OF_WORK_NAMES);
+	private readonly UNSUPPORTED_SCOPE_FILTER = '__unsupported_scope__';
 
 	async search(query: CarrierSearchQuery | Record<string, unknown>): Promise<CarrierSearchResponseDto> {
 		const filters = this.normalizeFilters(query);
@@ -151,6 +153,7 @@ export class CarrierSearchService {
 		const normalizedScopeNames = scopeValues
 			.filter(value => !isUuid(value))
 			.map(value => this.SCOPE_SLUG_TO_NAME[value] ?? value)
+			.map(name => this.PRODUCT_SCOPE_NAMES.has(name) ? name : this.UNSUPPORTED_SCOPE_FILTER)
 			.filter(Boolean);
 		const scopeIds = scopeValues.filter(isUuid);
 		const scopeNames = normalizedScopeNames.length

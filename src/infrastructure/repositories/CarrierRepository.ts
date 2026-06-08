@@ -317,10 +317,7 @@ export class CarrierRepository extends BaseRepository<Carrier> {
 
     if ((filters.scopeIds && filters.scopeIds.length > 0) || (filters.scopeNames && filters.scopeNames.length > 0)) {
       qb.leftJoin('carrier.scopeLinks', 'scopeLink');
-
-      if (filters.scopeNames && filters.scopeNames.length > 0) {
-        qb.leftJoin('scopeLink.scope', 'scopeFilter');
-      }
+      qb.leftJoin('scopeLink.scope', 'scopeFilter');
 
       qb.andWhere(new Brackets(scopeClause => {
         if (filters.scopeIds && filters.scopeIds.length > 0) {
@@ -335,6 +332,7 @@ export class CarrierRepository extends BaseRepository<Carrier> {
           }
         }
       }));
+      qb.andWhere('scopeFilter.status = :activeScopeStatus', { activeScopeStatus: 'ACTIVE' });
     }
 
     if (filters.sortBy === 'experience') {

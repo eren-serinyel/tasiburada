@@ -68,7 +68,6 @@ async function seed() {
     const scopes = [
       'Şehir İçi',
       'Şehirler Arası',
-      'Uluslararası',
     ];
 
     for (const name of scopes) {

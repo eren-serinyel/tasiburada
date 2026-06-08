@@ -9,6 +9,9 @@ export class ScopeOfWork {
     @Column({ type: 'varchar', length: 100, unique: true })
     name: string;
 
+    @Column({ type: 'enum', enum: ['ACTIVE', 'DEPRECATED', 'ARCHIVED'], default: 'ACTIVE' })
+    status: 'ACTIVE' | 'DEPRECATED' | 'ARCHIVED';
+
     @CreateDateColumn({ type: 'datetime', precision: 6 })
     createdAt: Date;
 

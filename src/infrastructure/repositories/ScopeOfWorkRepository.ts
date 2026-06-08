@@ -2,6 +2,8 @@ import { BaseRepository } from './BaseRepository';
 import { ScopeOfWork } from '../../domain/entities/ScopeOfWork';
 import { In } from 'typeorm';
 
+export const PRODUCT_SCOPE_OF_WORK_NAMES = ['Şehir İçi', 'Şehirler Arası'] as const;
+
 export class ScopeOfWorkRepository extends BaseRepository<ScopeOfWork> {
     constructor() {
         super(ScopeOfWork);
@@ -34,5 +36,19 @@ export class ScopeOfWorkRepository extends BaseRepository<ScopeOfWork> {
     
     async findAll(): Promise<ScopeOfWork[]> {
         return this.repository.find();
+    }
+
+    async findActiveProductScopes(): Promise<ScopeOfWork[]> {
+        const scopes = await this.repository.find({
+            where: {
+                name: In([...PRODUCT_SCOPE_OF_WORK_NAMES]),
+                status: 'ACTIVE'
+            }
+        });
+        return scopes.sort(
+            (left, right) =>
+                PRODUCT_SCOPE_OF_WORK_NAMES.indexOf(left.name as any) -
+                PRODUCT_SCOPE_OF_WORK_NAMES.indexOf(right.name as any)
+        );
     }
 }
