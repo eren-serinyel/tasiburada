@@ -44,10 +44,10 @@ interface VolumeCalculatorModalProps {
 
 const VEHICLE_LABELS: Record<string, string> = {
   panelvan: 'Panelvan',
-  short_chassis_van: 'Kisa sasi kamyonet',
-  long_chassis_van: 'Uzun sasi kamyonet',
-  small_truck: 'Kucuk kamyon',
-  large_truck: 'Buyuk kamyon',
+  short_chassis_van: 'Kısa şasi kamyonet',
+  long_chassis_van: 'Uzun şasi kamyonet',
+  small_truck: 'Küçük kamyon',
+  large_truck: 'Büyük kamyon',
 };
 
 const CONFIDENCE_LABELS: Record<'low' | 'medium' | 'high', string> = {
@@ -195,14 +195,14 @@ export default function VolumeCalculatorModal({
         <div className="space-y-4">
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <div className="space-y-2">
-              <Label>Tasima Tipi</Label>
+              <Label>Taşıma Tipi</Label>
               <Select value={moveType} onValueChange={(value) => setMoveType(value as ConverterMoveType)}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Secin" />
+                  <SelectValue placeholder="Seçin" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="household">Ev Esyasi</SelectItem>
-                  <SelectItem value="partial_load">Parca Yuk</SelectItem>
+                  <SelectItem value="household">Ev Eşyası</SelectItem>
+                  <SelectItem value="partial_load">Parça Yük</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -211,10 +211,10 @@ export default function VolumeCalculatorModal({
               <Label>Konut Tipi</Label>
               <Select value={propertyType} onValueChange={(value) => setPropertyType(value as ConverterPropertyType)}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Secin" />
+                  <SelectValue placeholder="Seçin" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="studio">Studio</SelectItem>
+                  <SelectItem value="studio">Stüdyo</SelectItem>
                   <SelectItem value="1+1">1+1</SelectItem>
                   <SelectItem value="2+1">2+1</SelectItem>
                   <SelectItem value="3+1">3+1</SelectItem>
@@ -225,7 +225,7 @@ export default function VolumeCalculatorModal({
             </div>
 
             <div className="space-y-2">
-              <Label>Cikis Kat</Label>
+              <Label>Çıkış Katı</Label>
               <Input
                 type="number"
                 min={-5}
@@ -236,7 +236,7 @@ export default function VolumeCalculatorModal({
             </div>
 
             <div className="space-y-2">
-              <Label>Varis Kat</Label>
+              <Label>Varış Katı</Label>
               <Input
                 type="number"
                 min={-5}
@@ -254,7 +254,7 @@ export default function VolumeCalculatorModal({
                 checked={buildingElevator}
                 onChange={(e) => setBuildingElevator(e.target.checked)}
               />
-              Bina asansoru var
+              Bina asansörü var
             </label>
             <label className="flex items-center gap-2 rounded-md border border-slate-200 p-2 text-sm">
               <input
@@ -262,20 +262,20 @@ export default function VolumeCalculatorModal({
                 checked={externalLift}
                 onChange={(e) => setExternalLift(e.target.checked)}
               />
-              Dis cephe asansoru kullanilacak
+              Dış cephe asansörü kullanılacak
             </label>
           </div>
 
           <div className="space-y-2">
-            <Label>Esya Listesi ve Adet</Label>
+            <Label>Eşya Listesi ve Adet</Label>
             {catalogLoading ? (
-              <div className="rounded-md border border-slate-200 p-3 text-sm text-slate-600">Eşya katalogu yükleniyor...</div>
+              <div className="rounded-md border border-slate-200 p-3 text-sm text-slate-600">Eşya kataloğu yükleniyor...</div>
             ) : catalogError ? (
               <Alert variant="destructive">
                 <AlertDescription>{catalogError}</AlertDescription>
               </Alert>
             ) : catalogItems.length === 0 ? (
-              <div className="rounded-md border border-slate-200 p-3 text-sm text-slate-600">Aktif eşya katalogu bulunamadı.</div>
+              <div className="rounded-md border border-slate-200 p-3 text-sm text-slate-600">Aktif eşya kataloğu bulunamadı.</div>
             ) : (
               <ItemSelector
                 items={catalogItems}
@@ -288,7 +288,7 @@ export default function VolumeCalculatorModal({
           </div>
 
           <div className="space-y-2">
-            <Label>Ozel Esyalar</Label>
+            <Label>Özel Eşyalar</Label>
             <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
               {specialCatalog.map((item) => {
                 const checked = specialItems.includes(item.itemCode);
@@ -332,7 +332,7 @@ export default function VolumeCalculatorModal({
                 Önerilen araç: {VEHICLE_LABELS[result.recommendedVehicle] || result.recommendedVehicle}
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-sm text-slate-700">Confidence:</span>
+                <span className="text-sm text-slate-700">Güven seviyesi:</span>
                 <Badge className={CONFIDENCE_CLASS[result.confidence]}>{CONFIDENCE_LABELS[result.confidence]}</Badge>
               </div>
               {result.warnings.length > 0 && (
@@ -353,7 +353,7 @@ export default function VolumeCalculatorModal({
             Kapat
           </Button>
           <Button type="button" onClick={handleCalculate} disabled={!canCalculate}>
-            {loading ? 'Hesaplaniyor...' : 'Hesapla'}
+            {loading ? 'Hesaplanıyor...' : 'Hesapla'}
           </Button>
           <Button type="button" onClick={handleApply} disabled={!result || loading}>
             {applyLabel}
