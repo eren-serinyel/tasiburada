@@ -361,11 +361,8 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
     return {
       moveType: form.transportType === 'parca' ? 'partial_load' : 'household',
       propertyType,
-      originFloor: form.floor ? Number(form.floor) : 0,
-      destinationFloor: 0,
-      buildingElevator: Boolean(form.hasElevator),
     };
-  }, [form.floor, form.hasElevator, form.placeType, form.transportType]);
+  }, [form.placeType, form.transportType]);
 
   const applyConverterEstimateToForm = (result: EstimateConverterResponse) => {
     const weightKg = result.estimatedWeightKg;

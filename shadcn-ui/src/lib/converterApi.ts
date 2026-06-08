@@ -27,10 +27,10 @@ export interface EstimateConverterRequest {
   propertyType: ConverterPropertyType;
   loadType?: ExtraServiceLoadType;
   items: ConverterEstimateItemInput[];
-  originFloor: number;
-  destinationFloor: number;
-  buildingElevator: boolean;
-  externalLift: boolean;
+  originFloor?: number;
+  destinationFloor?: number;
+  buildingElevator?: boolean;
+  externalLift?: boolean;
   specialItems?: string[];
   customItems?: ConverterCustomItemInput[];
 }

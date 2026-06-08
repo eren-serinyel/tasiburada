@@ -32,9 +32,6 @@ import { cn } from '@/lib/utils';
 export interface VolumeCalculatorInitialValues {
   moveType?: ConverterMoveType;
   propertyType?: ConverterPropertyType;
-  originFloor?: number;
-  destinationFloor?: number;
-  buildingElevator?: boolean;
 }
 
 interface VolumeCalculatorModalProps {
@@ -94,10 +91,6 @@ export default function VolumeCalculatorModal({
 }: VolumeCalculatorModalProps) {
   const [moveType, setMoveType] = useState<ConverterMoveType>('household');
   const [propertyType, setPropertyType] = useState<ConverterPropertyType>('2+1');
-  const [originFloor, setOriginFloor] = useState<number>(0);
-  const [destinationFloor, setDestinationFloor] = useState<number>(0);
-  const [buildingElevator, setBuildingElevator] = useState(false);
-  const [externalLift, setExternalLift] = useState(false);
   const [selectedItems, setSelectedItems] = useState<Record<string, number>>({});
   const [specialItems, setSpecialItems] = useState<string[]>([]);
   const [customItems, setCustomItems] = useState<ConverterCustomItemInput[]>([]);
@@ -126,10 +119,6 @@ export default function VolumeCalculatorModal({
 
     setMoveType(initialValues?.moveType ?? 'household');
     setPropertyType(initialValues?.propertyType ?? '2+1');
-    setOriginFloor(initialValues?.originFloor ?? 0);
-    setDestinationFloor(initialValues?.destinationFloor ?? 0);
-    setBuildingElevator(initialValues?.buildingElevator ?? false);
-    setExternalLift(false);
     setCustomItems([]);
     setShowCustomForm(false);
     setCustomName('');
@@ -231,10 +220,6 @@ export default function VolumeCalculatorModal({
         propertyType,
         loadType: loadType ?? undefined,
         items: selectedItemEntries.map(([itemCode, quantity]) => ({ itemCode, quantity })),
-        originFloor,
-        destinationFloor,
-        buildingElevator,
-        externalLift,
         specialItems,
         customItems,
       });
@@ -294,48 +279,6 @@ export default function VolumeCalculatorModal({
               </Select>
             </div>
 
-            <div className="space-y-2">
-              <Label>Çıkış Katı</Label>
-              <Input
-                type="number"
-                min={-5}
-                max={100}
-                value={originFloor === 0 ? '' : originFloor}
-                placeholder="0"
-                onChange={(e) => setOriginFloor(Number(e.target.value || 0))}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label>Varış Katı</Label>
-              <Input
-                type="number"
-                min={-5}
-                max={100}
-                value={destinationFloor === 0 ? '' : destinationFloor}
-                placeholder="0"
-                onChange={(e) => setDestinationFloor(Number(e.target.value || 0))}
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            <label className="flex items-center gap-2 rounded-md border border-slate-200 p-2 text-sm">
-              <input
-                type="checkbox"
-                checked={buildingElevator}
-                onChange={(e) => setBuildingElevator(e.target.checked)}
-              />
-              Bina asansörü var
-            </label>
-            <label className="flex items-center gap-2 rounded-md border border-slate-200 p-2 text-sm">
-              <input
-                type="checkbox"
-                checked={externalLift}
-                onChange={(e) => setExternalLift(e.target.checked)}
-              />
-              Dış cephe asansörü kullanılacak
-            </label>
           </div>
 
           <div className="space-y-3">
@@ -525,6 +468,11 @@ export default function VolumeCalculatorModal({
                 <span className="text-sm text-slate-700">Güven seviyesi:</span>
                 <Badge className={CONFIDENCE_CLASS[result.confidence]}>{CONFIDENCE_LABELS[result.confidence]}</Badge>
               </div>
+              {(result.confidence === 'medium' || result.confidence === 'low') && (
+                <p className="text-xs text-slate-500">
+                  Kat ve asansör bilgisi forma yansıtıldığında tahmin daha doğru olacak.
+                </p>
+              )}
               {result.warnings.length > 0 && (
                 <ul className="list-disc space-y-1 pl-5 text-sm text-amber-700">
                   {result.warnings.map((warning, index) => (
