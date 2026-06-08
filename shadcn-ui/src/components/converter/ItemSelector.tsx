@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Input } from '@/components/ui/input';
+import { CONVERTER_CATEGORY_LABELS, CONVERTER_CATEGORY_ORDER } from '@/lib/converterCategories';
 import type { ConverterCatalogItem } from '@/lib/converterApi';
 
 interface ItemSelectorProps {
@@ -18,18 +19,27 @@ export default function ItemSelector({ items, selectedItems, onQuantityChange }:
     }, {} as Record<string, ConverterCatalogItem[]>);
   }, [items]);
 
+  const orderedCategories = useMemo(() => {
+    const knownCategories = CONVERTER_CATEGORY_ORDER.filter((category) => itemsByCategory[category]);
+    const unknownCategories = Object.keys(itemsByCategory).filter(
+      (category) => !CONVERTER_CATEGORY_ORDER.includes(category),
+    );
+    return [...knownCategories, ...unknownCategories];
+  }, [itemsByCategory]);
+
   return (
     <Accordion type="multiple" defaultValue={['living_room', 'bedroom']} className="rounded-md border border-slate-200">
-      {Object.entries(itemsByCategory).map(([category, categoryItems]) => {
+      {orderedCategories.map((category) => {
+        const categoryItems = itemsByCategory[category];
         const selectedCount = categoryItems.filter((item) => (selectedItems[item.itemCode] || 0) > 0).length;
 
         return (
           <AccordionItem key={category} value={category} className="px-3">
             <AccordionTrigger className="text-sm">
               <span className="flex items-center gap-2">
-                <span>{category}</span>
+                <span>{CONVERTER_CATEGORY_LABELS[category] || category}</span>
                 <span className="text-xs font-normal text-slate-500">
-                  ({categoryItems.length} esya, {selectedCount} secili)
+                  ({categoryItems.length} eşya, {selectedCount} seçili)
                 </span>
               </span>
             </AccordionTrigger>
@@ -44,7 +54,6 @@ export default function ItemSelector({ items, selectedItems, onQuantityChange }:
                     >
                       <div className="min-w-0">
                         <div className="truncate text-sm font-medium text-slate-800">{item.label}</div>
-                        <div className="text-xs text-slate-500">{item.itemCode}</div>
                       </div>
                       <Input
                         type="number"
