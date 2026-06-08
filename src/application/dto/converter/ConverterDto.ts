@@ -19,6 +19,14 @@ export interface ConverterItemInputDto {
   quantity: number;
 }
 
+export type ConverterCustomItemSizeClassDto = 'small' | 'medium' | 'large' | 'very_large';
+
+export interface ConverterCustomItemInputDto {
+  name: string;
+  sizeClass: ConverterCustomItemSizeClassDto;
+  quantity: number;
+}
+
 export interface CreateConverterSessionRequestDto {
   flowType: ConverterFlowTypeDto;
 }
@@ -33,6 +41,7 @@ export interface EstimateConverterRequestDto {
   buildingElevator: boolean;
   externalLift: boolean;
   specialItems?: string[];
+  customItems?: ConverterCustomItemInputDto[];
 }
 
 export interface EstimateConverterResponseDto {
@@ -74,6 +83,7 @@ export interface ConverterAnswerSummaryDto {
   buildingElevator: boolean | null;
   externalLift: boolean | null;
   specialItems: string[];
+  customItems: ConverterCustomItemInputDto[];
 }
 
 export interface GetConverterResultResponseDto {

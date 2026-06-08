@@ -29,6 +29,12 @@ import { CONVERTER_TO_VEHICLE_TYPE_NAME } from './converter/vehicleTypeMapping';
 const roundDown1 = (value: number): number => Math.floor(value * 10) / 10;
 const roundUp1 = (value: number): number => Math.ceil(value * 10) / 10;
 const estimateWeightKgFromVolume = (minM3: number, maxM3: number): number => Math.round(((minM3 + maxM3) / 2) * 200);
+const CUSTOM_ITEM_SIZE_CLASS_VOLUMES: Record<string, { min: number; max: number }> = {
+  small: { min: 0.1, max: 0.3 },
+  medium: { min: 0.3, max: 0.8 },
+  large: { min: 0.8, max: 1.5 },
+  very_large: { min: 1.5, max: 3.0 },
+};
 const EDITABLE_SHIPMENT_STATUSES = new Set<ShipmentStatus>([
   ShipmentStatus.PENDING,
   ShipmentStatus.OFFER_RECEIVED,
@@ -60,7 +66,8 @@ export class ConverterService {
   ): Promise<string[]> {
     const loadType = this.inferConverterLoadType(payload);
     const suggestedNames = new Set<string>();
-    const totalItemCount = payload.items.reduce((sum, item) => sum + item.quantity, 0);
+    const totalItemCount = payload.items.reduce((sum, item) => sum + item.quantity, 0)
+      + (payload.customItems ?? []).reduce((sum, item) => sum + item.quantity, 0);
     const highFloorWithoutLift = Math.max(payload.originFloor, payload.destinationFloor) >= 4
       && !payload.buildingElevator
       && !payload.externalLift;
@@ -154,16 +161,30 @@ export class ConverterService {
       throw error;
     }
 
-    let totalMin = 0;
-    let totalMax = 0;
+    let catalogTotalMin = 0;
+    let catalogTotalMax = 0;
     for (const item of payload.items) {
       const catalogItem = catalogMap.get(item.itemCode)!;
-      totalMin += catalogItem.unitVolumeMin * item.quantity;
-      totalMax += catalogItem.unitVolumeMax * item.quantity;
+      catalogTotalMin += catalogItem.unitVolumeMin * item.quantity;
+      catalogTotalMax += catalogItem.unitVolumeMax * item.quantity;
     }
 
-    const estimatedVolumeMin = roundDown1(totalMin);
-    const estimatedVolumeMax = roundUp1(totalMax);
+    const customItems = (payload.customItems ?? []).map((item) => ({
+      name: item.name.trim(),
+      sizeClass: item.sizeClass,
+      quantity: item.quantity,
+    }));
+    let customTotalMin = 0;
+    let customTotalMax = 0;
+    for (const custom of customItems) {
+      const range = CUSTOM_ITEM_SIZE_CLASS_VOLUMES[custom.sizeClass];
+      if (!range) continue;
+      customTotalMin += range.min * custom.quantity;
+      customTotalMax += range.max * custom.quantity;
+    }
+
+    const estimatedVolumeMin = roundDown1(catalogTotalMin + customTotalMin);
+    const estimatedVolumeMax = roundUp1(catalogTotalMax + customTotalMax);
     const estimatedWeightKg = estimateWeightKgFromVolume(estimatedVolumeMin, estimatedVolumeMax);
 
     const warnings: string[] = [];
@@ -198,7 +219,8 @@ export class ConverterService {
 
     const hasFloors = typeof payload.originFloor === 'number' && typeof payload.destinationFloor === 'number';
     const hasElevatorInfo = typeof payload.buildingElevator === 'boolean' && typeof payload.externalLift === 'boolean';
-    const hasEnoughItems = payload.items.reduce((sum, item) => sum + item.quantity, 0) >= 5;
+    const hasEnoughItems = payload.items.reduce((sum, item) => sum + item.quantity, 0)
+      + customItems.reduce((sum, item) => sum + item.quantity, 0) >= 5;
     const hasProperty = payload.propertyType !== 'unknown';
 
     let confidence: ConverterConfidence = ConverterConfidence.LOW;
@@ -208,12 +230,23 @@ export class ConverterService {
       confidence = ConverterConfidence.MEDIUM;
     }
 
-    if (payload.items.length === 0 || !hasProperty) {
+    if ((payload.items.length === 0 && customItems.length === 0) || !hasProperty) {
       warnings.push('Girilen veri sınırlı olduğu için sonuç düşük güven seviyesindedir.');
     }
 
-    const manualReviewRecommended = confidence === ConverterConfidence.LOW && (hasSpecialItems || payload.items.length < 2);
-    const summaryText = `Tahmini hacim bandı ${estimatedVolumeMin}-${estimatedVolumeMax} m3 aralığında görünüyor. Nihai planlama keşif ve taşıyıcı değerlendirmesiyle netleşir.`;
+    const manualReviewRecommended = confidence === ConverterConfidence.LOW && (hasSpecialItems || (payload.items.length + customItems.length) < 2);
+    const summaryParts = [
+      `Tahmini hacim bandı ${estimatedVolumeMin}-${estimatedVolumeMax} m3 aralığında görünüyor.`,
+    ];
+    if (payload.items.length > 0) {
+      summaryParts.push(`Standart eşyalar: ${roundDown1(catalogTotalMin)}-${roundUp1(catalogTotalMax)} m3.`);
+    }
+    if (customItems.length > 0) {
+      const customItemText = customItems.map((item) => `${item.quantity}x ${item.name}`).join(', ');
+      summaryParts.push(`Diğer eşyalar: ${roundDown1(customTotalMin)}-${roundUp1(customTotalMax)} m3 (${customItemText}).`);
+    }
+    summaryParts.push('Nihai planlama keşif ve taşıyıcı değerlendirmesiyle netleşir.');
+    const summaryText = summaryParts.join(' ');
 
     const suggestedExtraServiceIds = await this.buildSuggestedExtraServiceIds(payload, estimatedVolumeMax);
     let answer = await this.answerRepo.findOne({ where: { sessionId: session.id } });
@@ -227,7 +260,10 @@ export class ConverterService {
     answer.buildingElevator = payload.buildingElevator;
     answer.externalLift = payload.externalLift;
     answer.specialItemsJson = specialItems;
-    answer.rawAnswersJson = payload as unknown as Record<string, unknown>;
+    answer.rawAnswersJson = {
+      ...payload,
+      customItems,
+    } as unknown as Record<string, unknown>;
     await this.answerRepo.save(answer);
 
     let result = await this.resultRepo.findOne({ where: { sessionId: session.id } });
@@ -304,6 +340,7 @@ export class ConverterService {
             buildingElevator: answer.buildingElevator,
             externalLift: answer.externalLift,
             specialItems: answer.specialItemsJson ?? [],
+            customItems: answerPayload?.customItems ?? [],
           }
         : null,
       result: result

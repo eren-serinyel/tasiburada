@@ -194,6 +194,112 @@ describe('Converter API Flow', () => {
     expect(['high', 'medium', 'low']).toContain(res.body.data.confidence);
   });
 
+  test('5.1 Custom item hacme dahil edilmeli ve resultta saklanmali', async () => {
+    if (skipDB()) return;
+
+    const sessionRes = await request(testApp)
+      .post(`${BASE}/sessions`)
+      .set('Authorization', `Bearer ${customerToken}`)
+      .send({ flowType: 'household' });
+
+    const sessionId = sessionRes.body.data?.sessionId || '';
+    expect(sessionId).toBeTruthy();
+
+    const payload = {
+      moveType: 'household',
+      propertyType: '2+1',
+      items: [],
+      originFloor: 0,
+      destinationFloor: 0,
+      buildingElevator: true,
+      externalLift: false,
+      specialItems: [],
+      customItems: [{ name: 'Antika dolap', sizeClass: 'large', quantity: 1 }],
+    };
+
+    const res = await request(testApp)
+      .post(`${BASE}/sessions/${sessionId}/estimate`)
+      .set('Authorization', `Bearer ${customerToken}`)
+      .send(payload);
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.estimatedVolumeMin).toBe(0.8);
+    expect(res.body.data.estimatedVolumeMax).toBe(1.5);
+    expect(res.body.data.estimatedWeightKg).toBe(230);
+    expect(res.body.data.summaryText).toContain('Diğer eşyalar: 0.8-1.5 m3');
+    expect(res.body.data.summaryText).toContain('1x Antika dolap');
+
+    const resultRes = await request(testApp)
+      .get(`${BASE}/sessions/${sessionId}/result`)
+      .set('Authorization', `Bearer ${customerToken}`);
+
+    expect(resultRes.status).toBe(200);
+    expect(resultRes.body.data.answer.customItems).toEqual(payload.customItems);
+  });
+
+  test('5.2 Custom item bos isim validationdan dusmeli', async () => {
+    if (skipDB()) return;
+
+    const sessionRes = await request(testApp)
+      .post(`${BASE}/sessions`)
+      .set('Authorization', `Bearer ${customerToken}`)
+      .send({ flowType: 'household' });
+
+    const sessionId = sessionRes.body.data?.sessionId || '';
+    expect(sessionId).toBeTruthy();
+
+    const res = await request(testApp)
+      .post(`${BASE}/sessions/${sessionId}/estimate`)
+      .set('Authorization', `Bearer ${customerToken}`)
+      .send({
+        moveType: 'household',
+        propertyType: '2+1',
+        items: [],
+        originFloor: 0,
+        destinationFloor: 0,
+        buildingElevator: true,
+        externalLift: false,
+        customItems: [{ name: ' ', sizeClass: 'small', quantity: 1 }],
+      });
+
+    expect(res.status).toBe(400);
+    expect(res.body.success).toBe(false);
+  });
+
+  test('5.3 Custom item 5 kayit limitini asmamali', async () => {
+    if (skipDB()) return;
+
+    const sessionRes = await request(testApp)
+      .post(`${BASE}/sessions`)
+      .set('Authorization', `Bearer ${customerToken}`)
+      .send({ flowType: 'household' });
+
+    const sessionId = sessionRes.body.data?.sessionId || '';
+    expect(sessionId).toBeTruthy();
+
+    const res = await request(testApp)
+      .post(`${BASE}/sessions/${sessionId}/estimate`)
+      .set('Authorization', `Bearer ${customerToken}`)
+      .send({
+        moveType: 'household',
+        propertyType: '2+1',
+        items: [],
+        originFloor: 0,
+        destinationFloor: 0,
+        buildingElevator: true,
+        externalLift: false,
+        customItems: Array.from({ length: 6 }, (_, index) => ({
+          name: `Ek esya ${index}`,
+          sizeClass: 'small',
+          quantity: 1,
+        })),
+      });
+
+    expect(res.status).toBe(400);
+    expect(res.body.success).toBe(false);
+  });
+
   test('6. Estimate sonrası result okunabilmeli', async () => {
     if (skipDB() || !estimatedSessionId) return;
 

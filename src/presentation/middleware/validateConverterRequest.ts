@@ -4,6 +4,7 @@ const FLOW_TYPES = new Set(['household']);
 const MOVE_TYPES = new Set(['household', 'partial_load']);
 const PROPERTY_TYPES = new Set(['studio', '1+1', '2+1', '3+1', '4+1_plus', 'unknown']);
 const LOAD_TYPES = new Set(['HOME', 'OFFICE', 'PARTIAL', 'STORAGE']);
+const CUSTOM_ITEM_SIZE_CLASSES = new Set(['small', 'medium', 'large', 'very_large']);
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export const validateCreateConverterSession = (req: Request, res: Response, next: NextFunction): void => {
@@ -29,6 +30,7 @@ export const validateEstimateConverterRequest = (req: Request, res: Response, ne
     buildingElevator,
     externalLift,
     specialItems,
+    customItems,
   } = req.body ?? {};
 
   if (!MOVE_TYPES.has(moveType)) {
@@ -78,6 +80,29 @@ export const validateEstimateConverterRequest = (req: Request, res: Response, ne
   if (specialItems !== undefined && !Array.isArray(specialItems)) {
     res.status(400).json({ success: false, message: 'specialItems varsa dizi olmalıdır.' });
     return;
+  }
+  if (customItems !== undefined) {
+    if (!Array.isArray(customItems) || customItems.length > 5) {
+      res.status(400).json({ success: false, message: 'customItems varsa dizi olmalıdır ve 5 kaydı aşamaz.' });
+      return;
+    }
+
+    for (const [index, item] of customItems.entries()) {
+      const name = typeof item?.name === 'string' ? item.name.trim() : '';
+      if (name.length < 2 || name.length > 50) {
+        res.status(400).json({ success: false, message: `customItems[${index}].name 2 ile 50 karakter arasında olmalıdır.` });
+        return;
+      }
+      if (!CUSTOM_ITEM_SIZE_CLASSES.has(item?.sizeClass)) {
+        res.status(400).json({ success: false, message: `customItems[${index}].sizeClass geçersiz.` });
+        return;
+      }
+      if (!Number.isInteger(item.quantity) || item.quantity < 1 || item.quantity > 50) {
+        res.status(400).json({ success: false, message: `customItems[${index}].quantity 1 ile 50 arasında tam sayı olmalıdır.` });
+        return;
+      }
+      item.name = name;
+    }
   }
 
   next();
