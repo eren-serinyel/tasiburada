@@ -89,6 +89,10 @@ export default function VolumeCalculatorModal({
     () => Object.entries(selectedItems).filter(([, quantity]) => quantity > 0),
     [selectedItems],
   );
+  const hasAnySelection = useMemo(
+    () => selectedItemEntries.length > 0 || specialItems.length > 0,
+    [selectedItemEntries, specialItems],
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -143,11 +147,11 @@ export default function VolumeCalculatorModal({
     [catalogItems],
   );
 
-  const canCalculate = selectedItemEntries.length > 0 && !loading && !catalogLoading && !catalogError;
+  const canCalculate = hasAnySelection && !loading && !catalogLoading && !catalogError;
 
   const handleCalculate = async () => {
-    if (selectedItemEntries.length === 0) {
-      setErrorMessage('En az 1 eşya seçin');
+    if (!hasAnySelection) {
+      setErrorMessage('Hesaplamak için en az bir eşya seçin.');
       return;
     }
 
@@ -192,8 +196,8 @@ export default function VolumeCalculatorModal({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label>Taşıma Tipi</Label>
               <Select value={moveType} onValueChange={(value) => setMoveType(value as ConverterMoveType)}>
@@ -230,7 +234,8 @@ export default function VolumeCalculatorModal({
                 type="number"
                 min={-5}
                 max={100}
-                value={originFloor}
+                value={originFloor === 0 ? '' : originFloor}
+                placeholder="0"
                 onChange={(e) => setOriginFloor(Number(e.target.value || 0))}
               />
             </div>
@@ -241,13 +246,14 @@ export default function VolumeCalculatorModal({
                 type="number"
                 min={-5}
                 max={100}
-                value={destinationFloor}
+                value={destinationFloor === 0 ? '' : destinationFloor}
+                placeholder="0"
                 onChange={(e) => setDestinationFloor(Number(e.target.value || 0))}
               />
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <label className="flex items-center gap-2 rounded-md border border-slate-200 p-2 text-sm">
               <input
                 type="checkbox"
@@ -266,7 +272,7 @@ export default function VolumeCalculatorModal({
             </label>
           </div>
 
-          <div className="space-y-2">
+          <div className="space-y-3">
             <Label>Eşya Listesi ve Adet</Label>
             {catalogLoading ? (
               <div className="rounded-md border border-slate-200 p-3 text-sm text-slate-600">Eşya kataloğu yükleniyor...</div>
@@ -287,7 +293,7 @@ export default function VolumeCalculatorModal({
             )}
           </div>
 
-          <div className="space-y-2">
+          <div className="space-y-3 border-t border-slate-200 pt-4">
             <Label>Özel Eşyalar</Label>
             <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
               {specialCatalog.map((item) => {
@@ -318,6 +324,10 @@ export default function VolumeCalculatorModal({
             <Alert variant="destructive">
               <AlertDescription>{errorMessage}</AlertDescription>
             </Alert>
+          )}
+
+          {!hasAnySelection && (
+            <p className="text-sm text-slate-500">Hesaplamak için en az bir eşya seçin.</p>
           )}
 
           {result && (

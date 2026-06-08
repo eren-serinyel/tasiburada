@@ -28,18 +28,19 @@ export default function ItemSelector({ items, selectedItems, onQuantityChange }:
   }, [itemsByCategory]);
 
   return (
-    <Accordion type="multiple" defaultValue={['living_room', 'bedroom']} className="rounded-md border border-slate-200">
+    <Accordion type="multiple" defaultValue={['living_room', 'bedroom']} className="space-y-2">
       {orderedCategories.map((category) => {
         const categoryItems = itemsByCategory[category];
-        const selectedCount = categoryItems.filter((item) => (selectedItems[item.itemCode] || 0) > 0).length;
+        const selectedQuantity = categoryItems.reduce((sum, item) => sum + (selectedItems[item.itemCode] || 0), 0);
 
         return (
-          <AccordionItem key={category} value={category} className="px-3">
+          <AccordionItem key={category} value={category} className="rounded-md border border-slate-200 px-3">
             <AccordionTrigger className="text-sm">
               <span className="flex items-center gap-2">
                 <span>{CONVERTER_CATEGORY_LABELS[category] || category}</span>
                 <span className="text-xs font-normal text-slate-500">
-                  ({categoryItems.length} eşya, {selectedCount} seçili)
+                  {categoryItems.length} eşya
+                  {selectedQuantity > 0 && ` · ${selectedQuantity} adet seçili`}
                 </span>
               </span>
             </AccordionTrigger>
@@ -59,7 +60,8 @@ export default function ItemSelector({ items, selectedItems, onQuantityChange }:
                         type="number"
                         min={0}
                         max={999}
-                        value={quantity}
+                        value={quantity === 0 ? '' : quantity}
+                        placeholder="0"
                         onChange={(e) => {
                           const next = Number(e.target.value);
                           onQuantityChange(item.itemCode, Number.isFinite(next) ? Math.max(0, next) : 0);
