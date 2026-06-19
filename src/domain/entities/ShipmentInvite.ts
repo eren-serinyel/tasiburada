@@ -23,6 +23,12 @@ export class ShipmentInvite {
   })
   status: 'pending' | 'accepted' | 'declined' | 'expired';
 
+  @Column({ type: 'json', nullable: true })
+  requestedServices?: {
+    catalogServiceIds: string[];
+    customServiceIds: string[];
+  } | null;
+
   @ManyToOne(() => Shipment, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'shipmentId' })
   shipment: Shipment;

@@ -37,6 +37,7 @@ const shipmentStatusConfig: Record<string, { label: string; bg: string; text: st
   in_transit: { label: 'Tasiniyor', bg: 'bg-orange-50', text: 'text-orange-700' },
   completed: { label: 'Tamamlandi', bg: 'bg-green-50', text: 'text-green-700' },
   cancelled: { label: 'Iptal', bg: 'bg-gray-100', text: 'text-gray-500' },
+  expired: { label: 'Suresi doldu', bg: 'bg-slate-100', text: 'text-slate-600' },
 };
 
 const fmtDate = (d: string) =>
@@ -85,7 +86,7 @@ export default function MyOffers() {
 
   const openAcceptConfirm = (offer: CustomerOffer) => {
     if (isOfferAcceptDisabled(offer)) {
-      toast.error('Bu tasiyici artik teklif kabulu icin uygun degil.');
+      toast.error(offer.status === 'expired' ? 'Bu teklifin suresi doldu.' : 'Bu tasiyici artik teklif kabulu icin uygun degil.');
       return;
     }
 
@@ -95,7 +96,7 @@ export default function MyOffers() {
   const decide = async (offerId: string, accept: boolean) => {
     const targetOffer = offers.find((offer) => offer.id === offerId);
     if (accept && targetOffer && isOfferAcceptDisabled(targetOffer)) {
-      toast.error('Bu tasiyici artik teklif kabulu icin uygun degil.');
+      toast.error(targetOffer.status === 'expired' ? 'Bu teklifin suresi doldu.' : 'Bu tasiyici artik teklif kabulu icin uygun degil.');
       return;
     }
 

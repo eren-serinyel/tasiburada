@@ -13,6 +13,7 @@ import {
 	type CarrierSearchResponse
 } from '@/lib/carrierSearch';
 import { ArrowLeft, ChevronLeft, ChevronRight, SearchX, SlidersHorizontal } from 'lucide-react';
+import { useFavorites } from '@/hooks/useFavorites';
 
 const PAGE_SIZE = 12;
 
@@ -24,6 +25,7 @@ const parsePage = (params: URLSearchParams) => {
 export default function CarrierDirectory() {
 	const [searchParams, setSearchParams] = useSearchParams();
 	const navigate = useNavigate();
+	const { isFavorite } = useFavorites();
 	const filters = useMemo(() => filtersFromParams(searchParams), [searchParams]);
 	const page = useMemo(() => parsePage(searchParams), [searchParams]);
 	const offset = (page - 1) * PAGE_SIZE;
@@ -50,7 +52,10 @@ export default function CarrierDirectory() {
 
 	const total = data?.total ?? 0;
 	const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-	const carriers = data?.items ?? [];
+	const allCarriers = data?.items ?? [];
+	const carriers = filters.favoritesOnly
+		? allCarriers.filter(c => isFavorite(c.id))
+		: allCarriers;
 	const hasResults = carriers.length > 0;
 	const canPrev = page > 1;
 	const canNext = page < totalPages;

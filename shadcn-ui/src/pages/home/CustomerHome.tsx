@@ -70,6 +70,7 @@ const normalizeStatus = (s?: string): Shipment['status'] => {
     case 'matched':   return 'matched';
     case 'completed': return 'delivered';
     case 'cancelled': return 'cancelled';
+    case 'expired': return 'expired';
     case 'in_transit': return 'matched';
     default:          return 'pending';
   }
@@ -109,6 +110,7 @@ const statusCfg: Record<string, {
   in_transit:     { bg: '#EFF6FF', color: '#1D4ED8', border: '#BFDBFE', label: 'Taşınıyor' },
   completed:      { bg: '#F0FDF4', color: '#15803D', border: '#BBF7D0', label: 'Tamamlandı' },
   cancelled:      { bg: '#FEF2F2', color: '#DC2626', border: '#FECACA', label: 'İptal Edildi' },
+  expired:        { bg: '#F8FAFC', color: '#475569', border: '#CBD5E1', label: 'Suresi Doldu' },
 };
 
 function StatusBadge({ status }: { status: string }) {

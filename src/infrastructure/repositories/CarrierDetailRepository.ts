@@ -5,6 +5,9 @@ import { Offer } from '../../domain/entities/Offer';
 import { CarrierDocument, CarrierDocumentStatus } from '../../domain/entities/CarrierDocument';
 import { CarrierVehicleType } from '../../domain/entities/CarrierVehicleType';
 import { Review } from '../../domain/entities/Review';
+import { CarrierExtraServiceCapability } from '../../domain/entities/CarrierExtraServiceCapability';
+import { CarrierCustomExtraService } from '../../domain/entities/CarrierCustomExtraService';
+import { ExtraServiceLoadType } from '../../domain/entities/ExtraServiceLoadType';
 
 export interface CarrierDetailVehicleDto {
   id: string;
@@ -49,6 +52,22 @@ export interface CarrierReviewSummaryDto {
   createdAt: string;
 }
 
+export interface CarrierDetailServiceItemDto {
+  id: string;
+  name: string;
+  description: string | null;
+  priceMode: string | null;
+  basePrice: number | null;
+  minPrice: number | null;
+  maxPrice: number | null;
+  source: 'catalog' | 'custom';
+}
+
+export interface CarrierDetailServiceGroupDto {
+  loadType: ExtraServiceLoadType;
+  items: CarrierDetailServiceItemDto[];
+}
+
 export interface CarrierDetailDto {
   id: string;
   companyName: string;
@@ -70,6 +89,7 @@ export interface CarrierDetailDto {
   documents: CarrierDetailDocumentDto[];
   documentsApproved: boolean;
   recentReviews: CarrierReviewSummaryDto[];
+  services: CarrierDetailServiceGroupDto[];
 }
 
 export class CarrierDetailRepository extends BaseRepository<Carrier> {
@@ -158,8 +178,81 @@ export class CarrierDetailRepository extends BaseRepository<Carrier> {
         : null,
       documents,
       documentsApproved: allDocumentsApproved,
-      recentReviews: await this.fetchRecentReviews(carrierId)
+      recentReviews: await this.fetchRecentReviews(carrierId),
+      services: await this.fetchServiceShowcase(carrierId)
     };
+  }
+
+  private async fetchServiceShowcase(carrierId: string): Promise<CarrierDetailServiceGroupDto[]> {
+    const capabilities = await AppDataSource.getRepository(CarrierExtraServiceCapability)
+      .createQueryBuilder('cap')
+      .leftJoinAndSelect('cap.extraService', 'extraService')
+      .where('cap.carrierId = :carrierId', { carrierId })
+      .andWhere('cap.isActive = :isActive', { isActive: true })
+      .andWhere('(extraService.status = :status OR extraService.status IS NULL)', { status: 'ACTIVE' })
+      .getMany();
+
+    const customServices = await AppDataSource.getRepository(CarrierCustomExtraService)
+      .createQueryBuilder('customService')
+      .where('customService.carrierId = :carrierId', { carrierId })
+      .andWhere('customService.isActive = :isActive', { isActive: true })
+      .getMany();
+
+    const grouped = new Map<ExtraServiceLoadType, CarrierDetailServiceItemDto[]>();
+    const pushItem = (loadType: ExtraServiceLoadType, item: CarrierDetailServiceItemDto) => {
+      const items = grouped.get(loadType) ?? [];
+      items.push(item);
+      grouped.set(loadType, items);
+    };
+
+    capabilities.forEach((capability) => {
+      const serviceName = capability.extraService?.name?.trim();
+      if (!serviceName) return;
+
+      pushItem(capability.loadType, {
+        id: capability.extraServiceId,
+        name: serviceName,
+        description: capability.extraService?.description || capability.notes || null,
+        priceMode: capability.priceMode,
+        basePrice: this.toNullableNumber(capability.basePrice),
+        minPrice: this.toNullableNumber(capability.quoteMinPrice),
+        maxPrice: this.toNullableNumber(capability.quoteMaxPrice),
+        source: 'catalog',
+      });
+    });
+
+    customServices.forEach((service) => {
+      const serviceName = service.title?.trim();
+      if (!serviceName) return;
+
+      pushItem(service.loadType, {
+        id: service.id,
+        name: serviceName,
+        description: service.description || null,
+        priceMode: service.priceMode,
+        basePrice: this.toNullableNumber(service.basePrice),
+        minPrice: this.toNullableNumber(service.quoteMinPrice),
+        maxPrice: this.toNullableNumber(service.quoteMaxPrice),
+        source: 'custom',
+      });
+    });
+
+    const loadTypeOrder = [
+      ExtraServiceLoadType.HOME,
+      ExtraServiceLoadType.OFFICE,
+      ExtraServiceLoadType.PARTIAL,
+      ExtraServiceLoadType.STORAGE,
+    ];
+
+    return loadTypeOrder
+      .filter((loadType) => grouped.has(loadType))
+      .map((loadType) => ({
+        loadType,
+        items: (grouped.get(loadType) ?? []).sort((a, b) => {
+          if (a.source !== b.source) return a.source === 'catalog' ? -1 : 1;
+          return a.name.localeCompare(b.name, 'tr');
+        }),
+      }));
   }
 
   private async fetchRecentReviews(carrierId: string): Promise<CarrierReviewSummaryDto[]> {
@@ -226,5 +319,11 @@ export class CarrierDetailRepository extends BaseRepository<Carrier> {
       });
     });
     return Array.from(unique.values());
+  }
+
+  private toNullableNumber(value: unknown): number | null {
+    if (value === null || value === undefined || value === '') return null;
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
   }
 }

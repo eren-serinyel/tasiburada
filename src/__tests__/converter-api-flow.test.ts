@@ -70,13 +70,32 @@ describe('Converter API Flow', () => {
     carrierToken = carrierLogin.body.data?.token || '';
   });
 
-  test('1. Auth olmadan session create engellenmeli', async () => {
-    const res = await request(testApp)
+  test('1. Auth olmadan session create, estimate ve result misafire acik olmali', async () => {
+    if (skipDB()) return;
+
+    const sessionRes = await request(testApp)
       .post(`${BASE}/sessions`)
       .send({ flowType: 'household' });
 
-    expect(res.status).toBe(401);
-    expect(res.body.success).toBe(false);
+    expect(sessionRes.status).toBe(201);
+    expect(sessionRes.body.success).toBe(true);
+    expect(sessionRes.body.data.sessionId).toBeTruthy();
+
+    const sessionId = sessionRes.body.data.sessionId;
+    const estimateRes = await request(testApp)
+      .post(`${BASE}/sessions/${sessionId}/estimate`)
+      .send(VALID_ESTIMATE_PAYLOAD);
+
+    expect(estimateRes.status).toBe(200);
+    expect(estimateRes.body.success).toBe(true);
+    expect(estimateRes.body.data.estimatedVolumeMax).toBeGreaterThan(0);
+
+    const resultRes = await request(testApp)
+      .get(`${BASE}/sessions/${sessionId}/result`);
+
+    expect(resultRes.status).toBe(200);
+    expect(resultRes.body.success).toBe(true);
+    expect(resultRes.body.data.result.status).toBe('estimated');
   });
 
   test('2. Auth ile session create başarılı olmalı', async () => {

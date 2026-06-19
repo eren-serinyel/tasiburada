@@ -2,7 +2,7 @@ import { BaseRepository } from './BaseRepository';
 import { Carrier, CarrierApprovalState } from '../../domain/entities/Carrier';
 import { Brackets, SelectQueryBuilder } from 'typeorm';
 
-export type CarrierSearchSort = 'rating' | 'price' | 'experience' | 'profile' | 'recent';
+export type CarrierSearchSort = 'rating' | 'experience' | 'recent';
 
 export interface CarrierSearchFilters {
   city?: string;
@@ -11,8 +11,6 @@ export interface CarrierSearchFilters {
   serviceCity?: string;
   serviceDistrict?: string;
   minRating?: number;
-  minPrice?: number;
-  maxPrice?: number;
   minExperienceYears?: number;
   minProfileCompletion?: number;
   minCapacityKg?: number;
@@ -22,6 +20,7 @@ export interface CarrierSearchFilters {
   scopeIds?: string[];
   scopeNames?: string[];
   serviceTypeIds?: string[];
+  loadTypes?: string[];
   isVerified?: boolean;
   hasDocuments?: boolean;
   sortBy?: CarrierSearchSort;
@@ -33,6 +32,7 @@ export interface CarrierSearchRepositoryItem {
   carrier: Carrier;
   minPrice: number | null;
   offerCount: number;
+  reviewCount: number;
 }
 
 export class CarrierRepository extends BaseRepository<Carrier> {
@@ -45,6 +45,61 @@ export class CarrierRepository extends BaseRepository<Carrier> {
       .andWhere('carrier.isActive = :isActive', { isActive: true })
       .andWhere('carrier.verifiedByAdmin = :verifiedByAdmin', { verifiedByAdmin: true })
       .andWhere('carrier.approvalState = :approvalState', { approvalState: CarrierApprovalState.APPROVED });
+  }
+
+  private applyServiceCityFilter(qb: SelectQueryBuilder<Carrier>, serviceCity?: string): SelectQueryBuilder<Carrier> {
+    if (!serviceCity) return qb;
+
+    return qb.andWhere(new Brackets(cityClause => {
+      cityClause
+        .where('activity.city = :serviceCity', { serviceCity })
+        .orWhere(
+          'activity.serviceAreasJson IS NOT NULL AND JSON_CONTAINS(activity.serviceAreasJson, JSON_QUOTE(:serviceCity)) = 1',
+          { serviceCity }
+        );
+    }));
+  }
+
+  private applyScopeFilter(
+    qb: SelectQueryBuilder<Carrier>,
+    filters?: Pick<CarrierSearchFilters, 'scopeIds' | 'scopeNames'>
+  ): SelectQueryBuilder<Carrier> {
+    const hasScopeIds = (filters?.scopeIds?.length ?? 0) > 0;
+    const hasScopeNames = (filters?.scopeNames?.length ?? 0) > 0;
+    if (!hasScopeIds && !hasScopeNames) return qb;
+
+    return qb.andWhere(new Brackets(scopeClause => {
+      if (hasScopeIds) {
+        scopeClause.where(
+          `EXISTS (
+            SELECT 1
+            FROM carrier_scope_of_work scope_link_by_id
+            INNER JOIN scope_of_work scope_by_id ON scope_by_id.id = scope_link_by_id.scopeId
+            WHERE scope_link_by_id.carrierId = carrier.id
+              AND scope_link_by_id.scopeId IN (:...scopeIds)
+              AND scope_by_id.status = :activeScopeStatus
+          )`,
+          { scopeIds: filters!.scopeIds, activeScopeStatus: 'ACTIVE' }
+        );
+      }
+
+      if (hasScopeNames) {
+        const clause = `EXISTS (
+          SELECT 1
+          FROM carrier_scope_of_work scope_link_by_name
+          INNER JOIN scope_of_work scope_by_name ON scope_by_name.id = scope_link_by_name.scopeId
+          WHERE scope_link_by_name.carrierId = carrier.id
+            AND scope_by_name.name IN (:...scopeNames)
+            AND scope_by_name.status = :activeScopeStatus
+        )`;
+        const params = { scopeNames: filters!.scopeNames, activeScopeStatus: 'ACTIVE' };
+        if (hasScopeIds) {
+          scopeClause.orWhere(clause, params);
+        } else {
+          scopeClause.where(clause, params);
+        }
+      }
+    }));
   }
 
   async findFullById(id: string): Promise<Carrier | null> {
@@ -143,8 +198,16 @@ export class CarrierRepository extends BaseRepository<Carrier> {
       .getMany();
   }
 
-  async updateRating(carrierId: string, newRating: number): Promise<void> {
-    await this.repository.update(carrierId, { rating: newRating });
+  async updateRating(carrierId: string): Promise<void> {
+    await this.repository
+      .createQueryBuilder()
+      .update(Carrier)
+      .set({
+        rating: () =>
+          '(SELECT COALESCE(AVG(r.rating), 0) FROM reviews r WHERE r.carrierId = id)',
+      })
+      .where('id = :carrierId', { carrierId })
+      .execute();
   }
 
   // Teklif verildiğinde ilgili nakliyecinin toplam teklif sayısını 1 artırır.
@@ -159,6 +222,28 @@ export class CarrierRepository extends BaseRepository<Carrier> {
       .execute();
   }
 
+  // Teklif kabul edildiğinde kazanılan iş sayacını 1 artırır.
+  async incrementAcceptedOffers(carrierId: string): Promise<void> {
+    await this.repository
+      .createQueryBuilder()
+      .update(Carrier)
+      .set({
+        acceptedOffers: () => 'acceptedOffers + 1'
+      })
+      .where('id = :id', { id: carrierId })
+      .execute();
+  }
+
+  async decrementAcceptedOffers(carrierId: string): Promise<void> {
+    await this.repository
+      .createQueryBuilder()
+      .update(Carrier)
+      .set({
+        acceptedOffers: () => 'GREATEST(acceptedOffers - 1, 0)'
+      })
+      .where('id = :id', { id: carrierId })
+      .execute();
+  }
   // Taşıma başarıyla tamamlandığında completedShipments alanını 1 artırır.
   async incrementCompletedShipments(carrierId: string): Promise<void> {
     await this.repository
@@ -183,14 +268,14 @@ export class CarrierRepository extends BaseRepository<Carrier> {
       .execute();
   }
 
-  // Başarı oranını completedShipments / totalOffers * 100 formülüyle yeniden hesaplar.
-  // totalOffers = 0 ise successRate değeri 0 olarak set edilir.
+  // Başarı oranı, kabul edilmiş işlerin ne kadarının tamamlandığını gösterir.
+  // Kazanma oranı ayrı bir metriktir: acceptedOffers / totalOffers.
   async recalculateSuccessRate(carrierId: string): Promise<void> {
     await this.repository
       .createQueryBuilder()
       .update(Carrier)
       .set({
-        successRate: () => 'CASE WHEN totalOffers > 0 THEN ROUND((completedShipments / totalOffers) * 100, 2) ELSE 0 END'
+        successRate: () => 'CASE WHEN acceptedOffers > 0 THEN ROUND((completedShipments / acceptedOffers) * 100, 2) ELSE 0 END'
       })
       .where('id = :id', { id: carrierId })
       .execute();
@@ -215,6 +300,22 @@ export class CarrierRepository extends BaseRepository<Carrier> {
       .leftJoinAndSelect('carrier.profileStatus', 'profileStatus')
       .leftJoinAndSelect('carrier.vehicleTypeLinks', 'vehicleLink')
       .leftJoinAndSelect('vehicleLink.vehicleType', 'vehicleType')
+      .leftJoinAndSelect('carrier.scopeLinks', 'scopeResultLink')
+      .leftJoinAndSelect('scopeResultLink.scope', 'scopeResult')
+      .leftJoin(
+        qb => qb
+          .select('review.carrierId', 'carrierId')
+          .addSelect('COUNT(review.id)', 'reviewCount')
+          .from('reviews', 'review')
+          .groupBy('review.carrierId'),
+        'reviewSummary',
+        'reviewSummary.carrierId = carrier.id'
+      )
+      .addSelect('COALESCE(reviewSummary.reviewCount, 0)', 'reviewCount')
+      .addSelect(
+        '(CASE WHEN COALESCE(reviewSummary.reviewCount, 0) > 0 THEN 0 ELSE 1 END)',
+        'hasReviewsForSort'
+      )
       .where('1 = 1')
       .distinct(true);
 
@@ -232,16 +333,7 @@ export class CarrierRepository extends BaseRepository<Carrier> {
       qb.andWhere('vehicleLink.vehicleTypeId IN (:...vehicleTypeIds)', { vehicleTypeIds: filters.vehicleTypeIds });
     }
 
-    if (filters.serviceCity) {
-      qb.andWhere(new Brackets(cityClause => {
-        cityClause
-          .where('activity.city = :serviceCity', { serviceCity: filters.serviceCity })
-          .orWhere(
-            "(activity.serviceAreasJson IS NOT NULL AND JSON_SEARCH(activity.serviceAreasJson, 'one', :serviceCityPattern) IS NOT NULL)",
-            { serviceCityPattern: `%${filters.serviceCity}%` }
-          );
-      }));
-    }
+    this.applyServiceCityFilter(qb, filters.serviceCity);
 
     if (filters.serviceDistrict) {
       qb.andWhere(new Brackets(districtClause => {
@@ -315,35 +407,21 @@ export class CarrierRepository extends BaseRepository<Carrier> {
       );
     }
 
-    if ((filters.scopeIds && filters.scopeIds.length > 0) || (filters.scopeNames && filters.scopeNames.length > 0)) {
-      qb.leftJoin('carrier.scopeLinks', 'scopeLink');
-      qb.leftJoin('scopeLink.scope', 'scopeFilter');
+    this.applyScopeFilter(qb, filters);
 
-      qb.andWhere(new Brackets(scopeClause => {
-        if (filters.scopeIds && filters.scopeIds.length > 0) {
-          scopeClause.where('scopeLink.scopeId IN (:...scopeIds)', { scopeIds: filters.scopeIds });
-        }
-
-        if (filters.scopeNames && filters.scopeNames.length > 0) {
-          if (filters.scopeIds && filters.scopeIds.length > 0) {
-            scopeClause.orWhere('scopeFilter.name IN (:...scopeNames)', { scopeNames: filters.scopeNames });
-          } else {
-            scopeClause.where('scopeFilter.name IN (:...scopeNames)', { scopeNames: filters.scopeNames });
-          }
-        }
-      }));
-      qb.andWhere('scopeFilter.status = :activeScopeStatus', { activeScopeStatus: 'ACTIVE' });
+    if (filters.loadTypes && filters.loadTypes.length > 0) {
+      qb.innerJoin('carrier.loadTypeCapabilities', 'loadCap', 'loadCap.isActive = :activeLoadCap', { activeLoadCap: true });
+      qb.andWhere('loadCap.loadType IN (:...loadTypes)', { loadTypes: filters.loadTypes });
     }
 
     if (filters.sortBy === 'experience') {
       qb.orderBy('carrier.foundedYear', 'ASC');
       qb.addOrderBy('carrier.rating', 'DESC');
-    } else if (filters.sortBy === 'profile') {
-      qb.orderBy('COALESCE(profileStatus.overallPercentage, 0)', 'DESC');
     } else if (filters.sortBy === 'recent') {
       qb.orderBy('carrier.createdAt', 'DESC');
     } else {
-      qb.orderBy('carrier.rating', 'DESC');
+      qb.orderBy('hasReviewsForSort', 'ASC');
+      qb.addOrderBy('carrier.rating', 'DESC');
     }
     qb.addOrderBy('carrier.completedShipments', 'DESC');
 
@@ -354,31 +432,40 @@ export class CarrierRepository extends BaseRepository<Carrier> {
     const { entities, raw } = await pagedQb.getRawAndEntities();
     const total = await qb.clone().getCount();
 
-    const items: CarrierSearchRepositoryItem[] = entities.map((carrier) => ({
+    const items: CarrierSearchRepositoryItem[] = entities.map((carrier, index) => ({
       carrier,
       minPrice: null,
-      offerCount: carrier.totalOffers ?? 0
+      offerCount: carrier.totalOffers ?? 0,
+      reviewCount: Number(raw[index]?.reviewCount ?? 0)
     }));
 
     return { total, items };
   }
 
-  async countByAvailableDate(date: string): Promise<{ total: number; available: number }> {
-    const totalCount = await this.repository
-      .createQueryBuilder('carrier')
-      .where('1 = 1')
-      .andWhere('carrier.isActive = :isActive', { isActive: true })
-      .andWhere('carrier.verifiedByAdmin = :verifiedByAdmin', { verifiedByAdmin: true })
-      .andWhere('carrier.approvalState = :approvalState', { approvalState: CarrierApprovalState.APPROVED })
-      .getCount();
-
-    const availableCount = await this.repository
+  async countByAvailableDate(
+    date: string,
+    serviceCity?: string,
+    scopeFilters?: Pick<CarrierSearchFilters, 'scopeIds' | 'scopeNames'>
+  ): Promise<{ total: number; available: number }> {
+    const totalQb = this.repository
       .createQueryBuilder('carrier')
       .leftJoin('carrier.activity', 'activity')
-      .where('1 = 1')
-      .andWhere('carrier.isActive = :isActive', { isActive: true })
-      .andWhere('carrier.verifiedByAdmin = :verifiedByAdmin', { verifiedByAdmin: true })
-      .andWhere('carrier.approvalState = :approvalState', { approvalState: CarrierApprovalState.APPROVED })
+      .where('1 = 1');
+
+    this.applyPublicTrustGate(totalQb);
+    this.applyServiceCityFilter(totalQb, serviceCity);
+    this.applyScopeFilter(totalQb, scopeFilters);
+    const totalCount = await totalQb.getCount();
+
+    const availableQb = this.repository
+      .createQueryBuilder('carrier')
+      .leftJoin('carrier.activity', 'activity')
+      .where('1 = 1');
+
+    this.applyPublicTrustGate(availableQb);
+    this.applyServiceCityFilter(availableQb, serviceCity);
+    this.applyScopeFilter(availableQb, scopeFilters);
+    const availableCount = await availableQb
       .andWhere(
         "(activity.availableDates IS NOT NULL AND JSON_SEARCH(activity.availableDates, 'one', :date) IS NOT NULL)",
         { date }

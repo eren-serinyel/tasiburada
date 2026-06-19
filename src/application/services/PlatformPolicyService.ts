@@ -1,4 +1,4 @@
-import { In, LessThanOrEqual, MoreThan } from 'typeorm';
+import { EntityManager, In, LessThanOrEqual, MoreThan } from 'typeorm';
 import {
   ContactFilterAction,
   ContactFilterSurface,
@@ -10,6 +10,7 @@ import {
 import { ValidationError, ConflictError, NotFoundError } from '../../domain/errors/AppError';
 import { AppDataSource } from '../../infrastructure/database/data-source';
 import { ContactSafetyService } from './contact-safety/ContactSafetyService';
+import { PlatformSetting } from '../../domain/entities/PlatformSetting';
 
 type ActorType = 'customer' | 'carrier' | 'admin' | 'system';
 
@@ -26,8 +27,54 @@ interface ContactPolicyInput {
 const DIRECT_CONTACT_MESSAGE =
   'Guvenliginiz icin telefon, e-posta, link veya platform disi iletisim yonlendirmesi paylasilamaz.';
 
+export type CommissionBreakdown = {
+  grossAmount: number;
+  commissionRate: number;
+  commissionPercent: number;
+  minCommissionAmount: number;
+  commissionAmount: number;
+  netAmount: number;
+};
+
+const DEFAULT_COMMISSION_PERCENT = 10;
+const DEFAULT_MIN_COMMISSION_AMOUNT = 50;
+
+const roundToTwo = (value: number): number => Math.round((value + Number.EPSILON) * 100) / 100;
+
 export class PlatformPolicyService {
   private contactSafetyService = new ContactSafetyService();
+
+  private normalizeSettingNumber(value: unknown, fallback: number): number {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+  }
+
+  async computeCommission(gross: number, manager: EntityManager = AppDataSource.manager): Promise<CommissionBreakdown> {
+    const grossAmount = roundToTwo(Number(gross));
+    if (!Number.isFinite(grossAmount) || grossAmount < 0) {
+      throw new ValidationError('Komisyon hesaplamak için geçerli bir tutar gerekir.');
+    }
+
+    const settingRepo = manager.getRepository(PlatformSetting);
+    const [commissionSetting, minSetting] = await Promise.all([
+      settingRepo.findOne({ where: { key: 'platform_commission' } }),
+      settingRepo.findOne({ where: { key: 'min_commission_amount' } }),
+    ]);
+
+    const commissionPercent = this.normalizeSettingNumber(commissionSetting?.value, DEFAULT_COMMISSION_PERCENT);
+    const minCommissionAmount = this.normalizeSettingNumber(minSetting?.value, DEFAULT_MIN_COMMISSION_AMOUNT);
+    const commissionRate = commissionPercent / 100;
+    const commissionAmount = roundToTwo(Math.max(grossAmount * commissionRate, minCommissionAmount));
+
+    return {
+      grossAmount,
+      commissionRate,
+      commissionPercent,
+      minCommissionAmount,
+      commissionAmount,
+      netAmount: roundToTwo(grossAmount - commissionAmount),
+    };
+  }
 
   async hasActiveCooldown(customerId: string, carrierId: string): Promise<boolean> {
     const repo = AppDataSource.getRepository(MatchCooldown);

@@ -55,6 +55,21 @@ interface OfferWarning {
   message?: string;
 }
 
+type LoadType = 'HOME' | 'OFFICE' | 'PARTIAL' | 'STORAGE';
+type PriceMode = 'NONE' | 'FIXED' | 'QUOTE';
+
+interface CustomExtraService {
+  id: string;
+  loadType: LoadType;
+  title: string;
+  description?: string | null;
+  isActive: boolean;
+  priceMode: PriceMode;
+  basePrice?: number | string | null;
+  quoteMinPrice?: number | string | null;
+  quoteMaxPrice?: number | string | null;
+}
+
 const shipmentCategoryLabel: Record<string, string> = {
   HOME_MOVE: 'Ev taşıma',
   OFFICE_MOVE: 'Ofis taşıma',
@@ -167,6 +182,32 @@ const getOfferErrorMessage = (json: any, fallback = 'Teklif gönderilemedi.') =>
   return message || fallback;
 };
 
+const inferLoadType = (shipment: BackendShipment): LoadType | null => {
+  switch (shipment.shipmentCategory) {
+    case 'HOME_MOVE':
+      return 'HOME';
+    case 'OFFICE_MOVE':
+      return 'OFFICE';
+    case 'PARTIAL_ITEM':
+      return 'PARTIAL';
+    case 'STORAGE':
+      return 'STORAGE';
+    default:
+      break;
+  }
+
+  const transportType = String(shipment.transportType || '').toLocaleLowerCase('tr-TR');
+  if (transportType.includes('ev') || transportType.includes('home')) return 'HOME';
+  if (transportType.includes('ofis') || transportType.includes('office')) return 'OFFICE';
+  if (transportType.includes('par') || transportType.includes('partial')) return 'PARTIAL';
+  if (transportType.includes('depo') || transportType.includes('storage')) return 'STORAGE';
+
+  return null;
+};
+
+const formatMoney = (value: number) =>
+  new Intl.NumberFormat('tr-TR', { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(value);
+
 export default function CarrierRespond() {
   const { requestId } = useParams();
   const navigate = useNavigate();
@@ -179,6 +220,8 @@ export default function CarrierRespond() {
   const [priceError, setPriceError] = useState('');
   const [minOfferPrice, setMinOfferPrice] = useState(100);
   const [offerBlocked, setOfferBlocked] = useState<string | null>(null);
+  const [customServices, setCustomServices] = useState<CustomExtraService[]>([]);
+  const [selectedCustomIds, setSelectedCustomIds] = useState<string[]>([]);
 
   useEffect(() => {
     (async () => {
@@ -198,10 +241,11 @@ export default function CarrierRespond() {
     if (!requestId) return;
     (async () => {
       try {
-        const [res, statusRes, carrierRes] = await Promise.all([
+        const [res, statusRes, carrierRes, customRes] = await Promise.all([
           apiClient(`${API_BASE_URL}/shipments/${requestId}`),
           apiClient(`${API_BASE_URL}/carriers/me/profile-status`),
           apiClient(`${API_BASE_URL}/carriers/me`),
+          apiClient(`${API_BASE_URL}/carriers/me/custom-extra-services`),
         ]);
         const json = await res.json();
         if (res.ok && json?.success && json.data) {
@@ -212,6 +256,10 @@ export default function CarrierRespond() {
 
         const statusJson = await statusRes.json().catch(() => ({}));
         const carrierJson = await carrierRes.json().catch(() => ({}));
+        const customJson = await customRes.json().catch(() => ({}));
+        if (customRes.ok && customJson?.success && Array.isArray(customJson.data)) {
+          setCustomServices(customJson.data);
+        }
         const carrier = carrierJson?.data?.carrier ?? carrierJson?.data;
         const profilePercent = Number(statusJson?.data?.overallPercentage ?? 0);
         const adminApproved = Boolean(carrier?.verifiedByAdmin || carrier?.verificationStatus === 'verified');
@@ -248,6 +296,7 @@ export default function CarrierRespond() {
         shipmentId: shipment.id,
         price: priceNum,
       };
+      if (selectedCustomIds.length) body.customExtraServiceIds = selectedCustomIds;
       if (note.trim()) body.message = note.trim();
       if (eta) body.estimatedDuration = Number(eta);
 
@@ -303,6 +352,34 @@ export default function CarrierRespond() {
   }
 
   const extraServices = normalizeExtraServices(shipment.extraServices);
+  const shipmentLoadType = inferLoadType(shipment);
+  const visibleCustomServices = customServices.filter((service) => (
+    service.isActive &&
+    (!shipmentLoadType || service.loadType === shipmentLoadType)
+  ));
+  const selectedCustomServices = visibleCustomServices.filter((service) => selectedCustomIds.includes(service.id));
+  const selectedCustomFixedTotal = selectedCustomServices.reduce((sum, service) => {
+    if (service.priceMode !== 'FIXED') return sum;
+    const amount = Number(service.basePrice || 0);
+    return Number.isFinite(amount) && amount > 0 ? sum + amount : sum;
+  }, 0);
+  const offerBasePrice = Number(price);
+  const previewTotal = Number.isFinite(offerBasePrice) && offerBasePrice > 0
+    ? offerBasePrice + selectedCustomFixedTotal
+    : selectedCustomFixedTotal;
+  const toggleCustom = (service: CustomExtraService) => {
+    const amount = Number(service.basePrice || 0);
+    if (service.priceMode !== 'FIXED' || !Number.isFinite(amount) || amount <= 0) {
+      toast.info('Görüşülür özel hizmetler bu aşamada teklif toplamına eklenmez.');
+      return;
+    }
+
+    setSelectedCustomIds(prev => (
+      prev.includes(service.id)
+        ? prev.filter(id => id !== service.id)
+        : [...prev, service.id]
+    ));
+  };
   const converterVolume = formatConverterVolume(shipment);
   const converterVehicle = shipment.converter?.converterRecommendedVehicleCode
     ? vehicleLabel[shipment.converter.converterRecommendedVehicleCode] || shipment.converter.converterRecommendedVehicleCode
@@ -412,6 +489,63 @@ export default function CarrierRespond() {
             {priceError && <p className="mt-1 text-sm text-red-500">{priceError}</p>}
             <p className="mt-1 text-xs text-slate-500">Minimum teklif: ₺{minOfferPrice}</p>
           </div>
+          {visibleCustomServices.length > 0 && (
+            <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50/60 p-3">
+              <div>
+                <label className="text-sm font-semibold text-slate-700">Özel hizmetlerimden ekle (opsiyonel)</label>
+                <p className="mt-1 text-xs text-slate-500">
+                  Bu teklife kendi ek hizmetlerinizi ekleyebilirsiniz. Müşteri fiyat kırılımında “Nakliyeci önerisi” olarak görür.
+                </p>
+              </div>
+              <div className="space-y-2">
+                {visibleCustomServices.map((service) => {
+                  const checked = selectedCustomIds.includes(service.id);
+                  const amount = Number(service.basePrice || 0);
+                  const selectable = service.priceMode === 'FIXED' && Number.isFinite(amount) && amount > 0;
+
+                  return (
+                    <label
+                      key={service.id}
+                      className={`flex cursor-pointer items-center justify-between gap-3 rounded-xl border bg-white px-3 py-2.5 transition ${
+                        checked ? 'border-blue-600 bg-blue-50/70' : 'border-slate-200 hover:border-slate-300'
+                      } ${!selectable ? 'opacity-70' : ''}`}
+                    >
+                      <span className="flex min-w-0 items-center gap-2.5">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          disabled={!selectable}
+                          onChange={() => toggleCustom(service)}
+                          className="accent-blue-600"
+                        />
+                        <span className="min-w-0 text-sm">
+                          <span className="block truncate font-medium text-slate-800">{service.title}</span>
+                          {service.description && <span className="mt-0.5 block line-clamp-2 text-xs text-slate-500">{service.description}</span>}
+                          {!selectable && <span className="mt-0.5 block text-xs text-amber-700">Görüşülür hizmetler bu aşamada fiyata eklenmez.</span>}
+                        </span>
+                      </span>
+                      <span className="shrink-0 text-sm font-semibold text-slate-700">
+                        {selectable ? `+${formatMoney(amount)} ₺` : 'Görüşülür'}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+              {(selectedCustomFixedTotal > 0 || (Number.isFinite(offerBasePrice) && offerBasePrice > 0)) && (
+                <div className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-sm text-blue-900">
+                  <div className="flex items-center justify-between">
+                    <span>Toplam teklif önizlemesi</span>
+                    <span className="font-bold">₺{formatMoney(previewTotal)}</span>
+                  </div>
+                  {selectedCustomFixedTotal > 0 && (
+                    <p className="mt-1 text-xs text-blue-700">
+                      Taşıma bedeline ₺{formatMoney(selectedCustomFixedTotal)} özel hizmet eklendi.
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
           <div>
             <label className="text-sm">Tahmini Süre (saat)</label>
             <Input type="number" value={eta} onChange={(e) => setEta(e.target.value)} />

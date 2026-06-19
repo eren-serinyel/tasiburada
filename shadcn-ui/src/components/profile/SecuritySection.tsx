@@ -29,7 +29,7 @@ export default function SecuritySection({ user }: SectionProps) {
     if (!isCarrier) return;
     (async () => {
       try {
-        const res = await apiClient(`${API_BASE}/carriers/${user.id}`);
+        const res = await apiClient(`${API_BASE}/carriers/me`);
         const json = await res.json();
         if (!res.ok || !json?.success) return;
         const sec = json.data?.carrier?.securitySettings || json.data?.securitySettings;
@@ -70,7 +70,7 @@ export default function SecuritySection({ user }: SectionProps) {
     setIsSaving(true);
     try {
       if (isCarrier) {
-        const res = await apiClient(`${API_BASE}/carriers/${user.id}/security`, {
+        const res = await apiClient(`${API_BASE}/carriers/me/security`, {
           method: 'PUT', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ twoFactorEnabled: twoFA, suspiciousLoginAlertsEnabled: suspiciousAlerts, currentPassword: currentPwd || undefined, newPassword: newPwd || undefined }),
         });

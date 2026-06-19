@@ -35,12 +35,13 @@ const CarrierCard = ({ carrier, onInspect }: CarrierCardProps) => {
 	const detailPath = useMemo(() => `/nakliyeciler/${carrier.id}/${slug}`, [carrier.id, slug]);
 
 	const ratingValue = useMemo(() => normalizeNumber(carrier.rating), [carrier.rating]);
+	const reviewCount = useMemo(() => normalizeNumber(carrier.reviewCount), [carrier.reviewCount]);
 
 	const priceLabel = typeof carrier.startingPrice === 'number'
 		? formatPrice(carrier.startingPrice)
 		: 'Fiyat Sorunuz';
 
-	const isVerified = (carrier.profileCompletion || 0) > 70;
+	const isVerified = carrier.isVerified === true;
 
 	const experienceYears = normalizeNumber(carrier.experienceYears, NaN);
 	const experienceText = Number.isFinite(experienceYears)
@@ -78,7 +79,7 @@ const CarrierCard = ({ carrier, onInspect }: CarrierCardProps) => {
 								</AvatarFallback>
 							</Avatar>
 							{isVerified && (
-								<div className="absolute -bottom-1 -right-1 bg-blue-500 rounded-full p-0.5 border-2 border-white" title="Profil ve evrak bilgileri kontrol edilmiş nakliyeci">
+								<div className="absolute -bottom-1 -right-1 bg-blue-500 rounded-full p-0.5 border-2 border-white" title="Taşıburada tarafından doğrulanmış nakliyeci">
 									<ShieldCheck className="h-3 w-3 text-white" />
 								</div>
 							)}
@@ -93,13 +94,17 @@ const CarrierCard = ({ carrier, onInspect }: CarrierCardProps) => {
 								<span className="truncate max-w-[140px]">{carrier.city || 'Şehir belirtilmedi'}</span>
 							</div>
 
-							<div className="flex items-center gap-1.5">
-								<div className="flex items-center gap-0.5">
-									<Star className="h-4 w-4 text-yellow-500 fill-yellow-500" />
-									<span className="text-sm font-bold text-slate-900">{ratingValue.toFixed(1)}</span>
+							{reviewCount > 0 ? (
+								<div className="flex items-center gap-1.5">
+									<div className="flex items-center gap-0.5">
+										<Star className="h-4 w-4 text-yellow-500 fill-yellow-500" />
+										<span className="text-sm font-bold text-slate-900">{ratingValue.toFixed(1)}</span>
+									</div>
+									<span className="text-xs text-slate-400">({reviewCount})</span>
 								</div>
-								<span className="text-xs text-slate-400">({carrier.reviewCount})</span>
-							</div>
+							) : (
+								<span className="text-xs font-medium text-slate-500">Yeni firma</span>
+							)}
 						</div>
 					</div>
 					{isCustomer && (

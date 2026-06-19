@@ -34,7 +34,7 @@ export class Customer {
   @Column({ type: 'longtext', nullable: true })
   pictureUrl?: string | null;
 
-  @Column({ type: 'varchar', length: 255, nullable: false })
+  @Column({ type: 'varchar', length: 255, nullable: false, select: false })
   passwordHash: string;
 
   @Column({ type: 'boolean', default: true })
@@ -43,13 +43,13 @@ export class Customer {
   @Column({ type: 'boolean', default: false })
   isVerified: boolean;
 
-  @Column({ type: 'varchar', length: 10, nullable: true })
+  @Column({ type: 'varchar', length: 10, nullable: true, select: false })
   resetToken?: string | null;
 
-  @Column({ type: 'datetime', nullable: true })
+  @Column({ type: 'datetime', nullable: true, select: false })
   resetTokenExpiry?: Date | null;
 
-  @Column({ type: 'varchar', length: 10, nullable: true })
+  @Column({ type: 'varchar', length: 10, nullable: true, select: false })
   verificationToken?: string | null;
 
   @CreateDateColumn()

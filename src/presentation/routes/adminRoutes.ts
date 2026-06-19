@@ -51,6 +51,7 @@ router.delete('/reviews/:reviewId', adminController.deleteReview);
 
 // Offers
 router.get('/offers', adminController.getOffers);
+router.get('/offers/:offerId', adminController.getOfferDetail);
 router.put('/offers/:offerId/cancel', adminController.cancelOffer);
 router.delete('/offers/:offerId', adminController.deleteOffer);
 

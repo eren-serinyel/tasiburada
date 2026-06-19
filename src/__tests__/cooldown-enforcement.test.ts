@@ -23,6 +23,7 @@ describe('Cooldown enforcement v1', () => {
         customerId: 'customer-1',
         status: ShipmentStatus.PENDING,
         shipmentCategory: ShipmentCategory.HOME_MOVE,
+        shipmentDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
         estimatedWeight: null,
         extraServices: [],
       }),
@@ -121,6 +122,10 @@ describe('Cooldown enforcement v1', () => {
         buildPendingShipment('s-1', 'customer-1'),
         buildPendingShipment('s-2', 'customer-2'),
       ]),
+      expireStaleOpenShipments: jest.fn().mockResolvedValue(0),
+    };
+    service.offerRepository = {
+      expireStalePendingOffers: jest.fn().mockResolvedValue(0),
     };
     service.platformPolicy = {
       getActiveCooldownCustomerIdsForCarrier: jest.fn().mockResolvedValue(new Set(['customer-1'])),
@@ -141,6 +146,10 @@ describe('Cooldown enforcement v1', () => {
       findPendingShipmentsForCarrier: jest.fn().mockResolvedValue([
         buildPendingShipment('s-1', 'customer-1'),
       ]),
+      expireStaleOpenShipments: jest.fn().mockResolvedValue(0),
+    };
+    service.offerRepository = {
+      expireStalePendingOffers: jest.fn().mockResolvedValue(0),
     };
     service.platformPolicy = {
       getActiveCooldownCustomerIdsForCarrier: jest.fn().mockResolvedValue(new Set()),
@@ -211,32 +220,6 @@ describe('Cooldown enforcement v1', () => {
     txSpy.mockRestore();
   });
 
-  test('assign carrier cooldown regression: assertNoActiveCooldown çalışmaya devam eder', async () => {
-    const service = new ShipmentService() as any;
-    const mockEligibleCarrier = {
-      id: 'carrier-1',
-      isActive: true,
-      verifiedByAdmin: true,
-      approvalState: CarrierApprovalState.APPROVED,
-    };
-    service.shipmentRepository = {
-      findById: jest.fn().mockResolvedValue({
-        id: 'shipment-1',
-        customerId: 'customer-1',
-        status: ShipmentStatus.PENDING,
-      }),
-    };
-    service.matchingService = {
-      getCarrierForMatching: jest.fn().mockResolvedValue(mockEligibleCarrier),
-      isShipmentMatchingCarrier: jest.fn().mockReturnValue(true),
-    };
-    service.platformPolicy = {
-      assertNoActiveCooldown: jest.fn().mockRejectedValue(new ConflictError('active cooldown')),
-    };
-
-    await expect(service.assignCarrier('shipment-1', 'carrier-1', 'customer-1')).rejects.toBeInstanceOf(ConflictError);
-    expect(service.platformPolicy.assertNoActiveCooldown).toHaveBeenCalledWith('customer-1', 'carrier-1');
-  });
 });
 
 describe('expireStaleCooldowns lifecycle', () => {

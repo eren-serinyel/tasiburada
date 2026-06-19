@@ -1,6 +1,7 @@
 import { CarrierRepository } from '../../../infrastructure/repositories/CarrierRepository';
 import { CarrierApprovalState } from '../../../domain/entities/Carrier';
 import { CarrierProfileStatusService } from './CarrierProfileStatusService';
+import { resolveSuggestedServiceAreas } from '../../../shared/serviceAreaSuggestions';
 
 export interface CarrierOverviewOptions {
   enforcePublicTrustGate?: boolean;
@@ -24,7 +25,7 @@ export class CarrierProfileQueryService {
 
     return {
       carrier,
-      activity: carrier.activity ?? null,
+      activity: this.toActivityResponse(carrier.activity),
       status,
       earnings: carrier.earnings ?? null,
       documents: carrier.documents ?? [],
@@ -37,5 +38,32 @@ export class CarrierProfileQueryService {
 
   async getProfileStatus(carrierId: string) {
     return this.profileStatusService.getStatusSummary(carrierId);
+  }
+
+  private toActivityResponse(activity: any) {
+    if (!activity) return null;
+    const serviceAreas = this.parseStringArray(activity.serviceAreasJson);
+    return {
+      ...activity,
+      serviceAreas: serviceAreas.length ? serviceAreas : resolveSuggestedServiceAreas(activity.city),
+    };
+  }
+
+  private parseStringArray(raw: unknown): string[] {
+    if (!raw) return [];
+    if (Array.isArray(raw)) {
+      return raw.map(item => String(item).trim()).filter(Boolean);
+    }
+    if (typeof raw === 'string') {
+      try {
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed)
+          ? parsed.map(item => String(item).trim()).filter(Boolean)
+          : [];
+      } catch {
+        return [];
+      }
+    }
+    return [];
   }
 }

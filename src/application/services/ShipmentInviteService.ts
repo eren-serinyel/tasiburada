@@ -2,7 +2,14 @@ import { ShipmentInviteRepository } from '../../infrastructure/repositories/Ship
 import { ShipmentRepository } from '../../infrastructure/repositories/ShipmentRepository';
 import { CarrierRepository } from '../../infrastructure/repositories/CarrierRepository';
 import { NotificationService } from './NotificationService';
-import { NotFoundError, ConflictError } from '../../domain/errors/AppError';
+import { NotFoundError, ConflictError, ValidationError } from '../../domain/errors/AppError';
+import { AppDataSource } from '../../infrastructure/database/data-source';
+import { Offer } from '../../domain/entities/Offer';
+
+export interface InviteRequestedServices {
+  catalogServiceIds?: string[];
+  customServiceIds?: string[];
+}
 
 export class ShipmentInviteService {
   private inviteRepo = new ShipmentInviteRepository();
@@ -10,7 +17,26 @@ export class ShipmentInviteService {
   private carrierRepo = new CarrierRepository();
   private notificationService = new NotificationService();
 
-  async invite(customerId: string, shipmentId: string, carrierId: string) {
+  private normalizeRequestedServices(input?: InviteRequestedServices | null): {
+    catalogServiceIds: string[];
+    customServiceIds: string[];
+  } {
+    const normalizeIds = (values: unknown): string[] => {
+      if (!Array.isArray(values)) return [];
+      return Array.from(new Set(
+        values
+          .map((value) => String(value || '').trim())
+          .filter(Boolean)
+      ));
+    };
+
+    return {
+      catalogServiceIds: normalizeIds(input?.catalogServiceIds),
+      customServiceIds: normalizeIds(input?.customServiceIds),
+    };
+  }
+
+  async invite(customerId: string, shipmentId: string, carrierId: string, requestedServices?: InviteRequestedServices | null) {
     const shipment = await this.shipmentRepo.findByIdAndCustomerId(shipmentId, customerId);
     if (!shipment) throw new NotFoundError('İlan bulunamadı');
 
@@ -23,7 +49,8 @@ export class ShipmentInviteService {
     const invite = await this.inviteRepo.create({
       shipmentId,
       carrierId,
-      status: 'pending'
+      status: 'pending',
+      requestedServices: this.normalizeRequestedServices(requestedServices),
     });
 
     await this.notificationService.createNotification(
@@ -36,6 +63,39 @@ export class ShipmentInviteService {
     );
 
     return invite;
+  }
+
+  private async assertInviteCanBeManaged(customerId: string, shipmentId: string, carrierId: string) {
+    const shipment = await this.shipmentRepo.findByIdAndCustomerId(shipmentId, customerId);
+    if (!shipment) throw new NotFoundError('İlan bulunamadı');
+
+    const invite = await this.inviteRepo.findByShipmentAndCarrier(shipmentId, carrierId);
+    if (!invite) throw new NotFoundError('Davet bulunamadı');
+    if (invite.status !== 'pending') {
+      throw new ValidationError('Sadece bekleyen davetler yönetilebilir.');
+    }
+
+    const offerCount = await AppDataSource.getRepository(Offer).count({
+      where: { shipmentId, carrierId },
+    });
+    if (offerCount > 0) {
+      throw new ValidationError('Nakliyeci teklif verdikten sonra davet hizmetleri değiştirilemez veya geri çekilemez.');
+    }
+
+    return invite;
+  }
+
+  async withdraw(customerId: string, shipmentId: string, carrierId: string) {
+    const invite = await this.assertInviteCanBeManaged(customerId, shipmentId, carrierId);
+    await this.inviteRepo.delete(invite.id);
+    return { withdrawn: true, shipmentId, carrierId };
+  }
+
+  async updateRequestedServices(customerId: string, shipmentId: string, carrierId: string, requestedServices?: InviteRequestedServices | null) {
+    const invite = await this.assertInviteCanBeManaged(customerId, shipmentId, carrierId);
+    return this.inviteRepo.update(invite.id, {
+      requestedServices: this.normalizeRequestedServices(requestedServices),
+    });
   }
 
   async getCarrierInvites(carrierId: string) {

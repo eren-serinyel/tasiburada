@@ -4,14 +4,25 @@ import { Offer, OfferStatus } from '../../domain/entities/Offer';
 import { Shipment, ShipmentStatus } from '../../domain/entities/Shipment';
 import { NotFoundError, ConflictError, ForbiddenError } from '../../domain/errors/AppError';
 import { NotificationService } from './NotificationService';
-
-const DEFAULT_COMMISSION_RATE = 0.1;
-
-const roundToTwo = (value: number): number => Math.round((value + Number.EPSILON) * 100) / 100;
+import { PlatformPolicyService } from './PlatformPolicyService';
 
 export class PaymentService {
   private paymentRepo = AppDataSource.getRepository(Payment);
   private notificationService = new NotificationService();
+  private platformPolicy = new PlatformPolicyService();
+
+  private maskCustomerForCarrier(payment: Payment): Payment {
+    const sanitized = { ...payment } as any;
+
+    if (payment.customer) {
+      sanitized.customer = {
+        firstName: payment.customer.firstName,
+        lastName: `${payment.customer.lastName?.[0] ?? ''}***`,
+      };
+    }
+
+    return sanitized;
+  }
 
   async createPayment(data: {
     offerId: string;
@@ -59,21 +70,16 @@ export class PaymentService {
         throw new ConflictError('Bu teklif için aktif ödeme kaydı zaten mevcut.');
       }
 
-      const commissionRateRaw = Number(process.env.PLATFORM_COMMISSION_RATE);
-      const commissionRate = Number.isFinite(commissionRateRaw) ? commissionRateRaw : DEFAULT_COMMISSION_RATE;
-
-      const amount = roundToTwo(Number(offer.price));
-      const platformFee = roundToTwo(amount * commissionRate);
-      const carrierAmount = roundToTwo(amount - platformFee);
+      const commission = await this.platformPolicy.computeCommission(Number(offer.price));
 
       const payment = transactionalEntityManager.create(Payment, {
         shipmentId: shipment.id,
         offerId: offer.id,
         customerId: data.customerId,
         carrierId: offer.carrierId,
-        amount,
-        platformFee,
-        carrierAmount,
+        amount: commission.grossAmount,
+        platformFee: commission.commissionAmount,
+        carrierAmount: commission.netAmount,
         currency: 'TRY',
         provider: 'manual',
         method: data.method,
@@ -96,11 +102,13 @@ export class PaymentService {
   }
 
   async getPaymentsByCarrier(carrierId: string): Promise<Payment[]> {
-    return await this.paymentRepo.find({
+    const payments = await this.paymentRepo.find({
       where: { carrierId },
       relations: ['shipment', 'customer'],
       order: { createdAt: 'DESC' },
     });
+
+    return payments.map(payment => this.maskCustomerForCarrier(payment));
   }
 
   async getPaymentByShipment(shipmentId: string, customerId?: string): Promise<Payment | null> {

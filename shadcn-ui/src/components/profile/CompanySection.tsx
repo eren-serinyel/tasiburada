@@ -4,7 +4,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from '@/components/ui/sonner';
 import { apiClient } from '@/lib/apiClient';
-import { cn } from '@/lib/utils';
 import { Save } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import MultiSelect from '@/components/ui/multi-select';
@@ -26,7 +25,6 @@ export default function CompanySection({ user, refreshProfileStatus, onCompanyNa
     vehicleCapacities: {} as Record<string, string>,
   });
   const [vehicleTypesList, setVehicleTypesList] = useState<VehicleType[]>([]);
-  const [serviceTypeOptions, setServiceTypeOptions] = useState<{ id: string; name: string }[]>([]);
   const [scopeOptions, setScopeOptions] = useState<{ id: string; name: string }[]>([]);
   const nameToId = useMemo(() => Object.fromEntries(vehicleTypesList.map(v => [v.name, v.id])), [vehicleTypesList]);
   const workingScopeOptions = useMemo(() => {
@@ -36,7 +34,6 @@ export default function CompanySection({ user, refreshProfileStatus, onCompanyNa
 
   // Load master data + drafts + backend prefill
   useEffect(() => {
-    apiClient(`${API_BASE}/service-types`).then(r => r.json()).then(d => { if (d.success) setServiceTypeOptions(d.data); }).catch(() => {});
     apiClient(`${API_BASE}/scope-of-works`).then(r => r.json()).then(d => { if (d.success) setScopeOptions(d.data); }).catch(() => {});
     apiClient(`${API_BASE}/vehicle-types`).then(r => r.json()).then(d => { if (d.success && Array.isArray(d.data)) setVehicleTypesList(d.data); }).catch(() => {});
 
@@ -59,7 +56,7 @@ export default function CompanySection({ user, refreshProfileStatus, onCompanyNa
     // Prefill from backend
     (async () => {
       try {
-        const res = await apiClient(`${API_BASE}/carriers/${user.id}`);
+        const res = await apiClient(`${API_BASE}/carriers/me`);
         const json = await res.json();
         if (!res.ok || !json?.success || !json?.data) return;
         const carrierData = json.data?.carrier;
@@ -126,7 +123,7 @@ export default function CompanySection({ user, refreshProfileStatus, onCompanyNa
     // Prefill vehicle capacities from dedicated endpoint
     (async () => {
       try {
-        const res = await apiClient(`${API_BASE}/carriers/${user.id}/vehicles`);
+        const res = await apiClient(`${API_BASE}/carriers/me/vehicles`);
         const json = await res.json();
         if (!res.ok || !json?.success || !Array.isArray(json.data)) return;
         const caps: Record<string, string> = {};
@@ -172,17 +169,17 @@ export default function CompanySection({ user, refreshProfileStatus, onCompanyNa
     })).filter(v => !!v.vehicleTypeId);
 
     try {
-      await apiClient(`${API_BASE}/carriers/profile/${user.id}`, {
+      await apiClient(`${API_BASE}/carriers/me/company-info`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           companyName: company.name || undefined, taxNumber: company.taxNumber || undefined,
           email: company.email || undefined, foundedYear: company.year ? Number(company.year) : undefined,
           vehicleTypeNames: company.vehicleTypes || [], vehicleTypeCapacities: Object.keys(capacityOverrides).length ? capacityOverrides : undefined,
-          serviceTypeNames: company.services || [], scopeOfWorkNames: normalizedScopes,
+          scopeOfWorkNames: normalizedScopes,
         }),
       });
       if (selectedVehicles.length > 0) {
-        await apiClient(`${API_BASE}/carriers/${user.id}/vehicles`, {
+        await apiClient(`${API_BASE}/carriers/me/vehicles`, {
           method: 'PUT', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ selectedVehicles }),
         });
@@ -217,10 +214,6 @@ export default function CompanySection({ user, refreshProfileStatus, onCompanyNa
             <SelectTrigger className="mt-1"><SelectValue placeholder="Yıl seçiniz" /></SelectTrigger>
             <SelectContent>{Array.from({ length: new Date().getFullYear() - 1990 + 1 }, (_, i) => 1990 + i).reverse().map(y => (<SelectItem key={y} value={String(y)}>{y}</SelectItem>))}</SelectContent>
           </Select>
-        </div>
-        <div className="md:col-span-2">
-          <Label>Hizmet Türü</Label>
-          <MultiSelect label=" " placeholder="Seçiniz" options={serviceTypeOptions.length ? serviceTypeOptions.map(x => x.name) : ['Şehir içi', 'Şehirler arası', 'Parsiyel', 'Ofis taşıma', 'Ev taşıma', 'Eşya depolama']} selectedValues={company.services} onSelectionChange={(vals) => setCompany({ ...company, services: vals })} />
         </div>
         <div className="md:col-span-2">
           <Label>Çalışma Kapsamı</Label>

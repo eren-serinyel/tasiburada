@@ -9,12 +9,16 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Sheet, SheetContent } from '@/components/ui/sheet';
 import {
-  MapPin, Package, Truck, Shield, Award, MessageSquare, Star,
-  CheckCircle2, XCircle, Info, Images, Lock, X, ArrowRight,
-  Calendar, LayoutGrid, CheckCircle, Phone, Plus, Check, Loader2, UserCheck,
+  Shield, Award, Eye, Star,
+  CheckCircle2, XCircle, Info, Lock, X, ArrowRight,
+  Phone, Check, Loader2, UserCheck, LogIn, ChevronDown,
+  Home, Building2, Package, Archive, MapPin, CalendarDays,
+  ShieldCheck, Zap, Megaphone, Truck, AlertCircle,
 } from 'lucide-react';
-import { Carrier, LOAD_TYPES, VEHICLE_TYPES } from '@/lib/types';
+import type { LucideIcon } from 'lucide-react';
+import { Carrier, LOAD_TYPES, type CarrierDetail, type CarrierDetailServiceGroup, type CarrierDetailServiceItem } from '@/lib/types';
 import { getSessionUser } from '@/lib/storage';
 import { CITIES_TR, getDistrictsForCity, formatDateYYYYMMDD } from '@/lib/locations';
 import FileUpload from '@/components/ui/file-upload';
@@ -23,12 +27,16 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useToast } from '@/hooks/use-toast';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
+import { isAuthenticated as hasValidAuthSession } from '@/lib/auth';
 import { apiClient } from '@/lib/apiClient';
+import { mapPlaceTypeToConverterPropertyType } from '@/lib/placeType';
 import VolumeCalculatorModal from '@/components/converter/VolumeCalculatorModal';
 import type { VolumeCalculatorInitialValues } from '@/components/converter/VolumeCalculatorModal';
 import type { EstimateConverterResponse } from '@/lib/converterApi';
 import {
   getExtraServiceLoadType,
+  estimateServicesTotal,
+  formatServicePrice,
   mapSelectedExtraServiceNames,
   mergeSuggestedExtraServiceIds,
   reconcileSelectedExtraServiceIds,
@@ -41,7 +49,7 @@ import {
   type ConverterAppliedSummary,
 } from '@/lib/customerShipmentForm';
 
-type Step = 1 | 2 | 3;
+type Step = 1 | 2 | 3 | 4;
 
 interface CustomerAddress {
   id: number;
@@ -53,10 +61,48 @@ interface CustomerAddress {
   isDefault: boolean;
 }
 
-interface VehicleTypeOption {
-  id: string;
-  name: string;
-}
+type RequestedCarrierServices = Record<string, {
+  catalogServiceIds: string[];
+  customServiceIds: string[];
+}>;
+
+type SelectedCarrierServices = {
+  carrierId: string;
+  carrierName: string;
+  services: CarrierDetailServiceGroup[];
+};
+
+const normalizeServiceName = (name: string) => name.trim().replace(/\s+/g, ' ').toLocaleLowerCase('tr-TR');
+
+const filterAndDedupeServiceGroups = (
+  services: CarrierDetailServiceGroup[],
+  targetLoadType: string,
+): CarrierDetailServiceGroup[] => {
+  if (!targetLoadType) return [];
+
+  const byName = new Map<string, CarrierDetailServiceItem>();
+
+  for (const group of services) {
+    if (group.loadType !== targetLoadType) continue;
+
+    for (const service of group.items ?? []) {
+      const key = normalizeServiceName(service.name);
+      const existing = byName.get(key);
+
+      if (!existing) {
+        byName.set(key, service);
+        continue;
+      }
+
+      if (service.source === 'catalog' && existing.source === 'custom') {
+        byName.set(key, service);
+      }
+    }
+  }
+
+  const items = Array.from(byName.values());
+  return items.length > 0 ? [{ loadType: targetLoadType, items }] : [];
+};
 
 const CONVERTER_TO_VEHICLE_TYPE_NAME: Record<EstimateConverterResponse['recommendedVehicle'], string> = {
   panelvan: 'Panel Van',
@@ -66,16 +112,18 @@ const CONVERTER_TO_VEHICLE_TYPE_NAME: Record<EstimateConverterResponse['recommen
   large_truck: 'Kamyon',
 };
 
-export default function OfferRequestForm({ showHeader = false }: { showHeader?: boolean }) {
+export default function OfferRequestForm({ showHeader = false }: { showHeader: boolean }) {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const typeParam = searchParams.get('type');
+  const carrierIdParam = searchParams.get('carrierId');
   const { toast } = useToast();
   const { user, isAuthenticated } = useAuth();
   const [step, setStep] = useState<Step>(1);
   const [submitting, setSubmitting] = useState(false);
   const [loadingResults, setLoadingResults] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(false);
+  const [showSummaryModal, setShowSummaryModal] = useState(false);
   const [carriers, setCarriers] = useState<Carrier[]>([]);
   const [savedAddresses, setSavedAddresses] = useState<CustomerAddress[]>([]);
   const [needsPhone, setNeedsPhone] = useState(false);
@@ -84,9 +132,18 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
   const [inviteCarrierName, setInviteCarrierName] = useState<string | null>(null);
   const [isVolumeCalculatorOpen, setIsVolumeCalculatorOpen] = useState(false);
   const [appliedConverterSummary, setAppliedConverterSummary] = useState<ConverterAppliedSummary | null>(null);
+  const [weightEditMode, setWeightEditMode] = useState(false);
   const landingEstimateAppliedRef = useRef(false);
   const [availableExtraServices, setAvailableExtraServices] = useState<ExtraServiceOption[]>([]);
-  const [vehicleTypeOptions, setVehicleTypeOptions] = useState<VehicleTypeOption[]>([]);
+  const [selectedCarrierIds, setSelectedCarrierIds] = useState<string[]>([]);
+  const [reviewCarrierId, setReviewCarrierId] = useState<string | null>(null);
+  const [reviewCarrierDetail, setReviewCarrierDetail] = useState<CarrierDetail | null>(null);
+  const [reviewCarrierLoading, setReviewCarrierLoading] = useState(false);
+  const [selectedCarrierServices, setSelectedCarrierServices] = useState<SelectedCarrierServices[]>([]);
+  const [carrierServicesLoading, setCarrierServicesLoading] = useState(false);
+  const [requestedServicesByCarrier, setRequestedServicesByCarrier] = useState<RequestedCarrierServices>({});
+  const [expandedCarrierServices, setExpandedCarrierServices] = useState<Record<string, boolean>>({});
+  const [showAllCarrierServices, setShowAllCarrierServices] = useState<Record<string, boolean>>({});
   const [form, setForm] = useState({
     originCity: '',
     originDistrict: '',
@@ -97,13 +154,11 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
     transportType: '',
     placeType: '',
     loadType: '',
-    vehicleType: '',
     weightKg: '',
     floor: '',
     hasElevator: false,
     dateFlexibility: 'EXACT' as 'EXACT' | 'FLEXIBLE' | 'WITHIN_WEEK',
     timeWindow: '',
-    insurance: 'none' as 'none' | 'basic' | 'premium',
     extras: { asansor: false, sigorta: false, ambalaj: false },
     serviceOptions: {} as Record<string, string[]>,
     extraServices: [] as string[],
@@ -111,9 +166,48 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
     note: '',
   });
 
+  // Misafir taslagi: form localStorage'da saklanir, login donusunde restore edilir.
+  const DRAFT_KEY = 'tasiburada:shipment-draft:v1';
+  const DRAFT_TTL_MS = 24 * 60 * 60 * 1000; // 24 saat
+  const VOLUME_ESTIMATE_DRAFT_KEY = 'tasiburada:volume-calculator-estimate:v1';
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(DRAFT_KEY);
+      if (!raw) return;
+      const draft = JSON.parse(raw);
+      if (!draft.data || Date.now() - (draft.savedAt ?? 0) > DRAFT_TTL_MS) {
+        localStorage.removeItem(DRAFT_KEY);
+        return;
+      }
+      const { vehicleType: _vehicleType, insurance: _insurance, ...data } = draft.data;
+      setForm(prev => ({ ...prev, ...data, photos: [] }));
+      if (draft.step === 2 || draft.step === 3 || draft.step === 4) setStep(draft.step as Step);
+    } catch {
+      localStorage.removeItem(DRAFT_KEY);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      try {
+        const { photos: _photos, ...data } = form;
+        localStorage.setItem(DRAFT_KEY, JSON.stringify({ step, data, savedAt: Date.now() }));
+      } catch {
+        // localStorage quota/private mode errors should not block the form.
+      }
+    }, 400);
+    return () => clearTimeout(t);
+  }, [form, step]);
+
   const [availabilitySummary, setAvailabilitySummary] = useState<{ total: number; available: number } | null>(null);
   const [isCheckingAvailability, setIsCheckingAvailability] = useState(false);
   const availabilityTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const requestedScope = useMemo<'' | 'sehirici' | 'sehirlerarasi'>(() => {
+    if (!form.originCity || !form.destinationCity) return form.scope;
+    return form.originCity === form.destinationCity ? 'sehirici' : 'sehirlerarasi';
+  }, [form.originCity, form.destinationCity, form.scope]);
 
   useEffect(() => {
     if (!form.date) {
@@ -125,9 +219,12 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
     setAvailabilitySummary(null);
     availabilityTimerRef.current = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/v1/carriers/availability-summary?date=${encodeURIComponent(form.date)}`);
+        const params = new URLSearchParams({ date: form.date });
+        if (form.originCity) params.set('serviceCity', form.originCity);
+        if (requestedScope) params.set('scope', requestedScope);
+        const res = await fetch(`/api/v1/carriers/availability-summary?${params.toString()}`);
         const json = await res.json();
-        if (res.ok && json?.success) {
+        if (res.ok && json.success) {
           setAvailabilitySummary(json.data);
         }
       } catch {
@@ -139,7 +236,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
     return () => {
       if (availabilityTimerRef.current) clearTimeout(availabilityTimerRef.current);
     };
-  }, [form.date]);
+  }, [form.date, form.originCity, requestedScope]);
 
   // Load saved addresses for authenticated customers
   useEffect(() => {
@@ -169,20 +266,6 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
     }
   }, [isAuthenticated, user?.type]);
 
-  useEffect(() => {
-    apiClient('/vehicle-types')
-      .then((response) => response.json())
-      .then((json) => {
-        const nextOptions = Array.isArray(json?.data)
-          ? json.data
-              .filter((item: any) => item?.status === 'ACTIVE')
-              .map((item: any) => ({ id: String(item.id), name: String(item.name) }))
-          : [];
-        setVehicleTypeOptions(nextOptions);
-      })
-      .catch(() => setVehicleTypeOptions([]));
-  }, []);
-
   // Handle URL "type" parameter mappings
   useEffect(() => {
     if (typeParam) {
@@ -196,6 +279,12 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
       });
     }
   }, [typeParam]);
+
+  useEffect(() => {
+    if (!carrierIdParam) return;
+    setInviteCarrierId(carrierIdParam);
+    setSelectedCarrierIds(prev => prev.includes(carrierIdParam) ? prev : [...prev, carrierIdParam]);
+  }, [carrierIdParam]);
 
   // Repeat shipment: prefill from sessionStorage
   useEffect(() => {
@@ -222,7 +311,6 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
         if (data.placeType) next.placeType = data.placeType;
         if (data.floor) next.floor = String(data.floor);
         if (data.hasElevator !== undefined) next.hasElevator = data.hasElevator;
-        if (data.insuranceType && data.insuranceType !== 'none') next.insurance = data.insuranceType;
         if (data.extraServices) next.extraServices = data.extraServices;
         return next;
       });
@@ -230,6 +318,9 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
       if (data.inviteCarrierId) {
         setInviteCarrierId(data.inviteCarrierId);
         setInviteCarrierName(data.inviteCarrierName ?? null);
+        setSelectedCarrierIds(prev =>
+          prev.includes(data.inviteCarrierId) ? prev : [...prev, data.inviteCarrierId]
+        );
       }
     } catch {
       // ignore parse errors
@@ -237,7 +328,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
   }, []);
 
   const ALT_OPTIONS_BY_TRANSPORT: Record<string, string[]> = {
-    'evden-eve': ['1+1 ev','2+1 ev','3+1 ev','4+1 ev'],
+    'evden-eve': ['1+1 ev','2+1 ev','3+1 ev','4+1 ev','5+1 ev','5+2 ev','Dubleks / Müstakil','Diğer / Emin değilim'],
     'ofis-tasima': ['Küçük ofis','Orta ofis','Büyük ofis'],
     'parca': ['sadece beyaz eşya','sadece mobilya','tek parça eşya'],
     'depolama': ['Küçük depo','Orta depo','Büyük depo'],
@@ -277,11 +368,13 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
       .then((response) => response.json())
       .then((json) => {
         if (cancelled) return;
-        const nextOptions = Array.isArray(json?.data) ? json.data as ExtraServiceOption[] : [];
+        const nextOptions = Array.isArray(json.data) ? json.data as ExtraServiceOption[] : [];
         setAvailableExtraServices(nextOptions);
 
         setForm((prev) => {
-          const currentIds = prev.serviceOptions?.[currentServiceGroup] || [];
+          const currentIds = Array.isArray(prev.serviceOptions?.[currentServiceGroup])
+            ? prev.serviceOptions[currentServiceGroup]
+            : [];
           const fallbackIds = currentIds.length
             ? currentIds
             : nextOptions
@@ -327,62 +420,28 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
   const [originDistricts, setOriginDistricts] = useState<string[]>([]);
   const [destinationDistricts, setDestinationDistricts] = useState<string[]>([]);
 
+  const displayStep = showSummaryModal ? 5 : step;
   const progress = useMemo(() => {
-    const per = 100 / 3;
-    return Math.min(100, Math.max(0, Math.round(per * step)));
-  }, [step]);
+    const per = 100 / 5;
+    return Math.min(100, Math.max(0, Math.round(per * displayStep)));
+  }, [displayStep]);
 
   const handleChange = (field: string, value: any) => setForm((f) => ({ ...f, [field]: value }));
 
-  const requireLoginForSelection = (message?: string) => {
-    if (isAuthenticated || isLoggedIn) return true;
-
-    if (!showLoginModal) {
-      setShowLoginModal(true);
-      toast({
-        title: 'Giriş gerekli',
-        description: message ?? 'Teklif formunu doldurmak için giriş yapmalısınız.',
-      });
-    }
-    return false;
-  };
-
-  const getVehicleTypeLabel = (value: string) => {
-    return vehicleTypeOptions.find((item) => item.id === value)?.name
-      || VEHICLE_TYPES[value as keyof typeof VEHICLE_TYPES]?.name
-      || '';
-  };
-
-  const mapRecommendedVehicleToVehicleTypeId = (recommendedVehicle: EstimateConverterResponse['recommendedVehicle']) => {
-    const targetName = CONVERTER_TO_VEHICLE_TYPE_NAME[recommendedVehicle]?.toLocaleLowerCase('tr-TR');
-    if (!targetName) return '';
-    return vehicleTypeOptions.find((item) => item.name.toLocaleLowerCase('tr-TR') === targetName)?.id ?? '';
-  };
+  // Misafir kullanici formu serbestce doldurabilir; giris yalnizca
+  // yayinlama aninda istenir. Taslak localStorage'da saklanir.
+  const requireLoginForSelection = (_message?: string) => true;
 
   const converterInitialValues = useMemo<VolumeCalculatorInitialValues>(() => {
-    const placeType = form.placeType.toLowerCase();
-    const propertyType = placeType.includes('1+1')
-      ? '1+1'
-      : placeType.includes('2+1')
-        ? '2+1'
-        : placeType.includes('3+1')
-          ? '3+1'
-          : placeType.includes('4+1')
-            ? '4+1_plus'
-            : 'unknown';
-
     return {
       moveType: form.transportType === 'parca' ? 'partial_load' : 'household',
-      propertyType,
+      propertyType: mapPlaceTypeToConverterPropertyType(form.placeType),
     };
   }, [form.placeType, form.transportType]);
 
   const applyConverterEstimateToForm = (result: EstimateConverterResponse) => {
     const weightKg = result.estimatedWeightKg;
-    const mappedVehicleTypeId = mapRecommendedVehicleToVehicleTypeId(result.recommendedVehicle);
-    const recommendedVehicleLabel = mappedVehicleTypeId
-      ? getVehicleTypeLabel(mappedVehicleTypeId)
-      : CONVERTER_TO_VEHICLE_TYPE_NAME[result.recommendedVehicle] || result.recommendedVehicle;
+    const recommendedVehicleLabel = CONVERTER_TO_VEHICLE_TYPE_NAME[result.recommendedVehicle] || result.recommendedVehicle;
     setForm((prev) => {
       const currentIds = currentServiceGroup ? (prev.serviceOptions?.[currentServiceGroup] || []) : [];
       const mergedIds = currentServiceGroup
@@ -392,7 +451,6 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
       return {
         ...prev,
         weightKg: String(weightKg),
-        vehicleType: mappedVehicleTypeId || prev.vehicleType,
         serviceOptions: currentServiceGroup ? { [currentServiceGroup]: mergedIds } : prev.serviceOptions,
         extraServices: mapSelectedExtraServiceNames(mergedIds, availableExtraServices),
       };
@@ -403,38 +461,35 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
       estimatedWeightKg: result.estimatedWeightKg,
       recommendedVehicle: recommendedVehicleLabel,
     });
+    setWeightEditMode(false);
     toast({
       title: 'Ağırlık güncellendi',
-      description: mappedVehicleTypeId
-        ? `Tahmini ağırlık ${weightKg} kg olarak forma uygulandı.`
-        : `Tahmini ağırlık ${weightKg} kg olarak forma uygulandı. Araç önerisi metin olarak kaldı.`,
+      description: `Tahmini ağırlık ${weightKg} kg olarak forma uygulandı. Araç önerisi bilgi olarak kaldı.`,
     });
   };
 
   useEffect(() => {
     if (landingEstimateAppliedRef.current) return;
-    const raw = sessionStorage.getItem('volumeCalculatorEstimate');
+    const raw =
+      localStorage.getItem(VOLUME_ESTIMATE_DRAFT_KEY)
+      || sessionStorage.getItem('volumeCalculatorEstimate');
     if (!raw) return;
 
     try {
-      const payload = JSON.parse(raw) as { result?: EstimateConverterResponse };
-      const result = payload?.result;
+      const payload = JSON.parse(raw) as { result: EstimateConverterResponse };
+      const result = payload.result;
       if (!result) return;
 
       landingEstimateAppliedRef.current = true;
+      localStorage.removeItem(VOLUME_ESTIMATE_DRAFT_KEY);
       sessionStorage.removeItem('volumeCalculatorEstimate');
 
-      const mappedVehicleTypeId = mapRecommendedVehicleToVehicleTypeId(result.recommendedVehicle);
-      const recommendedVehicleLabel = mappedVehicleTypeId
-        ? getVehicleTypeLabel(mappedVehicleTypeId)
-        : CONVERTER_TO_VEHICLE_TYPE_NAME[result.recommendedVehicle] || result.recommendedVehicle;
+      const recommendedVehicleLabel = CONVERTER_TO_VEHICLE_TYPE_NAME[result.recommendedVehicle] || result.recommendedVehicle;
 
       setForm((prev) => ({
         ...prev,
         transportType: prev.transportType || 'evden-eve',
-        placeType: prev.placeType || '2+1 ev',
         weightKg: String(result.estimatedWeightKg),
-        vehicleType: mappedVehicleTypeId || prev.vehicleType,
       }));
       setAppliedConverterSummary({
         estimatedVolumeMin: result.estimatedVolumeMin,
@@ -442,15 +497,17 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
         estimatedWeightKg: result.estimatedWeightKg,
         recommendedVehicle: recommendedVehicleLabel,
       });
+      setWeightEditMode(false);
       setStep(2);
       toast({
         title: 'Hacim hesabı aktarıldı',
-        description: 'Tahmini hacim, ağırlık ve araç önerisi forma eklendi.',
+        description: 'Tahmini hacim ve ağırlık forma eklendi; araç önerisi bilgi olarak saklandı.',
       });
     } catch {
+      localStorage.removeItem(VOLUME_ESTIMATE_DRAFT_KEY);
       sessionStorage.removeItem('volumeCalculatorEstimate');
     }
-  }, [toast, vehicleTypeOptions]);
+  }, [toast]);
 
   const todayStr = useMemo(() => formatDateYYYYMMDD(new Date()), []);
   const maxDateStr = useMemo(() => { const d = new Date(); d.setDate(d.getDate() + 30); return formatDateYYYYMMDD(d); }, []);
@@ -459,50 +516,22 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
     try { return new Date(form.date) > new Date(maxDateStr); } catch { return false; }
   }, [form.date, maxDateStr]);
 
-  const canNextFrom1 = form.originCity && form.originDistrict && form.destinationCity && form.destinationDistrict && form.date && !isDateTooFar;
-  const isCityFlow = form.scope === 'sehirici' || form.scope === 'sehirlerarasi';
-  const canNextFrom2 = !!form.scope && !!form.transportType && (isCityFlow ? true : !!form.placeType);
-  const previewEstimate = useMemo(() => {
-    if (!(canNextFrom1 && canNextFrom2)) return null;
-
-    const base = form.scope === 'sehirlerarasi' ? 4000 : 1500;
-    const transportMultiplier: Record<string, number> = {
-      'evden-eve': 1.45,
-      'ofis-tasima': 1.65,
-      parca: 0.85,
-      depolama: 1.2,
-    };
-    const serviceGroup = SERVICE_GROUP_BY_TRANSPORT_TYPE[form.transportType] || '';
-    const selectedServices = serviceGroup ? (form.serviceOptions?.[serviceGroup] || []) : [];
-    const floorFee = Number(form.floor || 0) > 2 && !form.hasElevator ? 450 : 0;
-    const insuranceFee = form.insurance === 'premium' ? 700 : form.insurance === 'basic' ? 350 : 0;
-    const extrasFee = selectedServices.length * 250;
-    const midpoint = Math.round((base * (transportMultiplier[form.transportType] || 1)) + floorFee + insuranceFee + extrasFee);
-    const min = Math.max(750, Math.round(midpoint * 0.85));
-    const max = Math.round(midpoint * 1.25);
-    const format = (value: number) => new Intl.NumberFormat('tr-TR', { maximumFractionDigits: 0 }).format(value);
-
-    return {
-      range: `${format(min)} - ${format(max)} TL`,
-      carrierCount: availabilitySummary?.available,
-    };
-  }, [
-    availabilitySummary?.available,
-    canNextFrom1,
-    canNextFrom2,
-    form.floor,
-    form.hasElevator,
-    form.insurance,
-    form.scope,
-    form.serviceOptions,
-    form.transportType,
-  ]);
+  const canNextFrom1 = form.originCity && form.originDistrict && form.destinationCity && form.destinationDistrict && form.date && !isDateTooFar && !!form.transportType;
+  const hasLoadEstimate = !!form.placeType || !!form.weightKg || !!appliedConverterSummary;
+  const canPublish = !!canNextFrom1 && hasLoadEstimate;
+  const availabilityHint = useMemo(() => {
+    if (!canPublish) return null;
+    if (typeof availabilitySummary?.available !== 'number') return null;
+    return { carrierCount: availabilitySummary.available };
+  }, [availabilitySummary?.available, canPublish]);
 
   const TEMPLATE_WEIGHTS: Record<string, number> = {
     '1+1 ev': 800,
     '2+1 ev': 1500,
     '3+1 ev': 2500,
     '4+1 ev': 3500,
+    '5+1 ev': 4500,
+    '5+2 ev': 5200,
     'sadece beyaz eşya': 400,
     'sadece mobilya': 800,
     'tek parça eşya': 100,
@@ -515,76 +544,229 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
   };
 
   const suitableCarriersBase = useMemo(() => {
-    if (!(canNextFrom1 && canNextFrom2)) return [] as Carrier[];
-    // Backend zaten tarih filtresi uyguladı.
-    // ServiceAreas verisi tutarsız (bölge adları vs şehir adları karışık) olduğundan
-    // rota eşleşmesini zorunlu tutmuyoruz; CarrierCard'daki badge zaten gösteriyor.
+    if (!canNextFrom1) return [] as Carrier[];
+    // Backend tarih + çıkış şehri filtresi uygular; varış şehri esnek bırakılır.
     return carriers;
-  }, [canNextFrom1, canNextFrom2, carriers]);
+  }, [canNextFrom1, carriers]);
 
   const isLoggedIn = useMemo(() => {
-    try {
-      return Boolean(localStorage.getItem('userToken')) || Boolean(getSessionUser());
-    } catch {
-      return Boolean(getSessionUser());
-    }
-  }, []);
+    return isAuthenticated || hasValidAuthSession();
+  }, [isAuthenticated]);
 
-  // Step 3 açıldığında backend'den filtrelenmiş nakliyecileri çek
+  // Step 2 açıldığında backend'den tarih ve çıkış şehrine göre filtrelenmiş nakliyecileri çek
   useEffect(() => {
-    if (step !== 3 || !isLoggedIn) return;
+    if (step !== 2) return;
     if (!form.originCity || !form.destinationCity || !form.date) return;
 
     setLoadingResults(true);
     setCarriers([]);
 
-    // Sadece tarih filtresi — serviceAreas verisi tutarsız olduğundan backend'e gönderilmiyor
     const params = new URLSearchParams({ availableDate: form.date, limit: '50' });
+    params.set('serviceCity', form.originCity);
+    if (requestedScope) params.set('scope', requestedScope);
 
     const token = localStorage.getItem('authToken');
-    fetch(`/api/v1/carriers/search?${params}`, {
+    fetch(`/api/v1/carriers/search?${params.toString()}`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     })
       .then((r) => r.json())
       .then((json) => {
-        if (json.success && Array.isArray(json.data?.items)) {
+        if (json.success && Array.isArray(json.data.items)) {
           setCarriers(json.data.items.map(mapSearchResultToCarrier));
         }
       })
       .catch(() => {})
       .finally(() => setLoadingResults(false));
-  }, [step, form.originCity, form.destinationCity, form.date, isLoggedIn]);
+  }, [step, form.originCity, form.destinationCity, form.date, requestedScope]);
 
-  const [onlyApproved, setOnlyApproved] = useState(false);
   const [minRating, setMinRating] = useState(0);
-  const [sortBy, setSortBy] = useState<'rating' | 'reviews' | 'capacity' | 'price'>('rating');
+  const [sortBy, setSortBy] = useState<'rating' | 'reviews' | 'capacity'>('rating');
 
   const suitableCarriers = useMemo(() => {
     let list = suitableCarriersBase;
-    if (onlyApproved) list = list.filter(c => c.isApproved);
     if (minRating > 0) list = list.filter(c => c.rating >= minRating);
     const sorted = [...list].sort((a, b) => {
       if (sortBy === 'rating') return b.rating - a.rating;
       if (sortBy === 'reviews') return b.reviewCount - a.reviewCount;
-      if (sortBy === 'capacity') return b.vehicle.capacity - a.vehicle.capacity;
-      return a.baseFee - b.baseFee;
+      return b.vehicle.capacity - a.vehicle.capacity;
     });
     return sorted;
-  }, [suitableCarriersBase, onlyApproved, minRating, sortBy]);
+  }, [suitableCarriersBase, minRating, sortBy]);
 
-  const goNext = () => setStep((s) => (s < 3 ? ((s + 1) as Step) : s));
-  const goPrev = () => setStep((s) => (s > 1 ? ((s - 1) as Step) : s));
+  const selectedCarriers = useMemo(
+    () => selectedCarrierIds
+      .map(id => carriers.find(carrier => carrier.id === id))
+      .filter(Boolean) as Carrier[],
+    [carriers, selectedCarrierIds],
+  );
 
-  const handleGoToStep3 = () => {
-    if (!canNextFrom2) return;
-    if (!isLoggedIn) {
-      toast({ title: 'Giriş gerekli', description: 'Devam edebilmek için giriş yapmalısınız!' });
-      setStep(3);
-      setShowLoginModal(true);
+  const toggleCarrierSelection = (carrierId: string) => {
+    const removing = selectedCarrierIds.includes(carrierId);
+    if (!removing && selectedCarrierIds.length >= 4) {
+      toast({
+        title: 'En fazla 4 nakliyeci seçebilirsiniz',
+        description: 'Rekabet için 3-4 firma yeterli olur; daha fazlası teklif yönetimini zorlaştırır.',
+        variant: 'destructive',
+      });
       return;
     }
-    setStep(3);
+    setSelectedCarrierIds(prev =>
+      prev.includes(carrierId) ? prev.filter(id => id !== carrierId) : [...prev, carrierId]
+    );
+    if (removing) {
+      setRequestedServicesByCarrier(prev => {
+        const next = { ...prev };
+        delete next[carrierId];
+        return next;
+      });
+    }
   };
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!reviewCarrierId) {
+      setReviewCarrierDetail(null);
+      return;
+    }
+
+    setReviewCarrierLoading(true);
+    apiClient(`/api/v1/carriers/${reviewCarrierId}/detail`)
+      .then((response) => response.json())
+      .then((json) => {
+        if (cancelled) return;
+        setReviewCarrierDetail(json.success ? json.data as CarrierDetail : null);
+      })
+      .catch(() => {
+        if (!cancelled) setReviewCarrierDetail(null);
+      })
+      .finally(() => {
+        if (!cancelled) setReviewCarrierLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [reviewCarrierId]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (step !== 3 || selectedCarrierIds.length === 0) {
+      setSelectedCarrierServices([]);
+      return;
+    }
+
+    setCarrierServicesLoading(true);
+    Promise.all(selectedCarrierIds.map(async (carrierId) => {
+      const fallbackCarrier = carriers.find(carrier => carrier.id === carrierId);
+      try {
+        const detailPath = currentExtraServiceLoadType
+          ? `/api/v1/carriers/${carrierId}/detail?loadType=${currentExtraServiceLoadType}`
+          : `/api/v1/carriers/${carrierId}/detail`;
+        const response = await apiClient(detailPath);
+        const json = await response.json();
+        const detail = json.success ? json.data as CarrierDetail : null;
+        const services = Array.isArray(detail?.services)
+          ? filterAndDedupeServiceGroups(detail.services, currentExtraServiceLoadType)
+          : [];
+        return {
+          carrierId,
+          carrierName: detail?.companyName
+            || [fallbackCarrier?.name, fallbackCarrier?.surname].filter(Boolean).join(' ')
+            || 'Nakliyeci',
+          services,
+        };
+      } catch {
+        return {
+          carrierId,
+          carrierName: [fallbackCarrier?.name, fallbackCarrier?.surname].filter(Boolean).join(' ') || 'Nakliyeci',
+          services: [],
+        };
+      }
+    }))
+      .then((items) => {
+        if (!cancelled) setSelectedCarrierServices(items);
+      })
+      .finally(() => {
+        if (!cancelled) setCarrierServicesLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [carriers, currentExtraServiceLoadType, selectedCarrierIds, step]);
+
+  const isCarrierServiceSelected = (carrierId: string, service: CarrierDetailServiceItem) => {
+    const carrierServices = requestedServicesByCarrier[carrierId];
+    if (!carrierServices) return false;
+    return service.source === 'custom'
+      ? carrierServices.customServiceIds.includes(service.id)
+      : carrierServices.catalogServiceIds.includes(service.id);
+  };
+
+  const toggleCarrierService = (carrierId: string, service: CarrierDetailServiceItem) => {
+    setRequestedServicesByCarrier(prev => {
+      const current = prev[carrierId] ?? { catalogServiceIds: [], customServiceIds: [] };
+      const bucketKey = service.source === 'custom' ? 'customServiceIds' : 'catalogServiceIds';
+      const currentBucket = new Set(current[bucketKey]);
+      if (currentBucket.has(service.id)) currentBucket.delete(service.id);
+      else currentBucket.add(service.id);
+
+      return {
+        ...prev,
+        [carrierId]: {
+          ...current,
+          [bucketKey]: Array.from(currentBucket),
+        },
+      };
+    });
+  };
+
+  const isKnownPriceService = (service: CarrierDetailServiceItem) => {
+    if (service.priceMode === 'NONE' || service.priceMode === 'FIXED') return true;
+    return service.priceMode === 'QUOTE' && service.minPrice != null && service.maxPrice != null;
+  };
+
+  const getCarrierServiceItems = (carrierGroup: SelectedCarrierServices) =>
+    carrierGroup.services.flatMap((group) => group.items);
+
+  const areAllCarrierServicesSelected = (carrierGroup: SelectedCarrierServices) => {
+    const services = getCarrierServiceItems(carrierGroup);
+    return services.length > 0 && services.every((service) => isCarrierServiceSelected(carrierGroup.carrierId, service));
+  };
+
+  const toggleAllCarrierServices = (carrierGroup: SelectedCarrierServices) => {
+    const services = getCarrierServiceItems(carrierGroup);
+    const catalogIds = services.filter((service) => service.source !== 'custom').map((service) => service.id);
+    const customIds = services.filter((service) => service.source === 'custom').map((service) => service.id);
+
+    setRequestedServicesByCarrier((prev) => {
+      const current = prev[carrierGroup.carrierId] ?? { catalogServiceIds: [], customServiceIds: [] };
+      const allSelected = services.length > 0 && services.every((service) => {
+        const bucket = service.source === 'custom' ? current.customServiceIds : current.catalogServiceIds;
+        return bucket.includes(service.id);
+      });
+
+      return {
+        ...prev,
+        [carrierGroup.carrierId]: allSelected
+          ? {
+              catalogServiceIds: current.catalogServiceIds.filter((id) => !catalogIds.includes(id)),
+              customServiceIds: current.customServiceIds.filter((id) => !customIds.includes(id)),
+            }
+          : {
+              catalogServiceIds: Array.from(new Set([...current.catalogServiceIds, ...catalogIds])),
+              customServiceIds: Array.from(new Set([...current.customServiceIds, ...customIds])),
+            },
+      };
+    });
+  };
+
+  const goNext = () => setStep((s) => (s < 4 ? ((s + 1) as Step) : s));
+  const goPrev = () => setStep((s) => (s > 1 ? ((s - 1) as Step) : s));
+
+  const handleGoToStep4 = () => setStep(4);
 
   useEffect(() => {
     if (searchParams.get('calculator') === '1') {
@@ -634,7 +816,6 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
     return buildShipmentPayloadFromForm(form, {
       phone,
       templateWeights: TEMPLATE_WEIGHTS,
-      vehicleTypeOptions,
     });
   };
 
@@ -653,6 +834,10 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
   // Talebi yayınla — nakliyeci seçmeden marketplace'e gönderir
   const publishRequest = async () => {
     if (!isLoggedIn) { setShowLoginModal(true); return; }
+    if (!canPublish) {
+      toast({ title: 'Yük detayı gerekli', description: 'Yayınlamadan önce yer tipi seçin veya Hacim Hesapla ile ağırlığı doldurun.', variant: 'destructive' });
+      return;
+    }
     if (needsPhone && !phone.trim()) {
       toast({ title: 'Telefon gerekli', description: 'Nakliyecilerin sizi arayabilmesi için telefon numarası gereklidir.', variant: 'destructive' });
       return;
@@ -670,54 +855,47 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
         body: JSON.stringify(buildShipmentPayload()),
       });
       const json = await res.json().catch(() => ({}));
-      if (res.ok && json?.success) {
-        const newShipmentId = json.data?.id;
-        // Davet gönder (başarısız olsa bile talep oluşturuldu sayılır)
-        if (inviteCarrierId && newShipmentId) {
-          try {
-            await apiClient(`/api/v1/shipments/${newShipmentId}/invite/${inviteCarrierId}`, { method: 'POST' });
-            toast({ title: `${inviteCarrierName || 'Nakliyeci'} davet edildi`, description: 'Firma talebinizi görüp teklif verebilir.' });
-          } catch {
-            // davet başarısız — devam et
+      if (res.ok && json.success) {
+        const newShipmentId = json.data.id;
+        const carrierIdsToInvite = selectedCarrierIds.length > 0
+          ? selectedCarrierIds.slice(0, 4)
+          : inviteCarrierId
+            ? [inviteCarrierId]
+            : [];
+
+        if (carrierIdsToInvite.length > 0 && newShipmentId) {
+          const inviteResults = await Promise.allSettled(carrierIdsToInvite.map((carrierId) =>
+            apiClient(`/api/v1/shipments/${newShipmentId}/invite/${carrierId}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                requestedServices: requestedServicesByCarrier[carrierId] ?? {
+                  catalogServiceIds: [],
+                  customServiceIds: [],
+                },
+              }),
+            })
+          ));
+          const sentCount = inviteResults.filter(result => result.status === 'fulfilled').length;
+          if (sentCount > 0) {
+            toast({
+              title: `${sentCount} nakliyeciye teklif daveti gönderildi`,
+              description: 'Firmalar talebinizi ve seçtiğiniz ek hizmetleri görüp teklif verebilir.',
+            });
+          } else {
+            toast({
+              title: 'Talep yayınlandı',
+              description: 'Davetler gönderilemedi; talep yine de uygun nakliyecilere açık.',
+              variant: 'destructive',
+            });
           }
         } else {
           toast({ title: 'Talep yayınlandı!', description: 'Nakliyecilerden teklifler gelmeye başlayacak.' });
         }
+        localStorage.removeItem(DRAFT_KEY);
         navigate('/ilanlarim');
       } else {
-        toast({ title: 'Hata', description: json?.message || 'Talep oluşturulamadı.', variant: 'destructive' });
-      }
-    } catch {
-      toast({ title: 'Bağlantı Hatası', description: 'Sunucuya bağlanılamadı.', variant: 'destructive' });
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const requestOffer = async (carrier: Carrier) => {
-    const sessionUser = getSessionUser() || (localStorage.getItem('currentUser') ? JSON.parse(localStorage.getItem('currentUser') as string) : null);
-    if (!sessionUser) {
-      toast({ title: 'Giriş gerekli', description: 'Teklif göndermek için giriş yapmalısınız.', variant: 'destructive' });
-      return;
-    }
-    setSubmitting(true);
-    try {
-      await savePhoneIfNeeded();
-      const token = localStorage.getItem('authToken');
-      const res = await fetch('/api/v1/shipments/', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify(buildShipmentPayload()),
-      });
-      const json = await res.json().catch(() => ({}));
-      if (res.ok && json?.success) {
-        toast({ title: 'Başarılı', description: `${carrier.name} ${carrier.surname} adlı nakliyeciye teklif isteği gönderildi.` });
-        navigate('/ilanlarim');
-      } else {
-        toast({ title: 'Hata', description: json?.message || 'İlan oluşturulamadı.', variant: 'destructive' });
+        toast({ title: 'Hata', description: json.message || 'Talep oluşturulamadı.', variant: 'destructive' });
       }
     } catch {
       toast({ title: 'Bağlantı Hatası', description: 'Sunucuya bağlanılamadı.', variant: 'destructive' });
@@ -736,146 +914,274 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
   };
   const submitStep2 = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!canNextFrom2) return;
-    if (!isLoggedIn) {
-      toast({ title: 'Giriş gerekli', description: 'Devam edebilmek için giriş yapmalısınız!' });
-      setShowLoginModal(true);
-      setStep(3);
-      return;
-    }
     goNext();
   };
 
   useEffect(() => {
-    if (step === 3) {
+    if (step === 2) {
       setLoadingResults(true);
       const t = setTimeout(() => setLoadingResults(false), 400);
       return () => clearTimeout(t);
     }
   }, [step]);
   useEffect(() => {
-    if (step === 3) {
+    if (step === 2) {
       setLoadingResults(true);
       const t = setTimeout(() => setLoadingResults(false), 300);
       return () => clearTimeout(t);
     }
-  }, [onlyApproved, minRating, sortBy, suitableCarriersBase, step]);
+  }, [minRating, sortBy, suitableCarriersBase, step]);
 
-  useEffect(() => {
-    if (step === 3 && !isLoggedIn) {
-      setShowLoginModal(true);
-    }
-  }, [step, isLoggedIn]);
 
   const closeLoginModal = () => {
     setShowLoginModal(false);
-    if (step === 3) setStep(2);
   };
 
+  /* ── step data ── */
+  const stepTitles: Record<number, string> = {
+    1: 'Rota & Yük Türü',
+    2: 'Uygun Nakliyeciler',
+    3: 'Diğer Ek Hizmetler',
+    4: 'Yük Detayı',
+    5: 'Özet & Yayınla',
+  };
+  const stepSubtitles: Record<number, string> = {
+    1: 'Çıkış, varış noktası, tarih ve yük türünü belirleyin',
+    2: 'Firmaları inceleyin ve birden fazla nakliyeci seçin',
+    3: 'Seçtiğiniz nakliyecilere özel hizmet tercihleri yapın',
+    4: 'Yer, kat, hacim, fotoğraf ve notları tamamlayın',
+    5: 'Bilgileri kontrol edin ve talebi yayınlayın',
+  };
   /* ── step labels ── */
   const STEPS = [
-    { id: 1, label: 'Rota Bilgisi' },
-    { id: 2, label: 'Yük Bilgisi' },
-    { id: 3, label: 'Özet & Yayınla' },
+    { id: 1, label: 'Rota & Yük Türü' },
+    { id: 2, label: 'Uygun Nakliyeciler' },
+    { id: 3, label: 'Ek Hizmetler' },
+    { id: 4, label: 'Yük Detayı' },
+    { id: 5, label: 'Özet & Yayınla' },
   ];
 
   /* ── transport types for step 2 grid ── */
-  const TRANSPORT_CARDS: { value: string; emoji: string; label: string }[] = [
-    { value: 'evden-eve', emoji: '🏠', label: 'Ev Eşyası' },
-    { value: 'ofis-tasima', emoji: '🏢', label: 'Ofis' },
-    { value: 'parca', emoji: '📦', label: 'Parça Eşya' },
-    { value: 'depolama', emoji: '🚚', label: 'Depolama' },
+  const TRANSPORT_CARDS: { value: string; Icon: LucideIcon; label: string }[] = [
+    { value: 'evden-eve', Icon: Home, label: 'Ev Eşyası' },
+    { value: 'ofis-tasima', Icon: Building2, label: 'Ofis' },
+    { value: 'parca', Icon: Package, label: 'Parça Eşya' },
+    { value: 'depolama', Icon: Archive, label: 'Depolama' },
   ];
 
-  /* ── shared input style ── */
-  const inputStyle: React.CSSProperties = {
-    height: '44px', border: '1px solid #E2E8F0', borderRadius: '10px',
-    padding: '0 14px', fontSize: '14px', color: '#0F172A', background: 'white',
-    transition: 'border-color 150ms, box-shadow 150ms', outline: 'none', width: '100%',
+  /* ── Kurumsal ortak stiller (token tabanlı) ── */
+  const tb = {
+    card: {
+      background: 'var(--tb-surface)',
+      border: '1px solid var(--tb-border)',
+      borderRadius: 'var(--tb-radius)',
+      boxShadow: 'var(--tb-shadow)',
+      padding: '24px',
+    } as React.CSSProperties,
+    eyebrow: { fontSize: '12px', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: 'var(--tb-ink-500)' } as React.CSSProperties,
+    pageTitle: { fontSize: '24px', fontWeight: 700, color: 'var(--tb-brand-900)', letterSpacing: '-0.01em' } as React.CSSProperties,
+    sectionLabel: { fontSize: '11px', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase' as const, color: 'var(--tb-brand-700)' } as React.CSSProperties,
+    label: { display: 'block', fontSize: '12px', fontWeight: 500, color: 'var(--tb-ink-500)', marginBottom: '6px' } as React.CSSProperties,
+    body: { fontSize: '14px', color: 'var(--tb-ink-900)' } as React.CSSProperties,
+    caption: { fontSize: '12px', color: 'var(--tb-ink-500)' } as React.CSSProperties,
+    input: {
+      height: '40px', border: '1px solid var(--tb-ink-300)', borderRadius: 'var(--tb-radius-sm)',
+      padding: '0 12px', fontSize: '14px', color: 'var(--tb-ink-900)', background: '#fff', width: '100%',
+    } as React.CSSProperties,
+    ctaPrimary: {
+      background: 'var(--tb-brand-700)', color: '#fff', border: 'none', borderRadius: 'var(--tb-radius-sm)',
+      padding: '11px 28px', fontSize: '14px', fontWeight: 600, cursor: 'pointer',
+      display: 'inline-flex', alignItems: 'center', gap: '8px', transition: 'all 150ms',
+    } as React.CSSProperties,
+    ctaSecondary: {
+      background: '#fff', color: 'var(--tb-ink-700)', border: '1px solid var(--tb-border)', borderRadius: 'var(--tb-radius-sm)',
+      padding: '11px 22px', fontSize: '14px', fontWeight: 500, cursor: 'pointer',
+      display: 'inline-flex', alignItems: 'center', gap: '6px',
+    } as React.CSSProperties,
+    divider: { borderTop: '1px solid var(--tb-divider)' } as React.CSSProperties,
+    shellCard: {
+      background: 'var(--tb-surface)',
+      border: '1px solid var(--tb-border)',
+      borderRadius: 'var(--tb-radius)',
+      boxShadow: 'var(--tb-shadow)',
+      overflow: 'hidden',
+    } as React.CSSProperties,
+    surfaceBox: {
+      background: 'var(--tb-canvas)',
+      border: '1px solid var(--tb-border)',
+      borderRadius: 'var(--tb-radius)',
+    } as React.CSSProperties,
+    infoBox: {
+      background: 'var(--tb-brand-50)',
+      border: '1px solid var(--tb-brand-50)',
+      borderRadius: 'var(--tb-radius)',
+      color: 'var(--tb-brand-700)',
+    } as React.CSSProperties,
+    successBox: {
+      background: 'var(--tb-success-bg)',
+      border: '1px solid var(--tb-success-border)',
+      borderRadius: 'var(--tb-radius)',
+      color: 'var(--tb-success)',
+    } as React.CSSProperties,
+    iconBadge: {
+      width: '40px',
+      height: '40px',
+      borderRadius: '999px',
+      background: 'var(--tb-brand-50)',
+      color: 'var(--tb-brand-700)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      fontWeight: 700,
+      fontSize: '16px',
+      flexShrink: 0,
+    } as React.CSSProperties,
+    editLink: {
+      fontSize: '13px',
+      color: 'var(--tb-brand-600)',
+      cursor: 'pointer',
+      fontWeight: 600,
+    } as React.CSSProperties,
+    dangerText: { color: 'var(--tb-danger)' } as React.CSSProperties,
   };
-  const labelStyle: React.CSSProperties = { display: 'block', fontSize: '13px', fontWeight: 500, color: '#374151', marginBottom: '6px' };
+  /* ── shared input style (geriye uyumlu alias) ── */
+  const inputStyle = tb.input;
+  const labelStyle = tb.label;
+  const cardSel = (active: boolean): React.CSSProperties => ({
+    border: active ? '2px solid var(--tb-brand-700)' : '1px solid var(--tb-border)',
+    background: active ? 'var(--tb-brand-50)' : 'var(--tb-surface)',
+    borderRadius: '10px',
+    padding: '14px 8px',
+    textAlign: 'center',
+    cursor: 'pointer',
+    minHeight: '104px',
+    transition: 'border-color 150ms, background 150ms, box-shadow 150ms',
+    boxShadow: active ? '0 0 0 3px rgba(30,58,138,0.08)' : 'none',
+  });
   const converterAppliedRows = getConverterAppliedSummary(appliedConverterSummary);
 
   return (
-    <div style={{ background: '#F8FAFC', minHeight: '100vh' }}>
-      <div style={{ maxWidth: '760px', margin: '0 auto', padding: '40px 20px' }}>
+    <div className="offer-motion" style={{ background: 'var(--tb-canvas)', minHeight: '100vh' }}>
 
-        {/* ═══ PAGE HEADER ═══ */}
-        <div style={{ marginBottom: '32px' }}>
-          <div style={{ fontSize: '13px', marginBottom: '12px' }}>
-            <Link to="/home" style={{ color: '#94A3B8', textDecoration: 'none' }}>Ana Sayfa</Link>
-            <span style={{ color: '#CBD5E1', margin: '0 6px' }}>/</span>
-            <span style={{ color: '#0F172A', fontWeight: 500 }}>Taşıma Talebi Oluştur</span>
+      {/*  PAGE HEADER STRIP  */}
+      <div style={{
+        background: 'var(--tb-surface)',
+        borderBottom: '1px solid var(--tb-border)',
+        padding: '0',
+      }}>
+        <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '0 32px' }}>
+          {/* Breadcrumb + title row */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '20px', flexWrap: 'wrap', padding: '20px 0 16px' }}>
+            <div>
+              {/* Breadcrumb */}
+              <div style={{ fontSize: '12px', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                <Link to="/home" style={{ color: 'var(--tb-ink-400)', textDecoration: 'none' }}>Ana Sayfa</Link>
+                <span style={{ color: 'var(--tb-ink-300)' }}>/</span>
+                <span style={{ color: 'var(--tb-ink-700)', fontWeight: 500 }}>Taşıma Talebi Oluştur</span>
+              </div>
+              <div style={tb.eyebrow}>Taşıma Talebi Oluştur</div>
+              <div style={{ ...tb.pageTitle, marginTop: '4px' }}>{stepTitles[displayStep]}</div>
+              <div style={{ ...tb.caption, marginTop: '4px' }}>
+                {!isLoggedIn
+                  ? 'Üyelik gerekmez - giriş yalnızca yayınlama adımında istenir.'
+                  : stepSubtitles[displayStep]}
+              </div>
+            </div>
+            {/* Progress */}
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: '10px',
+              background: 'var(--tb-canvas)', borderRadius: 'var(--tb-radius)',
+              padding: '8px 16px', border: '1px solid var(--tb-border)',
+            }}>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ ...tb.caption, marginBottom: '6px', fontWeight: 700, color: 'var(--tb-brand-700)' }}>Adım {displayStep}/5</div>
+                <div style={{ width: '120px', height: '6px', borderRadius: '999px', background: 'var(--tb-border)', overflow: 'hidden' }}>
+                  <div style={{ width: `${progress}%`, height: '100%', borderRadius: '999px', background: 'var(--tb-brand-700)', transition: 'width 400ms ease' }} />
+                </div>
+              </div>
+            </div>
           </div>
-          <h1 style={{ fontSize: '1.75rem', fontWeight: 700, color: '#0F172A', letterSpacing: '-0.02em', margin: 0 }}>
-            Taşıma Talebi Oluştur
-          </h1>
-          <p style={{ fontSize: '15px', color: '#64748B', marginTop: '6px' }}>
-            3 adımda ilanınızı oluşturup yayınlayın
-          </p>
-        </div>
 
-        {/* ═══ STEP INDICATOR ═══ */}
-        <div style={{ marginBottom: '32px', background: 'white', border: '1px solid #E2E8F0', borderRadius: '14px', padding: '20px 32px', position: 'relative' }}>
-          <div style={{ position: 'absolute', top: '20px', right: '32px', fontSize: '13px', fontWeight: 600, color: '#2563EB' }}>
-            %{progress}
-          </div>
-          <div className="flex items-center justify-between">
+          {/* ─── STEP INDICATOR ─── */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0', borderTop: '1px solid var(--tb-divider)' }}>
             {STEPS.map((st, i) => {
-              const done = step > st.id;
-              const active = step === st.id;
+              const done = displayStep > st.id;
+              const active = displayStep === st.id;
+              const clickable = st.id < displayStep && st.id <= 4;
               return (
-                <div key={st.id} className="flex items-center" style={{ flex: i < STEPS.length - 1 ? 1 : undefined }}>
-                  <div className="flex flex-col items-center" style={{ gap: '8px' }}>
-                    {/* circle */}
+                <div key={st.id} style={{ display: 'flex', alignItems: 'center', flex: i < STEPS.length - 1 ? 1 : undefined }}>
+                  <div
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: '8px',
+                      padding: '14px 0 12px',
+                      borderBottom: active ? '3px solid var(--tb-brand-700)' : '3px solid transparent',
+                      cursor: clickable ? 'pointer' : 'default',
+                      transition: 'border-color 200ms',
+                    }}
+                    onClick={() => {
+                      if (!clickable) return;
+                      setShowSummaryModal(false);
+                      setStep(st.id as Step);
+                    }}
+                  >
                     {done ? (
-                      <div className="flex items-center justify-center" style={{ width: '36px', height: '36px', borderRadius: '50%', background: '#2563EB' }}>
-                        <Check style={{ width: '16px', height: '16px', color: 'white' }} />
+                      <div style={{ width: '26px', height: '26px', borderRadius: '50%', background: 'var(--tb-brand-700)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <Check style={{ width: '12px', height: '12px', color: 'white' }} />
                       </div>
                     ) : active ? (
-                      <div className="flex items-center justify-center" style={{ width: '36px', height: '36px', borderRadius: '50%', background: 'white', border: '2px solid #2563EB', boxShadow: '0 0 0 4px #EFF6FF' }}>
-                        <span style={{ color: '#2563EB', fontWeight: 700, fontSize: '15px' }}>{st.id}</span>
+                      <div style={{ width: '26px', height: '26px', borderRadius: '50%', background: 'var(--tb-brand-50)', border: '2px solid var(--tb-brand-700)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <span style={{ color: 'var(--tb-brand-700)', fontWeight: 800, fontSize: '12px' }}>{st.id}</span>
                       </div>
                     ) : (
-                      <div className="flex items-center justify-center" style={{ width: '36px', height: '36px', borderRadius: '50%', background: '#F1F5F9' }}>
-                        <span style={{ color: '#94A3B8', fontWeight: 500, fontSize: '15px' }}>{st.id}</span>
+                      <div style={{ width: '26px', height: '26px', borderRadius: '50%', background: 'var(--tb-divider)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <span style={{ color: 'var(--tb-ink-400)', fontWeight: 600, fontSize: '12px' }}>{st.id}</span>
                       </div>
                     )}
-                    {/* label */}
-                    <span style={{ fontSize: '13px', fontWeight: done || active ? 500 : 400, color: done || active ? '#0F172A' : '#94A3B8', whiteSpace: 'nowrap' }}>
+                    <span style={{
+                      fontSize: '13px', fontWeight: active ? 700 : done ? 500 : 400,
+                      color: active ? 'var(--tb-brand-900)' : done ? 'var(--tb-ink-700)' : 'var(--tb-ink-400)',
+                      whiteSpace: 'nowrap',
+                    }}>
                       {st.label}
+                      {st.id === 5 && !isLoggedIn && (
+                        <Lock style={{ width: '10px', height: '10px', marginLeft: '4px', verticalAlign: 'middle', color: 'var(--tb-ink-300)' }} />
+                      )}
                     </span>
                   </div>
-                  {/* connector line */}
                   {i < STEPS.length - 1 && (
-                    <div style={{ flex: 1, height: '2px', margin: '0 8px', marginBottom: '20px', background: step > st.id ? '#2563EB' : '#E2E8F0' }} />
+                    <div style={{ flex: 1, height: '3px', borderRadius: '999px', background: displayStep > st.id ? 'var(--tb-brand-700)' : 'var(--tb-border)', margin: '0 14px' }} />
                   )}
                 </div>
               );
             })}
           </div>
         </div>
+      </div>
 
-        {/* ═══ FORM CARD ═══ */}
-        <div style={{ background: 'white', border: '1px solid #E2E8F0', borderRadius: '16px', padding: '32px', boxShadow: '0 4px 16px rgba(0,0,0,0.06)' }}>
+      {/*  MAIN CONTENT  */}
+      <div className="offer-grid" style={{ maxWidth: '1400px', margin: '0 auto', padding: '28px 32px 64px', display: 'grid', gridTemplateColumns: '1fr 340px', gap: '24px', alignItems: 'start' }}>
 
-          {/* ── STEP 1: ROTA ── */}
+        {/* ── LEFT: FORM CARD ── */}
+        <div style={tb.shellCard}>
+
+          {/* ── STEP 1: ROTA + YÜK TÜRÜ ── */}
           {step === 1 && (
-            <form onSubmit={submitStep1}>
+            <form onSubmit={submitStep1} style={{ padding: '32px' }}>
               {/* Card header */}
-              <div className="flex items-center" style={{ gap: '12px', paddingBottom: '20px', borderBottom: '1px solid #F1F5F9', marginBottom: '24px' }}>
-                <div className="flex items-center justify-center" style={{ width: '40px', height: '40px', borderRadius: '50%', background: '#EFF6FF', color: '#2563EB', fontWeight: 700, fontSize: '16px', flexShrink: 0 }}>1</div>
+              <div className="flex items-center" style={{ gap: '12px', paddingBottom: '20px', borderBottom: '1px solid var(--tb-divider)', marginBottom: '24px' }}>
+                <div className="flex items-center justify-center" style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'var(--tb-brand-50)', color: 'var(--tb-brand-600)', fontWeight: 700, fontSize: '16px', flexShrink: 0 }}>1</div>
                 <div>
-                  <div style={{ fontSize: '17px', fontWeight: 600, color: '#0F172A' }}>Rota Bilgisi</div>
-                  <div style={{ fontSize: '13px', color: '#64748B' }}>Çıkış ve varış noktalarını belirleyin</div>
+                  <div style={{ fontSize: '17px', fontWeight: 600, color: 'var(--tb-ink-900)' }}>Rota & Yük Türü</div>
+                  <div style={{ fontSize: '13px', color: 'var(--tb-ink-500)' }}>Çıkış, varış, tarih ve taşınacak yük türünü belirleyin</div>
                 </div>
               </div>
 
               {/* Saved addresses quick-fill */}
               {savedAddresses.length > 0 && (
-                <div style={{ marginBottom: '20px', padding: '14px 16px', background: '#EFF6FF', borderRadius: '10px', border: '1px solid #BFDBFE' }}>
-                  <label style={{ ...labelStyle, color: '#1D4ED8', marginBottom: '8px' }}>
-                    📌 Kayıtlı adreslerden çıkış noktası seç
+                <div style={{ marginBottom: '20px', padding: '14px 16px', background: 'var(--tb-brand-50)', borderRadius: '10px', border: '1px solid var(--tb-brand-50)' }}>
+                  <label style={{ ...labelStyle, color: 'var(--tb-brand-700)', marginBottom: '8px' }}>
+                    <MapPin style={{ width: '14px', height: '14px', verticalAlign: '-2px', marginRight: '6px' }} />
+                    Kayıtlı adreslerden çıkış noktası seç
                   </label>
                   <Select
                     value=""
@@ -904,16 +1210,16 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
               )}
 
               {/* Route grid: origin → arrow → destination */}
-              <div className="grid items-end" style={{ gridTemplateColumns: '1fr auto 1fr', gap: '12px' }}>
+              <div className="grid items-end offer-route-grid" style={{ gridTemplateColumns: '1fr auto 1fr', gap: '12px' }}>
                 {/* Origin */}
                 <div>
-                  <div className="flex items-center" style={{ background: '#F8FAFC', borderRadius: '8px', padding: '12px', marginBottom: '12px', gap: '6px' }}>
-                    <span style={{ fontSize: '14px' }}>📍</span>
-                    <span style={{ fontSize: '12px', fontWeight: 600, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Çıkış Noktası</span>
+                  <div className="flex items-center" style={{ background: 'var(--tb-canvas)', borderRadius: '8px', padding: '12px', marginBottom: '12px', gap: '6px' }}>
+                    <MapPin style={{ width: '14px', height: '14px', color: 'var(--tb-ink-500)' }} />
+                    <span style={tb.sectionLabel}>Çıkış Noktası</span>
                   </div>
                   <div className="flex flex-col" style={{ gap: '10px' }}>
                     <div>
-                      <label style={labelStyle}>Şehir <span style={{ color: '#EF4444' }}>*</span></label>
+                      <label style={labelStyle}>Şehir <span style={{ color: 'var(--tb-danger)' }}>*</span></label>
                       <Select value={form.originCity} onValueChange={(v) => {
                         if (!requireLoginForSelection()) return;
                         handleChange('originCity', v);
@@ -923,7 +1229,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
                       </Select>
                     </div>
                     <div>
-                      <label style={labelStyle}>İlçe <span style={{ color: '#EF4444' }}>*</span></label>
+                      <label style={labelStyle}>İlçe <span style={{ color: 'var(--tb-danger)' }}>*</span></label>
                       <Select value={form.originDistrict} onValueChange={(v) => {
                         if (!requireLoginForSelection()) return;
                         handleChange('originDistrict', v);
@@ -936,19 +1242,19 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
                 </div>
 
                 {/* Arrow */}
-                <div className="flex items-center justify-center" style={{ width: '40px', height: '40px', borderRadius: '50%', background: '#EFF6FF', marginBottom: '4px' }}>
-                  <ArrowRight style={{ width: '20px', height: '20px', color: '#2563EB' }} />
+                <div className="flex items-center justify-center offer-route-arrow" style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'var(--tb-brand-50)', marginBottom: '4px' }}>
+                  <ArrowRight style={{ width: '20px', height: '20px', color: 'var(--tb-brand-700)' }} />
                 </div>
 
                 {/* Destination */}
                 <div>
-                  <div className="flex items-center" style={{ background: '#F8FAFC', borderRadius: '8px', padding: '12px', marginBottom: '12px', gap: '6px' }}>
-                    <span style={{ fontSize: '14px' }}>📍</span>
-                    <span style={{ fontSize: '12px', fontWeight: 600, color: '#64748B', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Varış Noktası</span>
+                  <div className="flex items-center" style={{ background: 'var(--tb-canvas)', borderRadius: '8px', padding: '12px', marginBottom: '12px', gap: '6px' }}>
+                    <MapPin style={{ width: '14px', height: '14px', color: 'var(--tb-ink-500)' }} />
+                    <span style={tb.sectionLabel}>Varış Noktası</span>
                   </div>
                   <div className="flex flex-col" style={{ gap: '10px' }}>
                     <div>
-                      <label style={labelStyle}>Şehir <span style={{ color: '#EF4444' }}>*</span></label>
+                      <label style={labelStyle}>Şehir <span style={{ color: 'var(--tb-danger)' }}>*</span></label>
                       <Select value={form.destinationCity} onValueChange={(v) => {
                         if (!requireLoginForSelection()) return;
                         handleChange('destinationCity', v);
@@ -958,7 +1264,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
                       </Select>
                     </div>
                     <div>
-                      <label style={labelStyle}>İlçe <span style={{ color: '#EF4444' }}>*</span></label>
+                      <label style={labelStyle}>İlçe <span style={{ color: 'var(--tb-danger)' }}>*</span></label>
                       <Select value={form.destinationDistrict} onValueChange={(v) => {
                         if (!requireLoginForSelection()) return;
                         handleChange('destinationDistrict', v);
@@ -973,7 +1279,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
 
               {/* Date */}
               <div style={{ marginTop: '20px' }}>
-                <label style={labelStyle}>Taşıma Tarihi <span style={{ color: '#EF4444' }}>*</span></label>
+                <label style={labelStyle}>Taşıma Tarihi <span style={{ color: 'var(--tb-danger)' }}>*</span></label>
                 <div style={{ position: 'relative' }}>
                   <Input
                     type="date"
@@ -990,15 +1296,15 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
                   />
                 </div>
                 {isDateTooFar && (
-                  <div style={{ fontSize: '13px', color: '#DC2626', marginTop: '6px' }}>30 günden ileri bir tarihte gün seçemezsiniz.</div>
+                  <div style={{ fontSize: '13px', color: 'var(--tb-danger)', marginTop: '6px' }}>30 günden ileri bir tarihte gün seçemezsiniz.</div>
                 )}
                 {!isDateTooFar && (isCheckingAvailability || availabilitySummary) && (
                   <div style={{ fontSize: '13px', marginTop: '6px' }}>
                     {isCheckingAvailability ? (
-                      <span style={{ color: '#64748B' }}>Müsaitlik kontrol ediliyor...</span>
+                      <span style={{ color: 'var(--tb-ink-500)' }}>Müsaitlik kontrol ediliyor...</span>
                     ) : availabilitySummary ? (
-                      <span style={{ color: availabilitySummary.available > 0 ? '#16A34A' : '#DC2626' }}>
-                        Bu tarihte aktif {availabilitySummary.available} nakliyeci görünüyor
+                      <span style={{ color: availabilitySummary.available > 0 ? 'var(--tb-success)' : 'var(--tb-danger)' }}>
+                        {availabilitySummary.available} nakliyeci{form.originCity ? ` (${form.originCity} çıkışlı)` : ''} bu tarihte müsait görünüyor
                         {availabilitySummary.available === 0 && ' — başka bir tarih seçmeyi deneyin'}
                       </span>
                     ) : null}
@@ -1006,38 +1312,13 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
                 )}
               </div>
 
-              {/* Action bar */}
-              <div className="flex justify-end" style={{ paddingTop: '24px', borderTop: '1px solid #F1F5F9', marginTop: '24px' }}>
-                <button
-                  type="submit"
-                  disabled={!canNextFrom1}
-                  className="hover:shadow-[0_4px_12px_rgba(37,99,235,0.3)]"
-                  style={{ background: canNextFrom1 ? '#2563EB' : '#94A3B8', color: 'white', border: 'none', borderRadius: '10px', padding: '12px 32px', fontSize: '15px', fontWeight: 600, cursor: canNextFrom1 ? 'pointer' : 'not-allowed', transition: 'all 150ms' }}
-                >
-                  Devam →
-                </button>
-              </div>
-            </form>
-          )}
-
-          {/* ── STEP 2: YÜK BİLGİSİ ── */}
-          {step === 2 && (
-            <form onSubmit={submitStep2}>
-              {/* Card header */}
-              <div className="flex items-center" style={{ gap: '12px', paddingBottom: '20px', borderBottom: '1px solid #F1F5F9', marginBottom: '24px' }}>
-                <div className="flex items-center justify-center" style={{ width: '40px', height: '40px', borderRadius: '50%', background: '#EFF6FF', color: '#2563EB', fontWeight: 700, fontSize: '16px', flexShrink: 0 }}>2</div>
-                <div>
-                  <div style={{ fontSize: '17px', fontWeight: 600, color: '#0F172A' }}>Yük Bilgisi</div>
-                  <div style={{ fontSize: '13px', color: '#64748B' }}>Taşınacak yük tipini ve detaylarını belirtin</div>
-                </div>
-              </div>
-
               {/* Transport type cards */}
-              <div style={{ marginBottom: '24px' }}>
-                <label style={labelStyle}>Yük Türü <span style={{ color: '#EF4444' }}>*</span></label>
-                <div className="grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px' }}>
+              <div style={{ marginTop: '20px' }}>
+                <label style={labelStyle}>Yük Türü <span style={{ color: 'var(--tb-danger)' }}>*</span></label>
+                <div className="grid offer-transport-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px' }}>
                   {TRANSPORT_CARDS.map(tc => {
                     const sel = form.transportType === tc.value;
+                    const TransportIcon = tc.Icon;
                     return (
                       <div
                         key={tc.value}
@@ -1045,19 +1326,432 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
                           if (!requireLoginForSelection()) return;
                           handleChange('transportType', tc.value);
                         }}
-                        className="cursor-pointer text-center transition-all duration-150"
-                        style={{
-                          border: sel ? '2px solid #2563EB' : '1px solid #E2E8F0',
-                          borderRadius: '12px', padding: '16px',
-                          background: sel ? '#EFF6FF' : 'white',
-                          boxShadow: sel ? '0 0 0 3px rgba(37,99,235,0.08)' : 'none',
+                        onKeyDown={(e) => {
+                          if (e.key !== 'Enter' && e.key !== ' ') return;
+                          e.preventDefault();
+                          if (!requireLoginForSelection()) return;
+                          handleChange('transportType', tc.value);
                         }}
+                        className="cursor-pointer text-center transition-all duration-150 offer-focusable"
+                        style={cardSel(sel)}
+                        tabIndex={0}
                       >
-                        <div style={{ fontSize: '28px', marginBottom: '8px' }}>{tc.emoji}</div>
-                        <div style={{ fontSize: '13px', fontWeight: 500, color: sel ? '#2563EB' : '#374151' }}>{tc.label}</div>
+                        <div style={{ marginBottom: '8px', display: 'flex', justifyContent: 'center' }}>
+                          <TransportIcon style={{ width: '28px', height: '28px', color: sel ? 'var(--tb-brand-700)' : 'var(--tb-ink-900)' }} />
+                        </div>
+                        <div style={{ fontSize: '13px', fontWeight: 500, color: sel ? 'var(--tb-brand-700)' : 'var(--tb-ink-700)' }}>{tc.label}</div>
                       </div>
                     );
                   })}
+                </div>
+              </div>
+
+              {/* Action bar */}
+              <div className="flex justify-end" style={{ paddingTop: '24px', borderTop: '1px solid var(--tb-divider)', marginTop: '24px' }}>
+                <button
+                  type="submit"
+                  disabled={!canNextFrom1}
+                  style={{ ...tb.ctaPrimary, background: canNextFrom1 ? 'var(--tb-brand-700)' : 'var(--tb-ink-400)', padding: '12px 32px', fontSize: '15px', cursor: canNextFrom1 ? 'pointer' : 'not-allowed' }}
+                >
+                  Devam →
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* ── STEP 2: UYGUN NAKLİYECİLER ── */}
+          {step === 2 && (
+            <div style={{ padding: '32px' }}>
+              <div className="flex items-center" style={{ gap: '12px', paddingBottom: '20px', borderBottom: '1px solid var(--tb-divider)', marginBottom: '24px' }}>
+                <div className="flex items-center justify-center" style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'var(--tb-brand-50)', color: 'var(--tb-brand-600)', fontWeight: 700, fontSize: '16px', flexShrink: 0 }}>2</div>
+                <div>
+                  <div style={{ fontSize: '17px', fontWeight: 600, color: 'var(--tb-ink-900)' }}>Uygun Nakliyeciler</div>
+                  <div style={{ fontSize: '13px', color: 'var(--tb-ink-500)' }}>Firmaları inceleyin, birden fazla nakliyeci seçin veya açık ilan olarak devam edin</div>
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '20px', padding: '14px 16px', background: 'var(--tb-canvas)', border: '1px solid var(--tb-border)', borderRadius: '12px', fontSize: '13px', color: 'var(--tb-ink-700)' }}>
+                Seçtiğiniz nakliyecilerin ek hizmetleri bir sonraki adımda gösterilir. Hiç seçim yapmadan devam ederseniz talep herkese açık ilan olarak yayınlanır.
+              </div>
+
+              <div style={{ marginBottom: '24px' }}>
+                  <div className="flex flex-wrap items-end" style={{ gap: '12px', marginBottom: '12px' }}>
+                    <div>
+                      <Select value={String(minRating)} onValueChange={(v) => setMinRating(Number(v))}>
+                        <SelectTrigger style={{ ...inputStyle, width: '140px', height: '36px', fontSize: '13px' }}><SelectValue placeholder="Min. Puan" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="0">Fark etmez</SelectItem>
+                          <SelectItem value="3">3+</SelectItem>
+                          <SelectItem value="4">4+</SelectItem>
+                          <SelectItem value="4.5">4.5+</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Select value={sortBy} onValueChange={(v) => setSortBy(v as any)}>
+                        <SelectTrigger style={{ ...inputStyle, width: '180px', height: '36px', fontSize: '13px' }}><SelectValue placeholder="Sırala" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="rating">Puan (yüksek → düşük)</SelectItem>
+                          <SelectItem value="reviews">Yorum sayısı</SelectItem>
+                          <SelectItem value="capacity">Kapasite</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => { setMinRating(0); setSortBy('rating'); }}
+                      style={{ fontSize: '12px', color: 'var(--tb-brand-600)', background: 'none', border: 'none', cursor: 'pointer' }}
+                    >
+                      Sıfırla
+                    </button>
+                  </div>
+
+                  <div style={{ marginBottom: '12px', padding: '14px 16px', background: selectedCarrierIds.length ? 'linear-gradient(135deg, var(--tb-success-bg) 0%, var(--tb-success-bg) 100%)' : 'var(--tb-canvas)', border: `1.5px solid ${selectedCarrierIds.length ? 'var(--tb-success-border)' : 'var(--tb-border)'}`, borderRadius: '14px', fontSize: '13px', color: selectedCarrierIds.length ? 'var(--tb-success)' : 'var(--tb-ink-700)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      {selectedCarrierIds.length > 0
+                        ? <CheckCircle2 style={{ width: '16px', height: '16px', color: 'var(--tb-success)', flexShrink: 0 }} />
+                        : <Info style={{ width: '16px', height: '16px', color: 'var(--tb-ink-400)', flexShrink: 0 }} />
+                      }
+                      <span>
+                        <strong>{selectedCarrierIds.length}</strong> nakliyeci seçildi.
+                        {selectedCarrierIds.length === 0 ? ' Seçmeden devam ederseniz talep herkese açık olur.' : null}
+                      </span>
+                    </div>
+                    {selectedCarriers.length > 0 && (
+                      <div className="flex flex-wrap" style={{ gap: '6px' }}>
+                        {selectedCarriers.map((carrier) => (
+                          <span key={carrier.id} style={{ fontSize: '12px', background: 'var(--tb-success-bg)', color: 'var(--tb-success)', padding: '3px 10px', borderRadius: '999px', fontWeight: 700, border: '1px solid var(--tb-success-border)' }}>
+                            {[carrier.name, carrier.surname].filter(Boolean).join(' ')}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {loadingResults ? (
+                    <div className="flex flex-col" style={{ gap: '8px' }}>
+                      {[1,2,3].map(i => <Skeleton key={i} className="h-20 rounded-xl" />)}
+                    </div>
+                  ) : suitableCarriers.length === 0 ? (
+                    <div className="flex items-center" style={{ gap: '8px', padding: '20px', border: '1px dashed var(--tb-border)', borderRadius: '10px', fontSize: '13px', color: 'var(--tb-ink-500)' }}>
+                      <Info style={{ width: '16px', height: '16px' }} /> Bu çıkış şehri ve kriterlere uygun nakliyeci bulunamadı. Seçmeden devam ederek talebi herkese açabilirsiniz.
+                    </div>
+                  ) : (
+                    <div className="flex flex-col" style={{ gap: '8px' }}>
+                      {suitableCarriers.map((c) => (
+                        <CarrierCard
+                          key={c.id}
+                          carrier={c}
+                          form={form}
+                          isSelected={selectedCarrierIds.includes(c.id)}
+                          onToggleSelect={() => toggleCarrierSelection(c.id)}
+                          onReview={() => setReviewCarrierId(c.id)}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+              <div className="flex justify-between items-center" style={{ paddingTop: '24px', borderTop: '1px solid var(--tb-divider)' }}>
+                <button
+                  type="button"
+                  onClick={goPrev}
+                  style={tb.ctaSecondary}
+                >
+                  ← Geri
+                </button>
+                <button
+                  type="button"
+                  onClick={goNext}
+                  style={{ ...tb.ctaPrimary, padding: '12px 32px', fontSize: '15px' }}
+                >
+                  {selectedCarrierIds.length ? 'Seçimlerle devam →' : 'Hiç seçmeden devam et →'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ── STEP 3: DİĞER EK HİZMETLER ── */}
+          {step === 3 && (
+            <div style={{ padding: '32px' }}>
+              <div className="flex items-center" style={{ gap: '12px', paddingBottom: '20px', borderBottom: '1px solid var(--tb-divider)', marginBottom: '24px' }}>
+                <div className="flex items-center justify-center" style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'var(--tb-brand-50)', color: 'var(--tb-brand-700)', fontWeight: 700, fontSize: '16px', flexShrink: 0 }}>3</div>
+                <div>
+                  <div style={{ fontSize: '17px', fontWeight: 600, color: 'var(--tb-ink-900)' }}>Diğer Ek Hizmetler</div>
+                  <div style={{ ...tb.caption }}>Seçtiğiniz nakliyecilerin katalog ve özel hizmetleri</div>
+                </div>
+              </div>
+
+              {selectedCarrierIds.length === 0 ? (
+                <div style={{ marginBottom: '24px', padding: '14px 16px', background: 'var(--tb-canvas)', border: '1px solid var(--tb-border)', borderRadius: '12px', fontSize: '13px', color: 'var(--tb-ink-700)' }}>
+                  Nakliyeci seçmeden devam ediyorsunuz. Talep herkese açık yayınlanır; özel firma hizmeti seçimi yapılmaz.
+                </div>
+              ) : carrierServicesLoading ? (
+                <div className="flex flex-col" style={{ gap: '10px', marginBottom: '24px' }}>
+                  {[1,2].map(i => <Skeleton key={i} className="h-28 rounded-xl" />)}
+                </div>
+              ) : (
+                <div className="flex flex-col" style={{ gap: '14px', marginBottom: '24px' }}>
+                  {selectedCarrierServices.map((carrierGroup) => {
+                    const allServices = getCarrierServiceItems(carrierGroup);
+                    const serviceCount = allServices.length;
+                    const expanded = expandedCarrierServices[carrierGroup.carrierId] ?? serviceCount <= 5;
+                    const showAll = showAllCarrierServices[carrierGroup.carrierId] ?? false;
+                    const allSelected = areAllCarrierServicesSelected(carrierGroup);
+                    const selectedServices = allServices.filter(service => isCarrierServiceSelected(carrierGroup.carrierId, service));
+                    const estimate = estimateServicesTotal(selectedServices);
+                    const estimateText = estimate.min === estimate.max
+                      ? `${estimate.avg.toLocaleString('tr-TR')} ₺`
+                      : `~${estimate.avg.toLocaleString('tr-TR')} ₺ (${estimate.min.toLocaleString('tr-TR')}-${estimate.max.toLocaleString('tr-TR')} ₺)`;
+                    const knownPriceServices = allServices.filter(isKnownPriceService);
+                    const negotiableServices = allServices.filter(service => !isKnownPriceService(service));
+                    const visibleKnownCount = showAll ? knownPriceServices.length : Math.min(knownPriceServices.length, 6);
+                    const visibleKnownServices = knownPriceServices.slice(0, visibleKnownCount);
+                    const visibleNegotiableServices = showAll
+                      ? negotiableServices
+                      : negotiableServices.slice(0, Math.max(0, 6 - visibleKnownServices.length));
+                    const hiddenCount = serviceCount - visibleKnownServices.length - visibleNegotiableServices.length;
+
+                    const renderServiceRow = (service: CarrierDetailServiceItem, compact = false) => {
+                      const checked = isCarrierServiceSelected(carrierGroup.carrierId, service);
+                      return (
+                        <div
+                          key={`${service.source}-${service.id}`}
+                          role="checkbox"
+                          aria-checked={checked}
+                          tabIndex={0}
+                          onClick={() => toggleCarrierService(carrierGroup.carrierId, service)}
+                          onKeyDown={(event) => {
+                            if (event.key !== 'Enter' && event.key !== ' ') return;
+                            event.preventDefault();
+                            toggleCarrierService(carrierGroup.carrierId, service);
+                          }}
+                          style={{
+                            display: 'flex',
+                            alignItems: compact ? 'center' : 'flex-start',
+                            justifyContent: 'space-between',
+                            gap: '12px',
+                            minHeight: '44px',
+                            border: `1px solid ${checked ? 'var(--tb-brand-700)' : 'var(--tb-divider)'}`,
+                            borderRadius: '12px',
+                            padding: compact ? '10px 12px' : '12px 14px',
+                            cursor: 'pointer',
+                            background: checked ? 'var(--tb-brand-50)' : 'white',
+                            transition: 'border-color 150ms, background 150ms, box-shadow 150ms',
+                            boxShadow: checked ? '0 0 0 3px rgba(30,58,138,0.06)' : 'none',
+                          }}
+                        >
+                          <span style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', minWidth: 0 }}>
+                            <span style={{
+                              width: '20px',
+                              height: '20px',
+                              borderRadius: '6px',
+                              flexShrink: 0,
+                              marginTop: compact ? '0' : '1px',
+                              background: checked ? 'var(--tb-brand-700)' : 'white',
+                              border: `2px solid ${checked ? 'var(--tb-brand-700)' : 'var(--tb-ink-300)'}`,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                            }}>
+                              {checked && <Check style={{ width: '11px', height: '11px', color: 'white' }} />}
+                            </span>
+                            <span style={{ minWidth: 0 }}>
+                              <span style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', fontSize: '13px', fontWeight: checked ? 700 : 600, color: checked ? 'var(--tb-brand-900)' : 'var(--tb-ink-900)' }}>
+                                {service.name}
+                                {service.source === 'custom' && (
+                                  <span style={{ fontSize: '10px', background: 'var(--tb-brand-50)', color: 'var(--tb-brand-700)', padding: '1px 6px', borderRadius: '999px', fontWeight: 700, border: '1px solid var(--tb-brand-50)' }}>özel</span>
+                                )}
+                              </span>
+                              {!compact && service.description && (
+                                <span style={{ display: 'block', fontSize: '12px', color: 'var(--tb-ink-500)', marginTop: '3px', lineHeight: 1.4 }}>{service.description}</span>
+                              )}
+                            </span>
+                          </span>
+                          {!compact && (
+                            <span style={{
+                              flexShrink: 0,
+                              fontSize: '13px',
+                              fontWeight: 800,
+                              whiteSpace: 'nowrap',
+                              color: checked ? 'var(--tb-brand-700)' : 'var(--tb-ink-900)',
+                              background: checked ? 'white' : 'var(--tb-canvas)',
+                              padding: '4px 10px',
+                              borderRadius: '8px',
+                              border: `1px solid ${checked ? 'var(--tb-brand-600)' : 'var(--tb-border)'}`,
+                            }}>
+                              {formatServicePrice(service)}
+                            </span>
+                          )}
+                        </div>
+                      );
+                    };
+
+                    return (
+                      <div key={carrierGroup.carrierId} style={tb.shellCard}>
+                        <button
+                          type="button"
+                          onClick={() => setExpandedCarrierServices(prev => ({ ...prev, [carrierGroup.carrierId]: !expanded }))}
+                          style={{
+                            width: '100%',
+                            padding: '14px 18px',
+                            border: 'none',
+                            borderBottom: expanded ? '1px solid var(--tb-border)' : 'none',
+                            background: 'var(--tb-canvas)',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            gap: '12px',
+                            textAlign: 'left',
+                            cursor: 'pointer',
+                          }}
+                        >
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+                            <span style={{
+                              width: '40px',
+                              height: '40px',
+                              borderRadius: '10px',
+                              background: 'var(--tb-brand-700)',
+                              color: 'white',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '15px',
+                              fontWeight: 800,
+                              flexShrink: 0,
+                            }}>
+                              {carrierGroup.carrierName[0]?.toUpperCase() || 'N'}
+                            </span>
+                            <span style={{ minWidth: 0 }}>
+                              <span style={{ display: 'block', fontSize: '15px', fontWeight: 800, color: 'var(--tb-brand-900)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{carrierGroup.carrierName}</span>
+                              <span style={{ display: 'block', fontSize: '12px', color: 'var(--tb-ink-500)', marginTop: '2px' }}>
+                                {TRANSPORT_CARDS.find(t => t.value === form.transportType)?.label || 'Yük türü'} · {serviceCount} hizmet sunuyor
+                              </span>
+                            </span>
+                          </span>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
+                            {serviceCount > 0 && (
+                              <span
+                                role="button"
+                                tabIndex={0}
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  toggleAllCarrierServices(carrierGroup);
+                                }}
+                                onKeyDown={(event) => {
+                                  if (event.key !== 'Enter' && event.key !== ' ') return;
+                                  event.preventDefault();
+                                  event.stopPropagation();
+                                  toggleAllCarrierServices(carrierGroup);
+                                }}
+                                style={{ ...tb.ctaSecondary, minHeight: '34px', padding: '7px 12px', fontSize: '12px', color: 'var(--tb-brand-700)', borderColor: 'var(--tb-brand-50)' }}
+                              >
+                                {allSelected ? 'Tümünü kaldır' : 'Tümünü seç'}
+                              </span>
+                            )}
+                            <ChevronDown style={{ width: '18px', height: '18px', color: 'var(--tb-ink-500)', transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)', transition: 'transform 150ms' }} />
+                          </span>
+                        </button>
+
+                        {expanded && (
+                          <div style={{ padding: '16px 18px' }}>
+                            {serviceCount === 0 ? (
+                              <p style={{ fontSize: '13px', color: 'var(--tb-ink-400)', margin: 0 }}>Bu nakliyeci ek hizmet tanımlamamış.</p>
+                            ) : (
+                              <div className="flex flex-col" style={{ gap: '16px' }}>
+                                {visibleKnownServices.length > 0 && (
+                                  <div>
+                                    <div style={{ ...tb.sectionLabel, marginBottom: '8px' }}>Fiyatı belli hizmetler</div>
+                                    <div className="flex flex-col" style={{ gap: '8px' }}>
+                                      {visibleKnownServices.map((service) => renderServiceRow(service))}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {visibleNegotiableServices.length > 0 && (
+                                  <div>
+                                    <div style={{ ...tb.sectionLabel, color: 'var(--tb-ink-400)', marginBottom: '8px' }}>Fiyatı görüşülür hizmetler</div>
+                                    <div className="grid offer-service-compact-grid" style={{ gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '8px' }}>
+                                      {visibleNegotiableServices.map((service) => renderServiceRow(service, true))}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {hiddenCount > 0 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setShowAllCarrierServices(prev => ({ ...prev, [carrierGroup.carrierId]: true }))}
+                                    style={{ alignSelf: 'flex-start', border: 'none', background: 'transparent', color: 'var(--tb-brand-600)', fontSize: '13px', fontWeight: 700, cursor: 'pointer', padding: 0 }}
+                                  >
+                                    +{hiddenCount} hizmet daha göster
+                                  </button>
+                                )}
+
+                                {showAll && serviceCount > 6 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setShowAllCarrierServices(prev => ({ ...prev, [carrierGroup.carrierId]: false }))}
+                                    style={{ alignSelf: 'flex-start', border: 'none', background: 'transparent', color: 'var(--tb-ink-500)', fontSize: '13px', fontWeight: 700, cursor: 'pointer', padding: 0 }}
+                                  >
+                                    Daha az göster
+                                  </button>
+                                )}
+
+                                {selectedServices.length > 0 && (
+                                  <div style={{ ...tb.successBox, padding: '12px 14px' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: '12px', fontSize: '13px', alignItems: 'center' }}>
+                                      <span style={{ display: 'flex', alignItems: 'center', gap: '6px', fontWeight: 700, color: 'var(--tb-success)' }}>
+                                        <CheckCircle2 style={{ width: '14px', height: '14px' }} />
+                                        Bu nakliyeciden tahmini ek hizmet
+                                      </span>
+                                      <span style={{ fontWeight: 800, color: 'var(--tb-success)', fontSize: '15px' }}>{estimateText}</span>
+                                    </div>
+                                    <p style={{ margin: '6px 0 0', fontSize: '12px', color: 'var(--tb-success)' }}>
+                                      Tahminidir; görüşülür kalemler dahil değil, kesin fiyat teklifte netleşir.
+                                      {estimate.hasNegotiable && ' Görüşülür kalemler ayrıca konuşulur.'}
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              <div className="flex justify-between items-center" style={{ paddingTop: '24px', borderTop: '1px solid var(--tb-divider)' }}>
+                <button
+                  type="button"
+                  onClick={goPrev}
+                  className="hover:!bg-[var(--tb-canvas)] transition-colors"
+                  style={tb.ctaSecondary}
+                >
+                  ← Geri
+                </button>
+                <button
+                  type="button"
+                  onClick={handleGoToStep4}
+                  className="hover:shadow-[0_4px_12px_rgba(37,99,235,0.3)]"
+                  style={{ ...tb.ctaPrimary, padding: '12px 32px', fontSize: '15px' }}
+                >
+                  Devam →
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ── STEP 4: YÜK DETAYI ── */}
+          {step === 4 && (
+            <form onSubmit={submitStep2} style={{ padding: '32px' }}>
+              {/* Card header */}
+              <div className="flex items-center" style={{ gap: '12px', paddingBottom: '20px', borderBottom: '1px solid var(--tb-divider)', marginBottom: '24px' }}>
+                <div className="flex items-center justify-center" style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'var(--tb-brand-50)', color: 'var(--tb-brand-600)', fontWeight: 700, fontSize: '16px', flexShrink: 0 }}>4</div>
+                <div>
+                  <div style={{ fontSize: '17px', fontWeight: 600, color: 'var(--tb-ink-900)' }}>Yük Detayı</div>
+                  <div style={{ fontSize: '13px', color: 'var(--tb-ink-500)' }}>Yer, kat, hacim, ek hizmet ve notları tamamlayın</div>
                 </div>
               </div>
 
@@ -1065,9 +1759,9 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
               {form.scope && (
                 <div style={{ marginBottom: '16px' }}>
                   <label style={labelStyle}>Taşıma Kapsamı</label>
-                  <div style={{ ...inputStyle, display: 'flex', alignItems: 'center', background: '#F8FAFC', color: '#64748B', cursor: 'default' }}>
+                  <div style={{ ...inputStyle, display: 'flex', alignItems: 'center', background: 'var(--tb-canvas)', color: 'var(--tb-ink-500)', cursor: 'default' }}>
                     {form.scope === 'sehirici' ? 'Şehir İçi' : form.scope === 'sehirlerarasi' ? 'Şehirlerarası' : '-'}
-                    <span style={{ marginLeft: '8px', fontSize: '11px', color: '#94A3B8' }}>(otomatik)</span>
+                    <span style={{ marginLeft: '8px', fontSize: '11px', color: 'var(--tb-ink-400)' }}>(otomatik)</span>
                   </div>
                 </div>
               )}
@@ -1076,7 +1770,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
               <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '24px' }}>
                 {altOptions.length > 0 && (
                   <div>
-                    <label style={labelStyle}>Yer Tipi</label>
+                    <label style={labelStyle}>Yer Tipi (opsiyonel)</label>
                     <Select value={form.placeType} onValueChange={(v) => {
                       if (!requireLoginForSelection()) return;
                       handleChange('placeType', v);
@@ -1084,6 +1778,18 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
                       <SelectTrigger style={inputStyle}><SelectValue placeholder="Seçin" /></SelectTrigger>
                       <SelectContent>{altOptions.map((p) => (<SelectItem key={p} value={p}>{p}</SelectItem>))}</SelectContent>
                     </Select>
+                    {(!form.placeType || form.placeType.includes('Diğer') || form.placeType.includes('Emin')) && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (!requireLoginForSelection()) return;
+                          setIsVolumeCalculatorOpen(true);
+                        }}
+                        style={{ border: 'none', background: 'transparent', color: 'var(--tb-brand-600)', fontSize: '13px', fontWeight: 600, cursor: 'pointer', padding: 0, marginTop: '6px', textAlign: 'left' }}
+                      >
+                        Ev tipinizden emin değil misiniz? 30 saniyede hacim hesaplayalım →
+                      </button>
+                    )}
                   </div>
                 )}
                 {form.transportType === 'parca' && (
@@ -1099,32 +1805,56 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
                   </div>
                 )}
                 <div>
-                  <label style={labelStyle}>Araç Tercihi (opsiyonel)</label>
-                  <Select value={form.vehicleType} onValueChange={(v) => {
-                    if (!requireLoginForSelection()) return;
-                    handleChange('vehicleType', v);
-                  }}>
-                    <SelectTrigger style={inputStyle}><SelectValue placeholder="Araç seçin" /></SelectTrigger>
-                    <SelectContent>
-                      {vehicleTypeOptions.length > 0
-                        ? vehicleTypeOptions.map((item) => (<SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>))
-                        : Object.entries(VEHICLE_TYPES).map(([k, v]) => (<SelectItem key={k} value={k}>{v.name}</SelectItem>))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
                   <label style={labelStyle}>Tahmini Ağırlık (kg)</label>
-                  <Input
-                    type="number"
-                    min={0}
-                    value={form.weightKg}
-                    onChange={(e) => {
-                      if (!requireLoginForSelection()) return;
-                      handleChange('weightKg', e.target.value);
-                    }}
-                    placeholder="Örn. 1200"
-                    style={inputStyle}
-                  />
+                  {form.weightKg && !weightEditMode ? (
+                    <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
+                      <span className="text-sm text-slate-700">
+                        ~{form.weightKg} kg
+                        <span className="text-xs text-slate-400 ml-1.5">
+                          {appliedConverterSummary ? 'Hacim Hesapla tahmini' : 'tahmini'}
+                        </span>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setWeightEditMode(true)}
+                        className="text-xs font-semibold text-blue-600"
+                      >
+                        Düzenle
+                      </button>
+                    </div>
+                  ) : form.weightKg && weightEditMode ? (
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="number"
+                        min={0}
+                        value={form.weightKg}
+                        onChange={(e) => {
+                          if (!requireLoginForSelection()) return;
+                          handleChange('weightKg', e.target.value);
+                        }}
+                        placeholder="Örn. 1200"
+                        style={inputStyle}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setWeightEditMode(false)}
+                        className="text-xs font-semibold text-slate-500"
+                      >
+                        Bitti
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!requireLoginForSelection()) return;
+                        setIsVolumeCalculatorOpen(true);
+                      }}
+                      className="w-full rounded-xl border border-dashed border-blue-300 bg-blue-50/50 px-3 py-2.5 text-left text-sm font-semibold text-blue-600"
+                    >
+                      Hacim Hesapla ile tahmini ağırlığı otomatik doldurun →
+                    </button>
+                  )}
                 </div>
                 <div>
                   <label style={labelStyle}>Kat</label>
@@ -1150,26 +1880,12 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
                           if (!requireLoginForSelection()) return;
                           handleChange('hasElevator', e.target.checked);
                         }}
-                        style={{ accentColor: '#2563EB', width: '16px', height: '16px' }}
+                        style={{ accentColor: 'var(--tb-brand-600)', width: '16px', height: '16px' }}
                       />
-                      <span style={{ fontSize: '13px', color: '#374151' }}>Bina Asansörü Var</span>
+                      <span style={{ fontSize: '13px', color: 'var(--tb-ink-700)' }}>Bina Asansörü Var</span>
                     </label>
                   </div>
                 )}
-                <div>
-                  <label style={labelStyle}>Sigorta Türü</label>
-                  <Select value={form.insurance} onValueChange={(v) => {
-                    if (!requireLoginForSelection()) return;
-                    handleChange('insurance', v);
-                  }}>
-                    <SelectTrigger style={inputStyle}><SelectValue placeholder="Seçin" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">İstemiyorum</SelectItem>
-                      <SelectItem value="basic">Temel Sigorta</SelectItem>
-                      <SelectItem value="premium">Tam Sigorta</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
                 <div>
                   <label style={labelStyle}>Zaman Tercihi</label>
                   <Select value={form.timeWindow} onValueChange={(v) => {
@@ -1181,17 +1897,21 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
                       <SelectItem value="sabah">Sabah (08:00-12:00)</SelectItem>
                       <SelectItem value="ogle">Öğlen (12:00-17:00)</SelectItem>
                       <SelectItem value="aksam">Akşam (17:00-22:00)</SelectItem>
-                      <SelectItem value="farketmez">Farketmez</SelectItem>
+                      <SelectItem value="farketmez">Fark etmez</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
               </div>
 
-              <div style={{ marginBottom: '24px', padding: '12px', border: '1px solid #BFDBFE', borderRadius: '10px', background: '#EFF6FF' }}>
+              <div style={{ marginBottom: '24px', padding: '12px', border: '1px solid var(--tb-brand-50)', borderRadius: '10px', background: 'var(--tb-brand-50)' }}>
                 <div className="flex flex-col md:flex-row md:items-center md:justify-between" style={{ gap: '10px' }}>
                   <div>
-                    <div style={{ fontSize: '14px', fontWeight: 600, color: '#1D4ED8' }}>Hacmi Hesapla</div>
-                    <div style={{ fontSize: '12px', color: '#475569' }}>Eşya listesi ile tahmini hacim ve ağırlık hesabı yapın.</div>
+                    <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--tb-brand-700)' }}>
+                      Eşyalarınızın hacmini bilmiyor musunuz
+                    </div>
+                    <div style={{ fontSize: '12px', color: 'var(--tb-ink-700)' }}>
+                      30 saniyede hacim ve yaklaşık ağırlık hesaplayalım; araç önerisini nakliyeciye bilgi olarak saklayalım.
+                    </div>
                   </div>
                   <Button type="button" onClick={() => {
                     if (!requireLoginForSelection()) return;
@@ -1201,50 +1921,6 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
                   </Button>
                 </div>
               </div>
-
-              {/* Extra services */}
-              {currentServiceGroup && (
-                <div style={{ marginBottom: '24px' }}>
-                  <label style={labelStyle}>Ek Hizmetler</label>
-                  <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                    {availableExtraServices.map((option) => {
-                      const checked = (form.serviceOptions?.[currentServiceGroup] || []).includes(option.id);
-                      return (
-                        <label
-                          key={option.id}
-                          className="flex items-center cursor-pointer transition-colors"
-                          style={{
-                            gap: '8px', padding: '10px 14px',
-                            border: checked ? '1px solid #2563EB' : '1px solid #E2E8F0',
-                            borderRadius: '8px',
-                            background: checked ? '#EFF6FF' : 'white',
-                          }}
-                          onClick={() => {
-                            if (!requireLoginForSelection()) return;
-                            setForm(prev => {
-                              const current = new Set(prev.serviceOptions?.[currentServiceGroup] || []);
-                              if (current.has(option.id)) current.delete(option.id); else current.add(option.id);
-                              return {
-                                ...prev,
-                                serviceOptions: { [currentServiceGroup]: Array.from(current) },
-                                extraServices: mapSelectedExtraServiceNames(Array.from(current), availableExtraServices),
-                              };
-                            });
-                          }}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            readOnly
-                            style={{ accentColor: '#2563EB', width: '16px', height: '16px' }}
-                          />
-                          <span style={{ fontSize: '13px', color: '#374151' }}>{option.name}</span>
-                        </label>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
 
               {/* Photos */}
               <div style={{ marginBottom: '24px' }}>
@@ -1268,145 +1944,170 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
                   value={form.note}
                   onChange={(e) => handleChange('note', e.target.value)}
                   placeholder="Örn. hassas eşyalar var, 3. kat, vs."
-                  style={{ minHeight: '80px', border: '1px solid #E2E8F0', borderRadius: '10px', padding: '12px 14px', resize: 'vertical', fontSize: '14px' }}
-                  className="focus:border-[#2563EB] focus:ring-[3px] focus:ring-[rgba(37,99,235,0.1)]"
+                  style={{ minHeight: '80px', border: '1px solid var(--tb-border)', borderRadius: '10px', padding: '12px 14px', resize: 'vertical', fontSize: '14px' }}
+                  className="focus:border-[var(--tb-brand-600)] focus:ring-[3px] focus:ring-[rgba(37,99,235,0.1)]"
                 />
               </div>
 
-              {previewEstimate && (
-                <div style={{ marginBottom: '24px', padding: '16px', border: '1px solid #BFDBFE', borderRadius: '12px', background: '#EFF6FF' }}>
-                  <div style={{ fontSize: '13px', fontWeight: 600, color: '#1D4ED8', marginBottom: '6px' }}>Tahmini fiyat önizlemesi</div>
-                  <div style={{ fontSize: '22px', fontWeight: 700, color: '#0F172A' }}>{previewEstimate.range}</div>
-                  <p style={{ fontSize: '13px', color: '#475569', marginTop: '6px' }}>
-                    Bu aralık rota, yük tipi ve seçtiğiniz ek hizmetlere göre bilgilendirme amaçlıdır.
-                    {typeof previewEstimate.carrierCount === 'number' && ` Bu tarihte ${previewEstimate.carrierCount} aktif nakliyeci görünüyor.`}
-                  </p>
+              {availabilityHint && (
+                <div style={{ marginBottom: '24px', padding: '16px', border: '1px solid var(--tb-brand-50)', borderRadius: '12px', background: 'var(--tb-brand-50)' }}>
+                  <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--tb-brand-700)', marginBottom: '6px' }}>
+                    Talebiniz yayına hazır
+                  </div>
+                  {availabilityHint.carrierCount > 0 ? (
+                    <>
+                      <div style={{ fontSize: '22px', fontWeight: 700, color: 'var(--tb-ink-900)' }}>
+                        {availabilityHint.carrierCount} nakliyeci bu tarihte müsait
+                      </div>
+                      <p style={{ fontSize: '13px', color: 'var(--tb-ink-700)', marginTop: '6px' }}>
+                        Talebinizi yayınladığınızda uygun nakliyeciler size teklif gönderir.
+                        Gelen teklifleri karşılaştırıp en uygununu seçebilirsiniz.
+                      </p>
+                    </>
+                  ) : (
+                    <p style={{ fontSize: '13px', color: 'var(--tb-ink-700)', marginTop: '6px' }}>
+                      Talebinizi yayınladığınızda uygun nakliyeciler teklif gönderecek.
+                      Farklı bir tarih seçmek daha fazla teklif almanızı sağlayabilir.
+                    </p>
+                  )}
                 </div>
               )}
 
-              {/* Action bar */}
-              <div className="flex justify-between items-center" style={{ paddingTop: '24px', borderTop: '1px solid #F1F5F9' }}>
-                <button
-                  type="button"
-                  onClick={goPrev}
-                  className="hover:!bg-[#F8FAFC] transition-colors"
-                  style={{ border: '1px solid #E2E8F0', borderRadius: '10px', padding: '11px 24px', fontSize: '14px', color: '#374151', background: 'white', cursor: 'pointer' }}
-                >
-                  ← Geri
-                </button>
-                <button
-                  type="submit"
-                  disabled={!canNextFrom2}
-                  className="hover:shadow-[0_4px_12px_rgba(37,99,235,0.3)]"
-                  style={{ background: canNextFrom2 ? '#2563EB' : '#94A3B8', color: 'white', border: 'none', borderRadius: '10px', padding: '12px 32px', fontSize: '15px', fontWeight: 600, cursor: canNextFrom2 ? 'pointer' : 'not-allowed', transition: 'all 150ms' }}
-                >
-                  Devam →
-                </button>
-              </div>
+              {!isLoggedIn && (
+                <div className="mb-3 flex items-start gap-2 rounded-xl border border-blue-100 bg-blue-50 p-3 text-sm text-blue-700">
+                  <Info style={{ width: '16px', height: '16px', marginTop: '2px', flexShrink: 0 }} />
+                  <span>
+                    Talebinizi yayınlamak için giriş yapmanız gerekir. Girdiğiniz bilgiler kaybolmaz; giriş sonrası kaldığınız yerden devam edebilirsiniz.
+                  </span>
+                </div>
+              )}
+
             </form>
           )}
 
-          {/* ── STEP 3: ÖZET & YAYINLA ── */}
-          {step === 3 && (
-            <div className={showLoginModal ? 'pointer-events-none blur-sm' : ''} aria-hidden={showLoginModal}>
+          {/* ── STEP 5: ÖZET & YAYINLA MODAL ── */}
+          <AnimatePresence>
+          {showSummaryModal && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="fixed inset-0 z-40 flex items-center justify-center px-4 py-6"
+              style={{ background: 'rgba(15,23,42,0.58)', backdropFilter: 'blur(5px)' }}
+            >
+            <motion.div
+              initial={{ scale: 0.96, opacity: 0, y: 12 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.96, opacity: 0, y: 12 }}
+              transition={{ duration: 0.2 }}
+              role="dialog"
+              aria-modal="true"
+              aria-label="Özet ve yayınla"
+              style={{ position: 'relative', width: 'min(960px, 100%)', maxHeight: '92vh', overflowY: 'auto', background: 'white', borderRadius: '18px', boxShadow: '0 24px 72px rgba(15,23,42,0.28)' }}
+            >
+            <div className={showLoginModal ? 'pointer-events-none blur-sm' : ''} aria-hidden={showLoginModal} style={{ padding: '32px' }}>
+              <button
+                type="button"
+                onClick={() => setShowSummaryModal(false)}
+                aria-label="Özeti kapat"
+                style={{ position: 'absolute', top: '18px', right: '18px', width: '34px', height: '34px', border: '1px solid var(--tb-border)', borderRadius: '10px', background: 'white', color: 'var(--tb-ink-500)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+              >
+                <X style={{ width: '16px', height: '16px' }} />
+              </button>
               {/* Card header */}
-              <div className="flex items-center" style={{ gap: '12px', paddingBottom: '20px', borderBottom: '1px solid #F1F5F9', marginBottom: '24px' }}>
-                <div className="flex items-center justify-center" style={{ width: '40px', height: '40px', borderRadius: '50%', background: '#EFF6FF', color: '#2563EB', fontWeight: 700, fontSize: '16px', flexShrink: 0 }}>3</div>
+              <div className="flex items-center" style={{ gap: '12px', paddingBottom: '20px', borderBottom: '1px solid var(--tb-divider)', marginBottom: '24px' }}>
+                <div className="flex items-center justify-center" style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'var(--tb-brand-50)', color: 'var(--tb-brand-600)', fontWeight: 700, fontSize: '16px', flexShrink: 0 }}>5</div>
                 <div>
-                  <div style={{ fontSize: '17px', fontWeight: 600, color: '#0F172A' }}>Özet & Yayınla</div>
-                  <div style={{ fontSize: '13px', color: '#64748B' }}>Bilgileri kontrol edin</div>
+                  <div style={{ fontSize: '17px', fontWeight: 600, color: 'var(--tb-ink-900)' }}>Özet & Yayınla</div>
+                  <div style={{ fontSize: '13px', color: 'var(--tb-ink-500)' }}>Bilgileri kontrol edin</div>
                 </div>
               </div>
 
-              <div style={{ marginBottom: '16px', padding: '12px 14px', background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: '12px', color: '#92400E', fontSize: '13px', lineHeight: 1.5 }}>
+              <div style={{ marginBottom: '16px', padding: '12px 14px', background: 'var(--tb-warning-bg)', border: '1px solid var(--tb-warning-border)', borderRadius: '12px', color: 'var(--tb-warning)', fontSize: '13px', lineHeight: 1.5 }}>
                 {CONTACT_SAFETY_WARNING}
               </div>
 
               {/* Summary cards – 2 col */}
-              <div className="grid" style={{ gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+              <div className="grid offer-summary-grid" style={{ gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
                 {/* Rota Bilgileri */}
-                <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '20px' }}>
-                  <div style={{ fontSize: '13px', fontWeight: 600, color: '#64748B', marginBottom: '16px' }}>Rota Bilgileri</div>
+                <div style={{ ...tb.surfaceBox, padding: '20px' }}>
+                  <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--tb-ink-500)', marginBottom: '16px' }}>Rota Bilgileri</div>
 
                   <div>
-                    <div style={{ fontSize: '11px', fontWeight: 600, color: '#94A3B8', letterSpacing: '0.06em', textTransform: 'uppercase' }}>NEREDEN</div>
-                    <div style={{ fontSize: '16px', fontWeight: 600, color: '#0F172A', marginTop: '2px' }}>
+                    <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--tb-ink-400)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>NEREDEN</div>
+                    <div style={{ fontSize: '16px', fontWeight: 600, color: 'var(--tb-ink-900)', marginTop: '2px' }}>
                       {form.originCity}{form.originDistrict ? `, ${form.originDistrict}` : ''}
                     </div>
                   </div>
 
                   <div className="flex items-center justify-center" style={{ margin: '12px 0' }}>
-                    <div style={{ flex: 1, height: '1px', background: '#E2E8F0' }} />
-                    <div className="flex items-center justify-center" style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#EFF6FF', margin: '0 8px' }}>
-                      <ArrowRight style={{ width: '14px', height: '14px', color: '#2563EB' }} />
+                    <div style={{ flex: 1, height: '1px', background: 'var(--tb-border)' }} />
+                    <div className="flex items-center justify-center" style={{ width: '28px', height: '28px', borderRadius: '50%', background: 'var(--tb-brand-50)', margin: '0 8px' }}>
+                      <ArrowRight style={{ width: '14px', height: '14px', color: 'var(--tb-brand-700)' }} />
                     </div>
-                    <div style={{ flex: 1, height: '1px', background: '#E2E8F0' }} />
+                    <div style={{ flex: 1, height: '1px', background: 'var(--tb-border)' }} />
                   </div>
 
                   <div>
-                    <div style={{ fontSize: '11px', fontWeight: 600, color: '#94A3B8', letterSpacing: '0.06em', textTransform: 'uppercase' }}>NEREYE</div>
-                    <div style={{ fontSize: '16px', fontWeight: 600, color: '#0F172A', marginTop: '2px' }}>
+                    <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--tb-ink-400)', letterSpacing: '0.06em', textTransform: 'uppercase' }}>NEREYE</div>
+                    <div style={{ fontSize: '16px', fontWeight: 600, color: 'var(--tb-ink-900)', marginTop: '2px' }}>
                       {form.destinationCity}{form.destinationDistrict ? `, ${form.destinationDistrict}` : ''}
                     </div>
                   </div>
 
                   {form.date && (
-                    <div style={{ borderTop: '1px solid #E2E8F0', paddingTop: '14px', marginTop: '14px' }}>
-                      <span style={{ fontSize: '14px', fontWeight: 500, color: '#0F172A' }}>
-                        📅 {new Date(form.date).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' })}
+                    <div style={{ borderTop: '1px solid var(--tb-border)', paddingTop: '14px', marginTop: '14px' }}>
+                      <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--tb-ink-900)' }}>
+                        <CalendarDays style={{ width: '14px', height: '14px', verticalAlign: '-2px', marginRight: '6px' }} />
+                        {new Date(form.date).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' })}
                       </span>
                     </div>
                   )}
                 </div>
 
                 {/* Yük Detayları */}
-                <div style={{ background: '#F8FAFC', border: '1px solid #E2E8F0', borderRadius: '12px', padding: '20px' }}>
-                  <div style={{ fontSize: '13px', fontWeight: 600, color: '#64748B', marginBottom: '16px' }}>Yük Detayları</div>
+                <div style={{ ...tb.surfaceBox, padding: '20px' }}>
+                  <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--tb-ink-500)', marginBottom: '16px' }}>Yük Detayları</div>
                   <div className="flex flex-col" style={{ gap: '10px' }}>
                     {form.transportType && (
                       <div className="flex justify-between">
-                        <span style={{ fontSize: '12px', color: '#64748B' }}>Taşıma Tipi</span>
-                        <span style={{ fontSize: '14px', fontWeight: 500, color: '#0F172A' }}>
+                        <span style={{ fontSize: '12px', color: 'var(--tb-ink-500)' }}>Taşıma Tipi</span>
+                        <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--tb-ink-900)' }}>
                           {TRANSPORT_CARDS.find(t => t.value === form.transportType)?.label || form.transportType}
                         </span>
                       </div>
                     )}
                     {form.scope && (
                       <div className="flex justify-between">
-                        <span style={{ fontSize: '12px', color: '#64748B' }}>Kapsam</span>
-                        <span style={{ fontSize: '14px', fontWeight: 500, color: '#0F172A' }}>{form.scope === 'sehirici' ? 'Şehir İçi' : 'Şehirlerarası'}</span>
+                        <span style={{ fontSize: '12px', color: 'var(--tb-ink-500)' }}>Kapsam</span>
+                        <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--tb-ink-900)' }}>{form.scope === 'sehirici' ? 'Şehir İçi' : 'Şehirlerarası'}</span>
                       </div>
                     )}
                     {form.placeType && (
                       <div className="flex justify-between">
-                        <span style={{ fontSize: '12px', color: '#64748B' }}>Yer Türü</span>
-                        <span style={{ fontSize: '14px', fontWeight: 500, color: '#0F172A' }}>{form.placeType}</span>
+                        <span style={{ fontSize: '12px', color: 'var(--tb-ink-500)' }}>Yer Türü</span>
+                        <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--tb-ink-900)' }}>{form.placeType}</span>
                       </div>
                     )}
-                    {form.vehicleType && (
+                    {!form.weightKg && form.placeType && !appliedConverterSummary && (
                       <div className="flex justify-between">
-                        <span style={{ fontSize: '12px', color: '#64748B' }}>Araç</span>
-                        <span style={{ fontSize: '14px', fontWeight: 500, color: '#0F172A' }}>{getVehicleTypeLabel(form.vehicleType)}</span>
+                        <span style={{ fontSize: '12px', color: 'var(--tb-ink-500)' }}>Ağırlık</span>
+                        <span style={{ fontSize: '13px', color: 'var(--tb-ink-400)', fontStyle: 'italic' }}>
+                          "{form.placeType}" için tahmini
+                        </span>
                       </div>
                     )}
                     {form.floor && (
                       <div className="flex justify-between">
-                        <span style={{ fontSize: '12px', color: '#64748B' }}>Kat</span>
-                        <span style={{ fontSize: '14px', fontWeight: 500, color: '#0F172A' }}>{form.floor}. kat {form.hasElevator ? '(asansörlü)' : ''}</span>
+                        <span style={{ fontSize: '12px', color: 'var(--tb-ink-500)' }}>Kat</span>
+                        <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--tb-ink-900)' }}>{form.floor}. kat {form.hasElevator ? '(asansörlü)' : ''}</span>
                       </div>
                     )}
                     {form.timeWindow && (
                       <div className="flex justify-between">
-                        <span style={{ fontSize: '12px', color: '#64748B' }}>Zaman</span>
-                        <span style={{ fontSize: '14px', fontWeight: 500, color: '#0F172A' }}>{form.timeWindow}</span>
-                      </div>
-                    )}
-                    {form.insurance !== 'none' && (
-                      <div className="flex justify-between items-center">
-                        <span style={{ fontSize: '12px', color: '#64748B' }}>Sigorta</span>
-                        <span style={{ background: '#EFF6FF', color: '#2563EB', fontSize: '12px', fontWeight: 500, padding: '2px 10px', borderRadius: '6px' }}>
-                          {form.insurance === 'basic' ? 'Temel' : 'Tam'} Sigorta
-                        </span>
+                        <span style={{ fontSize: '12px', color: 'var(--tb-ink-500)' }}>Zaman</span>
+                        <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--tb-ink-900)' }}>{form.timeWindow}</span>
                       </div>
                     )}
                     {/* Extra services chips */}
@@ -1417,10 +2118,10 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
                       if (!selected.length) return null;
                       return (
                         <div>
-                          <span style={{ fontSize: '12px', color: '#64748B', display: 'block', marginBottom: '6px' }}>Ek Hizmetler</span>
+                          <span style={{ fontSize: '12px', color: 'var(--tb-ink-500)', display: 'block', marginBottom: '6px' }}>Ek Hizmetler</span>
                           <div className="flex flex-wrap" style={{ gap: '4px' }}>
                             {selected.map((k: string) => (
-                              <span key={k} style={{ background: '#F1F5F9', borderRadius: '6px', padding: '3px 10px', fontSize: '12px', color: '#374151' }}>
+                              <span key={k} style={{ background: 'var(--tb-divider)', borderRadius: '6px', padding: '3px 10px', fontSize: '12px', color: 'var(--tb-ink-700)' }}>
                                 {allOpts.get(k) || k}
                               </span>
                             ))}
@@ -1430,8 +2131,8 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
                     })()}
                     {form.note && (
                       <div>
-                        <span style={{ fontSize: '12px', color: '#64748B', display: 'block', marginBottom: '2px' }}>Not</span>
-                        <span style={{ fontSize: '13px', color: '#0F172A' }}>{form.note}</span>
+                        <span style={{ fontSize: '12px', color: 'var(--tb-ink-500)', display: 'block', marginBottom: '2px' }}>Not</span>
+                        <span style={{ fontSize: '13px', color: 'var(--tb-ink-900)' }}>{form.note}</span>
                       </div>
                     )}
                   </div>
@@ -1439,11 +2140,11 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
               </div>
 
               {converterAppliedRows.length > 0 && (
-                <div style={{ marginBottom: '16px', padding: '12px 16px', background: '#ECFDF5', border: '1px solid #A7F3D0', borderRadius: '12px' }}>
-                  <div style={{ fontSize: '13px', fontWeight: 600, color: '#047857', marginBottom: '6px' }}>Hacim hesaplayıcı forma uygulandı</div>
+                <div style={{ marginBottom: '16px', padding: '12px 16px', background: 'var(--tb-success-bg)', border: '1px solid var(--tb-success-border)', borderRadius: '12px' }}>
+                  <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--tb-success)', marginBottom: '6px' }}>Hacim hesaplayıcı forma uygulandı</div>
                   <div className="flex flex-wrap" style={{ gap: '6px' }}>
                     {converterAppliedRows.map((row) => (
-                      <span key={row} style={{ background: 'white', border: '1px solid #D1FAE5', borderRadius: '8px', padding: '4px 10px', fontSize: '12px', color: '#065F46' }}>
+                      <span key={row} style={{ background: 'white', border: '1px solid var(--tb-success-border)', borderRadius: '8px', padding: '4px 10px', fontSize: '12px', color: 'var(--tb-success)' }}>
                         {row}
                       </span>
                     ))}
@@ -1453,25 +2154,35 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
 
               {/* Invite banner */}
               {inviteCarrierId && inviteCarrierName && (
-                <div style={{ marginBottom: '16px', padding: '12px 16px', background: '#EFF6FF', border: '1px solid #BFDBFE', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div className="flex items-center" style={{ gap: '8px', fontSize: '13px', color: '#1E40AF' }}>
+                <div style={{ marginBottom: '16px', padding: '12px 16px', background: 'var(--tb-brand-50)', border: '1px solid var(--tb-brand-50)', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div className="flex items-center" style={{ gap: '8px', fontSize: '13px', color: 'var(--tb-brand-700)' }}>
                     <UserCheck style={{ width: '16px', height: '16px' }} />
                     <span><strong>{inviteCarrierName}</strong> bu talebe öncelikli davet edilecek</span>
                   </div>
-                  <button onClick={() => { setInviteCarrierId(null); setInviteCarrierName(null); }} style={{ fontSize: '12px', color: '#2563EB', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>Kaldır</button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedCarrierIds(prev => inviteCarrierId ? prev.filter(id => id !== inviteCarrierId) : prev);
+                      setInviteCarrierId(null);
+                      setInviteCarrierName(null);
+                    }}
+                    style={{ fontSize: '12px', color: 'var(--tb-brand-600)', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}
+                  >
+                    Kaldır
+                  </button>
                 </div>
               )}
 
               {/* Phone — her zaman göster; profil varsa pre-fill, yoksa gerekli */}
-              <div style={{ marginBottom: '20px', padding: '16px', background: needsPhone ? '#FFFBEB' : '#F8FAFC', border: `1px solid ${needsPhone ? '#FDE68A' : '#E2E8F0'}`, borderRadius: '12px' }}>
+              <div style={{ marginBottom: '20px', padding: '16px', background: needsPhone ? 'var(--tb-warning-bg)' : 'var(--tb-canvas)', border: `1px solid ${needsPhone ? 'var(--tb-warning-border)' : 'var(--tb-border)'}`, borderRadius: '12px' }}>
                 <div className="flex items-center" style={{ gap: '8px', marginBottom: '10px' }}>
-                  <Phone style={{ width: '16px', height: '16px', color: needsPhone ? '#D97706' : '#64748B' }} />
-                  <span style={{ fontSize: '14px', fontWeight: 600, color: needsPhone ? '#92400E' : '#374151' }}>
+                  <Phone style={{ width: '16px', height: '16px', color: needsPhone ? 'var(--tb-warning)' : 'var(--tb-ink-500)' }} />
+                  <span style={{ fontSize: '14px', fontWeight: 600, color: needsPhone ? 'var(--tb-warning)' : 'var(--tb-ink-700)' }}>
                     {needsPhone ? 'Telefon numaranızı ekleyin' : 'İletişim numarası'}
                   </span>
                 </div>
                 {needsPhone && (
-                  <p style={{ fontSize: '13px', color: '#92400E', marginBottom: '10px' }}>
+                  <p style={{ fontSize: '13px', color: 'var(--tb-warning)', marginBottom: '10px' }}>
                     Nakliyecilerin sizi arayabilmesi için telefon numarası gereklidir.
                   </p>
                 )}
@@ -1483,7 +2194,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
                   style={{ ...inputStyle, background: 'white' }}
                 />
                 {!needsPhone && (
-                  <p style={{ fontSize: '12px', color: '#94A3B8', marginTop: '6px' }}>
+                  <p style={{ fontSize: '12px', color: 'var(--tb-ink-400)', marginTop: '6px' }}>
                     Profilinizdeki numara kullanılıyor. Bu talep için farklı bir numara girebilirsiniz.
                   </p>
                 )}
@@ -1491,88 +2202,174 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
 
               {/* Edit links */}
               <div className="flex" style={{ gap: '16px', marginTop: '8px', marginBottom: '24px' }}>
-                <span onClick={() => setStep(1)} className="hover:underline" style={{ fontSize: '13px', color: '#2563EB', cursor: 'pointer' }}>✏️ Adım 1'i Düzenle</span>
-                <span onClick={() => setStep(2)} className="hover:underline" style={{ fontSize: '13px', color: '#2563EB', cursor: 'pointer' }}>✏️ Adım 2'yi Düzenle</span>
+                <span onClick={() => { setShowSummaryModal(false); setStep(1); }} className="hover:underline" style={{ fontSize: '13px', color: 'var(--tb-brand-600)', cursor: 'pointer' }}> Adım 1'i Düzenle</span>
+                <span onClick={() => { setShowSummaryModal(false); setStep(2); }} className="hover:underline" style={{ fontSize: '13px', color: 'var(--tb-brand-600)', cursor: 'pointer' }}> Adım 2'yi Düzenle</span>
+                <span onClick={() => { setShowSummaryModal(false); setStep(3); }} className="hover:underline" style={{ fontSize: '13px', color: 'var(--tb-brand-600)', cursor: 'pointer' }}> Adım 3'ü Düzenle</span>
               </div>
 
-              {/* Suitable carriers (existing logic preserved) */}
-              {isLoggedIn && (
-                <div style={{ marginBottom: '24px' }}>
-                  <div style={{ fontSize: '14px', fontWeight: 500, color: '#0F172A', marginBottom: '12px' }}>Uygun Nakliyeciler</div>
-                  <div className="flex flex-wrap items-end" style={{ gap: '12px', marginBottom: '12px' }}>
-                    <label className="flex items-center" style={{ gap: '6px', fontSize: '13px', color: '#374151' }}>
-                      <input type="checkbox" checked={onlyApproved} onChange={(e) => setOnlyApproved(e.target.checked)} style={{ accentColor: '#2563EB' }} />
-                      Sadece Onaylı
-                    </label>
-                    <div>
-                      <Select value={String(minRating)} onValueChange={(v) => setMinRating(Number(v))}>
-                        <SelectTrigger style={{ ...inputStyle, width: '140px', height: '36px', fontSize: '13px' }}><SelectValue placeholder="Min. Puan" /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="0">Farketmez</SelectItem>
-                          <SelectItem value="3">3+</SelectItem>
-                          <SelectItem value="4">4+</SelectItem>
-                          <SelectItem value="4.5">4.5+</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <Select value={sortBy} onValueChange={(v) => setSortBy(v as any)}>
-                        <SelectTrigger style={{ ...inputStyle, width: '180px', height: '36px', fontSize: '13px' }}><SelectValue placeholder="Sırala" /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="rating">Puan (yüksek → düşük)</SelectItem>
-                          <SelectItem value="reviews">Yorum sayısı</SelectItem>
-                          <SelectItem value="capacity">Kapasite</SelectItem>
-                          <SelectItem value="price">Fiyat (taban ücret)</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <button onClick={() => { setOnlyApproved(false); setMinRating(0); setSortBy('rating'); }} style={{ fontSize: '12px', color: '#2563EB', background: 'none', border: 'none', cursor: 'pointer' }}>Sıfırla</button>
-                  </div>
-
-                  {loadingResults ? (
-                    <div className="flex flex-col" style={{ gap: '8px' }}>
-                      {[1,2,3].map(i => <Skeleton key={i} className="h-20 rounded-xl" />)}
-                    </div>
-                  ) : suitableCarriers.length === 0 ? (
-                    <div className="flex items-center" style={{ gap: '8px', padding: '20px', border: '1px dashed #E2E8F0', borderRadius: '10px', fontSize: '13px', color: '#64748B' }}>
-                      <Info style={{ width: '16px', height: '16px' }} /> Kriterlerinize uygun nakliyeci bulunamadı.
-                    </div>
-                  ) : (
-                    <div className="flex flex-col" style={{ gap: '8px' }}>
-                      {suitableCarriers.map((c) => (
-                        <CarrierCard key={c.id} carrier={c} form={form} onRequest={() => requestOffer(c)} />
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-
               {/* Action bar */}
-              <div className="flex justify-between items-center" style={{ paddingTop: '24px', borderTop: '1px solid #F1F5F9' }}>
-                <button
-                  type="button"
-                  onClick={goPrev}
-                  className="hover:!bg-[#F8FAFC] transition-colors"
-                  style={{ border: '1px solid #E2E8F0', borderRadius: '10px', padding: '11px 24px', fontSize: '14px', color: '#374151', background: 'white', cursor: 'pointer' }}
-                >
-                  ← Geri
-                </button>
+              <div className="flex justify-end items-center" style={{ paddingTop: '24px', borderTop: '1px solid var(--tb-divider)' }}>
                 <button
                   type="button"
                   disabled={submitting}
                   className="inline-flex items-center hover:shadow-[0_4px_12px_rgba(37,99,235,0.3)]"
-                  style={{ background: '#2563EB', color: 'white', border: 'none', borderRadius: '10px', padding: '12px 32px', fontSize: '15px', fontWeight: 600, cursor: submitting ? 'not-allowed' : 'pointer', gap: '8px', transition: 'all 150ms' }}
+                  style={{ background: 'var(--tb-brand-600)', color: 'white', border: 'none', borderRadius: '10px', padding: '12px 32px', fontSize: '15px', fontWeight: 600, cursor: submitting ? 'not-allowed' : 'pointer', gap: '8px', transition: 'all 150ms' }}
                   onClick={publishRequest}
                 >
                   {submitting ? (
                     <><Loader2 className="animate-spin" style={{ width: '16px', height: '16px' }} /> Yayınlanıyor...</>
+                  ) : !isLoggedIn ? (
+                    <><LogIn style={{ width: '16px', height: '16px' }} /> Giriş yap ve yayınla</>
                   ) : (
                     <><Check style={{ width: '16px', height: '16px' }} /> Talebi Yayınla</>
                   )}
                 </button>
               </div>
             </div>
+            </motion.div>
+            </motion.div>
           )}
+          </AnimatePresence>
+        </div>
+
+        {/* ── RIGHT: STICKY SIDEBAR ── */}
+        <div style={{ position: 'sticky', top: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+
+          {/* Order Summary Card */}
+          <div style={tb.shellCard}>
+            {/* Header */}
+            <div style={{ padding: '18px 20px', borderBottom: '1px solid var(--tb-divider)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: '14px', fontWeight: 700, color: 'var(--tb-ink-900)' }}>Talep Özeti</span>
+              <span style={{ fontSize: '12px', color: 'var(--tb-brand-600)', fontWeight: 600, background: 'var(--tb-brand-50)', padding: '2px 8px', borderRadius: '6px' }}>Adım {displayStep}/5</span>
+            </div>
+            <div style={{ padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+
+              {/* Route */}
+              {(form.originCity || form.destinationCity) ? (
+                <div style={{ padding: '12px 14px', ...tb.surfaceBox }}>
+                  <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--tb-ink-400)', letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '8px' }}>Güzergah</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--tb-ink-900)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {form.originCity || '—'}{form.originDistrict ? `, ${form.originDistrict}` : ''}
+                      </div>
+                    </div>
+                    <div style={{ width: '24px', height: '24px', borderRadius: '50%', background: 'var(--tb-brand-50)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <ArrowRight style={{ width: '11px', height: '11px', color: 'var(--tb-brand-600)' }} />
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0, textAlign: 'right' }}>
+                      <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--tb-ink-900)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {form.destinationCity || '—'}{form.destinationDistrict ? `, ${form.destinationDistrict}` : ''}
+                      </div>
+                    </div>
+                  </div>
+                  {form.date && (
+                    <div style={{ marginTop: '8px', fontSize: '12px', color: 'var(--tb-ink-500)', display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      <CalendarDays style={{ width: '13px', height: '13px' }} />
+                      {new Date(form.date).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' })}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div style={{ padding: '12px 14px', background: 'var(--tb-canvas)', border: '1px dashed var(--tb-border)', borderRadius: 'var(--tb-radius)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--tb-ink-300)', flexShrink: 0 }} />
+                  <span style={{ fontSize: '13px', color: 'var(--tb-ink-400)' }}>Güzergah seçilmedi</span>
+                </div>
+              )}
+
+              {/* Load type */}
+              {form.transportType ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 14px', ...tb.surfaceBox }}>
+                  <span style={{ fontSize: '20px' }}>
+                    {(() => {
+                      const SelectedTransportIcon = TRANSPORT_CARDS.find(t => t.value === form.transportType).Icon || Package;
+                      return <SelectedTransportIcon style={{ width: '20px', height: '20px', color: 'var(--tb-ink-900)' }} />;
+                    })()}
+                  </span>
+                  <div>
+                    <div style={{ fontSize: '12px', color: 'var(--tb-ink-500)', marginBottom: '1px' }}>Taşıma türü</div>
+                    <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--tb-ink-900)' }}>
+                      {TRANSPORT_CARDS.find(t => t.value === form.transportType)?.label || form.transportType}
+                    </div>
+                  </div>
+                  {form.scope && (
+                    <span style={{ marginLeft: 'auto', fontSize: '11px', fontWeight: 700, color: 'var(--tb-brand-600)', background: 'var(--tb-brand-50)', padding: '2px 7px', borderRadius: '6px', whiteSpace: 'nowrap' }}>
+                      {form.scope === 'sehirici' ? 'Şehir İçi' : 'Şehirlerarası'}
+                    </span>
+                  )}
+                </div>
+              ) : (
+                <div style={{ padding: '10px 14px', background: 'var(--tb-canvas)', border: '1px dashed var(--tb-border)', borderRadius: 'var(--tb-radius)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: 'var(--tb-ink-300)', flexShrink: 0 }} />
+                  <span style={{ fontSize: '13px', color: 'var(--tb-ink-400)' }}>Yük türü seçilmedi</span>
+                </div>
+              )}
+
+              {/* Weight / place type */}
+              {(form.weightKg || form.placeType) && (
+                <div style={{ padding: '10px 14px', ...tb.surfaceBox, fontSize: '13px', color: 'var(--tb-ink-700)' }}>
+                  {form.placeType && <div style={{ fontWeight: 600, marginBottom: form.weightKg ? '4px' : 0 }}>{form.placeType}</div>}
+                  {form.weightKg && <div style={{ color: 'var(--tb-ink-500)' }}>~{Number(form.weightKg).toLocaleString('tr-TR')} kg tahmini</div>}
+                </div>
+              )}
+
+              {/* Selected carriers */}
+              {selectedCarrierIds.length > 0 && (
+                <div style={{ padding: '10px 14px', ...tb.successBox, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <CheckCircle2 style={{ width: '15px', height: '15px', color: 'var(--tb-success)', flexShrink: 0 }} />
+                  <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--tb-success)' }}>{selectedCarrierIds.length} nakliyeci seçildi</span>
+                </div>
+              )}
+
+              {/* Publish CTA */}
+              {step === 4 && (
+                <>
+                  {!isLoggedIn && (
+                    <div className="flex items-start gap-2 rounded-xl border border-blue-100 bg-blue-50 p-3 text-sm text-blue-700">
+                      <Info style={{ width: '16px', height: '16px', marginTop: '2px', flexShrink: 0 }} />
+                      <span>Yayınlamak için giriş gerekir. Bilgileriniz kaybolmaz.</span>
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    disabled={!canPublish}
+                    onClick={() => setShowSummaryModal(true)}
+                    style={{
+                      width: '100%', padding: '14px', border: 'none', borderRadius: 'var(--tb-radius)',
+                      background: canPublish ? 'var(--tb-brand-700)' : 'var(--tb-ink-400)',
+                      color: 'white', fontSize: '15px', fontWeight: 700,
+                      cursor: canPublish ? 'pointer' : 'not-allowed',
+                      boxShadow: '0 4px 16px rgba(37,99,235,0.35)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                    }}
+                  >
+                    <Check style={{ width: '16px', height: '16px' }} /> Özet ve Yayınla
+                  </button>
+                </>
+              )}
+
+            </div>
+          </div>
+
+          {/* Trust Badges Card */}
+          <div style={{ ...tb.shellCard, padding: '18px 20px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {[
+                { Icon: ShieldCheck, title: 'Güvenli Platform', desc: 'Tüm iletişim platform üzerinden' },
+                { Icon: Zap, title: 'Hızlı Teklifler', desc: 'Ortalama 2-4 saat içinde' },
+                { Icon: Megaphone, title: 'Ücretsiz İlan', desc: 'Yayınlamak tamamen ücretsiz' },
+              ].map(({ Icon, title, desc }) => (
+                <div key={title} style={{ display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+                  <Icon style={{ width: '20px', height: '20px', lineHeight: 1, flexShrink: 0, marginTop: '1px', color: 'var(--tb-brand-600)' }} />
+                  <div>
+                    <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--tb-ink-900)' }}>{title}</div>
+                    <div style={{ fontSize: '12px', color: 'var(--tb-ink-500)', marginTop: '1px' }}>{desc}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
         </div>
       </div>
 
@@ -1584,31 +2381,335 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.3 }}
-            className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-sm bg-white/70 px-4"
+            className="fixed inset-0 z-50 flex items-center justify-center px-4"
+            style={{ background: 'rgba(15,23,42,0.6)', backdropFilter: 'blur(6px)' }}
           >
             <motion.div
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
-              transition={{ duration: 0.25 }}
-              className="relative bg-white shadow-2xl rounded-xl p-8 text-center max-w-md w-full"
+              initial={{ scale: 0.93, opacity: 0, y: 8 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.93, opacity: 0, y: 8 }}
+              transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+              style={{
+                position: 'relative', background: 'white',
+                borderRadius: '20px', maxWidth: '420px', width: '100%',
+                overflow: 'hidden',
+                boxShadow: '0 24px 64px rgba(0,0,0,0.22), 0 4px 16px rgba(0,0,0,0.1)',
+              }}
             >
-              <button onClick={closeLoginModal} className="absolute right-3 top-3 text-gray-400 hover:text-gray-600">
-                <X className="h-5 w-5" />
-              </button>
-              <div className="mx-auto mb-4 h-12 w-12 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center">
-                <Lock className="h-6 w-6" />
-              </div>
-              <h3 className="text-lg font-semibold text-gray-900">Devam edebilmek için giriş yapmalısınız</h3>
-              <p className="text-sm text-gray-600 mt-2">Teklif isteyebilmek ve nakliyecilerle iletişime geçebilmek için giriş yapın veya ücretsiz kayıt olun.</p>
-              <div className="mt-6 flex justify-center gap-4">
-                <Button onClick={() => navigate('/giris')}>Giriş Yap</Button>
-                <Button variant="outline" onClick={() => navigate('/musteri-kayit')}>Üye Ol</Button>
+              {/* Top gradient bar */}
+              <div style={{ height: '4px', background: 'linear-gradient(90deg, var(--tb-brand-600) 0%, var(--tb-brand-700) 100%)' }} />
+
+              <div style={{ padding: '32px 32px 28px', textAlign: 'center' }}>
+                <button
+                  onClick={closeLoginModal}
+                  style={{
+                    position: 'absolute', right: '16px', top: '20px',
+                    background: 'var(--tb-divider)', border: 'none', borderRadius: '8px',
+                    width: '32px', height: '32px', display: 'flex', alignItems: 'center',
+                    justifyContent: 'center', cursor: 'pointer', color: 'var(--tb-ink-500)',
+                  }}
+                >
+                  <X style={{ width: '16px', height: '16px' }} />
+                </button>
+
+                {/* Icon */}
+                <div style={{
+                  width: '72px', height: '72px', borderRadius: '50%', margin: '0 auto 20px',
+                  background: 'linear-gradient(135deg, var(--tb-brand-50) 0%, var(--tb-brand-50) 100%)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  boxShadow: '0 0 0 10px rgba(37,99,235,0.05)',
+                }}>
+                  <Lock style={{ width: '30px', height: '30px', color: 'var(--tb-brand-600)' }} />
+                </div>
+
+                <h3 style={{ fontSize: '20px', fontWeight: 700, color: 'var(--tb-ink-900)', margin: '0 0 8px' }}>
+                  Devam etmek için giriş yapın
+                </h3>
+                <p style={{ fontSize: '14px', color: 'var(--tb-ink-500)', margin: 0, lineHeight: 1.6 }}>
+                  Girdiğiniz bilgiler kaydedildi. Giriş yaptıktan sonra kaldığınız yerden devam edeceksiniz.
+                </p>
+
+                <div style={{ marginTop: '24px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  <button
+                    onClick={() => navigate(`/giris?redirect=${encodeURIComponent(window.location.pathname + window.location.search)}&reason=shipment-draft`)}
+                    style={{
+                      width: '100%', padding: '13px', border: 'none', borderRadius: '12px',
+                      background: 'linear-gradient(135deg, var(--tb-brand-600) 0%, var(--tb-brand-700) 100%)',
+                      color: 'white', fontSize: '15px', fontWeight: 700, cursor: 'pointer',
+                      boxShadow: '0 4px 14px rgba(37,99,235,0.35)',
+                    }}
+                  >
+                    Giriş Yap
+                  </button>
+                  <button
+                    onClick={() => navigate(`/musteri-kayit?redirect=${encodeURIComponent(window.location.pathname + window.location.search)}`)}
+                    style={{
+                      width: '100%', padding: '12px', borderRadius: '12px',
+                      border: '1.5px solid var(--tb-border)', background: 'white',
+                      color: 'var(--tb-ink-700)', fontSize: '15px', fontWeight: 600, cursor: 'pointer',
+                    }}
+                  >
+                    Üye Ol
+                  </button>
+                </div>
+
+                <p style={{ fontSize: '12px', color: 'var(--tb-ink-400)', marginTop: '16px' }}>
+                  Girişten önce bilgileriniz yerel olarak saklanır.
+                </p>
               </div>
             </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
+
+      <Sheet open={Boolean(reviewCarrierId)} onOpenChange={(open) => { if (!open) setReviewCarrierId(null); }}>
+        <SheetContent className="w-full overflow-y-auto sm:max-w-lg p-0">
+          {reviewCarrierLoading ? (
+            <div className="p-6 space-y-4">
+              <Skeleton className="h-24 rounded-2xl" />
+              <Skeleton className="h-10 rounded-xl" />
+              <Skeleton className="h-36 rounded-2xl" />
+              <Skeleton className="h-36 rounded-2xl" />
+            </div>
+          ) : !reviewCarrierDetail ? (
+            <div className="p-6">
+              <div style={{ borderRadius: '16px', border: '1px dashed var(--tb-border)', padding: '32px', textAlign: 'center' }}>
+                <AlertCircle style={{ width: '32px', height: '32px', margin: '0 auto 8px', color: 'var(--tb-ink-400)' }} />
+                <p style={{ fontSize: '14px', color: 'var(--tb-ink-500)', margin: 0 }}>Nakliyeci detayı yüklenemedi.</p>
+              </div>
+            </div>
+          ) : (
+            <div>
+              {/* ── Profile header ── */}
+              <div style={{
+                background: 'linear-gradient(135deg, var(--tb-ink-900) 0%, var(--tb-brand-700) 100%)',
+                padding: '28px 24px 24px',
+                position: 'relative', overflow: 'hidden',
+              }}>
+                {/* decorative circles */}
+                <div style={{ position: 'absolute', top: '-20px', right: '-20px', width: '120px', height: '120px', borderRadius: '50%', background: 'rgba(255,255,255,0.04)' }} />
+                <div style={{ position: 'absolute', bottom: '-30px', right: '40px', width: '80px', height: '80px', borderRadius: '50%', background: 'rgba(255,255,255,0.03)' }} />
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
+                  <div style={{ display: 'flex', gap: '14px', alignItems: 'flex-start', flex: 1, minWidth: 0 }}>
+                    <div style={{
+                      width: '60px', height: '60px', borderRadius: '16px', flexShrink: 0,
+                      background: 'linear-gradient(135deg, var(--tb-brand-600) 0%, var(--tb-brand-700) 100%)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      fontSize: '24px', fontWeight: 800, color: 'white',
+                      boxShadow: '0 4px 16px rgba(37,99,235,0.4)',
+                      border: '2px solid rgba(255,255,255,0.15)',
+                    }}>
+                      {reviewCarrierDetail.companyName[0].toUpperCase()}
+                    </div>
+                    <div style={{ minWidth: 0 }}>
+                      <h3 style={{ fontSize: '18px', fontWeight: 700, color: 'white', margin: '0 0 4px', lineHeight: 1.25 }}>
+                        {reviewCarrierDetail.companyName}
+                      </h3>
+                      <p style={{ fontSize: '13px', color: 'rgba(255,255,255,0.6)', margin: 0 }}>
+                        {[reviewCarrierDetail.city, reviewCarrierDetail.district].filter(Boolean).join(', ') || 'Konum belirtilmemiş'}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setReviewCarrierId(null)}
+                    style={{
+                      background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: '8px',
+                      width: '32px', height: '32px', display: 'flex', alignItems: 'center',
+                      justifyContent: 'center', cursor: 'pointer', flexShrink: 0,
+                      color: 'rgba(255,255,255,0.8)',
+                    }}
+                  >
+                    <X style={{ width: '16px', height: '16px' }} />
+                  </button>
+                </div>
+
+                {/* Stats row */}
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                  <div style={{
+                    background: 'rgba(255,255,255,0.1)', borderRadius: '10px',
+                    padding: '8px 14px', display: 'flex', alignItems: 'center', gap: '6px',
+                    border: '1px solid rgba(255,255,255,0.1)',
+                  }}>
+                    <Star style={{ width: '14px', height: '14px', color: 'var(--tb-rating)', fill: 'var(--tb-rating)' }} />
+                    <span style={{ fontSize: '13px', fontWeight: 700, color: 'white' }}>
+                      {reviewCarrierDetail.rating.count > 0 ? reviewCarrierDetail.rating.average : '—'}
+                    </span>
+                    <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.55)' }}>
+                      ({reviewCarrierDetail.rating.count} yorum)
+                    </span>
+                  </div>
+                  {reviewCarrierDetail.serviceAreas.slice(0, 3).map((area) => (
+                    <span key={area} style={{
+                      background: 'rgba(255,255,255,0.08)', borderRadius: '8px',
+                      padding: '6px 10px', fontSize: '12px', color: 'rgba(255,255,255,0.75)',
+                      border: '1px solid rgba(255,255,255,0.1)', fontWeight: 500,
+                    }}>
+                      {area}
+                    </span>
+                  ))}
+                  {reviewCarrierDetail.serviceAreas.length > 3 && (
+                    <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.45)', alignSelf: 'center' }}>
+                      +{reviewCarrierDetail.serviceAreas.length - 3}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* ── Content body ── */}
+              <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+
+                {/* Vehicles */}
+                <div style={{ border: '1px solid var(--tb-border)', borderRadius: '16px', overflow: 'hidden' }}>
+                  <div style={{ padding: '12px 16px', background: 'var(--tb-canvas)', borderBottom: '1px solid var(--tb-border)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div style={{ width: '28px', height: '28px', borderRadius: '8px', background: 'var(--tb-brand-50)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <Info style={{ width: '14px', height: '14px', color: 'var(--tb-brand-600)' }} />
+                    </div>
+                    <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--tb-ink-900)' }}>Araç Parkı</span>
+                  </div>
+                  <div style={{ padding: '12px 16px' }}>
+                    {reviewCarrierDetail.vehicles.length === 0 ? (
+                      <p style={{ fontSize: '13px', color: 'var(--tb-ink-400)', margin: 0 }}>Araç bilgisi girilmemiş.</p>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                        {reviewCarrierDetail.vehicles.map((vehicle) => (
+                          <div key={vehicle.id} style={{
+                            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                            padding: '10px 14px', borderRadius: '10px',
+                            background: 'var(--tb-canvas)', border: '1px solid var(--tb-divider)',
+                          }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <div style={{ width: '32px', height: '32px', borderRadius: '8px', background: 'var(--tb-brand-50)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '16px' }}>
+                                <Truck style={{ width: '16px', height: '16px', color: 'var(--tb-brand-600)' }} />
+                              </div>
+                              <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--tb-ink-900)' }}>{vehicle.typeName}</span>
+                            </div>
+                            <span style={{
+                              fontSize: '13px', fontWeight: 700, color: 'var(--tb-brand-600)',
+                              background: 'var(--tb-brand-50)', padding: '3px 10px', borderRadius: '8px',
+                              border: '1px solid var(--tb-brand-50)',
+                            }}>
+                              {vehicle.capacityKg ? `${vehicle.capacityKg.toLocaleString('tr-TR')} kg` : 'Kapasite belirtilmemiş'}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Services */}
+                <div style={{ border: '1px solid var(--tb-border)', borderRadius: '16px', overflow: 'hidden' }}>
+                  <div style={{ padding: '12px 16px', background: 'var(--tb-canvas)', borderBottom: '1px solid var(--tb-border)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <div style={{ width: '28px', height: '28px', borderRadius: '8px', background: 'var(--tb-brand-50)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <Award style={{ width: '14px', height: '14px', color: 'var(--tb-brand-700)' }} />
+                    </div>
+                    <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--tb-ink-900)' }}>Ek Hizmetler</span>
+                    {reviewCarrierDetail.services.length > 0 && (
+                      <span style={{ marginLeft: 'auto', fontSize: '12px', background: 'var(--tb-brand-50)', color: 'var(--tb-brand-700)', padding: '2px 8px', borderRadius: '999px', fontWeight: 600 }}>
+                        {reviewCarrierDetail.services.reduce((s, g) => s + g.items.length, 0)} hizmet
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ padding: '12px 16px' }}>
+                    {!reviewCarrierDetail.services.length ? (
+                      <p style={{ fontSize: '13px', color: 'var(--tb-ink-400)', margin: 0 }}>Bu nakliyeci ek hizmet tanımlamamış.</p>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                        {reviewCarrierDetail.services.map((group) => (
+                          <div key={group.loadType}>
+                            <div style={{
+                              fontSize: '11px', fontWeight: 700, color: 'var(--tb-brand-700)',
+                              textTransform: 'uppercase', letterSpacing: '0.08em',
+                              marginBottom: '8px', paddingBottom: '6px',
+                              borderBottom: '1px solid var(--tb-divider)',
+                            }}>
+                              {formatCarrierServiceLoadType(group.loadType)}
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                              {group.items.map((service) => (
+                                <div
+                                  key={`${service.source}-${service.id}`}
+                                  style={{
+                                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                                    gap: '12px', padding: '10px 12px', borderRadius: '10px',
+                                    background: 'var(--tb-canvas)', border: '1px solid var(--tb-divider)',
+                                  }}
+                                >
+                                  <div style={{ minWidth: 0 }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                      <span style={{ fontSize: '13px', fontWeight: 600, color: 'var(--tb-ink-900)' }}>{service.name}</span>
+                                      {service.source === 'custom' && (
+                                        <span style={{ fontSize: '10px', background: 'var(--tb-brand-50)', color: 'var(--tb-brand-700)', padding: '1px 6px', borderRadius: '999px', fontWeight: 700, border: '1px solid var(--tb-brand-50)' }}>özel</span>
+                                      )}
+                                    </div>
+                                    {service.description && (
+                                      <p style={{ margin: '2px 0 0', fontSize: '12px', color: 'var(--tb-ink-500)' }}>{service.description}</p>
+                                    )}
+                                  </div>
+                                  <span style={{
+                                    flexShrink: 0, fontSize: '13px', fontWeight: 700,
+                                    color: 'var(--tb-brand-600)', whiteSpace: 'nowrap',
+                                    background: 'var(--tb-brand-50)', padding: '3px 8px', borderRadius: '8px',
+                                    border: '1px solid var(--tb-brand-50)',
+                                  }}>
+                                    {formatCarrierServicePrice(service)}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* CTA buttons */}
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <button
+                    type="button"
+                    onClick={() => { if (reviewCarrierId) toggleCarrierSelection(reviewCarrierId); }}
+                    style={{
+                      flex: 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '7px',
+                      border: 'none', borderRadius: '12px', padding: '12px 16px',
+                      cursor: 'pointer', fontSize: '14px', fontWeight: 700,
+                      background: reviewCarrierId && selectedCarrierIds.includes(reviewCarrierId)
+                        ? 'linear-gradient(135deg, var(--tb-success) 0%, var(--tb-success) 100%)'
+                        : 'linear-gradient(135deg, var(--tb-brand-600) 0%, var(--tb-brand-700) 100%)',
+                      color: 'white',
+                      boxShadow: reviewCarrierId && selectedCarrierIds.includes(reviewCarrierId)
+                        ? '0 4px 14px rgba(5,150,105,0.35)'
+                        : '0 4px 14px rgba(37,99,235,0.35)',
+                    }}
+                  >
+                    {reviewCarrierId && selectedCarrierIds.includes(reviewCarrierId) ? (
+                      <><Check style={{ width: '16px', height: '16px' }} /> Seçildi</>
+                    ) : (
+                      <><Check style={{ width: '16px', height: '16px' }} /> Bu nakliyeciyi seç</>
+                    )}
+                  </button>
+                  {reviewCarrierId && (
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/nakliyeciler/${reviewCarrierId}`)}
+                      style={{
+                        display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '6px',
+                        border: '1px solid var(--tb-border)', borderRadius: '12px', padding: '12px 16px',
+                        background: 'white', cursor: 'pointer', fontSize: '14px', fontWeight: 600,
+                        color: 'var(--tb-ink-700)', boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                      }}
+                    >
+                      <Eye style={{ width: '15px', height: '15px' }} />
+                      Profil
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
 
       <VolumeCalculatorModal
         open={isVolumeCalculatorOpen}
@@ -1616,6 +2717,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
         onApplyEstimate={applyConverterEstimateToForm}
         loadType={currentExtraServiceLoadType}
         initialValues={converterInitialValues}
+        applyLabel="Bu bilgileri talebime ekle"
       />
     </div>
   );
@@ -1623,8 +2725,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader?: 
 
 function SummaryCard({ step, form, onEditStep }: { step: Step; form: any; onEditStep: (s: Step) => void }) {
   const routeReady = form.originCity && form.destinationCity && form.date;
-  const isCityFlow = form.scope === 'sehirici' || form.scope === 'sehirlerarasi';
-  const prefsReady = (!!form.scope) && (isCityFlow ? true : (form.placeType || form.loadType)) && form.transportType;
+  const prefsReady = (!!form.scope) && !!form.transportType && (form.placeType || form.loadType || form.weightKg);
   const summaryGroupKey = (() => {
     const map: Record<string, string> = {
       'evden-eve': 'evden-eve',
@@ -1672,10 +2773,8 @@ function SummaryCard({ step, form, onEditStep }: { step: Step; form: any; onEdit
                 <div>Taşıma Tipi: {form.transportType || '-'}</div>
                 {form.placeType && <div>Yer Türü: {form.placeType}</div>}
                 {form.loadType && <div>Yük Türü: {LOAD_TYPES[form.loadType as keyof typeof LOAD_TYPES]}</div>}
-                {form.vehicleType && <div>Araç: {VEHICLE_TYPES[form.vehicleType as keyof typeof VEHICLE_TYPES]?.name}</div>}
                 <div className="flex flex-wrap gap-2 pt-1">
                   {form.hasElevator && <Badge variant="secondary">Bina asansörü</Badge>}
-                  {form.insurance !== 'none' && <Badge variant="secondary">Sigorta: {form.insurance}</Badge>}
                   {form.timeWindow && <Badge variant="secondary">Zaman: {form.timeWindow}</Badge>}
                   {summaryGroupKey && (
                     <Badge variant="secondary">
@@ -1695,98 +2794,308 @@ function SummaryCard({ step, form, onEditStep }: { step: Step; form: any; onEdit
   );
 }
 
-function CarrierCard({ carrier, form, onRequest }: { carrier: Carrier; form: any; onRequest: () => void; }) {
+const CARRIER_SERVICE_LOAD_LABELS: Record<string, string> = {
+  HOME: 'Ev eşyası',
+  OFFICE: 'Ofis taşıma',
+  PARTIAL: 'Parça eşya',
+  STORAGE: 'Depolama',
+};
+
+function formatCarrierServiceLoadType(loadType: string) {
+  return CARRIER_SERVICE_LOAD_LABELS[loadType] ?? loadType;
+}
+
+function formatCarrierServicePrice(service: CarrierDetailServiceItem) {
+  return formatServicePrice(service);
+}
+
+function CarrierCard({
+  carrier,
+  form,
+  isSelected,
+  onToggleSelect,
+  onReview,
+}: {
+  carrier: Carrier;
+  form: any;
+  isSelected: boolean;
+  onToggleSelect: () => void;
+  onReview: () => void;
+}) {
   const weight = Number(form.weightKg || 0);
   const capacityOk = !weight || carrier.vehicle.capacity >= weight;
   const selectedExtraServices = Array.isArray(form.extraServices) ? form.extraServices : [];
-  const insuranceNeeded = form.insurance !== 'none'
-    || form.extras?.sigorta
+  const insuranceNeeded = form.extras.sigorta
     || selectedExtraServices.includes('Ek sigorta')
     || selectedExtraServices.includes('Kurumsal sigorta');
   const hasInsurance = (carrier.badges || []).some((b) => ['Sigorta', 'Soğuk Zincir'].includes(b));
   const insuranceOk = !insuranceNeeded || hasInsurance;
-  const vehicleOk = !form.vehicleType || !(form.vehicleType in VEHICLE_TYPES) || carrier.vehicle.type === form.vehicleType;
-  const routeOk = (!form.originCity || carrier.serviceAreas.includes(form.originCity)) && (!form.destinationCity || carrier.serviceAreas.includes(form.destinationCity));
-  const scopeOk = !form.scope || !(carrier.scopes && carrier.scopes.length) || (carrier.scopes || []).includes(form.scope);
-  const wantsPackaging = form.extras?.ambalaj
+  const normalizeCity = (value: string | null) => (value || '').trim().toLocaleLowerCase('tr-TR');
+  const matchesCity = (candidate: string | null, target: string | null) => {
+    if (!candidate || !target) return false;
+    return normalizeCity(candidate) === normalizeCity(target);
+  };
+  const originMatch = !form.originCity
+    || matchesCity(carrier.city, form.originCity)
+    || (carrier.serviceAreas || []).some((area) => matchesCity(area, form.originCity));
+  const destinationMatch = !form.destinationCity
+    || matchesCity(carrier.city, form.destinationCity)
+    || (carrier.serviceAreas || []).some((area) => matchesCity(area, form.destinationCity));
+  const routeLabel = originMatch && destinationMatch
+    ? 'Tam rota uygun'
+    : originMatch
+      ? 'Çıkış uygun'
+      : 'Çıkış uygun değil';
+  const routeScope: 'sehirici' | 'sehirlerarasi' | '' = form.originCity && form.destinationCity
+    ? (form.originCity === form.destinationCity ? 'sehirici' : 'sehirlerarasi')
+    : (form.scope || '');
+  const scopeOk = !routeScope || (carrier.scopes || []).includes(routeScope);
+  const wantsPackaging = form.extras.ambalaj
     || selectedExtraServices.includes('Profesyonel Paketleme')
     || selectedExtraServices.includes('Ambalajlama');
   const hasPackaging = (carrier.badges || []).some((b) => ['Profesyonel', 'Altın Taşıyıcı'].includes(b));
-  const extrasOk = (!wantsPackaging || hasPackaging) && (!form.extras?.sigorta || hasInsurance);
+  const extrasOk = (!wantsPackaging || hasPackaging) && (!form.extras.sigorta || hasInsurance);
+  const allCompatible = originMatch && scopeOk && capacityOk && insuranceOk && extrasOk;
+  const selectBtn = (selected: boolean): React.CSSProperties => ({
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '5px',
+    border: 'none',
+    borderRadius: 'var(--tb-radius-sm)',
+    padding: '8px 18px',
+    cursor: 'pointer',
+    fontSize: '13px',
+    fontWeight: 700,
+    background: selected ? 'var(--tb-success)' : 'var(--tb-brand-700)',
+    color: 'white',
+    boxShadow: selected ? '0 2px 8px rgba(22,163,74,0.24)' : '0 2px 8px rgba(30,58,138,0.24)',
+    transition: 'all 150ms',
+  });
 
-  const okTag = (ok: boolean, label: string) => (
-    <Badge key={label} className={`${ok ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-700'} flex items-center gap-1`}>
-      {ok ? <CheckCircle2 className="h-3 w-3" /> : <XCircle className="h-3 w-3" />} {label}
-    </Badge>
-  );
+  const compatChips = [
+    { ok: originMatch, label: routeLabel },
+    { ok: scopeOk, label: 'Kapsam uygun' },
+    { ok: capacityOk, label: 'Kapasite yeterli' },
+    { ok: insuranceOk, label: 'Sigorta uygun' },
+    { ok: extrasOk, label: 'Ekler uyumlu' },
+  ];
 
   return (
-    <Card className="border border-gray-100 shadow-sm">
-      <CardHeader>
-        <div className="flex items-start justify-between">
-          <div className="flex items-center gap-3">
-            <Avatar className="h-10 w-10"><AvatarFallback className="bg-blue-100 text-blue-600">{carrier.name[0]}</AvatarFallback></Avatar>
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                <span>{carrier.name} {carrier.surname}</span>
-                {carrier.isApproved && (
-                  <Badge className="bg-emerald-100 text-emerald-800 flex items-center gap-1"><Shield className="h-3 w-3" /> Onaylı Nakliyeci</Badge>
-                )}
-              </CardTitle>
-              <div className="flex items-center gap-2 text-xs text-gray-500">
-                <div className="flex items-center gap-1">
-                  <Star className="h-3.5 w-3.5 text-yellow-500" /> {carrier.rating}
+    <div
+      style={{
+        position: 'relative',
+        border: isSelected ? '2px solid var(--tb-brand-700)' : '1px solid var(--tb-border)',
+        borderRadius: 'var(--tb-radius)',
+        background: isSelected ? 'var(--tb-brand-50)' : 'var(--tb-surface)',
+        boxShadow: isSelected
+          ? '0 0 0 4px rgba(30,58,138,0.08), 0 4px 20px rgba(30,58,138,0.12)'
+          : 'var(--tb-shadow)',
+        overflow: 'hidden',
+        transition: 'box-shadow 200ms, border-color 200ms',
+      }}
+    >
+      {/* Top accent bar when selected */}
+      {isSelected && (
+        <div style={{
+          position: 'absolute', top: 0, left: 0, right: 0, height: '3px',
+          background: 'var(--tb-brand-700)',
+        }} />
+      )}
+
+      <div style={{ padding: isSelected ? '20px 18px 16px' : '16px 18px' }}>
+        {/* ── Header row ── */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
+          {/* Left: Avatar + identity */}
+          <div style={{ display: 'flex', gap: '13px', alignItems: 'flex-start', minWidth: 0, flex: 1 }}>
+            <div style={{ position: 'relative', flexShrink: 0 }}>
+              {carrier.pictureUrl ? (
+                <img
+                  src={carrier.pictureUrl}
+                  alt={carrier.name}
+                  style={{ width: '54px', height: '54px', borderRadius: '14px', objectFit: 'cover', border: '1px solid var(--tb-border)' }}
+                />
+              ) : (
+                <div style={{
+                  width: '54px', height: '54px', borderRadius: '14px',
+                  background: isSelected ? 'var(--tb-brand-700)' : 'var(--tb-brand-50)',
+                  border: isSelected ? 'none' : '1px solid var(--tb-border)',
+                  color: isSelected ? 'white' : 'var(--tb-brand-700)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: '20px', fontWeight: 800,
+                  boxShadow: isSelected ? '0 4px 12px rgba(30,58,138,0.22)' : 'var(--tb-shadow)',
+                }}>
+                  {carrier.name[0].toUpperCase()}
                 </div>
-                <span>·</span>
-                <div>{carrier.reviewCount} değerlendirme</div>
+              )}
+              {carrier.isApproved && (
+                <div style={{
+                  position: 'absolute', bottom: '-4px', right: '-4px',
+                  background: 'var(--tb-success)', borderRadius: '50%',
+                  width: '20px', height: '20px',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  border: '2.5px solid white',
+                  boxShadow: '0 1px 4px rgba(0,0,0,0.18)',
+                }}>
+                  <CheckCircle2 style={{ width: '11px', height: '11px', color: 'white' }} />
+                </div>
+              )}
+            </div>
+            <div style={{ minWidth: 0, flex: 1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '7px', flexWrap: 'wrap', marginBottom: '5px' }}>
+                <span style={{ fontSize: '15px', fontWeight: 700, color: 'var(--tb-ink-900)', letterSpacing: '-0.2px', lineHeight: 1.25 }}>
+                  {carrier.name} {carrier.surname}
+                </span>
+                {carrier.isApproved && (
+                  <span style={{
+                    fontSize: '11px', background: 'var(--tb-success-bg)', color: 'var(--tb-success)',
+                    padding: '2px 8px', borderRadius: '999px', fontWeight: 700,
+                    border: '1px solid var(--tb-success-border)',
+                    display: 'inline-flex', alignItems: 'center', gap: '3px',
+                  }}>
+                    <Shield style={{ width: '9px', height: '9px' }} /> Onaylı Nakliyeci
+                  </span>
+                )}
               </div>
+              {carrier.reviewCount > 0 ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  <div style={{ display: 'flex', gap: '1.5px' }}>
+                    {[1, 2, 3, 4, 5].map((s) => (
+                      <Star
+                        key={s}
+                        style={{
+                          width: '12px', height: '12px',
+                          color: s <= Math.round(carrier.rating) ? 'var(--tb-rating)' : 'var(--tb-border)',
+                          fill: s <= Math.round(carrier.rating) ? 'var(--tb-rating)' : 'var(--tb-border)',
+                        }}
+                      />
+                    ))}
+                  </div>
+                  <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--tb-ink-900)' }}>{carrier.rating}</span>
+                  <span style={{ fontSize: '12px', color: 'var(--tb-ink-400)' }}>({carrier.reviewCount} değerlendirme)</span>
+                </div>
+              ) : (
+                <span style={{
+                  display: 'inline-block', fontSize: '11px', background: 'var(--tb-canvas)',
+                  color: 'var(--tb-ink-500)', padding: '2px 8px', borderRadius: '6px',
+                  border: '1px solid var(--tb-border)', fontWeight: 500,
+                }}>Yeni firma - henüz değerlendirme yok</span>
+              )}
             </div>
           </div>
-          <div className="text-right">
-            <div className="text-lg font-semibold text-gray-900 uppercase">{carrier.vehicle.type}</div>
-            <div className="text-xs text-gray-500">Kapasite: {carrier.vehicle.capacity} kg</div>
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent>
-        <div className="grid md:grid-cols-3 gap-4 text-sm">
-          <div className="space-y-1">
-            <div className="text-gray-600">Hizmet Bölgeleri</div>
-            <div className="text-gray-900">{carrier.serviceAreas.join(', ')}</div>
-          </div>
-          <div className="space-y-1">
-            <div className="text-gray-600">Yük Tipleri</div>
-            <div className="text-gray-900">{carrier.loadTypes.join(', ')}</div>
-          </div>
-          <div className="space-y-1">
-            <div className="text-gray-600">Rozetler</div>
-            <div className="flex flex-wrap gap-2">
-              {(carrier.badges || []).map((b) => (<Badge key={b} variant="secondary" className="bg-gray-100">{b}</Badge>))}
+
+          {/* Right: Vehicle badge */}
+          <div style={{ flexShrink: 0 }}>
+            <div style={{
+              background: isSelected ? 'var(--tb-brand-50)' : 'var(--tb-canvas)',
+              border: `1px solid ${isSelected ? 'var(--tb-brand-600)' : 'var(--tb-border)'}`,
+              borderRadius: '12px', padding: '8px 12px', textAlign: 'center', minWidth: '82px',
+            }}>
+              <div style={{
+                fontSize: '11px', fontWeight: 800, color: isSelected ? 'var(--tb-brand-700)' : 'var(--tb-ink-700)',
+                letterSpacing: '0.08em', textTransform: 'uppercase',
+              }}>
+                {carrier.vehicle.type}
+              </div>
+              {carrier.vehicle.capacity > 0 && (
+                <div style={{ fontSize: '11px', color: isSelected ? 'var(--tb-brand-600)' : 'var(--tb-ink-500)', marginTop: '2px', fontWeight: 600 }}>
+                  {carrier.vehicle.capacity.toLocaleString('tr-TR')} kg
+                </div>
+              )}
             </div>
           </div>
         </div>
-        <Separator className="my-3" />
-        <div className="flex flex-wrap gap-2 text-xs">
-          {okTag(routeOk, 'Rota uygun')}
-          {okTag(scopeOk, 'Kapsam uygun')}
-          {okTag(vehicleOk, 'Araç uygun')}
-          {okTag(capacityOk, 'Kapasite yeterli')}
-          {okTag(insuranceOk, 'Sigorta uygun')}
-          {okTag(extrasOk, 'Ekler uyumlu')}
-        </div>
-        <div className="mt-4 flex items-center justify-between">
-          <div className="flex items-center gap-2 text-sm text-gray-600">
-            <Award className="h-4 w-4 text-yellow-500" />
-            <span>Güven Puanı: {carrier.rating} ({carrier.reviewCount} değerlendirme)</span>
+
+        {/* ── Service areas ── */}
+        {carrier.serviceAreas.length > 0 && (
+          <div style={{ display: 'flex', gap: '5px', flexWrap: 'wrap', marginTop: '12px', alignItems: 'center' }}>
+            <MapPin style={{ width: '12px', height: '12px', color: 'var(--tb-ink-400)', marginRight: '1px' }} />
+            {carrier.serviceAreas.slice(0, 4).map((area) => (
+              <span key={area} style={{
+                fontSize: '12px', background: 'var(--tb-canvas)',
+                border: '1px solid var(--tb-border)', color: 'var(--tb-ink-700)',
+                padding: '2px 8px', borderRadius: '6px', fontWeight: 500,
+              }}>
+                {area}
+              </span>
+            ))}
+            {carrier.serviceAreas.length > 4 && (
+              <span style={{ fontSize: '12px', color: 'var(--tb-ink-400)', fontWeight: 500 }}>+{carrier.serviceAreas.length - 4}</span>
+            )}
           </div>
-          <div className="flex gap-2">
-            <Button onClick={onRequest}>
-              <MessageSquare className="h-4 w-4 mr-2" /> Teklif İste
-            </Button>
+        )}
+
+        {/* ── Compatibility chips ── */}
+        <div style={{
+          display: 'flex', gap: '5px', flexWrap: 'wrap',
+          marginTop: '12px', paddingTop: '12px',
+          borderTop: '1px solid var(--tb-divider)',
+        }}>
+          {compatChips.map(({ ok, label }) => (
+            <span
+              key={label}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: '4px',
+                fontSize: '11px', fontWeight: 600, padding: '3px 9px', borderRadius: '999px',
+                background: ok ? 'var(--tb-success-bg)' : 'var(--tb-danger-bg)',
+                color: ok ? 'var(--tb-success)' : 'var(--tb-danger)',
+                border: `1px solid ${ok ? 'var(--tb-success-border)' : 'var(--tb-danger-border)'}`,
+              }}
+            >
+              {ok ? <CheckCircle2 style={{ width: '10px', height: '10px' }} /> : <XCircle style={{ width: '10px', height: '10px' }} />}
+              {label}
+            </span>
+          ))}
+        </div>
+
+        {/* ── Footer action bar ── */}
+        <div style={{
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          marginTop: '14px', paddingTop: '13px',
+          borderTop: '1px solid var(--tb-divider)',
+        }}>
+          <div>
+            {allCompatible ? (
+              <span style={{ fontSize: '12px', color: 'var(--tb-success)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <CheckCircle2 style={{ width: '13px', height: '13px' }} />
+                Tüm kriterler uygun
+              </span>
+            ) : (
+              <span style={{ fontSize: '12px', color: 'var(--tb-ink-400)' }}>
+                {carrier.reviewCount > 0 ? `${carrier.rating} puan · ${carrier.reviewCount} yorum` : 'Henüz yorum yok'}
+              </span>
+            )}
+          </div>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onReview(); }}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: '5px',
+                border: '1px solid var(--tb-border)', borderRadius: 'var(--tb-radius-sm)',
+                padding: '8px 14px', background: 'var(--tb-surface)', cursor: 'pointer',
+                fontSize: '13px', fontWeight: 600, color: 'var(--tb-ink-700)',
+                boxShadow: 'var(--tb-shadow)',
+                transition: 'all 150ms',
+                minHeight: '40px',
+              }}
+            >
+              <Eye style={{ width: '13px', height: '13px' }} />
+              İncele
+            </button>
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onToggleSelect(); }}
+              style={{ ...selectBtn(isSelected), minHeight: '40px' }}
+            >
+              {isSelected
+                ? <><Check style={{ width: '13px', height: '13px' }} /> Seçildi</>
+                : 'Seç'
+              }
+            </button>
           </div>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
 
@@ -1811,6 +3120,9 @@ function mapSearchResultToCarrier(item: {
   rating: number; reviewCount: number; vehicleSummary: string | null;
   serviceAreas: string[]; startingPrice: number | null;
   experienceYears: number | null; profileCompletion: number | null;
+  isVerified: boolean;
+  catalogExtraServiceIds: string[];
+  scopes: Array<'sehirici' | 'sehirlerarasi'>;
   pictureUrl: string | null;
 }): Carrier {
   const { type: vehicleType, capacity } = parseVehicleSummary(item.vehicleSummary);
@@ -1830,10 +3142,11 @@ function mapSearchResultToCarrier(item: {
     documents: { license: '', src: '', kBelgesi: '' },
     rating: item.rating ?? 0,
     reviewCount: item.reviewCount ?? 0,
-    isApproved: (item.profileCompletion ?? 0) >= 80,
+    isApproved: item.isVerified === true,
     baseFee: item.startingPrice ?? 0,
     badges: [],
-    scopes: [],
+    catalogExtraServiceIds: item.catalogExtraServiceIds ?? [],
+    scopes: item.scopes ?? [],
     pictureUrl: item.pictureUrl,
   };
 }

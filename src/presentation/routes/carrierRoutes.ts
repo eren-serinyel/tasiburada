@@ -44,6 +44,11 @@ router.put('/me/profile-status', authenticateCarrier, profileController.refreshP
 router.post('/me/submit-for-approval', authenticateCarrier, approvalSubmitLimiter, profileController.submitForApproval);
 router.put('/me/company-info', authenticateCarrier, profileController.updateCompanyInfo);
 router.get('/me/capabilities', authenticateCarrier, capabilityController.getMyCapabilities);
+router.put('/me/capabilities', authenticateCarrier, capabilityController.updateCapability);
+router.get('/me/custom-extra-services', authenticateCarrier, capabilityController.listCustomExtraServices);
+router.post('/me/custom-extra-services', authenticateCarrier, capabilityController.createCustomExtraService);
+router.put('/me/custom-extra-services/:customServiceId', authenticateCarrier, capabilityController.updateCustomExtraService);
+router.delete('/me/custom-extra-services/:customServiceId', authenticateCarrier, capabilityController.deleteCustomExtraService);
 router.get('/me/activity', authenticateCarrier, profileController.getActivityInfo);
 router.put('/me/activity', authenticateCarrier, profileController.updateActivityInfo);
 router.put('/me/vehicle-types', authenticateCarrier, profileController.updateVehicleTypes);

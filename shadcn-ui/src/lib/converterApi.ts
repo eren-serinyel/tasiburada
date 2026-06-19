@@ -70,6 +70,7 @@ export async function createConverterSession(): Promise<CreateConverterSessionRe
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ flowType: 'household' }),
+    skipAuth: true,
   });
 
   const json = await parseApiJson(response);
@@ -88,6 +89,7 @@ export async function estimateConverter(
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
+    skipAuth: true,
   });
 
   const json = await parseApiJson(response);
@@ -99,7 +101,7 @@ export async function estimateConverter(
 }
 
 export async function fetchConverterItems(): Promise<ConverterCatalogItem[]> {
-  const response = await apiClient('/converter/items');
+  const response = await apiClient('/converter/items', { skipAuth: true });
   const json = await parseApiJson(response);
   if (!response.ok || !json?.success || !Array.isArray(json?.data)) {
     throw new Error(json?.message || 'Eşya katalogu alınamadı.');

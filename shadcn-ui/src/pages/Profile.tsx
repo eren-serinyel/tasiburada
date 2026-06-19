@@ -11,11 +11,11 @@ import { User as UserType } from '@/lib/types';
 import { getSessionUser, setSessionUser } from '@/lib/storage';
 import { apiClient } from '@/lib/apiClient';
 import { cn } from '@/lib/utils';
-import { User, Bell, Lock, Save, Image as ImageIcon, Building2, MapPin, FileBadge, Wallet2, Send, Truck } from 'lucide-react';
+import { User, Bell, Lock, Save, Image as ImageIcon, Building2, MapPin, FileBadge, Wallet2, Send, Truck, Sparkles } from 'lucide-react';
 
 import {
   AccountSection, SecuritySection, CompanySection, OperationsSection,
-  DocumentSection, VehiclesSection, PayoutSection, AddressSection, PaymentSection,
+  ServicesSection, DocumentSection, VehiclesSection, PayoutSection, AddressSection, PaymentSection,
   NotificationSection, Section, gradientBg, useInitials,
 } from '@/components/profile';
 import type { SidebarKey } from '@/components/profile';
@@ -39,6 +39,9 @@ const normalizeProfileTab = (raw: string | null, isCarrier: boolean): SidebarKey
     payouts: 'payouts',
     faaliyet: 'operations',
     operations: 'operations',
+    hizmetlerim: 'services',
+    hizmetler: 'services',
+    services: 'services',
     guvenlik: 'security',
     güvenlik: 'security',
     security: 'security',
@@ -48,7 +51,7 @@ const normalizeProfileTab = (raw: string | null, isCarrier: boolean): SidebarKey
   const tab = aliases[value];
   if (!tab) return null;
 
-  const carrierOnly: SidebarKey[] = ['company', 'operations', 'documents', 'vehicles', 'payouts', 'notifications'];
+  const carrierOnly: SidebarKey[] = ['company', 'operations', 'services', 'documents', 'vehicles', 'payouts', 'notifications'];
   if (!isCarrier && carrierOnly.includes(tab)) return null;
   return tab;
 };
@@ -333,6 +336,7 @@ export default function Profile() {
                   <>
                     <Item id="company" label="Firma Bilgileri" icon={Building2} />
                     <Item id="operations" label="Faaliyet Bilgileri" icon={MapPin} />
+                    <Item id="services" label="Hizmetlerim" icon={Sparkles} />
                     <Item id="documents" label="Belgeler" icon={FileBadge} />
                     <Item id="vehicles" label="Araçlarım" icon={Truck} />
                     <Item id="payouts" label="Kazanç Bilgileri" icon={Wallet2} />
@@ -366,6 +370,7 @@ export default function Profile() {
             <AnimatePresence mode="wait">
               {isCarrier && active === 'company' && <Section key="company"><CompanySection user={user} refreshProfileStatus={refreshProfileStatus} onCompanyNameChange={setCompanyName} /></Section>}
               {isCarrier && active === 'operations' && <Section key="operations"><OperationsSection user={user} refreshProfileStatus={refreshProfileStatus} /></Section>}
+              {isCarrier && active === 'services' && <Section key="services"><ServicesSection user={user} refreshProfileStatus={refreshProfileStatus} /></Section>}
               {isCarrier && active === 'documents' && <Section key="documents"><DocumentSection user={user} refreshProfileStatus={refreshProfileStatus} /></Section>}
               {isCarrier && active === 'vehicles' && <Section key="vehicles"><VehiclesSection user={user} refreshProfileStatus={refreshProfileStatus} /></Section>}
               {isCarrier && active === 'payouts' && <Section key="payouts"><PayoutSection user={user} refreshProfileStatus={refreshProfileStatus} /></Section>}

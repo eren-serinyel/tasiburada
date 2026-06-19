@@ -2,6 +2,7 @@ export { default as AccountSection } from './AccountSection';
 export { default as SecuritySection } from './SecuritySection';
 export { default as CompanySection } from './CompanySection';
 export { default as OperationsSection } from './OperationsSection';
+export { default as ServicesSection } from './ServicesSection';
 export { default as DocumentSection } from './DocumentSection';
 export { default as VehiclesSection } from './VehiclesSection';
 export { default as PayoutSection } from './PayoutSection';

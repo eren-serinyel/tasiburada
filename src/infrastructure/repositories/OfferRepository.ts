@@ -37,10 +37,14 @@ export class OfferRepository extends BaseRepository<Offer> {
         'offer.shipmentId',
         'offer.carrierId',
         'offer.price',
+        'offer.basePrice',
+        'offer.extraServicesTotal',
+        'offer.extraServicesBreakdown',
         'offer.message',
         'offer.estimatedDuration',
         'offer.status',
         'offer.offeredAt',
+        'offer.validUntil',
         'shipment.id',
         'shipment.customerId',
         'shipment.carrierId',
@@ -98,10 +102,14 @@ export class OfferRepository extends BaseRepository<Offer> {
         'offer.shipmentId',
         'offer.carrierId',
         'offer.price',
+        'offer.basePrice',
+        'offer.extraServicesTotal',
+        'offer.extraServicesBreakdown',
         'offer.message',
         'offer.estimatedDuration',
         'offer.status',
         'offer.offeredAt',
+        'offer.validUntil',
         'shipment.id',
         'shipment.customerId',
         'shipment.carrierId',
@@ -141,9 +149,22 @@ export class OfferRepository extends BaseRepository<Offer> {
       .where('offer.shipmentId = :shipmentId', { shipmentId })
       .andWhere('offer.carrierId = :carrierId', { carrierId })
       .andWhere('offer.status NOT IN (:...statuses)', { 
-          statuses: [OfferStatus.WITHDRAWN, OfferStatus.REJECTED, OfferStatus.CANCELLED] 
+          statuses: [OfferStatus.WITHDRAWN, OfferStatus.REJECTED, OfferStatus.CANCELLED, OfferStatus.EXPIRED] 
       })
       .getOne();
+  }
+
+  async expireStalePendingOffers(now: Date = new Date()): Promise<number> {
+    const result = await this.repository
+      .createQueryBuilder()
+      .update(Offer)
+      .set({ status: OfferStatus.EXPIRED })
+      .where('status = :pending', { pending: OfferStatus.PENDING })
+      .andWhere('valid_until IS NOT NULL')
+      .andWhere('valid_until < :now', { now })
+      .execute();
+
+    return result.affected ?? 0;
   }
 
   async rejectOtherPendingOffers(shipmentId: string, acceptedOfferId: string): Promise<void> {

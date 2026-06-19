@@ -30,6 +30,47 @@
   animation-delay: 4s;
 }
 
+/* Offer Request page – responsive two-column grid */
+@media (max-width: 900px) {
+  .offer-grid {
+    grid-template-columns: 1fr !important;
+    padding: 20px 16px 48px !important;
+  }
+  .offer-grid > div:last-child {
+    position: static !important;
+  }
+  .offer-route-grid,
+  .offer-detail-grid,
+  .offer-summary-grid,
+  .offer-service-compact-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .offer-route-arrow {
+    transform: rotate(90deg);
+    justify-self: center;
+    margin: 4px 0 !important;
+  }
+  .offer-transport-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+  .offer-stepper-label {
+    display: none !important;
+  }
+}
+
+.offer-focusable:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--tb-brand-50);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .offer-motion,
+  .offer-motion * {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+
 @layer base {
   :root {
     --background: 0 0% 100%;
@@ -61,6 +102,39 @@
     --ring: 222.2 84% 4.9%;
 
     --radius: 0.5rem;
+
+    /* === Tasiburada kurumsal marka tokenları === */
+    --tb-brand-900: #0B1B3A;
+    --tb-brand-700: #1E3A8A;
+    --tb-brand-600: #2563EB;
+    --tb-brand-50:  #EFF6FF;
+
+    --tb-ink-900:   #0F172A;
+    --tb-ink-700:   #334155;
+    --tb-ink-500:   #64748B;
+    --tb-ink-400:   #94A3B8;
+    --tb-ink-300:   #CBD5E1;
+
+    --tb-border:    #E2E8F0;
+    --tb-divider:   #F1F5F9;
+    --tb-surface:   #FFFFFF;
+    --tb-canvas:    #F8FAFC;
+
+    --tb-success:        #16A34A;
+    --tb-success-bg:     #F0FDF4;
+    --tb-success-border: #BBF7D0;
+    --tb-danger:         #EF4444;
+    --tb-danger-bg:      #FEF2F2;
+    --tb-danger-border:  #FECACA;
+    --tb-warning:        #92400E;
+    --tb-warning-bg:     #FFFBEB;
+    --tb-warning-border: #FDE68A;
+    --tb-rating:         #F59E0B;
+
+    --tb-radius:    12px;
+    --tb-radius-sm: 8px;
+
+    --tb-shadow:    0 1px 3px rgba(15,23,42,0.04);
   }
 
   .dark {

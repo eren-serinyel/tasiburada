@@ -127,8 +127,7 @@ export class ReviewService {
       })
     });
 
-    const averageRating = await this.reviewRepository.getCarrierAverageRating(shipment.carrierId);
-    await this.carrierRepository.updateRating(shipment.carrierId, Number(averageRating.toFixed(2)));
+    await this.carrierRepository.updateRating(shipment.carrierId);
 
     const saved = await this.reviewRepository.findById(review.id);
     if (!saved) {
@@ -196,8 +195,7 @@ export class ReviewService {
       })
     });
 
-    const averageRating = await this.reviewRepository.getCarrierAverageRating(carrierId);
-    await this.carrierRepository.updateRating(carrierId, Number(averageRating.toFixed(2)));
+    await this.carrierRepository.updateRating(carrierId);
 
     const saved = await this.reviewRepository.findById(review.id);
     if (!saved) throw new NotFoundError('Yorum kaydedildi ancak getirilemedi.');
@@ -250,7 +248,6 @@ export class ReviewService {
     const carrierId = review.carrierId;
     await this.reviewRepository.delete(reviewId);
 
-    const averageRating = await this.reviewRepository.getCarrierAverageRating(carrierId);
-    await this.carrierRepository.updateRating(carrierId, Number(averageRating.toFixed(2)));
+    await this.carrierRepository.updateRating(carrierId);
   }
 }

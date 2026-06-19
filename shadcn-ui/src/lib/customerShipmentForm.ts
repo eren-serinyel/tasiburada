@@ -5,11 +5,6 @@ export const getCustomerShipmentDetailPath = (shipmentId: string) => `/ilan/${sh
 
 export type DateFlexibility = 'EXACT' | 'FLEXIBLE' | 'WITHIN_WEEK' | string;
 
-export interface VehicleTypeOptionForShipmentPayload {
-  id: string;
-  name: string;
-}
-
 export interface OfferRequestFormContractInput {
   originCity?: string;
   originDistrict?: string;
@@ -29,12 +24,10 @@ export interface OfferRequestFormContractInput {
   dateFlexibility?: DateFlexibility;
   originAccessDistance?: string | number;
   destinationAccessDistance?: string | number;
-  insurance?: string;
   timeWindow?: string;
   serviceOptions?: Record<string, string[]>;
   extraServices?: string[];
   weightKg?: string | number;
-  vehicleType?: string;
   note?: string;
 }
 
@@ -42,7 +35,6 @@ export interface BuildShipmentPayloadOptions {
   phone?: string;
   today?: string;
   templateWeights?: Record<string, number>;
-  vehicleTypeOptions?: VehicleTypeOptionForShipmentPayload[];
 }
 
 export interface ConverterAppliedSummary {
@@ -88,10 +80,6 @@ export const buildShipmentPayloadFromForm = (
   const estimatedWeight = explicitWeight
     ?? (form.placeType && options.templateWeights ? options.templateWeights[form.placeType] : undefined);
 
-  const vehicleTypePreferenceId = options.vehicleTypeOptions?.some((item) => item.id === form.vehicleType)
-    ? form.vehicleType
-    : undefined;
-
   return {
     origin: [form.originCity, form.originDistrict].filter(Boolean).join(', '),
     destination: [form.destinationCity, form.destinationDistrict].filter(Boolean).join(', '),
@@ -109,12 +97,10 @@ export const buildShipmentPayloadFromForm = (
     dateFlexibility: form.dateFlexibility || 'EXACT',
     originAccessDistance: toOptionalNumber(form.originAccessDistance),
     destinationAccessDistance: toOptionalNumber(form.destinationAccessDistance),
-    insuranceType: form.insurance && form.insurance !== 'none' ? form.insurance : undefined,
     timePreference: toOptionalString(form.timeWindow),
     extraServices,
     weight: estimatedWeight,
     estimatedWeight,
-    vehicleTypePreferenceId,
     note: toOptionalString(form.note),
     shipmentDate: form.date || options.today || new Date().toISOString().split('T')[0],
     contactPhone: toOptionalString(options.phone),

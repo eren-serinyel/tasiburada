@@ -15,6 +15,8 @@ export interface CarrierTrustFields {
 export interface CarrierEligibilitySource {
   carrierEligibility?: CarrierEligibility | null;
   carrier?: CarrierTrustFields | null;
+  status?: string | null;
+  validUntil?: string | Date | null;
 }
 
 export function resolveCarrierEligibility(source: CarrierEligibilitySource): CarrierEligibility {
@@ -60,5 +62,20 @@ export function getCarrierEligibilityComparisonText(source: CarrierEligibilitySo
 }
 
 export function isOfferAcceptDisabled(source: CarrierEligibilitySource, disabled = false): boolean {
-  return disabled || !resolveCarrierEligibility(source).isEligible;
+  if (disabled || !resolveCarrierEligibility(source).isEligible) {
+    return true;
+  }
+
+  if (source.status === 'expired') {
+    return true;
+  }
+
+  if (source.validUntil) {
+    const validUntil = new Date(source.validUntil);
+    if (!Number.isNaN(validUntil.getTime()) && validUntil < new Date()) {
+      return true;
+    }
+  }
+
+  return false;
 }

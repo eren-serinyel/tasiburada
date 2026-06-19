@@ -51,6 +51,7 @@ export interface Carrier extends User {
   description?: string;
   experience?: number;
   badges?: string[];
+  catalogExtraServiceIds?: string[];
   iban?: string;
 }
 
@@ -66,6 +67,9 @@ export interface CarrierSearchItem {
   experienceYears: number | null;
   profileCompletion: number | null;
   pictureUrl: string | null;
+  isVerified?: boolean;
+  catalogExtraServiceIds?: string[];
+  scopes?: Array<'sehirici' | 'sehirlerarasi'>;
 }
 
 export interface CarrierDetailProfile {
@@ -111,6 +115,24 @@ export interface CarrierDetailReview {
   createdAt: string;
 }
 
+export type CarrierDetailServiceSource = 'catalog' | 'custom';
+
+export interface CarrierDetailServiceItem {
+  id: string;
+  name: string;
+  description: string | null;
+  priceMode: 'NONE' | 'FIXED' | 'QUOTE' | string | null;
+  basePrice: number | null;
+  minPrice: number | null;
+  maxPrice: number | null;
+  source: CarrierDetailServiceSource;
+}
+
+export interface CarrierDetailServiceGroup {
+  loadType: 'HOME' | 'OFFICE' | 'PARTIAL' | 'STORAGE' | string;
+  items: CarrierDetailServiceItem[];
+}
+
 export interface CarrierDetail {
   id: string;
   companyName: string;
@@ -132,6 +154,7 @@ export interface CarrierDetail {
   documents: CarrierDetailDocument[];
   documentsApproved: boolean;
   recentReviews: CarrierDetailReview[];
+  services?: CarrierDetailServiceGroup[];
 }
 
 export interface Customer extends User {
@@ -153,7 +176,7 @@ export interface ShipmentRequest {
   description?: string;
   specialRequirements?: string[];
   estimatedDuration?: number;
-  status: 'pending' | 'offer_received' | 'matched' | 'in_transit' | 'completed' | 'cancelled' | 'delivered';
+  status: 'pending' | 'offer_received' | 'matched' | 'in_transit' | 'completed' | 'cancelled' | 'delivered' | 'expired';
   price?: number;
   carrierId?: string;
   createdAt: Date;
@@ -174,7 +197,7 @@ export interface Offer {
   price: number;
   message?: string;
   estimatedDuration?: number;
-  status: 'pending' | 'accepted' | 'rejected' | 'withdrawn' | 'cancelled';
+  status: 'pending' | 'accepted' | 'rejected' | 'withdrawn' | 'cancelled' | 'expired';
   createdAt: Date;
   validUntil?: Date;
 }

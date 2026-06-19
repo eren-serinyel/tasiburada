@@ -15,7 +15,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { tr } from 'date-fns/locale';
 import { formatLocation } from '@/utils/formatLocation';
 
-type ShipmentStatus = 'all' | 'pending' | 'active' | 'in_transit' | 'completed' | 'cancelled';
+type ShipmentStatus = 'all' | 'pending' | 'active' | 'in_transit' | 'completed' | 'cancelled' | 'expired';
 
 const statusTabs: { value: ShipmentStatus; label: string }[] = [
   { value: 'all', label: 'Tümü' },
@@ -24,6 +24,7 @@ const statusTabs: { value: ShipmentStatus; label: string }[] = [
   { value: 'in_transit', label: 'Yolda' },
   { value: 'completed', label: 'Tamamlandı' },
   { value: 'cancelled', label: 'İptal' },
+  { value: 'expired', label: 'Süresi Dolan' },
 ];
 
 interface Shipment {

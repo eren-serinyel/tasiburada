@@ -12,7 +12,8 @@ export enum OfferStatus {
     ACCEPTED = "accepted",
     REJECTED = "rejected",
     WITHDRAWN = "withdrawn",
-    CANCELLED = "cancelled"
+    CANCELLED = "cancelled",
+    EXPIRED = "expired"
 }
 
 @Entity("offers")
@@ -37,11 +38,29 @@ export class Offer {
     @Column({ type: "decimal", precision: 10, scale: 2, transformer: decimalToNumberTransformer })
     price: number;
 
+    @Column({ name: 'base_price', type: "decimal", precision: 10, scale: 2, nullable: true, transformer: decimalToNumberTransformer })
+    basePrice?: number | null;
+
+    @Column({ name: 'extra_services_total', type: "decimal", precision: 10, scale: 2, nullable: true, transformer: decimalToNumberTransformer })
+    extraServicesTotal?: number | null;
+
+    @Column({ name: 'extra_services_breakdown', type: 'json', nullable: true })
+    extraServicesBreakdown?: Array<{
+        extraServiceId?: string;
+        customServiceId?: string;
+        name: string;
+        price: number;
+        source?: 'requested' | 'offered';
+    }> | null;
+
     @Column({ type: 'text', nullable: true })
     message?: string;
 
     @Column({ type: 'int', nullable: true })
     estimatedDuration?: number;
+
+    @Column({ name: 'valid_until', type: 'datetime', nullable: true })
+    validUntil: Date | null;
 
     @Column({
         type: 'enum',

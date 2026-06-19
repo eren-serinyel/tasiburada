@@ -58,9 +58,13 @@ export class AuthService {
     const typeormRepo = this.getTypeORMRepository(userType);
     const repo = this.getRepository(userType);
 
-    const user = await typeormRepo.findOne({
-      where: { resetToken: token } as any,
-    });
+    const alias = userType;
+    const user = await typeormRepo
+      .createQueryBuilder(alias)
+      .addSelect(`${alias}.resetToken`)
+      .addSelect(`${alias}.resetTokenExpiry`)
+      .where(`${alias}.resetToken = :token`, { token })
+      .getOne();
 
     if (!user) {
       throw new Error('Geçersiz sıfırlama kodu.');
@@ -85,9 +89,12 @@ export class AuthService {
     const typeormRepo = this.getTypeORMRepository(userType);
     const repo = this.getRepository(userType);
 
-    const user = await typeormRepo.findOne({
-      where: { verificationToken: token } as any,
-    });
+    const alias = userType;
+    const user = await typeormRepo
+      .createQueryBuilder(alias)
+      .addSelect(`${alias}.verificationToken`)
+      .where(`${alias}.verificationToken = :token`, { token })
+      .getOne();
 
     if (!user) {
       throw new Error('Geçersiz veya süresi dolmuş doğrulama kodu.');

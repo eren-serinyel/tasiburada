@@ -78,25 +78,6 @@ export class ShipmentRepository extends BaseRepository<Shipment> {
       .getMany();
   }
 
-  async assignCarrierIfOpen(shipmentId: string, carrierId: string): Promise<Shipment | null> {
-    const result = await this.repository
-      .createQueryBuilder()
-      .update(Shipment)
-      .set({
-        carrierId,
-        status: ShipmentStatus.MATCHED,
-        matchedAt: new Date(),
-      })
-      .where('id = :shipmentId', { shipmentId })
-      .andWhere('status IN (:...openStatuses)', {
-        openStatuses: [ShipmentStatus.PENDING, ShipmentStatus.OFFER_RECEIVED],
-      })
-      .execute();
-
-    if (!result.affected) return null;
-    return this.findById(shipmentId);
-  }
-
   async findByCustomerIdWithOfferCount(customerId: string): Promise<Array<Shipment & { offerCount: number }>> {
     const rows = await this.repository
       .createQueryBuilder('shipment')
@@ -113,6 +94,20 @@ export class ShipmentRepository extends BaseRepository<Shipment> {
       result.offerCount = Number(rows.raw[index]?.offerCount ?? 0);
       return result;
     });
+  }
+
+  async expireStaleOpenShipments(today: string = formatTodayForShipmentDate()): Promise<number> {
+    const result = await this.repository
+      .createQueryBuilder()
+      .update(Shipment)
+      .set({ status: ShipmentStatus.EXPIRED })
+      .where('status IN (:...openStatuses)', {
+        openStatuses: [ShipmentStatus.PENDING, ShipmentStatus.OFFER_RECEIVED],
+      })
+      .andWhere('shipment_date < :today', { today })
+      .execute();
+
+    return result.affected ?? 0;
   }
 
   async findByIdWithOffers(shipmentId: string): Promise<Shipment | null> {
@@ -159,12 +154,13 @@ export class ShipmentRepository extends BaseRepository<Shipment> {
 
   async transitionStatus(shipmentId: string, current: ShipmentStatus, next: ShipmentStatus): Promise<boolean> {
     const validTransitions: Record<ShipmentStatus, ShipmentStatus[]> = {
-      [ShipmentStatus.PENDING]: [ShipmentStatus.OFFER_RECEIVED, ShipmentStatus.MATCHED, ShipmentStatus.CANCELLED],
-      [ShipmentStatus.OFFER_RECEIVED]: [ShipmentStatus.MATCHED, ShipmentStatus.CANCELLED],
+      [ShipmentStatus.PENDING]: [ShipmentStatus.OFFER_RECEIVED, ShipmentStatus.MATCHED, ShipmentStatus.CANCELLED, ShipmentStatus.EXPIRED],
+      [ShipmentStatus.OFFER_RECEIVED]: [ShipmentStatus.MATCHED, ShipmentStatus.CANCELLED, ShipmentStatus.EXPIRED],
       [ShipmentStatus.MATCHED]: [ShipmentStatus.IN_TRANSIT, ShipmentStatus.CANCELLED],
       [ShipmentStatus.IN_TRANSIT]: [ShipmentStatus.COMPLETED],
       [ShipmentStatus.COMPLETED]: [],
-      [ShipmentStatus.CANCELLED]: []
+      [ShipmentStatus.CANCELLED]: [],
+      [ShipmentStatus.EXPIRED]: []
     };
 
     const allowed = validTransitions[current] || [];

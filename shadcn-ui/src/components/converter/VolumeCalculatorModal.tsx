@@ -13,7 +13,6 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import ItemSelector from '@/components/converter/ItemSelector';
 import {
   createConverterSession,
@@ -51,10 +50,18 @@ const VEHICLE_LABELS: Record<string, string> = {
   large_truck: 'Büyük kamyon',
 };
 
+const VEHICLE_HINTS: Record<string, string> = {
+  panelvan: '~4 m³ · stüdyo / az eşya',
+  short_chassis_van: '~8 m³ · 1+1 ev',
+  long_chassis_van: '~14 m³ · 2+1 ev',
+  small_truck: '~22 m³ · 3+1 ev',
+  large_truck: '22 m³+ · 4+1 ve üzeri',
+};
+
 const CONFIDENCE_LABELS: Record<'low' | 'medium' | 'high', string> = {
-  low: 'low',
-  medium: 'medium',
-  high: 'high',
+  low: 'Düşük',
+  medium: 'Orta',
+  high: 'Yüksek',
 };
 
 const CONFIDENCE_CLASS: Record<'low' | 'medium' | 'high', string> = {
@@ -68,10 +75,10 @@ const SIZE_CLASSES: Array<{
   label: string;
   examples: string;
 }> = [
-  { value: 'small', label: 'Küçük', examples: 'Kutu, sandalye, küçük masa' },
-  { value: 'medium', label: 'Orta', examples: 'Çekmeceli dolap, ofis koltuğu' },
-  { value: 'large', label: 'Büyük', examples: 'Yatak, tek gardrop, büyük masa' },
-  { value: 'very_large', label: 'Çok büyük', examples: 'Çift gardrop, piyano boyutu' },
+  { value: 'small', label: 'Küçük (~0,2 m³)', examples: 'Kutu, sandalye, küçük masa' },
+  { value: 'medium', label: 'Orta (~0,5 m³)', examples: 'Çekmeceli dolap, ofis koltuğu' },
+  { value: 'large', label: 'Büyük (~1 m³)', examples: 'Yatak, tek gardrop, büyük masa' },
+  { value: 'very_large', label: 'Çok büyük (~2 m³)', examples: 'Çift gardrop, piyano boyutu' },
 ];
 
 const SIZE_CLASS_LABELS: Record<ConverterCustomItemSizeClass, string> = {
@@ -81,13 +88,27 @@ const SIZE_CLASS_LABELS: Record<ConverterCustomItemSizeClass, string> = {
   very_large: 'Çok büyük',
 };
 
+const MOVE_TYPE_LABELS: Record<ConverterMoveType, string> = {
+  household: 'Ev Eşyası',
+  partial_load: 'Parça Yük',
+};
+
+const PROPERTY_TYPE_LABELS: Record<ConverterPropertyType, string> = {
+  studio: 'Stüdyo',
+  '1+1': '1+1',
+  '2+1': '2+1',
+  '3+1': '3+1',
+  '4+1_plus': '4+1+',
+  unknown: 'Konut tipi bilinmiyor',
+};
+
 export default function VolumeCalculatorModal({
   open,
   onOpenChange,
   onApplyEstimate,
   loadType,
   initialValues,
-  applyLabel = 'Forma Uygula',
+  applyLabel = 'Bu bilgileri talebime ekle',
 }: VolumeCalculatorModalProps) {
   const [moveType, setMoveType] = useState<ConverterMoveType>('household');
   const [propertyType, setPropertyType] = useState<ConverterPropertyType>('2+1');
@@ -166,6 +187,12 @@ export default function VolumeCalculatorModal({
   const specialCatalog = useMemo(
     () => catalogItems.filter((item) => item.isSpecial),
     [catalogItems],
+  );
+  const selectedSpecialLabels = useMemo(
+    () => specialCatalog
+      .filter((item) => specialItems.includes(item.itemCode))
+      .map((item) => item.label),
+    [specialCatalog, specialItems],
   );
 
   const resetCustomForm = () => {
@@ -248,37 +275,8 @@ export default function VolumeCalculatorModal({
         </DialogHeader>
 
         <div className="space-y-6">
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <Label>Taşıma Tipi</Label>
-              <Select value={moveType} onValueChange={(value) => setMoveType(value as ConverterMoveType)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Seçin" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="household">Ev Eşyası</SelectItem>
-                  <SelectItem value="partial_load">Parça Yük</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Konut Tipi</Label>
-              <Select value={propertyType} onValueChange={(value) => setPropertyType(value as ConverterPropertyType)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Seçin" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="studio">Stüdyo</SelectItem>
-                  <SelectItem value="1+1">1+1</SelectItem>
-                  <SelectItem value="2+1">2+1</SelectItem>
-                  <SelectItem value="3+1">3+1</SelectItem>
-                  <SelectItem value="4+1_plus">4+1+</SelectItem>
-                  <SelectItem value="unknown">Bilinmiyor</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
+          <div className="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-500">
+            {MOVE_TYPE_LABELS[moveType]} · {PROPERTY_TYPE_LABELS[propertyType]} için tahmin
           </div>
 
           <div className="space-y-3">
@@ -462,7 +460,10 @@ export default function VolumeCalculatorModal({
                 Tahmini ağırlık: {result.estimatedWeightKg} kg
               </div>
               <div className="text-sm text-slate-700">
-                Önerilen araç: {VEHICLE_LABELS[result.recommendedVehicle] || result.recommendedVehicle}
+                <span className="font-medium">Önerilen araç:</span> {VEHICLE_LABELS[result.recommendedVehicle] || result.recommendedVehicle}
+                {VEHICLE_HINTS[result.recommendedVehicle] && (
+                  <span className="ml-1 text-xs text-slate-500">({VEHICLE_HINTS[result.recommendedVehicle]})</span>
+                )}
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-sm text-slate-700">Güven seviyesi:</span>
@@ -473,6 +474,11 @@ export default function VolumeCalculatorModal({
                   Kat ve asansör bilgisi forma yansıtıldığında tahmin daha doğru olacak.
                 </p>
               )}
+              {selectedSpecialLabels.length > 0 && (
+                <p className="text-xs text-amber-700">
+                  {selectedSpecialLabels[0]} gibi özel eşyalar için daha geniş araç önerilmiş olabilir.
+                </p>
+              )}
               {result.warnings.length > 0 && (
                 <ul className="list-disc space-y-1 pl-5 text-sm text-amber-700">
                   {result.warnings.map((warning, index) => (
@@ -481,6 +487,12 @@ export default function VolumeCalculatorModal({
                 </ul>
               )}
               <p className="text-sm text-slate-600">{result.summaryText}</p>
+              <p className="text-xs text-slate-500">
+                Ağırlık kabaca tahmindir; kitap, beyaz eşya veya yoğun/ağır eşyalar varsa açıklama alanında belirtin.
+              </p>
+              <p className="text-xs text-slate-500">
+                "{applyLabel}" dediğinizde tahmini ağırlık, önerilen araç tercihi ve eşya özeti talebinize eklenir.
+              </p>
               <p className="text-xs font-medium text-slate-500">Bu ekran fiyat vermez. Fiyat için teklif alın.</p>
             </div>
           )}

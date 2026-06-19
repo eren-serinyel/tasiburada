@@ -24,8 +24,8 @@ import { formatLocation } from '@/utils/formatLocation';
 
 const API_BASE_URL = '/api/v1';
 
-type OfferStatus = 'pending' | 'accepted' | 'rejected' | 'withdrawn' | 'cancelled' | string;
-type ShipmentStatus = 'pending' | 'offer_received' | 'matched' | 'in_transit' | 'completed' | 'cancelled' | string;
+type OfferStatus = 'pending' | 'accepted' | 'rejected' | 'withdrawn' | 'cancelled' | 'expired' | string;
+type ShipmentStatus = 'pending' | 'offer_received' | 'matched' | 'in_transit' | 'completed' | 'cancelled' | 'expired' | string;
 
 interface BackendShipment {
   id: string;
@@ -53,6 +53,7 @@ interface BackendOffer {
   estimatedDuration?: number | null;
   status: OfferStatus;
   offeredAt: string;
+  validUntil?: string | null;
 }
 
 const offerStatusConfig: Record<string, { label: string; className: string; description: string }> = {
@@ -135,10 +136,14 @@ const truncate = (value?: string | null, max = 120) => {
 };
 
 const getOfferStatus = (status: OfferStatus) =>
-  offerStatusConfig[status] || { label: String(status), className: 'bg-slate-100 text-slate-700', description: 'Bu teklif artık aktif işlem beklemiyor.' };
+  status === 'expired'
+    ? { label: 'Süresi Doldu', className: 'bg-slate-100 text-slate-700', description: 'Bu teklifin geçerlilik süresi doldu. İlan hala açıksa yeni teklif verebilirsiniz.' }
+    : offerStatusConfig[status] || { label: String(status), className: 'bg-slate-100 text-slate-700', description: 'Bu teklif artık aktif işlem beklemiyor.' };
 
 const getShipmentStatus = (status?: ShipmentStatus) =>
-  shipmentStatusConfig[status || ''] || { label: status || '-', className: 'bg-slate-100 text-slate-700 border-slate-200' };
+  status === 'expired'
+    ? { label: 'Süresi Doldu', className: 'bg-slate-100 text-slate-700 border-slate-200' }
+    : shipmentStatusConfig[status || ''] || { label: status || '-', className: 'bg-slate-100 text-slate-700 border-slate-200' };
 
 export default function CarrierOffers() {
   const [offers, setOffers] = useState<BackendOffer[]>([]);
@@ -420,6 +425,7 @@ function OfferCard({
           <InfoItem icon={<CalendarDays className="h-4 w-4" />} label="Talep tarihi" value={formatDate(shipment?.shipmentDate)} />
           <InfoItem icon={<Package className="h-4 w-4" />} label="Yük türü" value={formatLoadType(shipment)} />
           <InfoItem icon={<Clock className="h-4 w-4" />} label="Tahmini süre" value={offer.estimatedDuration ? `${offer.estimatedDuration} saat` : '-'} />
+          <InfoItem icon={<Clock className="h-4 w-4" />} label="Geçerlilik" value={formatDate(offer.validUntil)} />
           <InfoItem icon={<AlertCircle className="h-4 w-4" />} label="Ek hizmet" value={extraServices.length ? `${extraServices.length} hizmet` : '-'} />
         </div>
 

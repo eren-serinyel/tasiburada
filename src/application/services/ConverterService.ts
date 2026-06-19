@@ -146,19 +146,21 @@ export class ConverterService {
       throw error;
     }
 
-    if (session.userId && userId && session.userId !== userId) {
+    if (session.userId && session.userId !== userId) {
       const error = new Error('Bu converter oturumuna erişim yetkiniz yok.');
       (error as any).statusCode = 403;
       throw error;
     }
 
-    const requestedCodes = payload.items.map((item) => item.itemCode);
+    const requestedItemCodes = payload.items.map((item) => item.itemCode);
+    const requestedSpecialCodes = Array.isArray(payload.specialItems) ? payload.specialItems : [];
+    const requestedCodes = Array.from(new Set([...requestedItemCodes, ...requestedSpecialCodes]));
     const catalogItems = requestedCodes.length > 0
       ? await this.catalogRepo.find({ where: requestedCodes.map((itemCode) => ({ itemCode, isActive: true })) })
       : [];
     const catalogMap = new Map(catalogItems.map((item) => [item.itemCode, item]));
 
-    const missingCodes = requestedCodes.filter((code) => !catalogMap.has(code));
+    const missingCodes = requestedItemCodes.filter((code) => !catalogMap.has(code));
     if (missingCodes.length > 0) {
       const error = new Error(`Aktif katalogda bulunamayan itemCode değerleri: ${missingCodes.join(', ')}`);
       (error as any).statusCode = 400;
@@ -214,7 +216,14 @@ export class ConverterService {
     if ((nearThreshold || hasSpecialItems) && currentIndex >= 0 && currentIndex < activeRules.length - 1) {
       selectedRule = activeRules[currentIndex + 1];
       if (hasSpecialItems) {
-        warnings.push('Özel eşya seçildiği için daha geniş araç önerildi.');
+        const specialLabels = specialItems
+          .map((code) => catalogMap.get(code)?.label)
+          .filter(Boolean);
+        warnings.push(
+          specialLabels.length
+            ? `${specialLabels.join(', ')} gibi özel eşyalar için daha geniş araç önerildi.`
+            : 'Özel eşya seçildiği için daha geniş araç önerildi.'
+        );
       }
       if (nearThreshold) {
         warnings.push('Hacim üst sınıra yakın olduğu için bir üst araç sınıfı önerildi.');
@@ -312,7 +321,7 @@ export class ConverterService {
       throw error;
     }
 
-    if (session.userId && userId && session.userId !== userId) {
+    if (session.userId && session.userId !== userId) {
       const error = new Error('Bu converter oturumuna erişim yetkiniz yok.');
       (error as any).statusCode = 403;
       throw error;

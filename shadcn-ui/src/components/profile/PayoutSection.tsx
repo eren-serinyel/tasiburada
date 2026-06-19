@@ -16,7 +16,7 @@ export default function PayoutSection({ user, refreshProfileStatus }: SectionPro
       let hydratedFromBackend = false;
 
       try {
-        const res = await apiClient(`${API_BASE}/carriers/${user.id}`);
+        const res = await apiClient(`${API_BASE}/carriers/me`);
         const json = await res.json().catch(() => ({}));
         if (res.ok && json?.success) {
           const earnings = json.data?.carrier?.earnings ?? json.data?.earnings;
@@ -46,7 +46,7 @@ export default function PayoutSection({ user, refreshProfileStatus }: SectionPro
 
   const save = async () => {
     try {
-      await apiClient(`${API_BASE}/carriers/profile/${user.id}`, {
+      await apiClient(`${API_BASE}/carriers/me/earnings`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ bankName: payout.bank || undefined, iban: payout.iban || undefined, accountHolder: payout.holder || undefined }),
       });

@@ -12,6 +12,22 @@ export class CustomerRepository extends BaseRepository<Customer> {
     });
   }
 
+  async findByEmailWithPassword(email: string): Promise<Customer | null> {
+    return await this.repository
+      .createQueryBuilder('customer')
+      .addSelect('customer.passwordHash')
+      .where('customer.email = :email', { email })
+      .getOne();
+  }
+
+  async findByIdWithPassword(customerId: string): Promise<Customer | null> {
+    return await this.repository
+      .createQueryBuilder('customer')
+      .addSelect('customer.passwordHash')
+      .where('customer.id = :customerId', { customerId })
+      .getOne();
+  }
+
   async findByPhone(phone: string): Promise<Customer | null> {
     return await this.repository.findOne({
       where: { phone }

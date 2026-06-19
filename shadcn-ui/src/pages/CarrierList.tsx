@@ -16,6 +16,7 @@ import { formatPrice } from '@/lib/utils';
 import { ArrowRight, Award, MapPin, SearchX, Shield, Star, Truck, Zap, CheckCircle2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import { useFavorites } from '@/hooks/useFavorites';
 
 const HIGHLIGHT_LIMIT = 12;
 
@@ -31,6 +32,7 @@ const num = (v: unknown, fb = 0) => { const n = Number(v); return Number.isFinit
 export default function CarrierList() {
 	const [searchParams, setSearchParams] = useSearchParams();
 	const navigate = useNavigate();
+	const { isFavorite } = useFavorites();
 	const filters = useMemo(() => filtersFromParams(searchParams), [searchParams]);
 	const filterKey = useMemo(() => filtersToParams(filters).toString(), [filters]);
 	
@@ -50,7 +52,10 @@ export default function CarrierList() {
 		navigate({ pathname: '/nakliyeciler/tumu', search: params.toString() });
 	};
 
-	const carriers = data?.items ?? [];
+	const allCarriers = data?.items ?? [];
+	const carriers = filters.favoritesOnly
+		? allCarriers.filter(c => isFavorite(c.id))
+		: allCarriers;
 	const total = data?.total ?? 0;
 	const hasResults = carriers.length > 0;
 
@@ -314,8 +319,9 @@ function InlineCarrierCard({ carrier, navigate }: { carrier: CarrierSearchItem; 
 	const slug = slugify(carrier.companyName);
 	const detailPath = `/nakliyeciler/${carrier.id}/${slug}`;
 	const ratingValue = num(carrier.rating);
+	const reviewCount = num(carrier.reviewCount);
 	const priceLabel = typeof carrier.startingPrice === 'number' ? `₺${formatPrice(carrier.startingPrice)}` : null;
-	const isVerified = (carrier.profileCompletion || 0) > 70;
+	const isVerified = carrier.isVerified === true;
 	const expYears = num(carrier.experienceYears, NaN);
 	const experienceText = Number.isFinite(expYears) ? `${expYears} Yıl` : null;
 	const serviceAreas = carrier.serviceAreas || [];
@@ -349,8 +355,8 @@ function InlineCarrierCard({ carrier, navigate }: { carrier: CarrierSearchItem; 
 					
 					{isVerified && (
 						<div className="mt-1">
-							<Badge title="Profil ve evrak bilgileri kontrol edilmiş nakliyeci" className="bg-emerald-50 text-emerald-600 border-none px-3 py-1 font-black text-[10px] tracking-widest uppercase flex items-center gap-1 hover:bg-emerald-100 transition-colors">
-								<CheckCircle2 className="w-3 h-3" /> P-ONAYLI
+							<Badge title="Taşıburada tarafından doğrulanmış nakliyeci" className="bg-emerald-50 text-emerald-600 border-none px-3 py-1 font-black text-[10px] tracking-widest uppercase flex items-center gap-1 hover:bg-emerald-100 transition-colors">
+								<CheckCircle2 className="w-3 h-3" /> ONAYLI
 							</Badge>
 						</div>
 					)}
@@ -358,11 +364,17 @@ function InlineCarrierCard({ carrier, navigate }: { carrier: CarrierSearchItem; 
 
 				{/* Rating & Exp Row */}
 				<div className="flex items-center gap-3 mb-6 bg-[#F8FAFC] p-2 rounded-2xl border border-[#F1F5F9]">
-					<div className="flex items-center gap-1.5 bg-white px-3 py-1.5 rounded-xl shadow-sm border border-slate-50">
-						<Star className="w-4 h-4 text-amber-500 fill-amber-500" />
-						<span className="text-sm font-black text-slate-800">{ratingValue.toFixed(1)}</span>
-						<span className="text-xs font-bold text-slate-400">({carrier.reviewCount})</span>
-					</div>
+					{reviewCount > 0 ? (
+						<div className="flex items-center gap-1.5 bg-white px-3 py-1.5 rounded-xl shadow-sm border border-slate-50">
+							<Star className="w-4 h-4 text-amber-500 fill-amber-500" />
+							<span className="text-sm font-black text-slate-800">{ratingValue.toFixed(1)}</span>
+							<span className="text-xs font-bold text-slate-400">({reviewCount})</span>
+						</div>
+					) : (
+						<div className="flex items-center gap-1.5 bg-white px-3 py-1.5 rounded-xl shadow-sm border border-slate-50">
+							<span className="text-xs font-bold text-slate-500">Yeni firma</span>
+						</div>
+					)}
 					<Separator orientation="vertical" className="h-4" />
 					<div className="flex items-center gap-1.5 text-slate-600">
 						<Award className="w-3.5 h-3.5 text-blue-500" />

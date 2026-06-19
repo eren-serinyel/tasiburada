@@ -92,6 +92,164 @@ describe('Carrier Capability Management API', () => {
   // GET /api/v1/admin/carriers/:carrierId/capabilities
   // ─────────────────────────────────────────────────────────────────────────
 
+  describe('PUT /api/v1/carriers/me/capabilities', () => {
+    test('carrier can create, update, list, and delete custom extra services', async () => {
+      expect(carrierToken).toBeTruthy();
+
+      const current = await request(testApp)
+        .get('/api/v1/carriers/me/capabilities')
+        .set('Authorization', `Bearer ${carrierToken}`);
+
+      expect(current.status).toBe(200);
+      const loadType = current.body.data.loadTypes.find((item: any) => item.isActive)?.loadType;
+      if (!loadType) return;
+
+      let customServiceId: string | undefined;
+
+      try {
+        const create = await request(testApp)
+          .post('/api/v1/carriers/me/custom-extra-services')
+          .set('Authorization', `Bearer ${carrierToken}`)
+          .send({
+            loadType,
+            title: `Test manuel hizmet ${Date.now()}`,
+            description: 'Test aciklamasi',
+            priceMode: 'QUOTE',
+            quoteMinPrice: 100,
+            quoteMaxPrice: 300,
+          });
+
+        expect(create.status).toBe(201);
+        expect(create.body.success).toBe(true);
+        expect(create.body.data.loadType).toBe(loadType);
+        expect(Number(create.body.data.quoteMinPrice)).toBe(100);
+        expect(Number(create.body.data.quoteMaxPrice)).toBe(300);
+        customServiceId = create.body.data.id;
+
+        const list = await request(testApp)
+          .get(`/api/v1/carriers/me/custom-extra-services?loadType=${loadType}`)
+          .set('Authorization', `Bearer ${carrierToken}`);
+
+        expect(list.status).toBe(200);
+        expect(list.body.data.some((item: any) => item.id === customServiceId)).toBe(true);
+
+        const update = await request(testApp)
+          .put(`/api/v1/carriers/me/custom-extra-services/${customServiceId}`)
+          .set('Authorization', `Bearer ${carrierToken}`)
+          .send({
+            loadType,
+            title: 'Test manuel hizmet guncel',
+            description: 'Sabit fiyatli test',
+            priceMode: 'FIXED',
+            basePrice: 450,
+          });
+
+        expect(update.status).toBe(200);
+        expect(update.body.success).toBe(true);
+        expect(update.body.data.priceMode).toBe('FIXED');
+        expect(Number(update.body.data.basePrice)).toBe(450);
+
+        const remove = await request(testApp)
+          .delete(`/api/v1/carriers/me/custom-extra-services/${customServiceId}`)
+          .set('Authorization', `Bearer ${carrierToken}`);
+
+        expect(remove.status).toBe(200);
+        expect(remove.body.success).toBe(true);
+        customServiceId = undefined;
+      } finally {
+        if (customServiceId) {
+          await request(testApp)
+            .delete(`/api/v1/carriers/me/custom-extra-services/${customServiceId}`)
+            .set('Authorization', `Bearer ${carrierToken}`);
+        }
+      }
+    });
+
+    test('carrier can add and update own fixed extra service price', async () => {
+      expect(carrierToken).toBeTruthy();
+
+      const current = await request(testApp)
+        .get('/api/v1/carriers/me/capabilities')
+        .set('Authorization', `Bearer ${carrierToken}`);
+
+      expect(current.status).toBe(200);
+      const loadType = current.body.data.loadTypes.find((item: any) => item.isActive)?.loadType;
+      if (!loadType) return;
+
+      const services = await request(testApp)
+        .get(`/api/v1/extra-services?loadType=${loadType}`);
+
+      expect(services.status).toBe(200);
+      const service = services.body.data?.[0];
+      if (!service) return;
+
+      const previousCapability = current.body.data.extraServices.find(
+        (item: any) => item.extraServiceId === service.id && item.loadType === loadType
+      );
+
+      try {
+        const createOrUpdate = await request(testApp)
+          .put('/api/v1/carriers/me/capabilities')
+          .set('Authorization', `Bearer ${carrierToken}`)
+          .send({
+            action: 'add_extra_service',
+            extraServiceId: service.id,
+            loadType,
+            priceMode: 'FIXED',
+            basePrice: 321,
+          });
+
+        expect(createOrUpdate.status).toBe(200);
+        expect(createOrUpdate.body.success).toBe(true);
+
+        const firstSaved = createOrUpdate.body.data.extraServices.find(
+          (item: any) => item.extraServiceId === service.id && item.loadType === loadType
+        );
+        expect(Number(firstSaved.basePrice)).toBe(321);
+
+        const priceUpdate = await request(testApp)
+          .put('/api/v1/carriers/me/capabilities')
+          .set('Authorization', `Bearer ${carrierToken}`)
+          .send({
+            action: 'add_extra_service',
+            extraServiceId: service.id,
+            loadType,
+            priceMode: 'FIXED',
+            basePrice: 432,
+          });
+
+        expect(priceUpdate.status).toBe(200);
+        const updated = priceUpdate.body.data.extraServices.find(
+          (item: any) => item.extraServiceId === service.id && item.loadType === loadType
+        );
+        expect(Number(updated.basePrice)).toBe(432);
+      } finally {
+        if (previousCapability) {
+          await request(testApp)
+            .put('/api/v1/carriers/me/capabilities')
+            .set('Authorization', `Bearer ${carrierToken}`)
+            .send({
+              action: 'add_extra_service',
+              extraServiceId: service.id,
+              loadType,
+              priceMode: previousCapability.priceMode || 'NONE',
+              basePrice: previousCapability.basePrice ?? undefined,
+              notes: previousCapability.notes,
+            });
+        } else {
+          await request(testApp)
+            .put('/api/v1/carriers/me/capabilities')
+            .set('Authorization', `Bearer ${carrierToken}`)
+            .send({
+              action: 'remove_extra_service',
+              extraServiceId: service.id,
+              loadType,
+            });
+        }
+      }
+    });
+  });
+
   describe('GET /api/v1/admin/carriers/:carrierId/capabilities', () => {
     beforeAll(async () => {
       // Login as admin once

@@ -28,7 +28,13 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { useFavorites } from '@/hooks/useFavorites';
 import { cn, formatPrice, formatDate } from '@/lib/utils';
-import type { CarrierDetail, CarrierDetailDocument, CarrierDetailReview } from '@/lib/types';
+import type {
+  CarrierDetail,
+  CarrierDetailDocument,
+  CarrierDetailReview,
+  CarrierDetailServiceGroup,
+  CarrierDetailServiceItem,
+} from '@/lib/types';
 import { getSessionUser } from '@/lib/storage';
 import { apiClient } from '@/lib/apiClient';
 
@@ -239,6 +245,7 @@ const CarrierDetailPage = () => {
     ? `${data.experienceYears} yıl deneyim`
     : 'Deneyim bilgisi paylaşılmadı';
   const serviceAreas = data.serviceAreas?.length ? data.serviceAreas : [];
+  const serviceShowcase = data.services ?? [];
   const vehicles = data.vehicles ?? [];
   const documents = data.documents ?? [];
   const startingPriceText = typeof data.startingPrice === 'number'
@@ -435,6 +442,10 @@ const CarrierDetailPage = () => {
                         </div>
                       </CardContent>
                     </Card>
+                  )}
+
+                  {serviceShowcase.length > 0 && (
+                    <ServiceShowcaseCard services={serviceShowcase} />
                   )}
 
                   {/* Company info */}
@@ -943,6 +954,65 @@ const InfoItem = ({ label, value, icon }: { label: string; value: string; icon: 
       <p className="text-sm font-medium text-foreground mt-0.5">{value}</p>
     </div>
   </div>
+);
+
+const LOAD_TYPE_LABELS: Record<string, string> = {
+  HOME: 'Evden Eve',
+  OFFICE: 'Ofis Taşıma',
+  PARTIAL: 'Parça Eşya',
+  STORAGE: 'Depolama',
+};
+
+const formatServicePrice = (service: CarrierDetailServiceItem) => {
+  if (service.priceMode === 'NONE') return 'Ücretsiz';
+  if (service.priceMode === 'FIXED' && typeof service.basePrice === 'number') return formatPrice(service.basePrice);
+  if (typeof service.minPrice === 'number' && typeof service.maxPrice === 'number') {
+    return `${formatPrice(service.minPrice)} - ${formatPrice(service.maxPrice)}`;
+  }
+  return 'Görüşülür';
+};
+
+const ServiceShowcaseCard = ({ services }: { services: CarrierDetailServiceGroup[] }) => (
+  <Card>
+    <CardHeader className="pb-3">
+      <CardTitle className="text-base">Sunduğu Ek Hizmetler</CardTitle>
+      <CardDescription>Bu nakliyecinin aktif katalog ve özel hizmetleri.</CardDescription>
+    </CardHeader>
+    <CardContent className="space-y-4">
+      {services.map((group) => (
+        <div key={group.loadType}>
+          <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            {LOAD_TYPE_LABELS[group.loadType] || group.loadType}
+          </div>
+          <div className="space-y-2">
+            {group.items.map((service) => (
+              <div
+                key={`${service.source}-${service.id}`}
+                className="flex items-start justify-between gap-3 rounded-xl border border-slate-100 px-3 py-2"
+              >
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-1.5 text-sm font-medium text-slate-800">
+                    <span>{service.name}</span>
+                    {service.source === 'custom' && (
+                      <span className="rounded bg-purple-50 px-1.5 py-0.5 text-[10px] font-bold text-purple-600">
+                        özel
+                      </span>
+                    )}
+                  </div>
+                  {service.description && (
+                    <div className="mt-0.5 text-xs text-slate-500">{service.description}</div>
+                  )}
+                </div>
+                <div className="ml-3 whitespace-nowrap text-sm font-semibold text-slate-700">
+                  {formatServicePrice(service)}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </CardContent>
+  </Card>
 );
 
 const DocumentRow = ({ document }: { document: CarrierDetailDocument }) => {

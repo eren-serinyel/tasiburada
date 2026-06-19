@@ -50,6 +50,12 @@ export class CarrierExtraServiceCapability {
   @Column({ name: 'base_price', type: 'decimal', precision: 10, scale: 2, nullable: true })
   basePrice: number | null;
 
+  @Column({ name: 'quote_min_price', type: 'decimal', precision: 10, scale: 2, nullable: true })
+  quoteMinPrice: number | null;
+
+  @Column({ name: 'quote_max_price', type: 'decimal', precision: 10, scale: 2, nullable: true })
+  quoteMaxPrice: number | null;
+
   @Column({ type: 'varchar', length: 500, nullable: true })
   notes: string | null;
 

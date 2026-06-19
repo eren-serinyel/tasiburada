@@ -16,7 +16,8 @@ export enum ShipmentStatus {
     MATCHED = "matched",
     IN_TRANSIT = "in_transit",
     COMPLETED = "completed",
-    CANCELLED = "cancelled"
+    CANCELLED = "cancelled",
+    EXPIRED = "expired"
 }
 
 export enum ShipmentCategory {

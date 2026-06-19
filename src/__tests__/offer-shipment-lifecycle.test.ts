@@ -285,20 +285,4 @@ describe('Offer/Shipment Lifecycle & Review Update/Delete', () => {
     expect([200, 400]).toContain(res.status);
   });
 
-  // ── Shipment: assignCarrier guard ─────────────────────────────────────────
-  test('25. Token olmadan carrier atama 401 dönmeli', async () => {
-    const res = await request(testApp)
-      .put('/api/v1/shipments/00000000-0000-0000-0000-000000000000/assign-carrier')
-      .send({ carrierId: '00000000-0000-0000-0000-000000000000' });
-    expect(res.status).toBe(401);
-  });
-
-  test('26. Olmayan shipment için carrier atama 400/404 dönmeli', async () => {
-    if (skipDB() || !customerToken) return;
-    const res = await request(testApp)
-      .put('/api/v1/shipments/00000000-0000-0000-0000-000000000000/assign-carrier')
-      .set('Authorization', `Bearer ${customerToken}`)
-      .send({ carrierId: '00000000-0000-0000-0000-000000000000' });
-    expect([400, 403, 404]).toContain(res.status);
-  });
 });

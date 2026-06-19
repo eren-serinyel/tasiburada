@@ -60,11 +60,21 @@ export interface CustomerOffer {
   carrier?: CustomerOfferCarrier | null;
   shipment?: CustomerOfferShipment;
   price: number;
+  basePrice?: number | null;
+  extraServicesTotal?: number | null;
+  extraServicesBreakdown?: Array<{
+    extraServiceId?: string;
+    customServiceId?: string;
+    name: string;
+    price: number;
+    source?: 'requested' | 'offered';
+  }> | null;
   currency?: 'TRY' | string;
   message?: string;
   estimatedDuration?: number;
-  status: 'pending' | 'accepted' | 'rejected' | 'withdrawn' | 'cancelled';
+  status: 'pending' | 'accepted' | 'rejected' | 'withdrawn' | 'cancelled' | 'expired';
   offeredAt: string;
+  validUntil?: string | Date | null;
   carrierEligibility?: CarrierEligibility;
   isLowestPrice?: boolean;
   isHighestRating?: boolean;
@@ -184,6 +194,14 @@ const statusLabel: Record<string, string> = {
   rejected: 'Reddedildi',
   withdrawn: 'Geri Cekildi',
   cancelled: 'Iptal',
+  expired: 'Suresi Doldu',
+};
+
+const validUntilLabel = (value?: string | Date | null): string | null => {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toLocaleDateString('tr-TR', { day: 'numeric', month: 'short', year: 'numeric' });
 };
 
 const loadTypeLabel = (loadType?: string | null): string => {
@@ -251,6 +269,10 @@ export function CustomerOfferCard({
   const eligibilityWarning = getCarrierEligibilityWarning(offer);
   const acceptDisabled = isOfferAcceptDisabled(offer, disabled);
   const matchBadge = getMatchBadge(offer.matchScore);
+  const validityLabel = validUntilLabel(offer.validUntil);
+  const hasPriceBreakdown = Boolean(
+    offer.extraServicesBreakdown?.length && Number(offer.extraServicesTotal || 0) > 0
+  );
   const missingExtraServices = offer.matchDetails?.missingExtraServices ?? [];
   const matchWarnings = [
     ...(offer.matchDetails && !offer.matchDetails.loadTypeCompatible
@@ -321,6 +343,9 @@ export function CustomerOfferCard({
         {offer.isRecommended && offer.status === 'pending' && (
           <Badge className="bg-blue-50 text-blue-700 hover:bg-blue-50">Onerilen</Badge>
         )}
+        {offer.status === 'expired' && (
+          <Badge variant="outline" className="border-slate-200 bg-slate-100 text-slate-600">Suresi doldu</Badge>
+        )}
         {offer.isLowestPrice && offer.status === 'pending' && (
           <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700">En uygun</Badge>
         )}
@@ -387,6 +412,27 @@ export function CustomerOfferCard({
         <div className="rounded-lg bg-slate-50 p-3">
           <p className="text-xs text-slate-500">Teklif</p>
           <p className="mt-1 text-2xl font-bold text-slate-950">₺{fmtPrice(Number(offer.price))}</p>
+          {hasPriceBreakdown && (
+            <div className="mt-2 space-y-1 border-t border-slate-200 pt-2 text-[11px] text-slate-600">
+              <div className="flex items-center justify-between gap-2">
+                <span>Tasima bedeli</span>
+                <span className="font-medium text-slate-800">₺{fmtPrice(Number(offer.basePrice ?? offer.price))}</span>
+              </div>
+              {offer.extraServicesBreakdown!.map((item) => (
+                <div key={`${item.extraServiceId ?? item.customServiceId}-${item.name}`} className="flex items-center justify-between gap-2">
+                  <span className="min-w-0 truncate">
+                    + {item.name}
+                    {item.source === 'offered' && (
+                      <span className="ml-1.5 rounded bg-blue-50 px-1.5 py-0.5 align-middle text-[10px] font-bold text-blue-600">
+                        Nakliyeci önerisi
+                      </span>
+                    )}
+                  </span>
+                  <span className="font-medium text-slate-800">₺{fmtPrice(Number(item.price))}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
         <div className="rounded-lg bg-slate-50 p-3">
           <p className="text-xs text-slate-500">Arac</p>
@@ -406,6 +452,12 @@ export function CustomerOfferCard({
           <Clock3 className="h-3.5 w-3.5" />
           Teslim: {durationLabel(offer.estimatedDuration)}
         </span>
+        {validityLabel && (
+          <span className="inline-flex items-center gap-1.5">
+            <Clock3 className="h-3.5 w-3.5" />
+            Son geçerlilik: {validityLabel}
+          </span>
+        )}
         <span className="inline-flex items-center gap-1.5">
           <Truck className="h-3.5 w-3.5" />
           {carrier?.isActive ? 'Aktif tasiyici' : 'Tasiyici durumu belirsiz'}

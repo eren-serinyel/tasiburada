@@ -267,6 +267,7 @@ export class ContactSafetyService {
       actorId: input.actorId,
       windowDays: input.windowDays,
       threshold: input.threshold,
+      endAt: new Date(input.latestViolationAt.getTime() + 1000),
     });
 
     const found = repeated.find((item) => item.actorType === input.actorType && item.actorId === input.actorId);

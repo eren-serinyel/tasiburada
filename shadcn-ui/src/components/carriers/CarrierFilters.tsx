@@ -1,23 +1,19 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Slider } from '@/components/ui/slider';
+import { useEffect, useState } from 'react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
-import MultiSelect from '@/components/ui/multi-select';
-import { CITIES_TR, getDistrictsForCity } from '@/lib/locations';
-import { FilterIcon, RotateCcw, MapPin, Truck, Box, Shield, Star, Award, SlidersHorizontal, ChevronRight, Zap } from 'lucide-react';
+import { CITIES_TR, getDistrictsForCity, formatDateYYYYMMDD } from '@/lib/locations';
+import { RotateCcw, MapPin, Truck, Star, SlidersHorizontal, ArrowUpDown, Filter, Check, Search, Package, CalendarDays, Award, Heart } from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
 import {
 	CarrierSearchFilters,
 	DEFAULT_CARRIER_FILTERS,
 	MIN_EXPERIENCE_OPTIONS,
-	MIN_RATING_OPTIONS,
 	CarrierSearchSort
 } from '@/lib/carrierSearch';
-import { Separator } from '@/components/ui/separator';
-import { motion } from 'framer-motion';
 
 interface VehicleTypeOption {
 	value: string;
@@ -37,13 +33,12 @@ interface CarrierFiltersProps {
 
 const SORT_OPTIONS: { label: string; value: CarrierSearchSort }[] = [
 	{ label: 'En yüksek puan', value: 'rating' },
-	{ label: 'En uygun fiyat', value: 'price' },
 	{ label: 'En deneyimliler', value: 'experience' },
-	{ label: 'Profil tamamlanma', value: 'profile' },
 	{ label: 'En yeni', value: 'recent' }
 ];
 
 const ANY_VALUE = '__all__';
+const HIGH_RATING_VALUE = '4';
 
 const SCOPE_OPTIONS = [
 	{ id: 'sehirici', label: 'Şehir İçi' },
@@ -51,36 +46,23 @@ const SCOPE_OPTIONS = [
 ];
 
 const LOAD_TYPE_OPTIONS = [
-	{ id: 'ev-esyasi', label: 'Ev Eşyası' },
-	{ id: 'ofis', label: 'Ofis Taşıma' },
-	{ id: 'parsiyel', label: 'Parsiyel' },
-	{ id: 'komple', label: 'Komple Yük' },
-	{ id: 'hassas', label: 'Hassas Yük' },
-	{ id: 'agir', label: 'Ağır Yük' }
-];
-
-const PROFILE_COMPLETION_OPTIONS = [
-	{ value: 25, label: '%25+' },
-	{ value: 50, label: '%50+' },
-	{ value: 75, label: '%75+' },
-	{ value: 100, label: '%100' }
+	{ value: 'HOME', label: 'Ev Eşyası' },
+	{ value: 'OFFICE', label: 'Ofis' },
+	{ value: 'PARTIAL', label: 'Parça Eşya' },
+	{ value: 'STORAGE', label: 'Depolama' }
 ];
 
 const CarrierFilters = ({ filters, onChange, hideHeader }: CarrierFiltersProps) => {
+	const { user } = useAuth();
+	const isCustomer = user?.type === 'customer';
 	const [vehicleOptions, setVehicleOptions] = useState<VehicleTypeOption[]>([]);
 	const [vehiclesLoading, setVehiclesLoading] = useState(false);
 	const [districtOptions, setDistrictOptions] = useState<string[]>([]);
-	const [districtsLoading, setDistrictsLoading] = useState(false);
+	const [searchDraft, setSearchDraft] = useState(filters.searchText ?? '');
 
 	const serviceCityValue = filters.serviceCity && filters.serviceCity.trim().length > 0 ? filters.serviceCity : ANY_VALUE;
 	const serviceDistrictValue = filters.serviceDistrict && filters.serviceDistrict.trim().length > 0 ? filters.serviceDistrict : ANY_VALUE;
-
-	const vehicleOptionMap = useMemo(() => {
-		return vehicleOptions.reduce((acc, option) => {
-			acc[option.value] = option.label;
-			return acc;
-		}, {} as Record<string, string>);
-	}, [vehicleOptions]);
+	const todayStr = formatDateYYYYMMDD(new Date());
 
 	useEffect(() => {
 		let ignore = false;
@@ -93,6 +75,7 @@ const CarrierFilters = ({ filters, onChange, hideHeader }: CarrierFiltersProps) 
 					setVehicleOptions(json.data.map((item: VehicleTypeApiItem) => ({ value: String(item.id), label: item.name })));
 				}
 			} catch {
+				// sessiz hata - chip listesi boş kalır
 			} finally {
 				if (!ignore) setVehiclesLoading(false);
 			}
@@ -106,24 +89,31 @@ const CarrierFilters = ({ filters, onChange, hideHeader }: CarrierFiltersProps) 
 		const loadDistricts = async () => {
 			if (!filters.serviceCity) {
 				setDistrictOptions([]);
-				setDistrictsLoading(false);
 				return;
 			}
-			setDistrictsLoading(true);
-			try {
-				const list = await getDistrictsForCity(filters.serviceCity);
-				if (!ignore) setDistrictOptions(list);
-			} catch {
-				if (!ignore) setDistrictOptions([]);
-			} finally {
-				if (!ignore) setDistrictsLoading(false);
-			}
+			const list = await getDistrictsForCity(filters.serviceCity);
+			if (!ignore) setDistrictOptions(list);
 		};
 		loadDistricts();
 		return () => { ignore = true; };
 	}, [filters.serviceCity]);
 
-	// Handlers
+	useEffect(() => {
+		setSearchDraft(filters.searchText ?? '');
+	}, [filters.searchText]);
+
+	useEffect(() => {
+		const timer = window.setTimeout(() => {
+			const trimmed = searchDraft.trim();
+			if ((filters.searchText ?? '') !== trimmed) {
+				onChange({ ...filters, searchText: trimmed });
+			}
+		}, 400);
+
+		return () => window.clearTimeout(timer);
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [searchDraft]);
+
 	const handleServiceCityChange = (value: string) => {
 		const val = value === ANY_VALUE ? undefined : value;
 		onChange({ ...filters, serviceCity: val, serviceDistrict: undefined });
@@ -134,32 +124,31 @@ const CarrierFilters = ({ filters, onChange, hideHeader }: CarrierFiltersProps) 
 		onChange({ ...filters, serviceDistrict: val });
 	};
 
-	const handleVehicleTypeMultiChange = (values: string[]) => {
-		onChange({ ...filters, vehicleTypeIds: values });
-	};
-
-	const handleMinCapacityChange = (val: string) => {
-		const v = Number(val);
-		onChange({ ...filters, minCapacityKg: v > 0 ? v : undefined });
-	};
-
-	const handleMaxCapacityChange = (val: string) => {
-		const v = Number(val);
-		onChange({ ...filters, maxCapacityKg: v > 0 ? v : undefined });
-	};
-
-	const handleCheckboxChange = (field: 'scopes' | 'loadTypes', id: string, checked: boolean) => {
+	const toggleArrayValue = (field: 'vehicleTypeIds' | 'loadTypes' | 'scopes', id: string) => {
 		const current = filters[field] ?? [];
-		if (checked) {
-			onChange({ ...filters, [field]: [...current, id] });
-		} else {
-			onChange({ ...filters, [field]: current.filter(x => x !== id) });
-		}
+		const next = current.includes(id) ? current.filter(x => x !== id) : [...current, id];
+		onChange({ ...filters, [field]: next });
+	};
+
+	const highRatingActive = filters.minRating === HIGH_RATING_VALUE;
+	const toggleHighRating = () => {
+		onChange({ ...filters, minRating: highRatingActive ? undefined : HIGH_RATING_VALUE });
+	};
+
+	const handleExperienceChange = (value: number) => {
+		onChange({ ...filters, minExperience: filters.minExperience === value ? undefined : value });
 	};
 
 	const resetFilters = () => {
+		setSearchDraft('');
 		onChange({ ...DEFAULT_CARRIER_FILTERS, serviceAreas: [], vehicleTypeIds: [], scopes: [], loadTypes: [] });
 	};
+
+	const chipClass = (active: boolean) =>
+		`inline-flex items-center gap-1.5 rounded-full border px-3.5 py-2 text-[13px] font-bold transition-all duration-200 ${active
+			? 'border-blue-600 bg-blue-600 text-white shadow-sm shadow-blue-200'
+			: 'border-[#E2E8F0] bg-white text-slate-600 hover:border-blue-300 hover:text-blue-600'
+		}`;
 
 	return (
 		<div className="bg-white/40 backdrop-blur-md rounded-[32px] overflow-hidden">
@@ -173,17 +162,24 @@ const CarrierFilters = ({ filters, onChange, hideHeader }: CarrierFiltersProps) 
 			)}
 
 			<div className="p-6 space-y-9">
+				<div className="relative">
+					<Search className="absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
+					<Input
+						value={searchDraft}
+						onChange={e => setSearchDraft(e.target.value)}
+						placeholder="Firma adı ara..."
+						className="h-12 pl-11 rounded-2xl border-[#F1F5F9] bg-white font-medium"
+					/>
+				</div>
 
-				{/* 1. KONUM & HİZMET ALANI */}
-				<FilterSection 
-					icon={<MapPin className="h-3.5 w-3.5" />} 
-					title="Konum ve Hizmet"
-				>
+
+
+				<FilterSection icon={<MapPin className="h-3.5 w-3.5" />} title="Konum ve Hizmet">
 					<div className="grid gap-4 flex-1">
 						<div className="space-y-2">
 							<Label className="text-[11px] font-black text-slate-400 uppercase tracking-widest pl-1">Hizmet Verdiği İl</Label>
 							<Select value={serviceCityValue} onValueChange={handleServiceCityChange}>
-								<SelectTrigger className="h-11 rounded-1.5xl border-[#F1F5F9] bg-white hover:bg-slate-50 transition-colors">
+								<SelectTrigger className="h-11 rounded-2xl border-[#F1F5F9] bg-white hover:bg-slate-50 transition-colors">
 									<SelectValue placeholder="İl Seçiniz" />
 								</SelectTrigger>
 								<SelectContent>
@@ -196,7 +192,7 @@ const CarrierFilters = ({ filters, onChange, hideHeader }: CarrierFiltersProps) 
 						<div className="space-y-2">
 							<Label className="text-[11px] font-black text-slate-400 uppercase tracking-widest pl-1">İlçe</Label>
 							<Select value={serviceDistrictValue} onValueChange={handleServiceDistrictChange} disabled={!filters.serviceCity}>
-								<SelectTrigger className="h-11 rounded-1.5xl border-[#F1F5F9] bg-white hover:bg-slate-50 transition-colors">
+								<SelectTrigger className="h-11 rounded-2xl border-[#F1F5F9] bg-white hover:bg-slate-50 transition-colors">
 									<SelectValue placeholder={!filters.serviceCity ? 'Önce İl Seçin' : 'İlçe Seçiniz'} />
 								</SelectTrigger>
 								<SelectContent>
@@ -214,7 +210,7 @@ const CarrierFilters = ({ filters, onChange, hideHeader }: CarrierFiltersProps) 
 										<Checkbox
 											id={`scope-${opt.id}`}
 											checked={filters.scopes?.includes(opt.id) ?? false}
-											onCheckedChange={(c) => handleCheckboxChange('scopes', opt.id, c as boolean)}
+											onCheckedChange={() => toggleArrayValue('scopes', opt.id)}
 											className="w-5 h-5 rounded-lg border-[#CBD5E1] data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600"
 										/>
 										<label htmlFor={`scope-${opt.id}`} className="text-sm font-bold text-slate-600 group-hover:text-slate-900 cursor-pointer transition-colors leading-none">
@@ -227,102 +223,114 @@ const CarrierFilters = ({ filters, onChange, hideHeader }: CarrierFiltersProps) 
 					</div>
 				</FilterSection>
 
-				{/* 2. ARAÇ & KAPASİTE */}
-				<FilterSection 
-					icon={<Truck className="h-3.5 w-3.5" />} 
-					title="Araç ve Kapasite"
-				>
-					<div className="space-y-4">
-						<MultiSelect
-							label="Araç Tipleri"
-							placeholder={vehiclesLoading ? "Yükleniyor..." : "Seçiniz"}
-							options={vehicleOptionMap}
-							selectedValues={filters.vehicleTypeIds ?? []}
-							onSelectionChange={handleVehicleTypeMultiChange}
-						/>
-
-						<div className="grid grid-cols-2 gap-3">
-							<div className="space-y-2">
-								<Label className="text-[11px] font-black text-slate-400 uppercase tracking-widest pl-1">Min. (kg)</Label>
-								<Input
-									type="number"
-									placeholder="0"
-									className="h-11 rounded-1.5xl border-[#F1F5F9] bg-white"
-									value={filters.minCapacityKg ?? ''}
-									onChange={e => handleMinCapacityChange(e.target.value)}
-								/>
-							</div>
-							<div className="space-y-2">
-								<Label className="text-[11px] font-black text-slate-400 uppercase tracking-widest pl-1">Maks. (kg)</Label>
-								<Input
-									type="number"
-									placeholder="Max"
-									className="h-11 rounded-1.5xl border-[#F1F5F9] bg-white"
-									value={filters.maxCapacityKg ?? ''}
-									onChange={e => handleMaxCapacityChange(e.target.value)}
-								/>
-							</div>
-						</div>
+				<FilterSection icon={<Package className="h-3.5 w-3.5" />} title="Yük Tipi">
+					<div className="flex flex-wrap gap-2">
+						{LOAD_TYPE_OPTIONS.map(opt => {
+							const active = (filters.loadTypes ?? []).includes(opt.value);
+							return (
+								<button
+									key={opt.value}
+									type="button"
+									aria-pressed={active}
+									onClick={() => toggleArrayValue('loadTypes', opt.value)}
+									className={chipClass(active)}
+								>
+									{active && <Check className="h-3.5 w-3.5" />}
+									{opt.label}
+								</button>
+							);
+						})}
 					</div>
 				</FilterSection>
 
-				{/* 3. SIRALAMA & PUAN */}
-				<FilterSection 
-					icon={<Zap className="h-3.5 w-3.5" />} 
-					title="Sıralama ve Puan"
-				>
-					<div className="space-y-5">
+
+
+				<FilterSection icon={<CalendarDays className="h-3.5 w-3.5" />} title="Müsaitlik">
+					<div className="space-y-2">
+						<Label className="text-[11px] font-black text-slate-400 uppercase tracking-widest pl-1">Bu Tarihte Müsait Olanlar</Label>
+						<Input
+							type="date"
+							min={todayStr}
+							value={filters.availableDate ?? ''}
+							onChange={e => onChange({ ...filters, availableDate: e.target.value || undefined })}
+							className="h-11 rounded-2xl border-[#F1F5F9] bg-white"
+						/>
+						{filters.availableDate && (
+							<button
+								type="button"
+								onClick={() => onChange({ ...filters, availableDate: undefined })}
+								className="text-[11px] font-bold text-slate-400 hover:text-blue-600 underline pl-1 transition-colors"
+							>
+								Tarih filtresini temizle
+							</button>
+						)}
+					</div>
+				</FilterSection>
+
+				<FilterSection icon={<Filter className="h-3.5 w-3.5" />} title="Filtreler">
+					<div className="space-y-4">
+						<button
+							type="button"
+							aria-pressed={highRatingActive}
+							onClick={toggleHighRating}
+							className={`flex w-full items-center justify-between rounded-2xl border px-4 py-3 transition-all duration-200 ${highRatingActive
+								? 'border-blue-600 bg-blue-50/80 text-blue-700 shadow-sm'
+								: 'border-[#F1F5F9] bg-white text-slate-600 hover:border-blue-200'
+							}`}
+						>
+							<span className="flex items-center gap-2.5">
+								<Star className={`h-4 w-4 ${highRatingActive ? 'fill-amber-400 text-amber-400' : 'text-slate-400'}`} />
+								<span className="text-sm font-bold">4+ Puanlı Firmalar</span>
+							</span>
+							{highRatingActive && <Check className="h-4 w-4" />}
+						</button>
+
+
+
 						<div className="space-y-2">
-							<Label className="text-[11px] font-black text-slate-400 uppercase tracking-widest pl-1">Tercih Sıralaması</Label>
-							<Select value={filters.sortBy ?? 'rating'} onValueChange={(v) => onChange({ ...filters, sortBy: v as any })}>
-								<SelectTrigger className="h-11 rounded-1.5xl border-[#F1F5F9] bg-white hover:bg-slate-50 transition-colors">
-									<SelectValue />
-								</SelectTrigger>
-								<SelectContent>
-									{SORT_OPTIONS.map(opt => <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>)}
-								</SelectContent>
-							</Select>
-						</div>
-
-						<div className="flex items-center justify-between px-1">
-							<div className="space-y-0.5">
-								<Label className="text-sm font-bold text-slate-700">Onaylı Hesaplar</Label>
-								<p className="text-[10px] text-slate-400 font-medium">Sadece doğrulanmış profiller</p>
-							</div>
-							<Switch
-								checked={filters.isVerified ?? false}
-								onCheckedChange={(c) => onChange({ ...filters, isVerified: c })}
-								className="data-[state=checked]:bg-blue-600"
-							/>
-						</div>
-
-						<div className="space-y-2 pt-1">
-							<Label className="text-[11px] font-black text-slate-400 uppercase tracking-widest pl-1">Min. Puan</Label>
-							<div className="flex gap-1.5 p-1 bg-slate-50 rounded-2xl border border-[#F1F5F9]">
-								{MIN_RATING_OPTIONS.map(opt => {
-									const isSelected = filters.minRating === opt.value;
+							<Label className="flex items-center gap-1.5 text-[11px] font-black text-slate-400 uppercase tracking-widest pl-1">
+								<Award className="h-3.5 w-3.5" /> Deneyim
+							</Label>
+							<div className="flex flex-wrap gap-2">
+								{MIN_EXPERIENCE_OPTIONS.map(opt => {
+									const active = filters.minExperience === opt.value;
 									return (
 										<button
 											key={opt.value}
-											onClick={() => onChange({ ...filters, minRating: isSelected ? undefined : opt.value })}
-											className={`flex-1 flex flex-col items-center justify-center py-2 rounded-xl transition-all duration-300 ${isSelected
-													? 'bg-white text-blue-600 shadow-sm border border-slate-100 scale-105'
-													: 'text-slate-400 hover:text-slate-600'
-												}`}
+											type="button"
+											aria-pressed={active}
+											onClick={() => handleExperienceChange(opt.value)}
+											className={chipClass(active)}
 										>
-											<Star className={`w-3.5 h-3.5 mb-1 ${isSelected ? 'fill-blue-600' : ''}`} />
-											<span className="text-[10px] font-black tracking-tighter">{opt.label}</span>
+											{active && <Check className="h-3.5 w-3.5" />}
+											{opt.label}
 										</button>
 									);
 								})}
 							</div>
 						</div>
+
+						{isCustomer && (
+							<div className="flex items-center justify-between rounded-2xl border border-[#F1F5F9] bg-white px-4 py-3">
+								<div className="space-y-0.5">
+									<Label className="flex items-center gap-1.5 text-sm font-bold text-slate-700">
+										<Heart className="h-4 w-4 text-red-400" /> Sadece Favorilerim
+									</Label>
+									<p className="text-[10px] text-slate-400 font-medium">Kaydettiğiniz firmalar</p>
+								</div>
+								<Switch
+									checked={filters.favoritesOnly ?? false}
+									onCheckedChange={(c) => onChange({ ...filters, favoritesOnly: c })}
+									className="data-[state=checked]:bg-blue-600"
+								/>
+							</div>
+						)}
 					</div>
 				</FilterSection>
 
-				<Button 
-					variant="secondary" 
-					className="w-full mt-8 bg-[#F8FAFC] text-slate-500 hover:text-blue-600 hover:bg-blue-50 transition-all rounded-2xl h-12 font-bold text-sm shadow-sm" 
+				<Button
+					variant="secondary"
+					className="w-full mt-8 bg-[#F8FAFC] text-slate-500 hover:text-blue-600 hover:bg-blue-50 transition-all rounded-2xl h-12 font-bold text-sm shadow-sm"
 					onClick={resetFilters}
 				>
 					<RotateCcw className="h-4 w-4 mr-2" />
@@ -333,7 +341,6 @@ const CarrierFilters = ({ filters, onChange, hideHeader }: CarrierFiltersProps) 
 	);
 };
 
-/* ── HELPERS: SECTION COMPONENT ── */
 function FilterSection({ icon, title, children }: { icon: React.ReactNode, title: string, children: React.ReactNode }) {
 	return (
 		<div className="space-y-4">

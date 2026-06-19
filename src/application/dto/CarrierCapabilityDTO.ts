@@ -24,6 +24,8 @@ export interface CarrierExtraServiceCapabilityDTO {
   isActive: boolean;
   priceMode: 'NONE' | 'FIXED' | 'QUOTE';
   basePrice?: number;
+  quoteMinPrice?: number;
+  quoteMaxPrice?: number;
   notes?: string;
   createdAt: Date;
   updatedAt: Date;
@@ -50,6 +52,8 @@ export interface UpdateCarrierCapabilityPayload {
   isActive?: boolean;
   priceMode?: 'NONE' | 'FIXED' | 'QUOTE';
   basePrice?: number;
+  quoteMinPrice?: number;
+  quoteMaxPrice?: number;
   notes?: string;
 }
 

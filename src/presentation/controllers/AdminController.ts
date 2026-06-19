@@ -197,7 +197,7 @@ export class AdminController {
 
   getContactFilterLogs = async (req: Request, res: Response): Promise<void> => {
     try {
-      const { page, limit, dateFrom, dateTo, surface, actorType, action, severity, reviewStatus, shipmentId, actorId } = req.query;
+      const { page, limit, dateFrom, dateTo, surface, actorType, action, severity, reviewStatus, shipmentId, offerId, actorId } = req.query;
       const result = await this.adminService.getContactFilterLogs({
         page: page ? Number(page) : 1,
         limit: limit ? Number(limit) : 30,
@@ -209,6 +209,7 @@ export class AdminController {
         severity: severity as string | undefined,
         reviewStatus: reviewStatus as string | undefined,
         shipmentId: shipmentId as string | undefined,
+        offerId: offerId as string | undefined,
         actorId: actorId as string | undefined,
       });
       res.status(200).json({ success: true, data: result });
@@ -295,6 +296,17 @@ export class AdminController {
       res.status(200).json({ success: true, data: result });
     } catch (error: any) {
       res.status(500).json({ success: false, message: error.message || 'Teklifler alınamadı.' });
+    }
+  };
+
+  getOfferDetail = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { offerId } = req.params;
+      const result = await this.adminService.getOfferDetail(offerId);
+      res.status(200).json({ success: true, data: result });
+    } catch (error: any) {
+      const statusCode = typeof error?.statusCode === 'number' ? error.statusCode : 500;
+      res.status(statusCode).json({ success: false, message: error.message || 'Teklif detayı alınamadı.' });
     }
   };
 

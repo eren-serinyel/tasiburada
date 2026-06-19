@@ -1,15 +1,17 @@
-import { ShipmentRepository } from '../../infrastructure/repositories/ShipmentRepository';
+﻿import { ShipmentRepository } from '../../infrastructure/repositories/ShipmentRepository';
+import { OfferRepository } from '../../infrastructure/repositories/OfferRepository';
 import { Shipment, ShipmentStatus, ShipmentCategory, PlaceType, InsuranceType, LoadProfile, AccessDistance, DateFlexibility } from '../../domain/entities/Shipment';
 import { Offer, OfferStatus } from '../../domain/entities/Offer';
 import { ExtraService } from '../../domain/entities/ExtraService';
 import { ExtraServiceLoadType } from '../../domain/entities/ExtraServiceApplicability';
 import { CarrierRepository } from '../../infrastructure/repositories/CarrierRepository';
 import { CarrierStatsRepository } from '../../infrastructure/repositories/CarrierStatsRepository';
+import { Carrier } from '../../domain/entities/Carrier';
+import { CarrierStats } from '../../domain/entities/CarrierStats';
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from '../../domain/errors/AppError';
 import { NotificationService } from './NotificationService';
 import { AppDataSource } from '../../infrastructure/database/data-source';
 import { CarrierEarningsLog } from '../../domain/entities/CarrierEarningsLog';
-import { PlatformSetting } from '../../domain/entities/PlatformSetting';
 import { CustomerCarrierRelationRepository } from '../../infrastructure/repositories/CustomerCarrierRelationRepository';
 import { ScopeOfWorkRepository } from '../../infrastructure/repositories/ScopeOfWorkRepository';
 import { ServiceTypeRepository } from '../../infrastructure/repositories/ServiceTypeRepository';
@@ -98,18 +100,18 @@ interface UpdateShipmentPayload {
 }
 
 const EXTRA_SERVICE_ALIASES: Record<string, string> = {
-  asansor: 'Asansörlü Taşıma',
+  asansor: 'AsansÃ¶rlÃ¼ TaÅŸÄ±ma',
   paketleme: 'Profesyonel Paketleme',
   ambalaj: 'Profesyonel Paketleme',
   profesyonelpaket: 'Profesyonel Paketleme',
   koli: 'Koli/Ambalaj Malzemesi',
   soktak: 'Mobilya Montaj/Demontaj',
   mobilya_montaj: 'Mobilya Montaj/Demontaj',
-  beyaz_esya_montaj: 'Beyaz Eşya Montaj/Demontaj',
-  'Asansörlü Taşıma': 'Asansörlü Taşıma',
+  beyaz_esya_montaj: 'Beyaz EÅŸya Montaj/Demontaj',
+  'AsansÃ¶rlÃ¼ TaÅŸÄ±ma': 'AsansÃ¶rlÃ¼ TaÅŸÄ±ma',
   'Profesyonel Paketleme': 'Profesyonel Paketleme',
   'Mobilya Montaj/Demontaj': 'Mobilya Montaj/Demontaj',
-  'Beyaz Eşya Montaj/Demontaj': 'Beyaz Eşya Montaj/Demontaj',
+  'Beyaz EÅŸya Montaj/Demontaj': 'Beyaz EÅŸya Montaj/Demontaj',
   'Koli/Ambalaj Malzemesi': 'Koli/Ambalaj Malzemesi',
 };
 
@@ -153,10 +155,10 @@ type ShipmentConverterSummary = {
 
 export class ShipmentService {
   private shipmentRepository = new ShipmentRepository();
+  private offerRepository = new OfferRepository();
   private carrierRepository = new CarrierRepository();
   private carrierStatsRepository = new CarrierStatsRepository();
   private notificationService = new NotificationService();
-  private earningsLogRepo = AppDataSource.getRepository(CarrierEarningsLog);
   private scopeOfWorkRepository = new ScopeOfWorkRepository();
   private serviceTypeRepository = new ServiceTypeRepository();
   private platformPolicy = new PlatformPolicyService();
@@ -164,22 +166,23 @@ export class ShipmentService {
 
   private ensureStatusTransition(current: ShipmentStatus, next: ShipmentStatus): void {
     const validTransitions: Record<ShipmentStatus, ShipmentStatus[]> = {
-      [ShipmentStatus.PENDING]: [ShipmentStatus.OFFER_RECEIVED, ShipmentStatus.MATCHED, ShipmentStatus.CANCELLED],
-      [ShipmentStatus.OFFER_RECEIVED]: [ShipmentStatus.MATCHED, ShipmentStatus.CANCELLED],
+      [ShipmentStatus.PENDING]: [ShipmentStatus.OFFER_RECEIVED, ShipmentStatus.MATCHED, ShipmentStatus.CANCELLED, ShipmentStatus.EXPIRED],
+      [ShipmentStatus.OFFER_RECEIVED]: [ShipmentStatus.MATCHED, ShipmentStatus.CANCELLED, ShipmentStatus.EXPIRED],
       [ShipmentStatus.MATCHED]: [ShipmentStatus.IN_TRANSIT, ShipmentStatus.CANCELLED],
       [ShipmentStatus.IN_TRANSIT]: [ShipmentStatus.COMPLETED],
       [ShipmentStatus.COMPLETED]: [],
-      [ShipmentStatus.CANCELLED]: []
+      [ShipmentStatus.CANCELLED]: [],
+      [ShipmentStatus.EXPIRED]: []
     };
 
     const allowed = validTransitions[current] || [];
     if (!allowed.includes(next)) {
-      throw new ValidationError(`Bu işlem şu anki durum (${current}) için geçersizdir. Hedef durum: ${next}.`);
+      throw new ValidationError(`Bu iÅŸlem ÅŸu anki durum (${current}) iÃ§in geÃ§ersizdir. Hedef durum: ${next}.`);
     }
   }
 
   private extractCity(address: string): string {
-    // "İstanbul, Kadıköy" → "İstanbul" ; "Ankara" → "Ankara"
+    // "Ä°stanbul, KadÄ±kÃ¶y" â†’ "Ä°stanbul" ; "Ankara" â†’ "Ankara"
     return address.split(',')[0].trim();
   }
 
@@ -230,6 +233,15 @@ export class ShipmentService {
     return this.normalizeExtraServiceInputs(extraServices);
   }
 
+  async expireStale(): Promise<{ shipments: number; offers: number }> {
+    const [shipments, offers] = await Promise.all([
+      this.shipmentRepository.expireStaleOpenShipments(),
+      this.offerRepository.expireStalePendingOffers(),
+    ]);
+
+    return { shipments, offers };
+  }
+
   private resolveExtraServiceLoadType(
     shipmentCategory?: ShipmentCategory | string | null,
     transportType?: string | null,
@@ -271,7 +283,7 @@ export class ShipmentService {
     const safeFirstName = firstName?.trim() ?? '';
     const safeLastName = lastName?.trim() ?? '';
 
-    if (!safeFirstName && !safeLastName) return 'Müşteri';
+    if (!safeFirstName && !safeLastName) return 'MÃ¼ÅŸteri';
     if (!safeLastName) return safeFirstName;
 
     const last = safeLastName.split(/\s+/)[0] ?? '';
@@ -378,7 +390,7 @@ export class ShipmentService {
 
       const missingServices = normalizedNames.filter(name => !existingByName.has(name));
     if (missingServices.length > 0) {
-      throw new ValidationError(`Tanımsız ek hizmet(ler): ${missingServices.join(', ')}`);
+      throw new ValidationError(`TanÄ±msÄ±z ek hizmet(ler): ${missingServices.join(', ')}`);
     }
 
     const targetIds = normalizedNames.map(name => existingByName.get(name)!.id);
@@ -468,6 +480,8 @@ export class ShipmentService {
   }
 
   async getPendingShipmentsForCarrier(carrierId: string): Promise<PendingShipmentListItem[]> {
+    await this.expireStale();
+
     const carrier = await this.matchingService.getCarrierForMatching(carrierId);
     const shipments = await this.shipmentRepository.findPendingShipmentsForCarrier(carrierId);
     const matchingShipments = shipments.filter(shipment =>
@@ -483,8 +497,8 @@ export class ShipmentService {
     const cooldownCustomerIds = await this.platformPolicy.getActiveCooldownCustomerIdsForCarrier(carrierId, customerIds);
     const visibleShipments = matchingShipments.filter((shipment) => !cooldownCustomerIds.has(shipment.customerId));
 
-    // ANTI-DISINTERMEDIATION: contactPhone ve müşteri PII maskeleme
-    // Bekleyen talepleri listelerken carrier iletişim bilgisi göremez
+    // ANTI-DISINTERMEDIATION: contactPhone ve mÃ¼ÅŸteri PII maskeleme
+    // Bekleyen talepleri listelerken carrier iletiÅŸim bilgisi gÃ¶remez
     return visibleShipments.map(s => {
       s.contactPhone = null as any;
       this.maskOpenAddressForCarrier(s, false);
@@ -522,24 +536,24 @@ export class ShipmentService {
 
   async createShipment(customerId: string, payload: CreateShipmentPayload): Promise<Shipment> {
     if (!payload.origin || !payload.destination || !payload.loadDetails || !payload.shipmentDate) {
-      throw new ValidationError('origin, destination, loadDetails ve shipmentDate alanları zorunludur.');
+      throw new ValidationError('origin, destination, loadDetails ve shipmentDate alanlarÄ± zorunludur.');
     }
 
     const origin = payload.origin.trim();
     const destination = payload.destination.trim();
 
     if (origin.length < 3) {
-      throw new ValidationError('Çıkış noktası en az 3 karakter olmalıdır.');
+      throw new ValidationError('Ã‡Ä±kÄ±ÅŸ noktasÄ± en az 3 karakter olmalÄ±dÄ±r.');
     }
     if (destination.length < 3) {
-      throw new ValidationError('Varış noktası en az 3 karakter olmalıdır.');
+      throw new ValidationError('VarÄ±ÅŸ noktasÄ± en az 3 karakter olmalÄ±dÄ±r.');
     }
 
     const shipmentDate = new Date(payload.shipmentDate);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     if (shipmentDate < today) {
-      throw new ValidationError('Taşıma tarihi geçmiş bir tarih olamaz.');
+      throw new ValidationError('TaÅŸÄ±ma tarihi geÃ§miÅŸ bir tarih olamaz.');
     }
 
     await this.platformPolicy.enforceNoContactInfo({
@@ -555,7 +569,7 @@ export class ShipmentService {
       text: payload.note,
     });
 
-    // BR3 — Çift İlan Engeli:
+    // BR3 â€” Ã‡ift Ä°lan Engeli:
     const originCity = payload.originCity ?? (origin ? this.extractCity(origin) : '');
     const destinationCity = payload.destinationCity ?? (destination ? this.extractCity(destination) : '');
     const originDistrict = payload.originDistrict ?? this.extractDistrict(origin);
@@ -563,7 +577,7 @@ export class ShipmentService {
 
     const duplicate = await this.shipmentRepository.findDuplicateShipment(customerId, originCity, destinationCity, originDistrict, destinationDistrict, shipmentDate);
     if (duplicate) {
-      throw new ConflictError('Bu rota için aktif ilanınız bulunuyor');
+      throw new ConflictError('Bu rota iÃ§in aktif ilanÄ±nÄ±z bulunuyor');
     }
 
         // Uygulama: reuseSavedAddresses
@@ -640,7 +654,7 @@ export class ShipmentService {
     const originCity = shipment.originCity ?? this.extractCity(shipment.origin);
     const destCity = shipment.destinationCity ?? this.extractCity(shipment.destination);
     const isSameCity = originCity.toLowerCase() === destCity.toLowerCase();
-    const scopeName = isSameCity ? 'Şehir İçi' : 'Şehirlerarası';
+    const scopeName = isSameCity ? 'Åehir Ä°Ã§i' : 'ÅehirlerarasÄ±';
 
     // Resolve scope ID
     const scopes = await this.scopeOfWorkRepository.findAll();
@@ -650,10 +664,13 @@ export class ShipmentService {
     // Service type matching is handled via carrier's serviceTypeLinks
     let serviceTypeIds: string[] = [];
 
-        const { items } = await this.carrierRepository.searchCarriers({
+    const loadType = inferExtraServiceLoadTypeFromShipmentCategory(shipment.shipmentCategory);
+
+    const { items } = await this.carrierRepository.searchCarriers({
       serviceCity: originCity,
       scopeIds,
       serviceTypeIds,
+      loadTypes: loadType ? [loadType] : [],
       isVerified: preferVerified ? true : undefined,
       hasDocuments: true,
       limit: 30,
@@ -670,7 +687,7 @@ export class ShipmentService {
           'carrier',
           'NEW_MATCHING_REQUEST',
           'Yeni Uygun Talep',
-          `${shipment.origin} → ${shipment.destination} arasında yeni bir taşıma talebi var. Teklif vermek için inceleyin.`,
+          `${shipment.origin} â†’ ${shipment.destination} arasÄ±nda yeni bir taÅŸÄ±ma talebi var. Teklif vermek iÃ§in inceleyin.`,
           shipment.id
         );
       } catch { /* individual notification failure should not block others */ }
@@ -678,6 +695,8 @@ export class ShipmentService {
   }
 
   async getMyShipments(customerId: string): Promise<Array<Shipment & { offerCount: number }>> {
+    await this.expireStale();
+
     const shipments = await this.shipmentRepository.findByCustomerIdWithOfferCount(customerId);
     return shipments.map(shipment => {
       const normalized = this.flattenExtraServices(shipment as Shipment & { offerCount: number });
@@ -693,20 +712,20 @@ export class ShipmentService {
     const shipment = await this.shipmentRepository.findByIdWithOffers(shipmentId);
 
     if (!shipment) {
-      throw new NotFoundError('Taşıma talebi bulunamadı.');
+      throw new NotFoundError('TaÅŸÄ±ma talebi bulunamadÄ±.');
     }
 
     this.flattenExtraServices(shipment);
 
-    // Admin her gönderiyi görebilir
+    // Admin her gÃ¶nderiyi gÃ¶rebilir
     if (requestingUserType === 'admin') {
       return this.attachShipmentConverterSummary(shipment);
     }
 
-    // Müşteri: sadece kendi gönderisini görebilir
+    // MÃ¼ÅŸteri: sadece kendi gÃ¶nderisini gÃ¶rebilir
     if (requestingUserType === 'customer') {
       if (shipment.customerId !== requestingUserId) {
-        throw new ForbiddenError('Bu gönderiye erişim yetkiniz yok.');
+        throw new ForbiddenError('Bu gÃ¶nderiye eriÅŸim yetkiniz yok.');
       }
       const canViewCarrierContact = this.platformPolicy.shouldRevealDirectContact(shipment, 'customer', requestingUserId);
       this.maskOfferCarriers(shipment);
@@ -722,7 +741,7 @@ export class ShipmentService {
       return this.attachShipmentConverterSummary(shipment);
     }
 
-    // A) ShipmentService.getById() — requester tipine göre maskeleme:
+    // A) ShipmentService.getById() â€” requester tipine gÃ¶re maskeleme:
     if (requestingUserType === 'carrier') {
       const isAssigned = shipment.carrierId === requestingUserId;
       const canViewDetails = isAssigned && this.platformPolicy.shouldRevealDirectContact(shipment, 'carrier', requestingUserId);
@@ -743,7 +762,7 @@ export class ShipmentService {
         } as any;
       }
 
-      // ANTI-DISINTERMEDIATION: contactPhone ve açık adres maskesi — atanmamış carrier göremez
+      // ANTI-DISINTERMEDIATION: contactPhone ve aÃ§Ä±k adres maskesi â€” atanmamÄ±ÅŸ carrier gÃ¶remez
       if (!canViewDetails) {
         shipment.contactPhone = null as any;
       }
@@ -756,17 +775,17 @@ export class ShipmentService {
       return this.attachShipmentConverterSummary(shipment);
     }
 
-    throw new ForbiddenError('Bu gönderiye erişim yetkiniz yok.');
+    throw new ForbiddenError('Bu gÃ¶nderiye eriÅŸim yetkiniz yok.');
   }
 
   async updateShipment(customerId: string, shipmentId: string, payload: UpdateShipmentPayload): Promise<Shipment> {
     const shipment = await this.shipmentRepository.findByIdAndCustomerId(shipmentId, customerId);
     if (!shipment) {
-      throw new NotFoundError('Taşıma talebi bulunamadı.');
+      throw new NotFoundError('TaÅŸÄ±ma talebi bulunamadÄ±.');
     }
 
     if (shipment.status !== ShipmentStatus.PENDING) {
-      throw new ValidationError('Sadece bekleyen taşıma talepleri güncellenebilir.');
+      throw new ValidationError('Sadece bekleyen taÅŸÄ±ma talepleri gÃ¼ncellenebilir.');
     }
 
     await this.platformPolicy.enforceNoContactInfo({
@@ -829,41 +848,92 @@ export class ShipmentService {
     }
 
     if (!updatedShipment) {
-      throw new ValidationError('Taşıma talebi güncellenemedi.');
+      throw new ValidationError('TaÅŸÄ±ma talebi gÃ¼ncellenemedi.');
     }
 
     return updatedShipment;
   }
 
   async cancel(customerId: string, shipmentId: string, reason?: string, note?: string): Promise<Shipment> {
-    const shipment = await this.shipmentRepository.findByIdAndCustomerId(shipmentId, customerId);
-    if (!shipment) {
-      throw new NotFoundError('Taşıma talebi bulunamadı.');
-    }
-
-    // C) Status transition guard: Geçersiz geçiş → 422
-    this.ensureStatusTransition(shipment.status, ShipmentStatus.CANCELLED);
-
     const fullReason = note ? `${reason} (${note})` : reason;
-    const shouldCreateCooldown = this.platformPolicy.shouldCreateCancellationCooldown(shipment, fullReason);
 
-    // D) ShipmentService.cancel():
-    // MATCHED → offer CANCELLED + carrier notification
-    if (shipment.status === ShipmentStatus.MATCHED && shipment.carrierId) {
-      const offerRepo = AppDataSource.getRepository(Offer);
-      await offerRepo
-        .createQueryBuilder()
-        .update(Offer)
-        .set({ status: OfferStatus.CANCELLED })
-        .where('shipmentId = :shipmentId', { shipmentId: shipment.id })
-        .andWhere('status = :accepted', { accepted: OfferStatus.ACCEPTED })
-        .execute();
+    const { cancelledShipment, originalShipment, notifyCarrierId, shouldCreateCooldown } =
+      await AppDataSource.manager.transaction(async (manager) => {
+        const shipment = await manager
+          .createQueryBuilder(Shipment, 'shipment')
+          .setLock('pessimistic_write')
+          .select([
+            'shipment.id',
+            'shipment.customerId',
+            'shipment.carrierId',
+            'shipment.status',
+            'shipment.cancellationReason',
+            'shipment.matchedAt',
+            'shipment.createdAt',
+            'shipment.updatedAt',
+          ])
+          .where('shipment.id = :shipmentId', { shipmentId })
+          .andWhere('shipment.customerId = :customerId', { customerId })
+          .getOne();
 
-      await this.carrierRepository.incrementCancelledShipments(shipment.carrierId);
-      await this.carrierRepository.recalculateSuccessRate(shipment.carrierId);
+        if (!shipment) {
+          throw new NotFoundError('Taşıma talebi bulunamadı.');
+        }
 
+        this.ensureStatusTransition(shipment.status, ShipmentStatus.CANCELLED);
+
+        const originalShipment = { ...shipment } as Shipment;
+        const shouldCreateCooldown = this.platformPolicy.shouldCreateCancellationCooldown(originalShipment, fullReason);
+        const notifyCarrierId = shipment.status === ShipmentStatus.MATCHED ? shipment.carrierId : null;
+
+        if (shipment.status === ShipmentStatus.MATCHED && shipment.carrierId) {
+          await manager
+            .createQueryBuilder()
+            .update(Offer)
+            .set({ status: OfferStatus.CANCELLED })
+            .where('shipmentId = :shipmentId', { shipmentId: shipment.id })
+            .andWhere('status = :accepted', { accepted: OfferStatus.ACCEPTED })
+            .execute();
+
+          await manager
+            .createQueryBuilder()
+            .update(Carrier)
+            .set({
+              cancelledShipments: () => 'cancelledShipments + 1',
+              acceptedOffers: () => 'GREATEST(acceptedOffers - 1, 0)',
+            })
+            .where('id = :carrierId', { carrierId: shipment.carrierId })
+            .execute();
+
+          await manager
+            .createQueryBuilder()
+            .update(Carrier)
+            .set({
+              successRate: () => 'CASE WHEN acceptedOffers > 0 THEN ROUND((completedShipments / acceptedOffers) * 100, 2) ELSE 0 END',
+            })
+            .where('id = :carrierId', { carrierId: shipment.carrierId })
+            .execute();
+        }
+
+        // If IN_TRANSIT cancellation is allowed in the future, decrement carrier_stats.activeJobs here.
+        shipment.status = ShipmentStatus.CANCELLED;
+        shipment.cancellationReason = fullReason || null;
+        await manager.update(Shipment, { id: shipmentId }, {
+          status: ShipmentStatus.CANCELLED,
+          cancellationReason: fullReason || null,
+        });
+
+        return {
+          cancelledShipment: shipment,
+          originalShipment,
+          notifyCarrierId,
+          shouldCreateCooldown,
+        };
+      });
+
+    if (notifyCarrierId) {
       this.notificationService.createNotification(
-        shipment.carrierId,
+        notifyCarrierId,
         'carrier',
         'SHIPMENT_CANCELLED',
         'Taşıma İptal Edildi',
@@ -872,30 +942,20 @@ export class ShipmentService {
       ).catch(() => { });
     }
 
-    const cancelledShipment = await this.shipmentRepository.update(shipmentId, {
-      status: ShipmentStatus.CANCELLED,
-      cancellationReason: fullReason || null
-    });
-
-    if (!cancelledShipment) {
-      throw new ValidationError('Taşıma talebi iptal edilemedi.');
-    }
-
     if (shouldCreateCooldown) {
-      await this.platformPolicy.createCancellationCooldown(shipment, fullReason);
+      await this.platformPolicy.createCancellationCooldown(originalShipment, fullReason).catch(() => { });
     }
 
     return cancelledShipment;
   }
-
   async startShipmentByCarrier(carrierId: string, shipmentId: string): Promise<Shipment> {
     const shipment = await this.shipmentRepository.findById(shipmentId);
     if (!shipment) {
-      throw new NotFoundError('Taşıma talebi bulunamadı.');
+      throw new NotFoundError('TaÅŸÄ±ma talebi bulunamadÄ±.');
     }
 
     if (shipment.carrierId !== carrierId) {
-      throw new ForbiddenError('Bu taşıma talebini başlatma yetkiniz yok.');
+      throw new ForbiddenError('Bu taÅŸÄ±ma talebini baÅŸlatma yetkiniz yok.');
     }
 
     this.ensureStatusTransition(shipment.status, ShipmentStatus.IN_TRANSIT);
@@ -907,14 +967,14 @@ export class ShipmentService {
     );
 
     if (!transitioned) {
-      throw new ValidationError('Taşıma durumu değiştirilemedi. Lütfen tekrar deneyin.');
+      throw new ValidationError('TaÅŸÄ±ma durumu deÄŸiÅŸtirilemedi. LÃ¼tfen tekrar deneyin.');
     }
 
     await this.carrierStatsRepository.incrementActiveJobs(carrierId, 1);
 
     const updatedShipment = await this.shipmentRepository.findById(shipmentId);
     if (!updatedShipment) {
-      throw new NotFoundError('Taşıma başlatıldı ancak kayıt getirilemedi.');
+      throw new NotFoundError('TaÅŸÄ±ma baÅŸlatÄ±ldÄ± ancak kayÄ±t getirilemedi.');
     }
 
     try {
@@ -930,74 +990,102 @@ export class ShipmentService {
           updatedShipment.customerId,
           'customer',
           'SHIPMENT_STARTED',
-          'Taşımanız Başladı',
-          'Nakliyeci taşımanızı başlattı. Teslimatı takip edebilirsiniz.',
+          'TaÅŸÄ±manÄ±z BaÅŸladÄ±',
+          'Nakliyeci taÅŸÄ±manÄ±zÄ± baÅŸlattÄ±. TeslimatÄ± takip edebilirsiniz.',
           shipmentId
         );
       }
-    } catch { /* bildirim hatası taşımayı etkilemesin */ }
+    } catch { /* bildirim hatasÄ± taÅŸÄ±mayÄ± etkilemesin */ }
 
     return updatedShipment;
   }
 
   async completeShipmentByCarrier(carrierId: string, shipmentId: string): Promise<Shipment> {
-    const shipment = await this.shipmentRepository.findById(shipmentId);
-    if (!shipment) {
-      throw new NotFoundError('Taşıma talebi bulunamadı.');
-    }
+    const updatedShipment = await AppDataSource.manager.transaction(async (manager) => {
+      const shipment = await manager
+        .createQueryBuilder(Shipment, 'shipment')
+        .setLock('pessimistic_write')
+        .select([
+          'shipment.id',
+          'shipment.customerId',
+          'shipment.carrierId',
+          'shipment.status',
+          'shipment.price',
+        ])
+        .where('shipment.id = :shipmentId', { shipmentId })
+        .getOne();
+      if (!shipment) {
+        throw new NotFoundError('TaÅŸÄ±ma talebi bulunamadÄ±.');
+      }
 
-    if (shipment.carrierId !== carrierId) {
-      throw new ForbiddenError('Bu taşıma talebini tamamlama yetkiniz yok.');
-    }
+      if (shipment.carrierId !== carrierId) {
+        throw new ForbiddenError('Bu taÅŸÄ±ma talebini tamamlama yetkiniz yok.');
+      }
 
-    this.ensureStatusTransition(shipment.status, ShipmentStatus.COMPLETED);
+      this.ensureStatusTransition(shipment.status, ShipmentStatus.COMPLETED);
 
-    const transitioned = await this.shipmentRepository.transitionStatusIfCurrent(
-      shipmentId,
-      shipment.status,
-      ShipmentStatus.COMPLETED
-    );
+      shipment.status = ShipmentStatus.COMPLETED;
+      await manager.update(Shipment, { id: shipmentId }, { status: ShipmentStatus.COMPLETED });
+      const savedShipment = shipment;
 
-    if (!transitioned) {
-      throw new ValidationError('Taşıma durumu değiştirilemedi. Lütfen tekrar deneyin.');
-    }
+      await manager
+        .createQueryBuilder()
+        .update(Carrier)
+        .set({ completedShipments: () => 'completedShipments + 1' })
+        .where('id = :carrierId', { carrierId })
+        .execute();
 
-    await this.carrierRepository.incrementCompletedShipments(carrierId);
-    await this.carrierRepository.recalculateSuccessRate(carrierId);
-    await this.carrierStatsRepository.incrementTotalJobs(carrierId, 1);
-    await this.carrierStatsRepository.incrementActiveJobs(carrierId, -1);
+      await manager
+        .createQueryBuilder()
+        .update(Carrier)
+        .set({
+          successRate: () => 'CASE WHEN acceptedOffers > 0 THEN ROUND((completedShipments / acceptedOffers) * 100, 2) ELSE 0 END',
+        })
+        .where('id = :carrierId', { carrierId })
+        .execute();
 
-    const updatedShipment = await this.shipmentRepository.findById(shipmentId);
-    if (updatedShipment?.price && Number(updatedShipment.price) > 0) {
-      try {
-        // 1-D: Komisyon hesaplama
-        const settingRepo = AppDataSource.getRepository(PlatformSetting);
-        const commissionSetting = await settingRepo.findOne({ where: { key: 'platform_commission' } });
-        const minSetting = await settingRepo.findOne({ where: { key: 'min_commission_amount' } });
-        const rate = Number(commissionSetting?.value ?? 10) / 100;
-        const minAmount = Number(minSetting?.value ?? 50);
+      await manager
+        .createQueryBuilder()
+        .insert()
+        .into(CarrierStats)
+        .values({ carrierId })
+        .orIgnore()
+        .execute();
+
+      await manager
+        .createQueryBuilder()
+        .update(CarrierStats)
+        .set({
+          totalJobs: () => 'GREATEST(totalJobs + 1, 0)',
+          activeJobs: () => 'GREATEST(activeJobs - 1, 0)',
+        })
+        .where('carrierId = :carrierId', { carrierId })
+        .execute();
+
+      const updatedShipment = savedShipment;
+      if (updatedShipment.price && Number(updatedShipment.price) > 0) {
         const gross = Number(updatedShipment.price);
-        const commissionAmount = Math.max(gross * rate, minAmount);
-        const netAmount = gross - commissionAmount;
+        const { netAmount } = await this.platformPolicy.computeCommission(gross, manager);
 
-        const log = this.earningsLogRepo.create({
+        const log = manager.create(CarrierEarningsLog, {
           carrierId,
           shipmentId,
           amount: netAmount,
         });
-        await this.earningsLogRepo.save(log);
+        await manager.save(CarrierEarningsLog, log);
 
-        await this.carrierStatsRepository.incrementTotalEarnings(carrierId, netAmount);
-      } catch (err) {
-        // EarningsLog başarısız olsa bile taşıma tamamlansın
-        console.error('[ShipmentService] EarningsLog error:', err);
+        await manager
+          .createQueryBuilder()
+          .update(CarrierStats)
+          .set({ totalEarnings: () => `totalEarnings + (${netAmount})` })
+          .where('carrierId = :carrierId', { carrierId })
+          .execute();
       }
-    }
-    if (!updatedShipment) {
-      throw new NotFoundError('Taşıma tamamlandı ancak kayıt getirilemedi.');
-    }
 
-    // CustomerCarrierRelation güncelle
+      return updatedShipment;
+    });
+
+    // CustomerCarrierRelation gÃ¼ncelle
     if (updatedShipment.carrierId && updatedShipment.customerId) {
       try {
         await CustomerCarrierRelationRepository.upsertRelation(
@@ -1005,7 +1093,7 @@ export class ShipmentService {
           updatedShipment.carrierId,
           shipmentId
         );
-      } catch { /* relation hatası taşımayı etkilemesin */ }
+      } catch { /* relation hatasÄ± taÅŸÄ±mayÄ± etkilemesin */ }
     }
 
     try {
@@ -1022,12 +1110,12 @@ export class ShipmentService {
           updatedShipment.customerId,
           'customer',
           'SHIPMENT_COMPLETED',
-          'Taşımanız Tamamlandı',
-          'Eşyalarınız teslim edildi. Lütfen nakliyeciyi değerlendirin.',
+          'TaÅŸÄ±manÄ±z TamamlandÄ±',
+          'EÅŸyalarÄ±nÄ±z teslim edildi. LÃ¼tfen nakliyeciyi deÄŸerlendirin.',
           shipmentId
         );
       }
-    } catch { /* bildirim hatası taşımayı etkilemesin */ }
+    } catch { /* bildirim hatasÄ± taÅŸÄ±mayÄ± etkilemesin */ }
 
     return updatedShipment;
   }
@@ -1059,7 +1147,7 @@ export class ShipmentService {
 
     const [shipments, total] = await qb.getManyAndCount();
 
-    // ANTI-DISINTERMEDIATION: Arama sonuçlarında PII maskeleme
+    // ANTI-DISINTERMEDIATION: Arama sonuÃ§larÄ±nda PII maskeleme
     const masked = shipments.map(s => {
       s.contactPhone = null as any;
       this.maskOpenAddressForCarrier(s, false);
@@ -1081,41 +1169,6 @@ export class ShipmentService {
     });
 
     return { shipments: masked.map(s => this.flattenExtraServices(s)), total };
-  }
-
-  async assignCarrier(
-    shipmentId: string,
-    carrierId: string,
-    requestingCustomerId: string
-  ): Promise<Shipment> {
-    const shipment = await this.shipmentRepository.findById(shipmentId, {
-      relations: ['extraServices'],
-    });
-    if (!shipment) throw new NotFoundError('Taşıma bulunamadı');
-
-    // Ownership kontrolü
-    if (shipment.customerId !== requestingCustomerId) {
-      throw new ForbiddenError('Bu gönderiye nakliyeci atama yetkiniz yok.');
-    }
-
-    if (![ShipmentStatus.PENDING, ShipmentStatus.OFFER_RECEIVED].includes(shipment.status)) {
-      throw new ConflictError('Bu tasima talebi artik nakliyeci atamaya acik degil.');
-    }
-
-    const carrier = await this.matchingService.getCarrierForMatching(carrierId);
-    if (!this.matchingService.isShipmentMatchingCarrier(shipment, carrier)) {
-      throw new ForbiddenError('Bu nakliyeci bu tasima talebi icin uygun degil.');
-    }
-
-    await this.platformPolicy.assertNoActiveCooldown(requestingCustomerId, carrierId);
-
-    const updated = await this.shipmentRepository.assignCarrierIfOpen(shipmentId, carrierId);
-
-    if (!updated) {
-      throw new ConflictError('Bu tasima talebi artik nakliyeci atamaya acik degil.');
-    }
-
-    return updated;
   }
 
 }

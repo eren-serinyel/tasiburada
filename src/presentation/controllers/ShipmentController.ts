@@ -228,29 +228,4 @@ export class ShipmentController {
     }
   };
 
-  assignCarrier = async (req: Request, res: Response): Promise<void> => {
-    try {
-      const { id } = req.params;
-      const { carrierId } = req.body;
-      const customerId = req.user?.customerId;
-
-      if (!customerId) {
-        res.status(401).json({ success: false, message: 'Yetkisiz erişim.' });
-        return;
-      }
-
-      if (!carrierId) {
-        res.status(400).json({ success: false, message: 'carrierId zorunlu' });
-        return;
-      }
-      const shipment = await this.shipmentService.assignCarrier(id, carrierId, customerId);
-      res.status(200).json({ success: true, data: shipment });
-    } catch (error: any) {
-      let statusCode = 400;
-      if (error.message?.includes('bulunamadı')) statusCode = 404;
-      else if (error.message?.includes('yetkiniz yok') || error.message?.includes('Yetkisiz')) statusCode = 403;
-      res.status(statusCode).json({ success: false, message: error.message || 'Nakliyeci atanamadı.' });
-    }
-  };
-
 }

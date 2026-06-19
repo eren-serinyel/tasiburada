@@ -18,7 +18,7 @@ import { NotificationService } from './NotificationService';
 import { CarrierApprovalService } from './carrier/CarrierApprovalService';
 import { ContactSafetyService } from './contact-safety/ContactSafetyService';
 import * as bcrypt from 'bcryptjs';
-import { ValidationError } from '../../domain/errors/AppError';
+import { NotFoundError, ValidationError } from '../../domain/errors/AppError';
 
 export interface ContactFilterLogDto {
   id: number;
@@ -48,6 +48,7 @@ interface ContactFilterLogsParams {
   severity?: string;
   reviewStatus?: string;
   shipmentId?: string;
+  offerId?: string;
   actorId?: string;
 }
 
@@ -126,6 +127,7 @@ export class AdminService {
       severity?: string;
       reviewStatus?: string;
       shipmentId?: string;
+      offerId?: string;
       actorId?: string;
     },
   ): void {
@@ -153,9 +155,30 @@ export class AdminService {
     if (params.shipmentId) {
       qb.andWhere('log.shipmentId = :shipmentId', { shipmentId: params.shipmentId });
     }
+    if (params.offerId) {
+      qb.andWhere('log.offerId = :offerId', { offerId: params.offerId });
+    }
     if (params.actorId) {
       qb.andWhere('log.actorId = :actorId', { actorId: params.actorId });
     }
+  }
+
+  private toContactFilterLogDto(row: ContactFilterLog): ContactFilterLogDto {
+    return {
+      id: row.id,
+      createdAt: row.createdAt,
+      actorType: row.actorType,
+      actorId: row.actorId,
+      surface: row.surface,
+      shipmentId: row.shipmentId,
+      offerId: row.offerId,
+      action: row.action,
+      severity: row.severity,
+      riskScore: row.riskScore,
+      reviewStatus: row.reviewStatus,
+      matchedRules: Array.isArray(row.matchedRules) ? row.matchedRules : [],
+      textHashPreview: row.textHash ? `${row.textHash.slice(0, 12)}…` : '',
+    };
   }
 
   // ─── Dashboard ─────────────────────────────────────────────────────────────
@@ -505,6 +528,7 @@ export class AdminService {
       severity,
       reviewStatus,
       shipmentId,
+      offerId,
       actorId,
     } = params;
 
@@ -535,27 +559,13 @@ export class AdminService {
       severity,
       reviewStatus,
       shipmentId,
+      offerId,
       actorId,
     });
 
     const [rows, total] = await qb.getManyAndCount();
 
-    const data: ContactFilterLogDto[] = rows.map((row) => ({
-      id: row.id,
-      createdAt: row.createdAt,
-      actorType: row.actorType,
-      actorId: row.actorId,
-      surface: row.surface,
-      shipmentId: row.shipmentId,
-      offerId: row.offerId,
-      action: row.action,
-      severity: row.severity,
-      riskScore: row.riskScore,
-      reviewStatus: row.reviewStatus,
-      matchedRules: Array.isArray(row.matchedRules) ? row.matchedRules : [],
-      // Expose only first 12 hex chars — raw text is never stored
-      textHashPreview: row.textHash ? `${row.textHash.slice(0, 12)}…` : '',
-    }));
+    const data = rows.map((row) => this.toContactFilterLogDto(row));
 
     return { data, total, page: safePage, limit: safeLimit };
   }
@@ -807,12 +817,50 @@ export class AdminService {
         const { passwordHash, ...rest } = o.carrier as any;
         o.carrier = rest;
       }
+      if (o.shipment?.customer) {
+        const { passwordHash, resetToken, resetTokenExpiry, verificationToken, ...customer } = o.shipment.customer as any;
+        o.shipment.customer = customer;
+      }
       return o;
     });
 
     return {
       offers: sanitized,
       pagination: { total, page, limit, totalPages: Math.ceil(total / limit) },
+    };
+  }
+
+  async getOfferDetail(offerId: string) {
+    const offer = await AppDataSource.getRepository(Offer)
+      .createQueryBuilder('offer')
+      .leftJoinAndSelect('offer.shipment', 'shipment')
+      .leftJoinAndSelect('shipment.customer', 'customer')
+      .leftJoinAndSelect('offer.carrier', 'carrier')
+      .where('offer.id = :offerId', { offerId })
+      .getOne();
+
+    if (!offer) {
+      throw new NotFoundError('Teklif bulunamadı.');
+    }
+
+    if (offer.carrier) {
+      const { passwordHash, resetToken, resetTokenExpiry, verificationToken, ...carrier } = offer.carrier as any;
+      offer.carrier = carrier;
+    }
+    if (offer.shipment?.customer) {
+      const { passwordHash, resetToken, resetTokenExpiry, verificationToken, ...customer } = offer.shipment.customer as any;
+      offer.shipment.customer = customer;
+    }
+
+    const contactLogs = await AppDataSource.getRepository(ContactFilterLog)
+      .createQueryBuilder('log')
+      .where('log.offerId = :offerId', { offerId })
+      .orderBy('log.createdAt', 'DESC')
+      .getMany();
+
+    return {
+      offer,
+      contactLogs: contactLogs.map((log) => this.toContactFilterLogDto(log)),
     };
   }
 

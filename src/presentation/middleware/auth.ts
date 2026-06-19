@@ -62,6 +62,38 @@ export const authenticateToken = (req: Request, res: Response, next: NextFunctio
   }
 };
 
+export const optionalAuthenticateToken = (req: Request, res: Response, next: NextFunction): void => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    next();
+    return;
+  }
+
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET!) as JwtPayload;
+    req.user = decoded;
+    if (decoded.carrierId) {
+      req.carrierId = decoded.carrierId;
+    }
+    next();
+  } catch (error: unknown) {
+    if (error instanceof jwt.TokenExpiredError) {
+      res.status(401).json({
+        success: false,
+        message: 'Oturumunuz sona erdi.'
+      });
+      return;
+    }
+
+    res.status(401).json({
+      success: false,
+      message: 'Geçersiz token.'
+    });
+  }
+};
+
 export const authenticateCustomer = (req: Request, res: Response, next: NextFunction): void => {
   authenticateToken(req, res, () => {
     if (req.user?.type !== 'customer') {

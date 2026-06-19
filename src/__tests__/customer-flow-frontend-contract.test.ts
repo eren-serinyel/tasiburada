@@ -25,14 +25,12 @@ describe('customer flow frontend contract', () => {
         dateFlexibility: 'FLEXIBLE',
         serviceOptions: { 'evden-eve': ['svc-pack', 'svc-lift'] },
         weightKg: '1250',
-        vehicleType: 'vehicle-1',
         note: 'Kirilacak esya var',
       },
       {
         phone: '5551112233',
         today: '2026-04-29',
         templateWeights: { '2+1 ev': 1500 },
-        vehicleTypeOptions: [{ id: 'vehicle-1', name: 'Kamyonet' }],
       },
     );
 
@@ -48,7 +46,7 @@ describe('customer flow frontend contract', () => {
     expect(payload.extraServices).toEqual(['svc-pack', 'svc-lift']);
     expect(payload.weight).toBe(1250);
     expect(payload.estimatedWeight).toBe(1250);
-    expect(payload.vehicleTypePreferenceId).toBe('vehicle-1');
+    expect(payload.vehicleTypePreferenceId).toBeUndefined();
     expect(payload.shipmentDate).toBe('2026-05-10');
   });
 

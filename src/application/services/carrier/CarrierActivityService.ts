@@ -2,6 +2,7 @@ import { CarrierActivityRepository } from '../../../infrastructure/repositories/
 import { CarrierActivityDto } from '../../dto/CarrierDto';
 import { CarrierProfileStatusService } from './CarrierProfileStatusService';
 import { CarrierActivity } from '../../../domain/entities/CarrierActivity';
+import { resolveSuggestedServiceAreas } from '../../../shared/serviceAreaSuggestions';
 
 type ActivityResponse = {
   city: string;
@@ -22,9 +23,12 @@ export class CarrierActivityService {
       throw new Error('Şehir alanı zorunludur.');
     }
 
-    const serviceAreas = Array.isArray(dto.serviceAreas)
+    const requestedServiceAreas = Array.isArray(dto.serviceAreas)
       ? dto.serviceAreas.map(area => String(area).trim()).filter(Boolean)
       : [];
+    if (requestedServiceAreas.length === 0) {
+      throw new Error('Hizmet verdiğiniz bölgelerden en az bir şehir seçmelisiniz.');
+    }
 
     const availableDates = Array.isArray(dto.availableDates)
       ? dto.availableDates.map(d => String(d).trim()).filter(Boolean)
@@ -41,7 +45,7 @@ export class CarrierActivityService {
       city: dto.city,
       district: dto.district,
       address: dto.address,
-      serviceAreas,
+      serviceAreas: requestedServiceAreas,
       availableDates,
     });
 
@@ -64,7 +68,7 @@ export class CarrierActivityService {
       city: activity.city,
       district: activity.district,
       address: activity.address,
-      serviceAreas,
+      serviceAreas: serviceAreas.length ? serviceAreas : resolveSuggestedServiceAreas(activity.city),
       availableDates,
     };
   }

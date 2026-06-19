@@ -328,7 +328,12 @@ function Metric({ label, value }: { label: string; value: string }) {
 
 function ComparisonTable({ offers, onChoose }: { offers: CustomerOffer[]; onChoose: (offer: CustomerOffer) => void }) {
   const rows = [
-    ['Fiyat', (o: CustomerOffer) => `₺${fmtPrice(Number(o.price))}`],
+    ['Fiyat', (o: CustomerOffer) => {
+      const extras = Number(o.extraServicesTotal || 0);
+      return extras > 0
+        ? `₺${fmtPrice(Number(o.price))} (₺${fmtPrice(extras)} ek hizmet dahil)`
+        : `₺${fmtPrice(Number(o.price))}`;
+    }],
     ['Sure', (o: CustomerOffer) => o.estimatedDuration ? `${o.estimatedDuration} saat` : 'Belirtilmedi'],
     ['Puan', (o: CustomerOffer) => o.carrier?.rating ? `${Number(o.carrier.rating).toFixed(1)} / 5 (${o.carrier?.ratingCount ?? 0} yorum)` : 'Yeni / yorum yok'],
     ['Tasiyici uygunlugu', (o: CustomerOffer) => getCarrierEligibilityComparisonText(o)],

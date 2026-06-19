@@ -318,6 +318,24 @@ describe('Nakliyeci Arama — Filtreler', () => {
       expect(items[0]).toHaveProperty('rating');
     }
   });
+
+  test('Yük tipine göre filtreleyebilmeli', async () => {
+    const res = await request(testApp)
+      .get(`${BASE}/carriers/search`)
+      .query({ loadTypes: 'HOME' });
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+  });
+
+  test('Arama sonuçlarında isVerified alanı olmalı', async () => {
+    const res = await request(testApp)
+      .get(`${BASE}/carriers/search`)
+      .query({ limit: 1 });
+    expect(res.status).toBe(200);
+    if (res.body.data.items.length > 0) {
+      expect(typeof res.body.data.items[0].isVerified).toBe('boolean');
+    }
+  });
 });
 
 describe('Nakliyeci Detay — Public', () => {

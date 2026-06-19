@@ -10,6 +10,7 @@ import { CarrierServiceType } from './CarrierServiceType';
 import { CarrierScopeOfWork } from './CarrierScopeOfWork';
 import { CarrierLoadTypeCapability } from './CarrierLoadTypeCapability';
 import { CarrierExtraServiceCapability } from './CarrierExtraServiceCapability';
+import { CarrierCustomExtraService } from './CarrierCustomExtraService';
 
 export enum CarrierApprovalState {
   DRAFT = 'DRAFT',
@@ -132,6 +133,9 @@ export class Carrier {
   @Column({ type: 'int', default: 0 })
   totalOffers: number;
 
+  @Column({ type: 'int', default: 0 })
+  acceptedOffers: number;
+
   @Column({ type: 'float', default: 0 })
   successRate: number;
 
@@ -189,4 +193,7 @@ export class Carrier {
 
   @OneToMany(() => CarrierExtraServiceCapability, capability => capability.carrier)
   extraServiceCapabilities: CarrierExtraServiceCapability[];
+
+  @OneToMany(() => CarrierCustomExtraService, service => service.carrier)
+  customExtraServices: CarrierCustomExtraService[];
 }

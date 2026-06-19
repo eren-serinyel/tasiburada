@@ -30,6 +30,105 @@ export class CarrierCapabilityController {
   };
 
   /**
+   * PUT /api/v1/carriers/me/capabilities
+   * Carrier updates own capabilities
+   */
+  updateCapability = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const carrierId = req.carrierId;
+      const payload: UpdateCarrierCapabilityPayload = req.body;
+
+      if (!carrierId) {
+        res.status(401).json({ success: false, message: 'Kimlik dogrulamasi gerekli.' });
+        return;
+      }
+
+      if (!payload.action) {
+        res.status(400).json({ success: false, message: 'Action zorunludur.' });
+        return;
+      }
+
+      const result = await this.service.updateCapability(carrierId, payload);
+
+      if (!result.success) {
+        res.status(400).json(result);
+        return;
+      }
+
+      res.status(200).json(result);
+    } catch (error: any) {
+      res.status(500).json({
+        success: false,
+        message: error.message || 'Yetenek guncellemesi basarisiz.',
+      });
+    }
+  };
+
+  listCustomExtraServices = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const carrierId = req.carrierId;
+      if (!carrierId) {
+        res.status(401).json({ success: false, message: 'Kimlik dogrulamasi gerekli.' });
+        return;
+      }
+
+      const loadType = typeof req.query.loadType === 'string' ? req.query.loadType as any : null;
+      const data = await this.service.listCustomExtraServices(carrierId, loadType);
+      res.status(200).json({ success: true, data });
+    } catch (error: any) {
+      res.status(400).json({ success: false, message: error.message || 'Ozel ek hizmetler alinamadi.' });
+    }
+  };
+
+  createCustomExtraService = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const carrierId = req.carrierId;
+      if (!carrierId) {
+        res.status(401).json({ success: false, message: 'Kimlik dogrulamasi gerekli.' });
+        return;
+      }
+
+      const data = await this.service.upsertCustomExtraService(carrierId, req.body);
+      res.status(201).json({ success: true, data });
+    } catch (error: any) {
+      res.status(400).json({ success: false, message: error.message || 'Ozel ek hizmet kaydedilemedi.' });
+    }
+  };
+
+  updateCustomExtraService = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const carrierId = req.carrierId;
+      if (!carrierId) {
+        res.status(401).json({ success: false, message: 'Kimlik dogrulamasi gerekli.' });
+        return;
+      }
+
+      const data = await this.service.upsertCustomExtraService(carrierId, {
+        ...req.body,
+        id: req.params.customServiceId,
+      });
+      res.status(200).json({ success: true, data });
+    } catch (error: any) {
+      res.status(400).json({ success: false, message: error.message || 'Ozel ek hizmet guncellenemedi.' });
+    }
+  };
+
+  deleteCustomExtraService = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const carrierId = req.carrierId;
+      if (!carrierId) {
+        res.status(401).json({ success: false, message: 'Kimlik dogrulamasi gerekli.' });
+        return;
+      }
+
+      await this.service.deleteCustomExtraService(carrierId, req.params.customServiceId);
+      res.status(200).json({ success: true, message: 'Ozel ek hizmet silindi.' });
+    } catch (error: any) {
+      res.status(400).json({ success: false, message: error.message || 'Ozel ek hizmet silinemedi.' });
+    }
+  };
+
+  /**
    * GET /api/v1/admin/carriers/:carrierId/capabilities
    * Admin reads carrier capabilities
    */

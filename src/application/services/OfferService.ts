@@ -7,26 +7,67 @@ import { NotificationService } from './NotificationService';
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from '../../domain/errors/AppError';
 import { analyzeContactInfo } from '../../utils/security';
 import { AppDataSource } from '../../infrastructure/database/data-source';
+import { In } from 'typeorm';
 import { PlatformSetting } from '../../domain/entities/PlatformSetting';
 import { PlatformPolicyService } from './PlatformPolicyService';
 import { ContactFilterSurface } from '../../domain/entities';
 import { CarrierLoadTypeCapability } from '../../domain/entities/CarrierLoadTypeCapability';
 import { CarrierExtraServiceCapability } from '../../domain/entities/CarrierExtraServiceCapability';
+import { CarrierCustomExtraService } from '../../domain/entities/CarrierCustomExtraService';
 import { Carrier, CarrierApprovalState } from '../../domain/entities/Carrier';
 import { getCarrierEligibility } from './carrier/carrierEligibility';
 import { inferExtraServiceLoadTypeFromShipmentCategory } from './extra-services/extraServiceApplicability';
+
+const TURKEY_TIME_ZONE = 'Europe/Istanbul';
+const OFFER_VALIDITY_MS = 7 * 24 * 60 * 60 * 1000;
+
+function formatDateKey(date: Date): string {
+  return new Intl.DateTimeFormat('sv-SE', {
+    timeZone: TURKEY_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date);
+}
+
+function isShipmentDateBeforeToday(shipmentDate?: Date | string | null): boolean {
+  if (!shipmentDate) return false;
+  const parsed = new Date(shipmentDate);
+  if (Number.isNaN(parsed.getTime())) return false;
+  return formatDateKey(parsed) < formatDateKey(new Date());
+}
+
+function computeOfferValidUntil(shipmentDate?: Date | string | null): Date {
+  const byDays = new Date(Date.now() + OFFER_VALIDITY_MS);
+  if (!shipmentDate) return byDays;
+
+  const byShipment = new Date(shipmentDate);
+  if (Number.isNaN(byShipment.getTime())) return byDays;
+  byShipment.setHours(23, 59, 59, 999);
+
+  return byShipment.getTime() < byDays.getTime() ? byShipment : byDays;
+}
 
 interface CreateOfferPayload {
   shipmentId: string;
   price: number;
   message?: string;
   estimatedDuration?: number;
+  customExtraServiceIds?: string[];
 }
 
 interface RequestUser {
   customerId?: string;
   carrierId?: string;
   type?: 'customer' | 'carrier' | 'admin';
+}
+
+interface OfferExtraServiceBreakdownItem {
+  extraServiceId?: string;
+  customServiceId?: string;
+  name: string;
+  price: number;
+  source: 'requested' | 'offered';
 }
 
 export class OfferService {
@@ -107,6 +148,110 @@ export class OfferService {
     }
   }
 
+  private async calculateOfferPricing(
+    carrierId: string,
+    shipment: Shipment,
+    basePrice: number,
+    customExtraServiceIds: string[] = []
+  ): Promise<{
+    basePrice: number;
+    finalPrice: number;
+    extraServicesTotal: number | null;
+    extraServicesBreakdown: OfferExtraServiceBreakdownItem[] | null;
+  }> {
+    const requestedExtraServices = Array.isArray(shipment.extraServices) ? shipment.extraServices : [];
+    const loadType = inferExtraServiceLoadTypeFromShipmentCategory(shipment.shipmentCategory);
+    const uniqueCustomIds = Array.from(new Set(
+      (Array.isArray(customExtraServiceIds) ? customExtraServiceIds : [])
+        .map((id) => String(id || '').trim())
+        .filter(Boolean)
+    ));
+    const extraServicesBreakdown: OfferExtraServiceBreakdownItem[] = [];
+
+    if (!loadType) {
+      return {
+        basePrice,
+        finalPrice: basePrice,
+        extraServicesTotal: null,
+        extraServicesBreakdown: null,
+      };
+    }
+
+    const requestedById = new Map(
+      requestedExtraServices
+        .filter((service) => Boolean(service?.id))
+        .map((service) => [service.id, service])
+    );
+    const requestedIds = Array.from(requestedById.keys());
+
+    if (requestedIds.length > 0) {
+      const pricedCapabilities = await AppDataSource.getRepository(CarrierExtraServiceCapability).find({
+        where: {
+          carrierId,
+          loadType,
+          isActive: true,
+          priceMode: 'FIXED' as any,
+          extraServiceId: In(requestedIds),
+        },
+        relations: ['extraService'],
+      });
+
+      for (const capability of pricedCapabilities) {
+        const price = Number(capability.basePrice || 0);
+        if (price <= 0) continue;
+
+        const requestedService = requestedById.get(capability.extraServiceId);
+        extraServicesBreakdown.push({
+          extraServiceId: capability.extraServiceId,
+          name: capability.extraService?.name || requestedService?.name || 'Ek hizmet',
+          price,
+          source: 'requested',
+        });
+      }
+    }
+
+    if (uniqueCustomIds.length > 0) {
+      const customServices = await AppDataSource.getRepository(CarrierCustomExtraService).find({
+        where: {
+          carrierId,
+          loadType,
+          isActive: true,
+          priceMode: 'FIXED' as any,
+          id: In(uniqueCustomIds),
+        },
+      });
+
+      for (const service of customServices) {
+        const price = Number(service.basePrice || 0);
+        if (price <= 0) continue;
+
+        extraServicesBreakdown.push({
+          customServiceId: service.id,
+          name: service.title || 'Özel ek hizmet',
+          price,
+          source: 'offered',
+        });
+      }
+    }
+
+    const extraServicesTotal = extraServicesBreakdown.reduce((sum, item) => sum + item.price, 0);
+    if (extraServicesTotal <= 0) {
+      return {
+        basePrice,
+        finalPrice: basePrice,
+        extraServicesTotal: null,
+        extraServicesBreakdown: null,
+      };
+    }
+
+    return {
+      basePrice,
+      finalPrice: Number((basePrice + extraServicesTotal).toFixed(2)),
+      extraServicesTotal: Number(extraServicesTotal.toFixed(2)),
+      extraServicesBreakdown,
+    };
+  }
+
   private async assertCarrierCanCreateOrUpdateOffer(carrierId: string, shipment: Shipment, payload: CreateOfferPayload): Promise<Carrier> {
     const carrier = await this.carrierRepository.findById(carrierId, { relations: ['carrierVehicles'] } as any);
     if (!carrier || !carrier.isActive) {
@@ -162,9 +307,8 @@ export class OfferService {
       throw new NotFoundError('Taşıma talebi bulunamadı.');
     }
 
-    // B) OfferService.createOffer() — self-offer block
-    if (String(shipment.customerId) === String(carrierId)) {
-      throw new ForbiddenError('Kendi ilanınıza teklif veremezsiniz');
+    if (isShipmentDateBeforeToday(shipment.shipmentDate)) {
+      throw new ValidationError('Bu ilanın taşıma tarihi geçmiş, teklif verilemez.');
     }
 
     if (shipment.status !== ShipmentStatus.PENDING && shipment.status !== ShipmentStatus.OFFER_RECEIVED) {
@@ -174,6 +318,8 @@ export class OfferService {
     const eligibleCarrier = await this.assertCarrierCanCreateOrUpdateOffer(carrierId, shipment, payload);
 
     const hasSuspiciousContent = payload.message ? this.checkSuspiciousContent(payload.message) : false;
+    const pricing = await this.calculateOfferPricing(carrierId, shipment, payload.price, payload.customExtraServiceIds);
+    const validUntil = computeOfferValidUntil(shipment.shipmentDate);
 
     // BR11 — Araç Uygunluk Soft Warning:
     const warnings: any[] = [];
@@ -192,7 +338,11 @@ export class OfferService {
     const existingOffer = await this.offerRepository.findActiveByShipmentAndCarrier(payload.shipmentId, carrierId);
     if (existingOffer) {
       await this.offerRepository.update(existingOffer.id, {
-        price: payload.price,
+        price: pricing.finalPrice,
+        basePrice: pricing.basePrice,
+        extraServicesTotal: pricing.extraServicesTotal,
+        extraServicesBreakdown: pricing.extraServicesBreakdown,
+        validUntil,
         message: payload.message ?? existingOffer.message,
         estimatedDuration: payload.estimatedDuration ?? existingOffer.estimatedDuration,
         hasSuspiciousContent: payload.message ? hasSuspiciousContent : existingOffer.hasSuspiciousContent
@@ -207,7 +357,11 @@ export class OfferService {
     const offer = await this.offerRepository.create({
       shipmentId: payload.shipmentId,
       carrierId,
-      price: payload.price,
+      price: pricing.finalPrice,
+      basePrice: pricing.basePrice,
+      extraServicesTotal: pricing.extraServicesTotal,
+      extraServicesBreakdown: pricing.extraServicesBreakdown,
+      validUntil,
       message: payload.message || undefined,
       estimatedDuration: payload.estimatedDuration || undefined,
       status: OfferStatus.PENDING,
@@ -286,6 +440,10 @@ export class OfferService {
         throw new ConflictError('Bu teklif artık kabul edilemez.');
       }
 
+      if (offer.validUntil && new Date(offer.validUntil) < new Date()) {
+        throw new ValidationError('Bu teklifin geçerlilik süresi dolmuş.');
+      }
+
       // POSSESS LOCK on the Shipment entity to prevent double matching
       const shipment = await transactionalEntityManager
         .createQueryBuilder(Shipment, 'shipment')
@@ -299,6 +457,10 @@ export class OfferService {
 
       if (shipment.customerId !== customerId) {
         throw new ForbiddenError('Bu teklifi kabul etme yetkiniz yok.');
+      }
+
+      if (isShipmentDateBeforeToday(shipment.shipmentDate)) {
+        throw new ValidationError('Bu ilanın taşıma tarihi geçmiş.');
       }
 
       if (shipment.status !== ShipmentStatus.PENDING && shipment.status !== ShipmentStatus.OFFER_RECEIVED) {
@@ -318,6 +480,24 @@ export class OfferService {
       // offer.status = ACCEPTED
       offer.status = OfferStatus.ACCEPTED;
       await transactionalEntityManager.save(Offer, offer);
+
+      await transactionalEntityManager
+        .createQueryBuilder()
+        .update(Carrier)
+        .set({
+          acceptedOffers: () => 'acceptedOffers + 1',
+          successRate: () => 'CASE WHEN (acceptedOffers + 1) > 0 THEN ROUND((completedShipments / (acceptedOffers + 1)) * 100, 2) ELSE 0 END',
+        })
+        .where('id = :carrierId', { carrierId: offer.carrierId })
+        .execute();
+
+      const autoRejectedOffers = (await transactionalEntityManager.find(Offer, {
+        select: ['id', 'carrierId', 'shipmentId'],
+        where: {
+          shipmentId: offer.shipmentId,
+          status: OfferStatus.PENDING,
+        },
+      })).filter((pendingOffer) => pendingOffer.id !== offer.id);
 
       // diğer offer'lar: status = REJECTED (batch update, WHERE shipmentId AND id != offerId)
       await transactionalEntityManager
@@ -341,34 +521,47 @@ export class OfferService {
         relations: ['shipment', 'carrier']
       });
 
-      return finalOffer;
+      return { finalOffer, autoRejectedOffers };
     });
 
-    if (!result) {
+    if (!result?.finalOffer) {
       throw new Error('Teklif kabul işlemi başarısız oldu.');
     }
+
+    const acceptedOffer = result.finalOffer;
 
     // Transaction sonrası (outside): notification create (best effort)
     if (typeof (this.notificationService as any).createFromEvent === 'function') {
       this.notificationService.createFromEvent('carrier.offer_accepted', {
-        recipientUserId: result.carrierId,
-        entityId: result.shipmentId,
-        offerId: result.id,
+        recipientUserId: acceptedOffer.carrierId,
+        entityId: acceptedOffer.shipmentId,
+        offerId: acceptedOffer.id,
         customerId,
-        acceptedPrice: Number(result.price),
+        acceptedPrice: Number(acceptedOffer.price),
       }).catch(err => console.error('Accept notification failed:', err));
     } else {
       this.notificationService.createNotification(
-        result.carrierId,
+        acceptedOffer.carrierId,
         'carrier',
         'OFFER_ACCEPTED',
         'Teklifiniz Kabul Edildi',
         'Müşteri teklifinizi kabul etti. Taşımaya hazırlanın.',
-        result.shipmentId
+        acceptedOffer.shipmentId
       ).catch(err => console.error('Accept notification failed:', err));
     }
 
-    return this.sanitizeOffer(result);
+    for (const rejectedOffer of result.autoRejectedOffers) {
+      this.notificationService.createNotification(
+        rejectedOffer.carrierId,
+        'carrier',
+        'OFFER_REJECTED',
+        'Teklifiniz Değerlendirildi',
+        'Müşteri bu taşıma için başka bir firmayı seçti. Bu kez teklifiniz kabul edilmedi.',
+        rejectedOffer.shipmentId
+      ).catch(err => console.error('Auto-reject notification failed:', err));
+    }
+
+    return this.sanitizeOffer(acceptedOffer);
   }
 
   async rejectOffer(customerId: string, offerId: string): Promise<Offer> {
@@ -491,6 +684,10 @@ export class OfferService {
       }
 
       const wasAccepted = offer.status === OfferStatus.ACCEPTED;
+      if (wasAccepted && offer.shipment && offer.shipment.status !== ShipmentStatus.MATCHED) {
+        throw new ValidationError('Taşıma başladıktan sonra teklif geri çekilemez.');
+      }
+
       offer.status = OfferStatus.WITHDRAWN;
       await transactionalEntityManager.save(Offer, offer);
 

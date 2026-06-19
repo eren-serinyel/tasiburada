@@ -1,6 +1,14 @@
 import { CarrierSearchItem } from './types';
 
-export type CarrierSearchSort = 'rating' | 'price' | 'experience' | 'profile' | 'recent';
+// DEĞİŞİKLİK (Nakliyeci #3):
+// 'price' ve 'profile' sıralamaları kaldırıldı.
+//  - price: Carrier'ın genel fiyat verisi yok (Offer shipment-bazlı,
+//    repository'de price filtreleri zaten yorum satırı). Ölü/yanıltıcı seçenekti.
+//  - profile: İç metrik, müşteriye anlamsız. Profil dolu firmaları öne
+//    çıkarmak istenirse backend'de rating sıralamasına gizli ağırlık eklenir.
+// Eski URL'lerden gelen ?sortBy=price / ?sortBy=profile değerleri
+// parseSort içinde 'rating'e map edilir — paylaşılan linkler kırılmaz.
+export type CarrierSearchSort = 'rating' | 'experience' | 'recent';
 
 export interface CarrierSearchFilters {
 	searchText?: string;
@@ -8,24 +16,26 @@ export interface CarrierSearchFilters {
 	serviceAreas: string[];
 	vehicleTypeIds: string[];
 	minRating?: string;
-	priceRange?: {
-		min?: number;
-		max?: number;
-	};
 	minExperience?: number;
 	minCapacityKg?: number;
-	onlyCompleteProfiles?: boolean;
+	maxCapacityKg?: number;
 	sortBy?: CarrierSearchSort;
 	serviceCity?: string;
 	serviceDistrict?: string;
-	// New Filters
+	availableDate?: string;
 	scopes?: string[];
 	loadTypes?: string[];
-	minProfileCompletion?: number;
 	isVerified?: boolean;
 	hasProfilePicture?: boolean;
 	minReviewCount?: number;
-	maxCapacityKg?: number;
+	/** Client-side filtre — API'ye gönderilmez, CarrierList/CarrierDirectory içinde uygulanır. */
+	favoritesOnly?: boolean;
+	/** @deprecated Kullanılmıyor — CarrierDirectory gibi eski tüketiciler için tipte tutuluyor. */
+	priceRange?: { min?: number; max?: number };
+	/** @deprecated Kullanılmıyor. */
+	onlyCompleteProfiles?: boolean;
+	/** @deprecated Kullanılmıyor. */
+	minProfileCompletion?: number;
 }
 
 export interface CarrierSearchResponse {
@@ -41,20 +51,19 @@ export const DEFAULT_CARRIER_FILTERS: CarrierSearchFilters = {
 	serviceAreas: [],
 	vehicleTypeIds: [],
 	minRating: '',
-	priceRange: undefined,
 	minExperience: undefined,
 	minCapacityKg: undefined,
 	maxCapacityKg: undefined,
-	onlyCompleteProfiles: false,
 	sortBy: 'rating',
 	serviceCity: undefined,
 	serviceDistrict: undefined,
+	availableDate: undefined,
 	scopes: [],
 	loadTypes: [],
-	minProfileCompletion: undefined,
 	isVerified: false,
 	hasProfilePicture: false,
-	minReviewCount: undefined
+	minReviewCount: undefined,
+	favoritesOnly: false
 };
 
 export const MIN_EXPERIENCE_OPTIONS = [
@@ -62,12 +71,6 @@ export const MIN_EXPERIENCE_OPTIONS = [
 	{ label: '3+ yıl', value: 3 },
 	{ label: '5+ yıl', value: 5 },
 	{ label: '10+ yıl', value: 10 }
-];
-
-export const MIN_RATING_OPTIONS = [
-	{ label: '3.0+', value: '3' },
-	{ label: '4.0+', value: '4' },
-	{ label: '4.5+', value: '4.5' }
 ];
 
 const API_BASE_URL = '/api/v1';
@@ -124,8 +127,10 @@ const parseNumber = (value?: string | null): number | undefined => {
 };
 
 const parseSort = (value?: string | null): CarrierSearchSort => {
-	const allowed: CarrierSearchSort[] = ['rating', 'price', 'experience', 'profile', 'recent'];
-	return allowed.includes(value as CarrierSearchSort) ? (value as CarrierSearchSort) : 'rating';
+	const allowed: CarrierSearchSort[] = ['rating', 'experience', 'recent'];
+	if (allowed.includes(value as CarrierSearchSort)) return value as CarrierSearchSort;
+	// Legacy: eski paylaşılan linklerdeki price/profile değerleri rating'e düşer
+	return 'rating';
 };
 
 export const filtersFromParams = (params: URLSearchParams): CarrierSearchFilters => {
@@ -135,9 +140,6 @@ export const filtersFromParams = (params: URLSearchParams): CarrierSearchFilters
 	};
 	const serviceAreas = params.getAll('serviceAreas');
 	const legacyServiceArea = params.get('serviceArea');
-	const minPrice = parseNumber(params.get('minPrice'));
-	const maxPrice = parseNumber(params.get('maxPrice'));
-	const onlyComplete = params.get('onlyCompleteProfiles');
 
 	return {
 		...base,
@@ -153,29 +155,23 @@ export const filtersFromParams = (params: URLSearchParams): CarrierSearchFilters
 			return parsed.length ? parsed : [...base.vehicleTypeIds];
 		})(),
 		minRating: params.get('minRating') ?? base.minRating,
-		priceRange: minPrice !== undefined || maxPrice !== undefined
-			? { min: minPrice, max: maxPrice }
-			: undefined,
 		minExperience: parseNumber(params.get('minExperienceYears')),
 		minCapacityKg: parseNumber(params.get('minCapacityKg')),
 		maxCapacityKg: parseNumber(params.get('maxCapacityKg')),
-		onlyCompleteProfiles: onlyComplete === '1' || onlyComplete === 'true',
 		sortBy: parseSort(params.get('sortBy')),
 		serviceCity: textOrUndefined(params.get('serviceCity')),
 		serviceDistrict: textOrUndefined(params.get('serviceDistrict')),
-
-		// New
+		availableDate: textOrUndefined(params.get('availableDate')),
 		scopes: parseArrayParam(params, 'scopes'),
 		loadTypes: parseArrayParam(params, 'loadTypes'),
-		minProfileCompletion: parseNumber(params.get('minProfileCompletion')),
 		isVerified: params.get('isVerified') === '1',
 		hasProfilePicture: params.get('hasProfilePicture') === '1',
-		minReviewCount: parseNumber(params.get('minReviewCount'))
+		minReviewCount: parseNumber(params.get('minReviewCount')),
+		favoritesOnly: params.get('favorites') === '1'
 	};
 };
 
-export const filtersToParams = (filters: CarrierSearchFilters): URLSearchParams => {
-	const params = new URLSearchParams();
+const appendCommonParams = (params: URLSearchParams, filters: CarrierSearchFilters) => {
 	appendParam(params, 'searchText', filters.searchText);
 	appendParam(params, 'city', filters.city);
 	filters.serviceAreas.forEach(area => {
@@ -185,68 +181,30 @@ export const filtersToParams = (filters: CarrierSearchFilters): URLSearchParams 
 		appendParam(params, 'vehicleTypeIds', filters.vehicleTypeIds.join(','));
 	}
 	appendParam(params, 'minRating', filters.minRating);
-	if (filters.priceRange) {
-		if (filters.priceRange.min !== undefined) appendParam(params, 'minPrice', filters.priceRange.min);
-		if (filters.priceRange.max !== undefined) appendParam(params, 'maxPrice', filters.priceRange.max);
-	}
 	appendParam(params, 'minExperienceYears', filters.minExperience);
 	appendParam(params, 'minCapacityKg', filters.minCapacityKg);
 	appendParam(params, 'maxCapacityKg', filters.maxCapacityKg);
-
-	if (filters.onlyCompleteProfiles) {
-		appendParam(params, 'onlyCompleteProfiles', '1');
-	}
 	appendParam(params, 'sortBy', filters.sortBy ?? 'rating');
 	appendParam(params, 'serviceCity', filters.serviceCity);
 	appendParam(params, 'serviceDistrict', filters.serviceDistrict);
-
-	// New
+	appendParam(params, 'availableDate', filters.availableDate);
 	if (filters.scopes?.length) params.append('scopes', filters.scopes.join(','));
 	if (filters.loadTypes?.length) params.append('loadTypes', filters.loadTypes.join(','));
-	appendParam(params, 'minProfileCompletion', filters.minProfileCompletion);
 	if (filters.isVerified) appendParam(params, 'isVerified', '1');
 	if (filters.hasProfilePicture) appendParam(params, 'hasProfilePicture', '1');
 	appendParam(params, 'minReviewCount', filters.minReviewCount);
+};
 
+export const filtersToParams = (filters: CarrierSearchFilters): URLSearchParams => {
+	const params = new URLSearchParams();
+	appendCommonParams(params, filters);
+	if (filters.favoritesOnly) params.set('favorites', '1');
 	return params;
 };
 
 export const filtersToApiParams = (filters: CarrierSearchFilters, limit: number, offset: number): URLSearchParams => {
 	const params = new URLSearchParams();
-	appendParam(params, 'searchText', filters.searchText);
-	appendParam(params, 'city', filters.city);
-	filters.serviceAreas.forEach(area => {
-		if (area.trim()) params.append('serviceAreas', area.trim());
-	});
-	if (filters.vehicleTypeIds.length) {
-		appendParam(params, 'vehicleTypeIds', filters.vehicleTypeIds.join(','));
-	}
-	appendParam(params, 'minRating', filters.minRating);
-	if (filters.priceRange) {
-		if (filters.priceRange.min !== undefined) appendParam(params, 'minPrice', filters.priceRange.min);
-		if (filters.priceRange.max !== undefined) appendParam(params, 'maxPrice', filters.priceRange.max);
-	}
-	appendParam(params, 'minExperienceYears', filters.minExperience);
-	appendParam(params, 'minCapacityKg', filters.minCapacityKg);
-	appendParam(params, 'maxCapacityKg', filters.maxCapacityKg);
-
-	if (filters.onlyCompleteProfiles) {
-		// Legacy support
-		appendParam(params, 'minProfileCompletion', 70);
-	} else {
-		appendParam(params, 'minProfileCompletion', filters.minProfileCompletion);
-	}
-
-	if (filters.isVerified) appendParam(params, 'isVerified', '1');
-	if (filters.hasProfilePicture) appendParam(params, 'hasProfilePicture', '1');
-	appendParam(params, 'minReviewCount', filters.minReviewCount);
-
-	if (filters.scopes?.length) params.append('scopes', filters.scopes.join(','));
-	if (filters.loadTypes?.length) params.append('loadTypes', filters.loadTypes.join(','));
-
-	appendParam(params, 'sortBy', filters.sortBy ?? 'rating');
-	appendParam(params, 'serviceCity', filters.serviceCity);
-	appendParam(params, 'serviceDistrict', filters.serviceDistrict);
+	appendCommonParams(params, filters);
 	params.set('limit', String(limit));
 	params.set('offset', String(offset));
 	return params;

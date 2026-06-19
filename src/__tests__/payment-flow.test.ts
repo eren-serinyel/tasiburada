@@ -9,6 +9,9 @@ import { AppDataSource } from '../infrastructure/database/data-source';
 import { Offer, OfferStatus } from '../domain/entities/Offer';
 import { Payment, PaymentStatus } from '../domain/entities/Payment';
 import { Shipment, ShipmentStatus } from '../domain/entities/Shipment';
+import { Carrier } from '../domain/entities/Carrier';
+import { PlatformSetting } from '../domain/entities/PlatformSetting';
+import { PlatformPolicyService } from '../application/services/PlatformPolicyService';
 
 const skipDB = () => process.env.SKIP_DB_TESTS === 'true';
 
@@ -19,11 +22,12 @@ const ADMIN    = { email: 'admin@tasiburada.com',      password: 'Maviface2141' 
 describe('Payment Akışı', () => {
   let customerToken: string;
   let secondCustomerToken: string;
+  let carrierToken: string;
   let adminToken: string;
   let acceptedOffer: Offer | null = null;
   let nonAcceptedOffer: Offer | null = null;
 
-  const commissionRate = Number(process.env.PLATFORM_COMMISSION_RATE || 0.1);
+  const platformPolicy = new PlatformPolicyService();
   const round2 = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
 
   const discoverOffers = async () => {
@@ -89,6 +93,18 @@ describe('Payment Akışı', () => {
     if (aRes.status === 200) adminToken = aRes.body.data?.token;
 
     await discoverOffers();
+
+    if (acceptedOffer?.carrierId) {
+      const carrier = await AppDataSource.getRepository(Carrier).findOne({
+        where: { id: acceptedOffer.carrierId },
+      });
+      if (carrier?.email) {
+        const carrierLogin = await request(testApp)
+          .post('/api/v1/carriers/login')
+          .send({ email: carrier.email, password: 'Maviface2141' });
+        if (carrierLogin.status === 200) carrierToken = carrierLogin.body.data?.token;
+      }
+    }
   });
 
   beforeEach(async () => {
@@ -163,11 +179,54 @@ describe('Payment Akışı', () => {
     expect(Number(payment.amount)).toBe(Number(acceptedOffer.price));
     expect(payment.carrierId).toBe(acceptedOffer.carrierId);
 
-    const expectedPlatformFee = round2(Number(acceptedOffer.price) * commissionRate);
-    const expectedCarrierAmount = round2(Number(acceptedOffer.price) - expectedPlatformFee);
-    expect(Number(payment.platformFee)).toBe(expectedPlatformFee);
-    expect(Number(payment.carrierAmount)).toBe(expectedCarrierAmount);
+    const commission = await platformPolicy.computeCommission(Number(acceptedOffer.price));
+    expect(Number(payment.platformFee)).toBe(commission.commissionAmount);
+    expect(Number(payment.carrierAmount)).toBe(commission.netAmount);
     expect(payment.currency).toBe('TRY');
+  });
+
+  test('7b. ödeme komisyonu DB platform ayarı ve min komisyon ile hesaplanmalı', async () => {
+    if (skipDB() || !customerToken || !acceptedOffer) return;
+
+    const settingRepo = AppDataSource.getRepository(PlatformSetting);
+    const commissionSetting = await settingRepo.findOne({ where: { key: 'platform_commission' } });
+    const minSetting = await settingRepo.findOne({ where: { key: 'min_commission_amount' } });
+    const previousEnv = process.env.PLATFORM_COMMISSION_RATE;
+    const gross = Number(acceptedOffer.price);
+    const forcedMinCommission = round2(gross / 2);
+
+    try {
+      process.env.PLATFORM_COMMISSION_RATE = '0.99';
+      await settingRepo.update({ key: 'platform_commission' }, { value: '1' });
+      await settingRepo.update({ key: 'min_commission_amount' }, { value: String(forcedMinCommission) });
+
+      const res = await request(testApp)
+        .post('/api/v1/payments')
+        .set('Authorization', `Bearer ${customerToken}`)
+        .send({
+          offerId: acceptedOffer.id,
+          method: 'credit_card',
+          note: 'db-min-commission-contract',
+        });
+
+      expect(res.status).toBe(201);
+      expect(res.body.success).toBe(true);
+      expect(Number(res.body.data.platformFee)).toBe(forcedMinCommission);
+      expect(Number(res.body.data.carrierAmount)).toBe(round2(gross - forcedMinCommission));
+    } finally {
+      await AppDataSource.getRepository(Payment).delete({ offerId: acceptedOffer.id });
+      if (commissionSetting) {
+        await settingRepo.update({ key: 'platform_commission' }, { value: commissionSetting.value });
+      }
+      if (minSetting) {
+        await settingRepo.update({ key: 'min_commission_amount' }, { value: minSetting.value });
+      }
+      if (previousEnv === undefined) {
+        delete process.env.PLATFORM_COMMISSION_RATE;
+      } else {
+        process.env.PLATFORM_COMMISSION_RATE = previousEnv;
+      }
+    }
   });
 
   test('8. başka customer accepted offer ile create -> 403', async () => {
@@ -246,6 +305,35 @@ describe('Payment Akışı', () => {
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
     expect(res.body.data).toBeDefined();
+  });
+
+  test('13b. Nakliyeci odeme listesinde musteri hassas verisi donmemeli', async () => {
+    if (skipDB() || !customerToken || !carrierToken || !acceptedOffer) return;
+
+    const create = await request(testApp)
+      .post('/api/v1/payments')
+      .set('Authorization', `Bearer ${customerToken}`)
+      .send({ offerId: acceptedOffer.id, method: 'credit_card', note: 'carrier-payment-pii-contract' });
+    expect(create.status).toBe(201);
+
+    const res = await request(testApp)
+      .get('/api/v1/payments/carrier/my')
+      .set('Authorization', `Bearer ${carrierToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+
+    const payment = res.body.data.find((item: any) => item.id === create.body.data.id);
+    expect(payment).toBeDefined();
+    expect(payment.customer).toBeDefined();
+    expect(Object.keys(payment.customer).sort()).toEqual(['firstName', 'lastName']);
+    expect(payment.customer.lastName).toContain('***');
+    expect(payment.customer.passwordHash).toBeUndefined();
+    expect(payment.customer.resetToken).toBeUndefined();
+    expect(payment.customer.resetTokenExpiry).toBeUndefined();
+    expect(payment.customer.verificationToken).toBeUndefined();
+    expect(payment.customer.email).toBeUndefined();
+    expect(payment.customer.phone).toBeUndefined();
   });
 
   test('14. Tamamlanmamis tasima icin payment release 409 donmeli', async () => {

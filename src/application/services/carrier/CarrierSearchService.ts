@@ -1,5 +1,7 @@
 import { Carrier } from '../../../domain/entities/Carrier';
+import { CarrierExtraServiceCapability } from '../../../domain/entities/CarrierExtraServiceCapability';
 import { CarrierRepository, CarrierSearchFilters, CarrierSearchRepositoryItem, CarrierSearchSort } from '../../../infrastructure/repositories/CarrierRepository';
+import { AppDataSource } from '../../../infrastructure/database/data-source';
 import { PRODUCT_SCOPE_OF_WORK_NAMES } from '../../../infrastructure/repositories/ScopeOfWorkRepository';
 
 export interface CarrierSearchQuery {
@@ -8,10 +10,10 @@ export interface CarrierSearchQuery {
 	vehicleTypeId?: string;
 	vehicleTypeIds?: string[];
 	scopes?: string[] | string;
+	scope?: string;
 	scopeIds?: string[] | string;
+	loadTypes?: string[] | string;
 	minRating?: number;
-	minPrice?: number;
-	maxPrice?: number;
 	minExperienceYears?: number;
 	minProfileCompletion?: number;
 	minCapacityKg?: number;
@@ -36,6 +38,9 @@ export interface CarrierSearchResultDto {
 	experienceYears: number | null;
 	profileCompletion: number | null;
 	pictureUrl: string | null;
+	isVerified: boolean;
+	catalogExtraServiceIds: string[];
+	scopes: Array<'sehirici' | 'sehirlerarasi'>;
 }
 
 export interface CarrierSearchResponseDto {
@@ -59,16 +64,24 @@ export class CarrierSearchService {
 	async search(query: CarrierSearchQuery | Record<string, unknown>): Promise<CarrierSearchResponseDto> {
 		const filters = this.normalizeFilters(query);
 		const { total, items } = await this.carrierRepository.searchCarriers(filters);
+		const catalogExtraServicesByCarrier = await this.fetchCatalogExtraServiceIds(items.map(item => item.carrier.id));
 		return {
 			total,
 			limit: filters.limit,
 			offset: filters.offset,
-			items: items.map(item => this.mapToDto(item))
+			items: items.map(item => this.mapToDto(item, catalogExtraServicesByCarrier.get(item.carrier.id) ?? []))
 		};
 	}
 
 	async getAvailabilitySummary(date: string): Promise<{ total: number; available: number }> {
 		return this.carrierRepository.countByAvailableDate(date);
+	}
+
+	async getAvailabilitySummaryForQuery(query: Record<string, unknown>): Promise<{ total: number; available: number }> {
+		const date = typeof query.date === 'string' ? query.date.trim() : '';
+		const serviceCity = typeof query.serviceCity === 'string' ? query.serviceCity.trim() : undefined;
+		const scopeFilters = this.normalizeScopeValues((query as any).scope ?? (query as any).scopes ?? (query as any).scopeIds);
+		return this.carrierRepository.countByAvailableDate(date, serviceCity || undefined, scopeFilters);
 	}
 
 	private normalizeFilters(query: CarrierSearchQuery | Record<string, unknown>): CarrierSearchFilters {
@@ -121,7 +134,7 @@ export class CarrierSearchService {
 
 		const serviceCity = toText((query as any).serviceCity);
 		const serviceDistrict = toText((query as any).serviceDistrict);
-		const baseCity = toText((query as any).city) ?? serviceCity;
+		const baseCity = toText((query as any).city);
 
 		const vehicleTypeIdsFromQuery = parseVehicleTypeIds((query as any).vehicleTypeIds);
 		const singleVehicleTypeId = toText((query as any).vehicleTypeId);
@@ -147,18 +160,13 @@ export class CarrierSearchService {
 			return undefined;
 		};
 
-		const scopeValues = parseScopeIds((query as any).scopes ?? (query as any).scopeIds) ?? [];
-		const isUuid = (value: string): boolean =>
-			/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
-		const normalizedScopeNames = scopeValues
-			.filter(value => !isUuid(value))
-			.map(value => this.SCOPE_SLUG_TO_NAME[value] ?? value)
-			.map(name => this.PRODUCT_SCOPE_NAMES.has(name) ? name : this.UNSUPPORTED_SCOPE_FILTER)
-			.filter(Boolean);
-		const scopeIds = scopeValues.filter(isUuid);
-		const scopeNames = normalizedScopeNames.length
-			? Array.from(new Set(normalizedScopeNames))
-			: undefined;
+		const { scopeIds, scopeNames } = this.normalizeScopeValues((query as any).scope ?? (query as any).scopes ?? (query as any).scopeIds);
+
+		const ALLOWED_LOAD_TYPES = new Set(['HOME', 'OFFICE', 'PARTIAL', 'STORAGE']);
+		const loadTypeValues = parseScopeIds((query as any).loadTypes) ?? [];
+		const loadTypes = loadTypeValues
+			.map(v => String(v).trim().toUpperCase())
+			.filter(v => ALLOWED_LOAD_TYPES.has(v));
 
 		const isVerifiedRaw = (query as any).isVerified;
 		const isVerified = isVerifiedRaw === true || isVerifiedRaw === '1' || isVerifiedRaw === 'true'
@@ -172,16 +180,15 @@ export class CarrierSearchService {
 			serviceAreas,
 			vehicleTypeIds,
 			minRating: toNumber((query as any).minRating),
-			minPrice: toNumber((query as any).minPrice),
-			maxPrice: toNumber((query as any).maxPrice),
 			minExperienceYears: toInt((query as any).minExperienceYears),
 			minProfileCompletion: toInt((query as any).minProfileCompletion),
 			minCapacityKg: toInt((query as any).minCapacityKg),
 			maxCapacityKg: toInt((query as any).maxCapacityKg),
 			searchText: toText((query as any).searchText),
 			availableDate: toText((query as any).availableDate),
-			scopeIds: scopeIds.length ? scopeIds : undefined,
+			scopeIds,
 			scopeNames,
+			loadTypes: loadTypes.length ? loadTypes : undefined,
 			isVerified,
 			sortBy: this.parseSort((query as any).sortBy),
 			limit,
@@ -189,13 +196,70 @@ export class CarrierSearchService {
 		};
 	}
 
+	private normalizeScopeValues(value: unknown): Pick<CarrierSearchFilters, 'scopeIds' | 'scopeNames'> {
+		const parseScopeValues = (raw: unknown): string[] => {
+			if (typeof raw === 'string' && raw.trim()) {
+				return raw.split(',').map(s => s.trim()).filter(Boolean);
+			}
+			if (Array.isArray(raw)) {
+				return raw
+					.flatMap(entry => String(entry).split(','))
+					.map(s => s.trim())
+					.filter(Boolean);
+			}
+			return [];
+		};
+
+		const isUuid = (candidate: string): boolean =>
+			/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(candidate);
+
+		const scopeValues = parseScopeValues(value);
+		const normalizedScopeNames = scopeValues
+			.filter(scopeValue => !isUuid(scopeValue))
+			.map(scopeValue => this.SCOPE_SLUG_TO_NAME[scopeValue] ?? scopeValue)
+			.map(scopeName => this.PRODUCT_SCOPE_NAMES.has(scopeName) ? scopeName : this.UNSUPPORTED_SCOPE_FILTER)
+			.filter(Boolean);
+		const scopeIds = scopeValues.filter(isUuid);
+		const scopeNames = normalizedScopeNames.length
+			? Array.from(new Set(normalizedScopeNames))
+			: undefined;
+
+		return {
+			scopeIds: scopeIds.length ? scopeIds : undefined,
+			scopeNames
+		};
+	}
+
 	private parseSort(value: unknown): CarrierSearchSort | undefined {
-		const allowed: CarrierSearchSort[] = ['rating', 'price', 'experience', 'profile', 'recent'];
+		const allowed: CarrierSearchSort[] = ['rating', 'experience', 'recent'];
 		if (typeof value !== 'string') return undefined;
 		return allowed.includes(value as CarrierSearchSort) ? (value as CarrierSearchSort) : undefined;
 	}
 
-	private mapToDto(item: CarrierSearchRepositoryItem): CarrierSearchResultDto {
+	private async fetchCatalogExtraServiceIds(carrierIds: string[]): Promise<Map<string, string[]>> {
+		const uniqueCarrierIds = Array.from(new Set(carrierIds.filter(Boolean)));
+		if (uniqueCarrierIds.length === 0) return new Map();
+
+		const rows = await AppDataSource.getRepository(CarrierExtraServiceCapability)
+			.createQueryBuilder('capability')
+			.select('capability.carrierId', 'carrierId')
+			.addSelect('capability.extraServiceId', 'extraServiceId')
+			.where('capability.carrierId IN (:...carrierIds)', { carrierIds: uniqueCarrierIds })
+			.andWhere('capability.isActive = :isActive', { isActive: true })
+			.getRawMany<{ carrierId: string; extraServiceId: string }>();
+
+		const grouped = new Map<string, Set<string>>();
+		rows.forEach((row) => {
+			if (!row.carrierId || !row.extraServiceId) return;
+			const bucket = grouped.get(row.carrierId) ?? new Set<string>();
+			bucket.add(row.extraServiceId);
+			grouped.set(row.carrierId, bucket);
+		});
+
+		return new Map(Array.from(grouped.entries()).map(([carrierId, serviceIds]) => [carrierId, Array.from(serviceIds)]));
+	}
+
+	private mapToDto(item: CarrierSearchRepositoryItem, catalogExtraServiceIds: string[]): CarrierSearchResultDto {
 		const carrier = item.carrier;
 		const city = carrier.activity?.city ?? null;
 		const serviceAreas = Array.isArray(carrier.activity?.serviceAreasJson)
@@ -209,14 +273,30 @@ export class CarrierSearchService {
 			companyName: carrier.companyName,
 			city,
 			rating: carrier.rating ?? 0,
-			reviewCount: item.offerCount ?? carrier.totalOffers ?? 0,
+			reviewCount: item.reviewCount ?? 0,
 			vehicleSummary,
 			serviceAreas,
 			startingPrice: item.minPrice ?? null,
 			experienceYears,
 			profileCompletion,
-			pictureUrl: carrier.pictureUrl ?? null
+			pictureUrl: carrier.pictureUrl ?? null,
+			isVerified: carrier.verifiedByAdmin === true,
+			catalogExtraServiceIds,
+			scopes: this.mapScopeLinksToSlugs(carrier)
 		};
+	}
+
+	private mapScopeLinksToSlugs(carrier: Carrier): Array<'sehirici' | 'sehirlerarasi'> {
+		const slugs = (carrier.scopeLinks || [])
+			.map(link => link.scope?.name)
+			.map(name => {
+				if (name === this.SCOPE_SLUG_TO_NAME.sehirici || name === 'Şehir İçi') return 'sehirici';
+				if (name === this.SCOPE_SLUG_TO_NAME.sehirlerarasi || name === 'Şehirler Arası') return 'sehirlerarasi';
+				return undefined;
+			})
+			.filter(Boolean) as Array<'sehirici' | 'sehirlerarasi'>;
+
+		return Array.from(new Set(slugs));
 	}
 
 	private computeExperience(carrier: Carrier): number | null {

@@ -62,7 +62,7 @@ export class CustomerService {
 
   async login(loginDto: LoginDto): Promise<{ customer: CustomerResponseDto; token: string }> {
     // Müşteriyi email ile bul
-    const customer = await this.customerRepository.findByEmail(loginDto.email);
+    const customer = await this.customerRepository.findByEmailWithPassword(loginDto.email);
     if (!customer) {
       throw new Error('Email veya şifre hatalı.');
     }
@@ -98,7 +98,7 @@ export class CustomerService {
   }
 
   async updateCustomer(customerId: string, updateDto: UpdateCustomerDto): Promise<CustomerResponseDto> {
-    const customer = await this.customerRepository.findById(customerId);
+    const customer = await this.customerRepository.findByIdWithPassword(customerId);
     if (!customer) {
       throw new Error('Müşteri bulunamadı.');
     }

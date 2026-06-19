@@ -20,7 +20,7 @@ export class CarrierSearchController {
 				res.status(400).json({ success: false, message: 'Geçerli bir tarih belirtin (YYYY-MM-DD).' });
 				return;
 			}
-			const data = await this.searchService.getAvailabilitySummary(date);
+			const data = await this.searchService.getAvailabilitySummaryForQuery(req.query);
 			res.status(200).json({ success: true, data });
 		} catch (error: any) {
 			res.status(400).json({ success: false, message: error?.message || 'Müsaitlik özeti alınamadı.' });

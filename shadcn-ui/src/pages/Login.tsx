@@ -225,6 +225,15 @@ export default function Login() {
               </CardHeader>
               
               <CardContent className="space-y-6">
+                {searchParams.get('reason') === 'shipment-draft' && (
+                  <div className="flex items-start gap-3 p-3 rounded-lg border bg-blue-50 border-blue-200 text-blue-800 text-sm">
+                    <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                    <p className="font-medium">
+                      Tasima talebiniz kaydedildi; giris yaptiktan sonra kaldiginiz yerden devam edeceksiniz.
+                    </p>
+                  </div>
+                )}
+
                 <Tabs value={userType} onValueChange={(value) => { setUserType(value as 'customer' | 'carrier'); setUserTypeManuallySelected(true); setError(''); setErrorStatus(undefined); }} className="w-full">
                   <TabsList className="grid w-full grid-cols-2 mb-6 bg-white/50 backdrop-blur-sm">
                     <TabsTrigger value="customer" className="flex items-center space-x-2 data-[state=active]:bg-gradient-to-r data-[state=active]:from-green-500 data-[state=active]:to-emerald-500 data-[state=active]:text-white">

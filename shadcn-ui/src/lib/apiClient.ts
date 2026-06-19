@@ -5,10 +5,11 @@ let redirectInProgress = false;
 
 type ApiClientInit = RequestInit & {
   suppressErrorToast?: boolean;
+  skipAuth?: boolean;
 };
 
 export async function apiClient(input: RequestInfo | URL, init: ApiClientInit = {}): Promise<Response> {
-  const { suppressErrorToast = false, ...requestInit } = init;
+  const { suppressErrorToast = false, skipAuth = false, ...requestInit } = init;
   const headers = new Headers(requestInit.headers || {});
   const token = typeof window !== 'undefined' ? localStorage.getItem(APP_CONFIG.tokenKey) : null;
 
@@ -31,7 +32,7 @@ export async function apiClient(input: RequestInfo | URL, init: ApiClientInit = 
     return input;
   })();
 
-  if (token && !headers.has('Authorization')) {
+  if (!skipAuth && token && !headers.has('Authorization')) {
     headers.set('Authorization', `Bearer ${token}`);
   }
 

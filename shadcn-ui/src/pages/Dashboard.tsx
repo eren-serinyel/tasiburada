@@ -119,6 +119,11 @@ export default function Dashboard() {
       color: 'text-red-700',
       bgColor: 'bg-red-50 border-red-200',
     },
+    expired: {
+      label: 'Suresi Doldu',
+      color: 'text-slate-700',
+      bgColor: 'bg-slate-50 border-slate-200',
+    },
   };
 
   const toUiShipment = (item: BackendShipment): Shipment => {
@@ -257,6 +262,7 @@ export default function Dashboard() {
       case 'completed': return <Badge className="bg-green-100 text-green-800 border-green-200">Tamamlandı</Badge>;
       case 'cancelled': return <Badge className="bg-red-100 text-red-800 border-red-200">İptal</Badge>;
       case 'accepted': return <Badge className="bg-blue-100 text-blue-800 border-blue-200">Eşleşti</Badge>;
+      case 'expired': return <Badge className="bg-slate-100 text-slate-700 border-slate-200">Suresi Doldu</Badge>;
       default: return <Badge className="bg-gray-100 text-gray-700 border-gray-200">{status || 'Bilinmiyor'}</Badge>;
     }
   };
@@ -267,7 +273,8 @@ export default function Dashboard() {
       matched: 'Eşleşti',
       in_transit: 'Yolda',
       completed: 'Tamamlandı',
-      pending: 'Bekliyor'
+      pending: 'Bekliyor',
+      expired: 'Suresi Doldu'
     };
     return map[status || ''] || status || '';
   };

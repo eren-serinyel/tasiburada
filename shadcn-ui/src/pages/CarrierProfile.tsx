@@ -30,6 +30,35 @@ interface ApiReview {
   createdAt: string;
 }
 
+type CapabilityLoadType = 'HOME' | 'OFFICE' | 'PARTIAL' | 'STORAGE';
+
+interface ExtraServiceOption {
+  id: string;
+  name: string;
+  description?: string | null;
+  loadType: CapabilityLoadType;
+}
+
+interface CarrierExtraServiceCapability {
+  extraServiceId: string;
+  extraServiceName: string;
+  loadType: CapabilityLoadType;
+  isActive: boolean;
+  priceMode?: 'NONE' | 'FIXED' | 'QUOTE';
+  basePrice?: number | null;
+}
+
+interface CarrierCapabilityProfile {
+  extraServices: CarrierExtraServiceCapability[];
+}
+
+const CAPABILITY_LOAD_TYPES: Array<{ value: CapabilityLoadType; label: string }> = [
+  { value: 'HOME', label: 'Ev esyasi' },
+  { value: 'OFFICE', label: 'Ofis' },
+  { value: 'PARTIAL', label: 'Parca yuk' },
+  { value: 'STORAGE', label: 'Depolama' },
+];
+
 export default function CarrierProfile() {
   const { carrierId } = useParams<{ carrierId: string }>();
   const navigate = useNavigate();
@@ -40,6 +69,7 @@ export default function CarrierProfile() {
   const { toast } = useToast();
   const sessionUser = useMemo(() => getSessionUser(), []);
   const isCustomer = sessionUser && sessionUser.type === 'customer';
+  const isOwnCarrierProfile = Boolean(sessionUser?.type === 'carrier' && carrierId && String(sessionUser.id) === String(carrierId));
   const userId = sessionUser?.id;
 
   // Form state for new review
@@ -51,6 +81,12 @@ export default function CarrierProfile() {
   // Delete state
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [capabilityLoadType, setCapabilityLoadType] = useState<CapabilityLoadType>('HOME');
+  const [capabilities, setCapabilities] = useState<CarrierCapabilityProfile | null>(null);
+  const [extraServiceOptions, setExtraServiceOptions] = useState<ExtraServiceOption[]>([]);
+  const [capabilityLoading, setCapabilityLoading] = useState(false);
+  const [capabilitySavingId, setCapabilitySavingId] = useState<string | null>(null);
+  const [priceDrafts, setPriceDrafts] = useState<Record<string, string>>({});
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -108,6 +144,48 @@ export default function CarrierProfile() {
 
     fetchProfile();
   }, [carrierId, navigate]);
+
+  useEffect(() => {
+    if (!isOwnCarrierProfile) return;
+
+    const fetchCapabilityData = async () => {
+      setCapabilityLoading(true);
+      try {
+        const [capabilityRes, servicesRes] = await Promise.all([
+          apiClient('/api/v1/carriers/me/capabilities'),
+          apiClient(`/api/v1/extra-services?loadType=${capabilityLoadType}`),
+        ]);
+        const capabilityJson = await capabilityRes.json();
+        const servicesJson = await servicesRes.json();
+
+        if (capabilityRes.ok && capabilityJson?.success) {
+          setCapabilities(capabilityJson.data);
+        }
+        if (servicesRes.ok && servicesJson?.success && Array.isArray(servicesJson.data)) {
+          setExtraServiceOptions(servicesJson.data);
+        }
+      } catch {
+        toast({ title: 'Hata', description: 'Ek hizmet bilgileri alinamadi.', variant: 'destructive' });
+      } finally {
+        setCapabilityLoading(false);
+      }
+    };
+
+    fetchCapabilityData();
+  }, [isOwnCarrierProfile, capabilityLoadType, toast]);
+
+  useEffect(() => {
+    const nextDrafts: Record<string, string> = {};
+    for (const option of extraServiceOptions) {
+      const capability = capabilities?.extraServices?.find(
+        item => item.extraServiceId === option.id && item.loadType === capabilityLoadType
+      );
+      nextDrafts[option.id] = capability?.priceMode === 'FIXED' && capability.basePrice != null
+        ? String(Number(capability.basePrice))
+        : '';
+    }
+    setPriceDrafts(nextDrafts);
+  }, [capabilities, extraServiceOptions, capabilityLoadType]);
 
   // Computed averages from API reviews
   const overallStats = useMemo(() => {
@@ -178,6 +256,58 @@ export default function CarrierProfile() {
       toast({ title: 'Hata', description: 'Bağlantı hatası.', variant: 'destructive' });
     } finally {
       setDeleteLoading(false);
+    }
+  };
+
+  const handleSaveCapabilityPrice = async (service: ExtraServiceOption) => {
+    const rawPrice = priceDrafts[service.id]?.trim();
+    const price = rawPrice ? Number(rawPrice) : NaN;
+    const existing = capabilities?.extraServices?.find(
+      item => item.extraServiceId === service.id && item.loadType === capabilityLoadType
+    );
+
+    if (!rawPrice && !existing) {
+      toast({ title: 'Fiyat gerekli', description: 'Ek hizmet eklemek icin sabit fiyat girin.' });
+      return;
+    }
+
+    const payload = rawPrice
+      ? {
+          action: 'add_extra_service',
+          extraServiceId: service.id,
+          loadType: capabilityLoadType,
+          priceMode: 'FIXED',
+          basePrice: price,
+        }
+      : {
+          action: 'remove_extra_service',
+          extraServiceId: service.id,
+          loadType: capabilityLoadType,
+        };
+
+    if (rawPrice && (!Number.isFinite(price) || price < 0)) {
+      toast({ title: 'Gecersiz fiyat', description: 'Lutfen 0 veya daha buyuk bir fiyat girin.', variant: 'destructive' });
+      return;
+    }
+
+    setCapabilitySavingId(service.id);
+    try {
+      const res = await apiClient('/api/v1/carriers/me/capabilities', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const json = await res.json();
+      if (res.ok && json?.success) {
+        setCapabilities(json.data);
+        toast({ title: 'Kaydedildi', description: rawPrice ? 'Ek hizmet fiyati guncellendi.' : 'Ek hizmet kaldirildi.' });
+      } else {
+        toast({ title: 'Hata', description: json?.message || json?.error?.details || 'Kaydedilemedi.', variant: 'destructive' });
+      }
+    } catch {
+      toast({ title: 'Hata', description: 'Baglanti hatasi.', variant: 'destructive' });
+    } finally {
+      setCapabilitySavingId(null);
     }
   };
 
@@ -390,6 +520,86 @@ export default function CarrierProfile() {
               </div>
             </CardContent>
           </Card>
+
+          {isOwnCarrierProfile && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Ek Hizmetlerim</CardTitle>
+                <CardDescription>
+                  Musterinin istedigi ek hizmetler teklif fiyatiniza otomatik eklenir.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <Label className="text-xs text-gray-600">Yuk tipi</Label>
+                  <select
+                    value={capabilityLoadType}
+                    onChange={(event) => setCapabilityLoadType(event.target.value as CapabilityLoadType)}
+                    className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm md:w-64"
+                  >
+                    {CAPABILITY_LOAD_TYPES.map((item) => (
+                      <option key={item.value} value={item.value}>{item.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {capabilityLoading ? (
+                  <p className="text-sm text-gray-500">Ek hizmetler yukleniyor...</p>
+                ) : extraServiceOptions.length === 0 ? (
+                  <p className="rounded-md border bg-gray-50 p-3 text-sm text-gray-500">
+                    Bu yuk tipi icin tanimli ek hizmet bulunmuyor.
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {extraServiceOptions.map((service) => {
+                      const capability = capabilities?.extraServices?.find(
+                        item => item.extraServiceId === service.id && item.loadType === capabilityLoadType
+                      );
+                      const isEnabled = Boolean(capability?.isActive && capability.priceMode === 'FIXED');
+
+                      return (
+                        <div key={service.id} className="grid gap-3 rounded-md border p-3 md:grid-cols-[1fr_160px_auto] md:items-center">
+                          <div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span className="font-medium text-sm">{service.name}</span>
+                              {isEnabled && <Badge variant="outline" className="bg-green-50 text-green-700">Aktif</Badge>}
+                            </div>
+                            {service.description && (
+                              <p className="mt-1 text-xs text-gray-500">{service.description}</p>
+                            )}
+                          </div>
+                          <div>
+                            <Label className="text-xs text-gray-600">Sabit fiyat (TL)</Label>
+                            <input
+                              type="number"
+                              min="0"
+                              step="1"
+                              value={priceDrafts[service.id] ?? ''}
+                              onChange={(event) => setPriceDrafts(prev => ({ ...prev, [service.id]: event.target.value }))}
+                              placeholder="Orn. 750"
+                              className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                            />
+                          </div>
+                          <Button
+                            type="button"
+                            variant={priceDrafts[service.id]?.trim() ? 'default' : 'outline'}
+                            disabled={capabilitySavingId === service.id}
+                            onClick={() => handleSaveCapabilityPrice(service)}
+                          >
+                            {capabilitySavingId === service.id
+                              ? 'Kaydediliyor...'
+                              : priceDrafts[service.id]?.trim()
+                                ? 'Kaydet'
+                                : 'Kaldir'}
+                          </Button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
           {/* Reviews */}
           <Card>

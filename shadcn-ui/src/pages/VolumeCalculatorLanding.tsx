@@ -18,6 +18,7 @@ import {
 
 const benefitIcons = [Truck, Boxes, Calculator, ShieldCheck];
 const OFFER_REQUEST_REDIRECT = '/teklif-talebi?volumeEstimate=1';
+const VOLUME_ESTIMATE_DRAFT_KEY = 'tasiburada:volume-calculator-estimate:v1';
 
 const isLoggedIn = () => {
   try {
@@ -48,10 +49,9 @@ export default function VolumeCalculatorLanding() {
   const openCalculator = () => setCalculatorOpen(true);
 
   const continueWithEstimate = (result: EstimateConverterResponse) => {
-    sessionStorage.setItem(
-      'volumeCalculatorEstimate',
-      JSON.stringify({ result, createdAt: new Date().toISOString() }),
-    );
+    const payload = JSON.stringify({ result, createdAt: new Date().toISOString() });
+    localStorage.setItem(VOLUME_ESTIMATE_DRAFT_KEY, payload);
+    sessionStorage.setItem('volumeCalculatorEstimate', payload);
 
     if (isLoggedIn()) {
       navigate(OFFER_REQUEST_REDIRECT);

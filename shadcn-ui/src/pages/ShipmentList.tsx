@@ -113,6 +113,8 @@ const normalizeStatus = (status?: string): Shipment['status'] => {
       return 'delivered';
     case 'cancelled':
       return 'cancelled';
+    case 'expired':
+      return 'expired';
     case 'in_transit':
       return 'matched';
     case 'offer_received':
@@ -140,6 +142,8 @@ const getCustomerNextStep = (shipment: ShipmentListItem): string => {
       return 'Surec tamamlandi. Dilerseniz benzer bir ilan yeniden olusturabilirsiniz.';
     case 'cancelled':
       return 'Ihtiyaciniz devam ediyorsa yeni bir ilan olusturabilirsiniz.';
+    case 'expired':
+      return 'Bu ilanin tasima tarihi gecti. Yeni tarih ile yeniden ilan olusturabilirsiniz.';
     default:
       return 'Ilan detaylarini kontrol ederek bir sonraki adimi belirleyin.';
   }

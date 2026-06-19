@@ -26,6 +26,7 @@ import {
   CarrierExtraServiceCapability,
   CarrierExtraServicePriceMode,
 } from '../../../domain/entities/CarrierExtraServiceCapability';
+import { resolveSuggestedServiceAreas } from '../../../shared/serviceAreaSuggestions';
 import { CARRIER_COMPANIES } from '../data/constants';
 import {
   ensureSeedDocumentsDirectory,
@@ -228,11 +229,7 @@ export async function seedCarriers(
     }
 
     // Carrier Activity Guarantee (Adım 6 - 150/150)
-    const serviceAreas = [
-      company.city,
-      district,
-      randomDistrict(company.city),
-    ].filter((value, position, list) => list.indexOf(value) === position);
+    const serviceAreas = resolveSuggestedServiceAreas(company.city);
 
     await activityRepo.save(activityRepo.create({
       carrierId: savedCarrier.id,
