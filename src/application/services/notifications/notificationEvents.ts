@@ -58,7 +58,7 @@ export const NOTIFICATION_EVENT_DEFINITIONS: Record<NotificationEventType, Notif
     buildTitle: () => 'Yeni teklif geldi',
     buildBody: (payload) => {
       const carrierName = asString(payload.carrierName, 'Nakliyeci');
-      return `${carrierName} tasimaniz icin teklif verdi.`;
+      return `${carrierName} taşımanız için teklif verdi.`;
     },
     buildDedupeKey: (payload) => `customer:offer_received:${asString(payload.offerId, asString(payload.entityId))}`,
   },
@@ -68,8 +68,8 @@ export const NOTIFICATION_EVENT_DEFINITIONS: Record<NotificationEventType, Notif
     severity: NotificationSeverity.HIGH,
     entityType: 'shipment',
     metadataWhitelist: ['carrierId', 'shipmentStatus'],
-    buildTitle: () => 'Tasimaniz basladi',
-    buildBody: () => 'Nakliyeci tasimanizi baslatti. Teslimati takip edebilirsiniz.',
+    buildTitle: () => 'Taşımanız başladı',
+    buildBody: () => 'Nakliyeci taşımanızı başlattı. Teslimatı takip edebilirsiniz.',
     buildDedupeKey: (payload) => `customer:shipment_in_transit:${asString(payload.entityId)}`,
   },
   'customer.shipment_completed': {
@@ -78,8 +78,8 @@ export const NOTIFICATION_EVENT_DEFINITIONS: Record<NotificationEventType, Notif
     severity: NotificationSeverity.HIGH,
     entityType: 'shipment',
     metadataWhitelist: ['carrierId', 'shipmentStatus', 'reviewSuggested'],
-    buildTitle: () => 'Tasimaniz tamamlandi',
-    buildBody: () => 'Esyalariniz teslim edildi. Lutfen nakliyeciyi degerlendirin.',
+    buildTitle: () => 'Taşımanız tamamlandı',
+    buildBody: () => 'Eşyalarınız teslim edildi. Lütfen nakliyeciyi değerlendirin.',
     buildDedupeKey: (payload) => `customer:shipment_completed:${asString(payload.entityId)}`,
   },
   'carrier.offer_accepted': {
@@ -89,7 +89,7 @@ export const NOTIFICATION_EVENT_DEFINITIONS: Record<NotificationEventType, Notif
     entityType: 'shipment',
     metadataWhitelist: ['offerId', 'customerId', 'acceptedPrice'],
     buildTitle: () => 'Teklifiniz kabul edildi',
-    buildBody: () => 'Musteri teklifinizi kabul etti. Tasimaya hazirlanin.',
+    buildBody: () => 'Müşteri teklifinizi kabul etti. Taşımaya hazırlanın.',
     buildDedupeKey: (payload) => `carrier:offer_accepted:${asString(payload.offerId, asString(payload.entityId))}`,
   },
   'carrier.payment_released': {
@@ -98,13 +98,13 @@ export const NOTIFICATION_EVENT_DEFINITIONS: Record<NotificationEventType, Notif
     severity: NotificationSeverity.HIGH,
     entityType: 'shipment',
     metadataWhitelist: ['paymentId', 'customerId', 'amount', 'currency'],
-    buildTitle: () => 'Odeme onaylandi',
+    buildTitle: () => 'Ödeme onaylandı',
     buildBody: (payload) => {
       const amount = asNumber(payload.amount);
       const currency = asString(payload.currency, 'TRY');
       return amount === null
-        ? 'Musteri teslimati onayladi. Odeme tamamlandi.'
-        : `Musteri teslimati onayladi. ${amount} ${currency} odeme tamamlandi.`;
+        ? 'Müşteri teslimatı onayladı. Ödeme tamamlandı.'
+        : `Müşteri teslimatı onayladı. ${amount} ${currency} ödeme tamamlandı.`;
     },
     buildDedupeKey: (payload) => `carrier:payment_released:${asString(payload.paymentId, asString(payload.entityId))}`,
   },
@@ -114,8 +114,8 @@ export const NOTIFICATION_EVENT_DEFINITIONS: Record<NotificationEventType, Notif
     severity: NotificationSeverity.HIGH,
     entityType: 'carrier',
     metadataWhitelist: ['approvalVersion', 'reviewedByAdminId'],
-    buildTitle: () => 'Profiliniz onaylandi',
-    buildBody: () => 'Basvurunuz onaylandi. Artik aktif olarak teklif verebilirsiniz.',
+    buildTitle: () => 'Profiliniz onaylandı',
+    buildBody: () => 'Başvurunuz onaylandı. Artık aktif olarak teklif verebilirsiniz.',
     buildDedupeKey: (payload) => {
       const approvalVersion = asNumber(payload.approvalVersion);
       return `carrier:profile_approved:${asString(payload.entityId)}:${approvalVersion ?? 'v0'}`;
@@ -127,10 +127,10 @@ export const NOTIFICATION_EVENT_DEFINITIONS: Record<NotificationEventType, Notif
     severity: NotificationSeverity.HIGH,
     entityType: 'carrier',
     metadataWhitelist: ['companyName', 'approvalVersion', 'resubmissionCount'],
-    buildTitle: () => 'Yeni onay basvurusu',
+    buildTitle: () => 'Yeni onay başvurusu',
     buildBody: (payload) => {
-      const companyName = asString(payload.companyName, 'Tasiyici');
-      return `${companyName} inceleme icin gonderildi.`;
+      const companyName = asString(payload.companyName, 'Taşıyıcı');
+      return `${companyName} inceleme için gönderildi.`;
     },
     buildDedupeKey: (payload) => {
       const approvalVersion = asNumber(payload.approvalVersion);
@@ -152,8 +152,8 @@ export const NOTIFICATION_EVENT_DEFINITIONS: Record<NotificationEventType, Notif
       'riskScore',
       'reasons',
     ],
-    buildTitle: () => 'Yuksek riskli iletisim denemesi',
-    buildBody: () => 'Platform disi iletisim denemesi tespit edildi.',
+    buildTitle: () => 'Yüksek riskli iletişim denemesi',
+    buildBody: () => 'Platform dışı iletişim denemesi tespit edildi.',
     buildDedupeKey: (payload) => {
       const contactFilterLogId = asString(payload.contactFilterLogId, asString(payload.entityId));
       const dedupeScope = asString(payload.dedupeScope);
@@ -166,8 +166,8 @@ export const NOTIFICATION_EVENT_DEFINITIONS: Record<NotificationEventType, Notif
     severity: NotificationSeverity.HIGH,
     entityType: 'actor',
     metadataWhitelist: ['actorType', 'actorId', 'windowDays', 'violationCount', 'latestViolationAt'],
-    buildTitle: () => 'Tekrarlayan iletisim ihlali',
-    buildBody: () => 'Bir kullanici kisa sure icinde birden fazla platform disi iletisim denemesi yapti.',
+    buildTitle: () => 'Tekrarlayan iletişim ihlali',
+    buildBody: () => 'Bir kullanıcı kısa süre içinde birden fazla platform dışı iletişim denemesi yaptı.',
     buildDedupeKey: (payload) => {
       const actorType = asString(payload.actorType);
       const actorId = asString(payload.actorId, asString(payload.entityId));

@@ -57,7 +57,7 @@ function formatPrice(n: number) {
 const BANK_INFO = {
   bankName: 'Ziraat Bankası',
   iban: 'TR00 0001 0000 0000 0000 0000 00',
-  accountName: 'Taşıburada Teknoloji A.Ş.',
+  accountName: 'Taşıburadan Teknoloji A.Ş.',
 };
 
 export default function Payment() {

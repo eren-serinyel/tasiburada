@@ -1,8 +1,8 @@
 /**
  * admin-flow.test.ts
  * Admin paneli uçtan uca akış testleri — seed verisi kullanır.
- * Admin: admin@tasiburada.com / Maviface2141
- * Superadmin: superadmin@tasiburada.com / Maviface2141
+ * Admin: admin@tasiburadan.com / Maviface2141
+ * Superadmin: superadmin@tasiburadan.com / Maviface2141
  */
 import request from 'supertest';
 import { testApp } from './helpers/testApp';
@@ -10,8 +10,8 @@ import { restoreSilenCarrierBaseline } from './setup/seedContract';
 
 const skipDB = () => process.env.SKIP_DB_TESTS === 'true';
 
-const ADMIN = { email: 'admin@tasiburada.com', password: 'Maviface2141' };
-const SUPERADMIN = { email: 'superadmin@tasiburada.com', password: 'Maviface2141' };
+const ADMIN = { email: 'admin@tasiburadan.com', password: 'Maviface2141' };
+const SUPERADMIN = { email: 'superadmin@tasiburadan.com', password: 'Maviface2141' };
 
 describe('Admin Akışı — Uçtan Uca', () => {
   let adminToken: string;
@@ -232,8 +232,8 @@ describe('Nakliyeci Onay — Business Rules', () => {
   beforeAll(async () => {
     if (process.env.SKIP_DB_TESTS === 'true') return;
     const [adm, sup] = await Promise.all([
-      request(testApp).post(`${BASE}/admin/login`).send({ email: 'admin@tasiburada.com', password: 'Maviface2141' }),
-      request(testApp).post(`${BASE}/admin/login`).send({ email: 'superadmin@tasiburada.com', password: 'Maviface2141' }),
+      request(testApp).post(`${BASE}/admin/login`).send({ email: 'admin@tasiburadan.com', password: 'Maviface2141' }),
+      request(testApp).post(`${BASE}/admin/login`).send({ email: 'superadmin@tasiburadan.com', password: 'Maviface2141' }),
     ]);
     adminToken = adm.body.data?.token || '';
     superadminToken = sup.body.data?.token || '';
@@ -295,8 +295,8 @@ describe('Platform Ayarları — Validasyon', () => {
   beforeAll(async () => {
     if (process.env.SKIP_DB_TESTS === 'true') return;
     const [sup, adm] = await Promise.all([
-      request(testApp).post(`${BASE}/admin/login`).send({ email: 'superadmin@tasiburada.com', password: 'Maviface2141' }),
-      request(testApp).post(`${BASE}/admin/login`).send({ email: 'admin@tasiburada.com', password: 'Maviface2141' }),
+      request(testApp).post(`${BASE}/admin/login`).send({ email: 'superadmin@tasiburadan.com', password: 'Maviface2141' }),
+      request(testApp).post(`${BASE}/admin/login`).send({ email: 'admin@tasiburadan.com', password: 'Maviface2141' }),
     ]);
     superadminToken = sup.body.data?.token || '';
     adminToken = adm.body.data?.token || '';
@@ -357,8 +357,8 @@ describe('Admin Yönetimi — Business Rules', () => {
   beforeAll(async () => {
     if (process.env.SKIP_DB_TESTS === 'true') return;
     const [sup, adm] = await Promise.all([
-      request(testApp).post(`${BASE}/admin/login`).send({ email: 'superadmin@tasiburada.com', password: 'Maviface2141' }),
-      request(testApp).post(`${BASE}/admin/login`).send({ email: 'admin@tasiburada.com', password: 'Maviface2141' }),
+      request(testApp).post(`${BASE}/admin/login`).send({ email: 'superadmin@tasiburadan.com', password: 'Maviface2141' }),
+      request(testApp).post(`${BASE}/admin/login`).send({ email: 'admin@tasiburadan.com', password: 'Maviface2141' }),
     ]);
     superadminToken = sup.body.data?.token || '';
     adminToken = adm.body.data?.token || '';
@@ -366,7 +366,7 @@ describe('Admin Yönetimi — Business Rules', () => {
 
   test('Superadmin yeni admin oluşturabilmeli', async () => {
     if (!superadminToken) return;
-    const unique = `testadmin_${Date.now()}@tasiburada.com`;
+    const unique = `testadmin_${Date.now()}@tasiburadan.com`;
     const res = await request(testApp)
       .post(`${BASE}/admin/admins`)
       .set('Authorization', `Bearer ${superadminToken}`)
@@ -382,7 +382,7 @@ describe('Admin Yönetimi — Business Rules', () => {
     const res = await request(testApp)
       .post(`${BASE}/admin/admins`)
       .set('Authorization', `Bearer ${adminToken}`)
-      .send({ email: 'blocked@tasiburada.com', password: 'Blocked1234', role: 'admin' });
+      .send({ email: 'blocked@tasiburadan.com', password: 'Blocked1234', role: 'admin' });
     expect([403]).toContain(res.status);
   });
 
@@ -427,7 +427,7 @@ describe('İstatistik Tutarlılığı', () => {
     if (process.env.SKIP_DB_TESTS === 'true') return;
     const res = await request(testApp)
       .post(`${BASE}/admin/login`)
-      .send({ email: 'admin@tasiburada.com', password: 'Maviface2141' });
+      .send({ email: 'admin@tasiburadan.com', password: 'Maviface2141' });
     adminToken = res.body.data?.token || '';
   });
 
@@ -489,7 +489,7 @@ describe('Admin Panel — Nakliyeci Detay', () => {
 
   beforeAll(async () => {
     if (process.env.SKIP_DB_TESTS === 'true') return;
-    const login = await request(testApp).post(`${BASE}/admin/login`).send({ email: 'admin@tasiburada.com', password: 'Maviface2141' });
+    const login = await request(testApp).post(`${BASE}/admin/login`).send({ email: 'admin@tasiburadan.com', password: 'Maviface2141' });
     adminToken = login.body.data?.token || '';
     const res = await request(testApp)
       .get(`${BASE}/admin/carriers`)
@@ -592,7 +592,7 @@ describe('Admin Panel — Müşteri Yönetimi', () => {
 
   beforeAll(async () => {
     if (process.env.SKIP_DB_TESTS === 'true') return;
-    const login = await request(testApp).post(`${BASE}/admin/login`).send({ email: 'admin@tasiburada.com', password: 'Maviface2141' });
+    const login = await request(testApp).post(`${BASE}/admin/login`).send({ email: 'admin@tasiburadan.com', password: 'Maviface2141' });
     adminToken = login.body.data?.token || '';
     const res = await request(testApp)
       .get(`${BASE}/admin/customers`)
@@ -664,7 +664,7 @@ describe('Admin Panel — İlan Yönetimi', () => {
 
   beforeAll(async () => {
     if (process.env.SKIP_DB_TESTS === 'true') return;
-    const login = await request(testApp).post(`${BASE}/admin/login`).send({ email: 'admin@tasiburada.com', password: 'Maviface2141' });
+    const login = await request(testApp).post(`${BASE}/admin/login`).send({ email: 'admin@tasiburadan.com', password: 'Maviface2141' });
     adminToken = login.body.data?.token || '';
   });
 
@@ -784,7 +784,7 @@ describe('Admin Panel — Teklif Yönetimi', () => {
 
   beforeAll(async () => {
     if (process.env.SKIP_DB_TESTS === 'true') return;
-    const login = await request(testApp).post(`${BASE}/admin/login`).send({ email: 'admin@tasiburada.com', password: 'Maviface2141' });
+    const login = await request(testApp).post(`${BASE}/admin/login`).send({ email: 'admin@tasiburadan.com', password: 'Maviface2141' });
     adminToken = login.body.data?.token || '';
     const res = await request(testApp)
       .get(`${BASE}/admin/offers`)
@@ -829,7 +829,7 @@ describe('Admin Panel — Belge Yönetimi', () => {
 
   beforeAll(async () => {
     if (process.env.SKIP_DB_TESTS === 'true') return;
-    const login = await request(testApp).post(`${BASE}/admin/login`).send({ email: 'admin@tasiburada.com', password: 'Maviface2141' });
+    const login = await request(testApp).post(`${BASE}/admin/login`).send({ email: 'admin@tasiburadan.com', password: 'Maviface2141' });
     adminToken = login.body.data?.token || '';
   });
 
@@ -879,7 +879,7 @@ describe('Admin Panel — Yorum Yönetimi', () => {
 
   beforeAll(async () => {
     if (process.env.SKIP_DB_TESTS === 'true') return;
-    const login = await request(testApp).post(`${BASE}/admin/login`).send({ email: 'admin@tasiburada.com', password: 'Maviface2141' });
+    const login = await request(testApp).post(`${BASE}/admin/login`).send({ email: 'admin@tasiburadan.com', password: 'Maviface2141' });
     adminToken = login.body.data?.token || '';
     const res = await request(testApp)
       .get(`${BASE}/admin/reviews`)
@@ -935,7 +935,7 @@ describe('Admin Panel — Rapor Sistemi', () => {
 
   beforeAll(async () => {
     if (process.env.SKIP_DB_TESTS === 'true') return;
-    const login = await request(testApp).post(`${BASE}/admin/login`).send({ email: 'admin@tasiburada.com', password: 'Maviface2141' });
+    const login = await request(testApp).post(`${BASE}/admin/login`).send({ email: 'admin@tasiburadan.com', password: 'Maviface2141' });
     adminToken = login.body.data?.token || '';
   });
 
@@ -978,7 +978,7 @@ describe('Admin Panel — Audit Log Derinlik', () => {
 
   beforeAll(async () => {
     if (process.env.SKIP_DB_TESTS === 'true') return;
-    const login = await request(testApp).post(`${BASE}/admin/login`).send({ email: 'admin@tasiburada.com', password: 'Maviface2141' });
+    const login = await request(testApp).post(`${BASE}/admin/login`).send({ email: 'admin@tasiburadan.com', password: 'Maviface2141' });
     adminToken = login.body.data?.token || '';
   });
 
@@ -1032,7 +1032,7 @@ describe('Admin Panel — Dashboard Tutarlılık', () => {
 
   beforeAll(async () => {
     if (process.env.SKIP_DB_TESTS === 'true') return;
-    const login = await request(testApp).post(`${BASE}/admin/login`).send({ email: 'admin@tasiburada.com', password: 'Maviface2141' });
+    const login = await request(testApp).post(`${BASE}/admin/login`).send({ email: 'admin@tasiburadan.com', password: 'Maviface2141' });
     adminToken = login.body.data?.token || '';
   });
 
@@ -1238,7 +1238,7 @@ describe('Admin Panel — Yetki Sınırları', () => {
 
   test('Normal admin superadmin-only endpoint erişilememeli', async () => {
     if (process.env.SKIP_DB_TESTS === 'true') return;
-    const login = await request(testApp).post(`${BASE}/admin/login`).send({ email: 'admin@tasiburada.com', password: 'Maviface2141' });
+    const login = await request(testApp).post(`${BASE}/admin/login`).send({ email: 'admin@tasiburadan.com', password: 'Maviface2141' });
     const adminToken = login.body.data?.token || '';
     if (!adminToken) return;
 
@@ -1258,7 +1258,7 @@ describe('Admin Panel — Yetki Sınırları', () => {
 
   test('Geçersiz admin ID formatı hata dönmeli', async () => {
     if (process.env.SKIP_DB_TESTS === 'true') return;
-    const login = await request(testApp).post(`${BASE}/admin/login`).send({ email: 'admin@tasiburada.com', password: 'Maviface2141' });
+    const login = await request(testApp).post(`${BASE}/admin/login`).send({ email: 'admin@tasiburadan.com', password: 'Maviface2141' });
     const adminToken = login.body.data?.token || '';
     if (!adminToken) return;
 

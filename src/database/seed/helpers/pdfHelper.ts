@@ -108,7 +108,7 @@ export function resolveSeedDocumentPath(fileUrl: string): string {
 }
 
 export function generateMinimalPdf(text: string): Buffer {
-  const titleLine = 'Tasiburada Demo Belge';
+  const titleLine = 'Taşıburadan Demo Belge';
   const bodyLines = wrapPdfLines(text);
   const textOperations: string[] = [
     'BT',

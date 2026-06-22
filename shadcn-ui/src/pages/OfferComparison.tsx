@@ -24,6 +24,7 @@ import { apiClient } from '@/lib/apiClient';
 import { getCarrierEligibilityComparisonText, isOfferAcceptDisabled } from '@/lib/customerOfferTrust';
 import { toast } from '@/components/ui/sonner';
 import { cn } from '@/lib/utils';
+import { CorporateCard, InlineNotice, RoutePair } from '@/components/shared/CorporateUI';
 
 type SortMode = 'backend' | 'recommended' | 'rating_desc' | 'price_asc' | 'duration_asc';
 
@@ -187,10 +188,15 @@ export default function OfferComparison() {
             )}
           </div>
         </div>
+        {shipment && (
+          <div className="mt-4">
+            <RoutePair originFallback={shipment.origin} destinationFallback={shipment.destination} />
+          </div>
+        )}
       </div>
 
       {offers.length > 0 && (
-        <div className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4 md:grid-cols-[1fr,auto] md:items-center">
+        <CorporateCard className="grid gap-3 md:grid-cols-[1fr,auto] md:items-center">
           <div className="grid gap-3 sm:grid-cols-3">
             <Metric label="Aktif teklif" value={String(pendingCount)} />
             <Metric label="En dusuk fiyat" value={`₺${fmtPrice(Math.min(...offers.map(o => Number(o.price))))}`} />
@@ -218,12 +224,12 @@ export default function OfferComparison() {
               Karsilastir
             </Button>
           </div>
-        </div>
+        </CorporateCard>
       )}
 
-      <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-        Tasiyiciyla iletisim ve odeme sureclerini platform uzerinden surdurun.
-      </div>
+      <InlineNotice tone="warning">
+        Taşıyıcıyla iletişim ve ödeme süreçlerini platform üzerinden sürdürün.
+      </InlineNotice>
 
       {sortedOffers.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-center">

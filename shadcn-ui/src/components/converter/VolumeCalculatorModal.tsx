@@ -113,7 +113,6 @@ export default function VolumeCalculatorModal({
   const [moveType, setMoveType] = useState<ConverterMoveType>('household');
   const [propertyType, setPropertyType] = useState<ConverterPropertyType>('2+1');
   const [selectedItems, setSelectedItems] = useState<Record<string, number>>({});
-  const [specialItems, setSpecialItems] = useState<string[]>([]);
   const [customItems, setCustomItems] = useState<ConverterCustomItemInput[]>([]);
   const [showCustomForm, setShowCustomForm] = useState(false);
   const [customName, setCustomName] = useState('');
@@ -131,8 +130,8 @@ export default function VolumeCalculatorModal({
     [selectedItems],
   );
   const hasAnySelection = useMemo(
-    () => selectedItemEntries.length > 0 || specialItems.length > 0 || customItems.length > 0,
-    [selectedItemEntries, specialItems, customItems],
+    () => selectedItemEntries.length > 0 || customItems.length > 0,
+    [selectedItemEntries, customItems],
   );
 
   useEffect(() => {
@@ -163,16 +162,11 @@ export default function VolumeCalculatorModal({
           const validCodes = new Set(items.map((item) => item.itemCode));
           return Object.fromEntries(Object.entries(prev).filter(([code]) => validCodes.has(code)));
         });
-        setSpecialItems((prev) => {
-          const validSpecialCodes = new Set(items.filter((item) => item.isSpecial).map((item) => item.itemCode));
-          return prev.filter((code) => validSpecialCodes.has(code));
-        });
       })
       .catch((error: any) => {
         if (cancelled) return;
         setCatalogItems([]);
         setSelectedItems({});
-        setSpecialItems([]);
         setCatalogError(error?.message || 'Eşya katalogu alınamadı.');
       })
       .finally(() => {
@@ -188,11 +182,17 @@ export default function VolumeCalculatorModal({
     () => catalogItems.filter((item) => item.isSpecial),
     [catalogItems],
   );
+  const selectedSpecialItemCodes = useMemo(
+    () => specialCatalog
+      .filter((item) => (selectedItems[item.itemCode] ?? 0) > 0)
+      .map((item) => item.itemCode),
+    [selectedItems, specialCatalog],
+  );
   const selectedSpecialLabels = useMemo(
     () => specialCatalog
-      .filter((item) => specialItems.includes(item.itemCode))
+      .filter((item) => selectedSpecialItemCodes.includes(item.itemCode))
       .map((item) => item.label),
-    [specialCatalog, specialItems],
+    [selectedSpecialItemCodes, specialCatalog],
   );
 
   const resetCustomForm = () => {
@@ -247,7 +247,7 @@ export default function VolumeCalculatorModal({
         propertyType,
         loadType: loadType ?? undefined,
         items: selectedItemEntries.map(([itemCode, quantity]) => ({ itemCode, quantity })),
-        specialItems,
+        specialItems: selectedSpecialItemCodes,
         customItems,
       });
       setResult(estimate);
@@ -412,33 +412,6 @@ export default function VolumeCalculatorModal({
                 Diğer eşya ekle
               </Button>
             )}
-          </div>
-
-          <div className="space-y-3 border-t border-slate-200 pt-4">
-            <Label>Özel Eşyalar</Label>
-            <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
-              {specialCatalog.map((item) => {
-                const checked = specialItems.includes(item.itemCode);
-                return (
-                  <label
-                    key={item.itemCode}
-                    className="flex cursor-pointer items-center gap-2 rounded-md border border-slate-200 p-2 text-sm"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={(e) => {
-                        setSpecialItems((prev) => {
-                          if (e.target.checked) return [...prev, item.itemCode];
-                          return prev.filter((code) => code !== item.itemCode);
-                        });
-                      }}
-                    />
-                    {item.label}
-                  </label>
-                );
-              })}
-            </div>
           </div>
 
           {errorMessage && (

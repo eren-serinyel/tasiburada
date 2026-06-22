@@ -384,7 +384,7 @@ function AdminManagementContent({ currentAdminId }: { currentAdminId: string | n
                 value={formData.email}
                 onChange={(e) => setFormData((f) => ({ ...f, email: e.target.value }))}
                 disabled={!!editingAdmin}
-                placeholder="admin@tasiburada.com"
+                placeholder="admin@tasiburadan.com"
                 className="mt-1"
               />
               {formErrors.email && <p className="text-xs text-rose-500 mt-1">{formErrors.email}</p>}

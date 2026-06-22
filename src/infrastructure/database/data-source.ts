@@ -60,6 +60,7 @@ export const AppDataSource = new DataSource({
   timezone: '+03:00', // Türkiye saat dilimi
   extra: {
     connectionLimit: poolSize,
+    charset: 'utf8mb4_unicode_ci',
   }
 });
 

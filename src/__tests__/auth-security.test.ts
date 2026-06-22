@@ -11,7 +11,7 @@ const skipDB = () => process.env.SKIP_DB_TESTS === 'true';
 const SEED = {
   customer: { email: 'ahmet.yilmaz0@gmail.com', password: 'Maviface2141' },
   carrier:  { email: 'info@silenakliyat.com',    password: 'Maviface2141' },
-  admin:    { email: 'admin@tasiburada.com',      password: 'Maviface2141' },
+  admin:    { email: 'admin@tasiburadan.com',      password: 'Maviface2141' },
 };
 
 describe('Auth & Güvenlik Testleri', () => {
@@ -342,7 +342,7 @@ describe('Input Sanitization Derinliği', () => {
   test('Unicode normalization saldırısı crash oluşturmamalı', async () => {
     const res = await request(testApp)
       .post(`${BASE}/customers/login`)
-      .send({ email: 'admin\u0300@tasiburada.com', password: 'Maviface2141' });
+      .send({ email: 'admin\u0300@tasiburadan.com', password: 'Maviface2141' });
     expect([400, 401]).toContain(res.status);
   });
 });

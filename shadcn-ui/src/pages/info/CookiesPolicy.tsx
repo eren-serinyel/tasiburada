@@ -64,7 +64,7 @@ export default function CookiesPolicy() {
               <p className="font-semibold text-gray-800">Çerez tercihlerinizle ilgili sorularınız mı var?</p>
               <div className="mt-3">
                 📧
-                <a href="mailto:info@tasiburada.com" className="ml-1 text-blue-600 hover:text-blue-700 underline transition">info@tasiburada.com</a>
+                <a href="mailto:info@tasiburadan.com" className="ml-1 text-blue-600 hover:text-blue-700 underline transition">info@tasiburadan.com</a>
               </div>
             </div>
           </CardContent>

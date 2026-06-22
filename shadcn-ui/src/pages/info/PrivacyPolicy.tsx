@@ -43,7 +43,7 @@ export default function PrivacyPolicy() {
             {/* Bölüm: KVKK */}
             <h2 className="text-xl font-semibold text-blue-700 mt-2 mb-3">Kişisel Verilerin Korunması</h2>
             <p className="text-gray-700 leading-relaxed">
-              Taşıburada olarak kullanıcı verilerinin güvenliğine önem veriyoruz. Hesap ve işlem
+              Taşıburadan olarak kullanıcı verilerinin güvenliğine önem veriyoruz. Hesap ve işlem
               bilgileriniz; kimlik, iletişim ve işlem geçmişi verileriniz yalnızca hizmetin
               sunulması, platform güvenliği ve yasal yükümlülüklerin yerine getirilmesi amacıyla
               işlenir ve KVKK’ya uygundur.
@@ -98,8 +98,8 @@ export default function PrivacyPolicy() {
               <div className="mt-3 space-y-1">
                 <div>
                   📧
-                  <a href="mailto:info@tasiburada.com" className="ml-1 text-blue-600 hover:text-blue-700 underline transition">
-                    info@tasiburada.com
+                  <a href="mailto:info@tasiburadan.com" className="ml-1 text-blue-600 hover:text-blue-700 underline transition">
+                    info@tasiburadan.com
                   </a>
                 </div>
                 <div>

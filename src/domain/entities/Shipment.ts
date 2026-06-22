@@ -1,9 +1,10 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, CreateDateColumn, UpdateDateColumn, ManyToMany, JoinTable } from "typeorm";
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, CreateDateColumn, UpdateDateColumn, ManyToMany, JoinTable, OneToMany } from "typeorm";
 import { Customer } from "./Customer";
 import { Carrier } from "./Carrier";
 import { VehicleType } from "./VehicleType";
 import { ExtraService } from "./ExtraService";
 import { CustomerAddress } from "./CustomerAddress";
+import { ShipmentCustomExtraService } from "./ShipmentCustomExtraService";
 
 const decimalToNumberTransformer = {
     to: (value: number | null | undefined) => value,
@@ -128,7 +129,7 @@ export class Shipment {
     @JoinColumn({ name: 'origin_address_id' })
     originAddress: CustomerAddress | null;
 
-    @Column({ name: 'origin_address_text', type: 'varchar', length: 500, nullable: true, select: false, insert: false, update: false })
+    @Column({ name: 'origin_address_text', type: 'varchar', length: 500, nullable: true })
     originAddressText: string | null;
 
 
@@ -154,7 +155,7 @@ export class Shipment {
     @JoinColumn({ name: 'destination_address_id' })
     destinationAddress: CustomerAddress | null;
 
-    @Column({ name: 'destination_address_text', type: 'varchar', length: 500, nullable: true, select: false, insert: false, update: false })
+    @Column({ name: 'destination_address_text', type: 'varchar', length: 500, nullable: true })
     destinationAddressText: string | null;
 
     @Column({ name: 'load_profile', type: 'enum', enum: LoadProfile, nullable: true, select: false, insert: false, update: false })
@@ -175,7 +176,7 @@ export class Shipment {
     @Column({ name: 'time_preference', nullable: true })
     timePreference: string;
 
-    @Column({ name: 'date_flexibility', type: 'enum', enum: DateFlexibility, nullable: true, default: DateFlexibility.EXACT, select: false, insert: false, update: false })
+    @Column({ name: 'date_flexibility', type: 'enum', enum: DateFlexibility, nullable: true, default: DateFlexibility.EXACT })
     dateFlexibility: DateFlexibility | null;
 
     @Column({ type: "decimal", precision: 10, scale: 2, nullable: true })
@@ -237,6 +238,9 @@ export class Shipment {
         inverseJoinColumn: { name: 'extra_service_id', referencedColumnName: 'id' },
     })
     extraServices: ExtraService[];
+
+    @OneToMany(() => ShipmentCustomExtraService, (customExtraService) => customExtraService.shipment, { cascade: true })
+    customExtraServices: ShipmentCustomExtraService[];
 
     @CreateDateColumn({ name: 'created_at' })
     createdAt: Date;

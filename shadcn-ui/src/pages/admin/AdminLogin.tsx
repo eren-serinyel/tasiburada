@@ -43,7 +43,7 @@ export default function AdminLogin() {
       <Card className="w-full max-w-sm shadow-lg">
         <CardHeader className="text-center">
           <CardTitle className="text-2xl font-bold text-gray-800">Admin Girişi</CardTitle>
-          <p className="text-sm text-gray-500 mt-1">TaşıBurada Yönetim Paneli</p>
+          <p className="text-sm text-gray-500 mt-1">Taşıburadan Yönetim Paneli</p>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -54,7 +54,7 @@ export default function AdminLogin() {
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="admin@tasiburada.com"
+                placeholder="admin@tasiburadan.com"
                 required
                 autoComplete="email"
               />

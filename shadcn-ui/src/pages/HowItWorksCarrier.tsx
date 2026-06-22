@@ -82,7 +82,7 @@ export default function HowItWorksCarrier() {
           </h1>
         </div>
         <p className="mt-3 text-gray-600 text-center">
-          Taşıburada'da onaylı profilinizle uygun talepleri görür, kontrollü iletişimle teklif verir ve tamamlanan işlerden kazanç elde edersiniz.
+          Taşıburadan'da onaylı profilinizle uygun talepleri görür, kontrollü iletişimle teklif verir ve tamamlanan işlerden kazanç elde edersiniz.
         </p>
       </div>
 

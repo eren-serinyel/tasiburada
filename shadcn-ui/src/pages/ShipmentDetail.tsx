@@ -8,6 +8,7 @@ import type { CarrierEligibility } from '@/lib/customerOfferTrust';
 import { getCarrierEligibilityWarning, isOfferAcceptDisabled } from '@/lib/customerOfferTrust';
 import { toast } from '@/components/ui/sonner';
 import { getUserType, getUserId } from '@/lib/auth';
+import { InlineNotice, RoutePair, ToneBadge } from '@/components/shared/CorporateUI';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel,
   AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
@@ -42,6 +43,12 @@ interface BackendShipment {
   id: string;
   origin: string;
   destination: string;
+  originCity?: string | null;
+  originDistrict?: string | null;
+  destinationCity?: string | null;
+  destinationDistrict?: string | null;
+  originAddressText?: string | null;
+  destinationAddressText?: string | null;
   loadDetails: string;
   transportType?: string;
   originPlaceType?: string;
@@ -327,6 +334,8 @@ export default function ShipmentDetail() {
       ? (shipment.customer?.phone || shipment.contactPhone)
       : shipment.carrier?.phone || shipment.customer?.phone || shipment.contactPhone;
   const showContactGate = ['matched', 'in_transit'].includes(shipment.status);
+  const canShowOpenAddress = shipment.status === 'in_transit' && isCarrierOwner;
+  const openAddressAvailable = Boolean(shipment.originAddressText || shipment.destinationAddressText);
 
   /* ── Timeline steps ── */
   const isCancelled = shipment.status === 'cancelled';
@@ -379,8 +388,6 @@ export default function ShipmentDetail() {
 
   /* ── Detail rows ── */
   const detailRows: { label: string; value: React.ReactNode }[] = [
-    { label: 'ÇIKIŞ', value: shipment.origin },
-    { label: 'VARIŞ', value: shipment.destination },
     { label: 'TARİH', value: fmtDate(shipment.shipmentDate) },
     { label: 'YÜK', value: shipment.loadDetails },
     { label: 'AĞIRLIK', value: shipment.weight ? `${shipment.weight} kg` : '—' },
@@ -448,6 +455,17 @@ export default function ShipmentDetail() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
               <span style={{ fontSize: '13px', fontWeight: 500, color: '#0F172A' }}>İlan Detayları</span>
               <span style={{ background: '#F1F5F9', borderRadius: '5px', padding: '2px 7px', fontFamily: 'monospace', fontSize: '11px', color: '#64748B' }}>#{shortId}</span>
+            </div>
+            <div style={{ marginBottom: '12px' }}>
+              <RoutePair
+                compact
+                originCity={shipment.originCity}
+                originDistrict={shipment.originDistrict}
+                destinationCity={shipment.destinationCity}
+                destinationDistrict={shipment.destinationDistrict}
+                originFallback={shipment.origin}
+                destinationFallback={shipment.destination}
+              />
             </div>
             {/* Detail rows */}
             {detailRows.map((row, i) => (
@@ -542,6 +560,31 @@ export default function ShipmentDetail() {
                 </div>
               </div>
             )}
+
+            <div style={{ marginTop: '12px', padding: '10px 12px', border: '0.5px solid var(--tb-border)', borderRadius: 'var(--tb-radius-sm)', background: 'var(--tb-canvas)' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', marginBottom: '8px' }}>
+                <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--tb-ink-900)' }}>Açık Adres</span>
+                <ToneBadge tone={canShowOpenAddress && openAddressAvailable ? 'success' : 'warning'}>
+                  {canShowOpenAddress && openAddressAvailable ? 'Açık' : 'Maskeli'}
+                </ToneBadge>
+              </div>
+              {canShowOpenAddress && openAddressAvailable ? (
+                <div style={{ display: 'grid', gap: '8px', fontSize: '12px', color: 'var(--tb-ink-700)' }}>
+                  <div>
+                    <div style={{ color: 'var(--tb-ink-500)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Çıkış</div>
+                    <div style={{ color: 'var(--tb-ink-900)', fontWeight: 600 }}>{shipment.originAddressText || 'Adres girilmemiş'}</div>
+                  </div>
+                  <div>
+                    <div style={{ color: 'var(--tb-ink-500)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Varış</div>
+                    <div style={{ color: 'var(--tb-ink-900)', fontWeight: 600 }}>{shipment.destinationAddressText || 'Adres girilmemiş'}</div>
+                  </div>
+                </div>
+              ) : (
+                <InlineNotice tone="warning">
+                  Açık adres taşıma başlayınca seçilmiş nakliyeciye görünür.
+                </InlineNotice>
+              )}
+            </div>
 
             {/* Action buttons */}
             <div style={{ marginTop: '12px', paddingTop: '12px', borderTop: '0.5px solid #F1F5F9', display: 'flex', flexDirection: 'column', gap: '6px' }}>

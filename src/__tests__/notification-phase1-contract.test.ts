@@ -7,6 +7,7 @@ import {
   Carrier,
   Customer,
   Notification,
+  NotificationRecipientRole,
   NotificationStatus,
 } from '../domain/entities';
 import { testApp } from './helpers/testApp';
@@ -16,7 +17,7 @@ const BASE = '/api/v1';
 
 const CUSTOMER_LOGIN = { email: 'ahmet.yilmaz0@gmail.com', password: 'Maviface2141' };
 const CARRIER_LOGIN = { email: 'info@silenakliyat.com', password: 'Maviface2141' };
-const ADMIN_LOGIN = { email: 'admin@tasiburada.com', password: 'Maviface2141' };
+const ADMIN_LOGIN = { email: 'admin@tasiburadan.com', password: 'Maviface2141' };
 
 describe('Notification Phase 1 contract foundation', () => {
   const service = new NotificationService();
@@ -94,6 +95,38 @@ describe('Notification Phase 1 contract foundation', () => {
     expect(item.relatedId).toBe(item.entityId || item.relatedId);
   });
 
+  test('legacy mojibake bildirim metni api cevabinda duzeltilir', async () => {
+    if (skipDB() || !carrierId || !carrierToken) return;
+
+    const brokenBody = 'Ankara â‡ Ardahan arasÄ±nda yeni bir taÅŸÄ±ma talebi var. Teklif vermek iÃ§in inceleyin.';
+    const repo = AppDataSource.getRepository(Notification);
+    const legacyRow = await repo.save(repo.create({
+      userId: carrierId,
+      userType: 'carrier',
+      recipientUserId: carrierId,
+      recipientRole: NotificationRecipientRole.CARRIER,
+      type: `legacy.mojibake.${Date.now()}`,
+      title: 'Yeni Uygun Talep',
+      message: brokenBody,
+      isRead: false,
+      relatedId: randomUUID(),
+      entityType: 'shipment',
+      entityId: randomUUID(),
+    }));
+    createdIds.add(legacyRow.id);
+
+    const res = await request(testApp)
+      .get(`${BASE}/notifications`)
+      .set('Authorization', `Bearer ${carrierToken}`);
+
+    expect(res.status).toBe(200);
+    const item = (res.body.data || []).find((n: any) => n.id === legacyRow.id);
+    expect(item).toBeTruthy();
+    expect(item.body).toContain('Ankara → Ardahan arasında yeni bir taşıma talebi var. Teklif vermek için inceleyin.');
+    expect(item.message).toBe(item.body);
+    expect(item.body).not.toMatch(/Ã|Â|â|Ä|Å/);
+  });
+
   test('createFromEvent customer.offer_received kaydi olusturur', async () => {
     if (skipDB() || !customerId) return;
 
@@ -112,6 +145,8 @@ describe('Notification Phase 1 contract foundation', () => {
     expect(created.recipientRole || created.userType).toBe('customer');
     expect(created.entityType).toBe('shipment');
     expect(created.entityId).toBe(entityId);
+    expect(created.body || created.message).toContain('taşımanız için teklif verdi');
+    expect(created.body || created.message).not.toMatch(/Ã|Â|â/);
   });
 
   test('createFromEvent duplicate cagri tek kayit dondurur', async () => {

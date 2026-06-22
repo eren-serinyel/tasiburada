@@ -33,11 +33,11 @@ export default function Help() {
               <CardTitle className="text-lg">Yardım Merkezi</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              <a href="mailto:support@tasiburada.com" className="w-full justify-start gap-2 inline-flex items-center rounded-md border bg-gray-50 hover:bg-white px-3 py-2 text-sm">
+              <a href="mailto:support@tasiburadan.com" className="w-full justify-start gap-2 inline-flex items-center rounded-md border bg-gray-50 hover:bg-white px-3 py-2 text-sm">
                 <MessageCircle className="h-4 w-4" /> Canlı Destek / Destek Formu
               </a>
-              <a href="mailto:support@tasiburada.com" className="w-full justify-start gap-2 inline-flex items-center rounded-md border bg-gray-50 hover:bg-white px-3 py-2 text-sm">
-                <Mail className="h-4 w-4" /> support@tasiburada.com
+              <a href="mailto:support@tasiburadan.com" className="w-full justify-start gap-2 inline-flex items-center rounded-md border bg-gray-50 hover:bg-white px-3 py-2 text-sm">
+                <Mail className="h-4 w-4" /> support@tasiburadan.com
               </a>
               <a href="tel:+905555555555" className="w-full justify-start gap-2 inline-flex items-center rounded-md border bg-gray-50 hover:bg-white px-3 py-2 text-sm">
                 <Phone className="h-4 w-4" /> +90 555 555 55 55
@@ -80,7 +80,7 @@ export default function Help() {
                   className="grid grid-cols-1 gap-4"
                   onSubmit={(event) => {
                     event.preventDefault();
-                    window.location.href = 'mailto:support@tasiburada.com?subject=Destek%20Talebi';
+                    window.location.href = 'mailto:support@tasiburadan.com?subject=Destek%20Talebi';
                   }}
                 >
                   <input type="text" placeholder="Konu" className="w-full rounded-md border border-gray-200 bg-white/70 px-3 py-2 text-sm outline-none focus:border-blue-400" />

@@ -49,7 +49,7 @@ export async function seedAuditLogs(
     },
     {
       action: 'SETTINGS_UPDATED',
-      details: { field: 'contact_email', oldValue: 'info@tasiburada.com', newValue: 'destek@tasiburada.com', message: 'İletişim e-postası güncellendi' },
+      details: { field: 'contact_email', oldValue: 'info@tasiburadan.com', newValue: 'destek@tasiburadan.com', message: 'İletişim e-postası güncellendi' },
     },
   ];
 

@@ -38,8 +38,8 @@ describe('CarrierApprovalService', () => {
   beforeAll(async () => {
     if (skipDB()) return;
 
-    const admin = await adminRepo().findOne({ where: { email: 'admin@tasiburada.com' } });
-    const superadmin = await adminRepo().findOne({ where: { email: 'superadmin@tasiburada.com' } });
+    const admin = await adminRepo().findOne({ where: { email: 'admin@tasiburadan.com' } });
+    const superadmin = await adminRepo().findOne({ where: { email: 'superadmin@tasiburadan.com' } });
     const vehicleType = await vehicleTypeRepo().findOne({ where: {} });
     const serviceType = await serviceTypeRepo().findOne({ where: {} });
 

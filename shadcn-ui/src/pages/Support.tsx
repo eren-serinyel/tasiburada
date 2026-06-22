@@ -159,9 +159,9 @@ export default function Support() {
           {
             icon: Mail,
             title: 'E-posta Desteği',
-            description: 'destek@tasiburada.com',
+            description: 'destek@tasiburadan.com',
             action: 'E-posta Gönder',
-            href: 'mailto:destek@tasiburada.com',
+            href: 'mailto:destek@tasiburadan.com',
             color: 'text-green-600',
             bg: 'bg-green-50',
             external: true,

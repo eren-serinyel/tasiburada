@@ -15,15 +15,18 @@ describe('customer flow frontend contract', () => {
       {
         originCity: 'Istanbul',
         originDistrict: 'Kadikoy',
+        originAddressText: 'Ataturk Mah. 5. Sok. A Blok Kat 5 Daire 12',
         destinationCity: 'Ankara',
         destinationDistrict: 'Cankaya',
+        destinationAddressText: 'Cumhuriyet Mah. B Blok Kat 3 Daire 7',
         date: '2026-05-10',
         transportType: 'evden-eve',
         placeType: '2+1 ev',
         floor: '4',
         hasElevator: true,
-        dateFlexibility: 'FLEXIBLE',
+        dateFlexibility: 'PLUS_MINUS_1_DAY',
         serviceOptions: { 'evden-eve': ['svc-pack', 'svc-lift'] },
+        customExtraServices: ['custom-aadee'],
         weightKg: '1250',
         note: 'Kirilacak esya var',
       },
@@ -36,14 +39,18 @@ describe('customer flow frontend contract', () => {
 
     expect(payload.origin).toBe('Istanbul, Kadikoy');
     expect(payload.destination).toBe('Ankara, Cankaya');
-    expect(payload.originPlaceType).toBe('2+1 ev');
-    expect(payload.destinationPlaceType).toBe('2+1 ev');
+    expect(payload.originAddressText).toBe('Ataturk Mah. 5. Sok. A Blok Kat 5 Daire 12');
+    expect(payload.destinationAddressText).toBe('Cumhuriyet Mah. B Blok Kat 3 Daire 7');
+    expect(payload.originPlaceType).toBe('Daire');
+    expect(payload.destinationPlaceType).toBe('Daire');
     expect(payload.originFloor).toBe(4);
     expect(payload.destinationFloor).toBe(4);
     expect(payload.originHasElevator).toBe(true);
     expect(payload.destinationHasElevator).toBe(true);
-    expect(payload.dateFlexibility).toBe('FLEXIBLE');
+    expect(payload.dateFlexibility).toBe('PLUS_MINUS_1_DAY');
+    expect(payload.loadType).toBe('HOME');
     expect(payload.extraServices).toEqual(['svc-pack', 'svc-lift']);
+    expect(payload.customExtraServices).toEqual(['custom-aadee']);
     expect(payload.weight).toBe(1250);
     expect(payload.estimatedWeight).toBe(1250);
     expect(payload.vehicleTypePreferenceId).toBeUndefined();
@@ -60,11 +67,11 @@ describe('customer flow frontend contract', () => {
       destinationHasElevator: true,
       originAccessDistance: '15',
       destinationAccessDistance: '30',
-      dateFlexibility: 'WITHIN_WEEK',
+      dateFlexibility: 'PLUS_MINUS_3_DAYS',
       extraServices: ['svc-a'],
     });
 
-    expect(payload.originPlaceType).toBe('Apartman');
+    expect(payload.originPlaceType).toBe('Apartman Dairesi');
     expect(payload.destinationPlaceType).toBe('Villa');
     expect(payload.originFloor).toBe(2);
     expect(payload.destinationFloor).toBe(0);
@@ -72,8 +79,46 @@ describe('customer flow frontend contract', () => {
     expect(payload.destinationHasElevator).toBe(true);
     expect(payload.originAccessDistance).toBe(15);
     expect(payload.destinationAccessDistance).toBe(30);
-    expect(payload.dateFlexibility).toBe('WITHIN_WEEK');
+    expect(payload.dateFlexibility).toBe('PLUS_MINUS_3_DAYS');
     expect(payload.extraServices).toEqual(['svc-a']);
+  });
+
+  test('OfferRequest payload maps legacy date flexibility values to active backend enum', () => {
+    expect(buildShipmentPayloadFromForm({ dateFlexibility: 'FLEXIBLE' }).dateFlexibility).toBe('PLUS_MINUS_3_DAYS');
+    expect(buildShipmentPayloadFromForm({ dateFlexibility: 'WITHIN_WEEK' }).dateFlexibility).toBe('PLUS_MINUS_3_DAYS');
+    expect(buildShipmentPayloadFromForm({ dateFlexibility: 'UNKNOWN' }).dateFlexibility).toBe('EXACT');
+  });
+
+  test('OfferRequest payload sends OFFICE loadType for office transport', () => {
+    const payload = buildShipmentPayloadFromForm({
+      originCity: 'Istanbul',
+      originDistrict: 'Kadikoy',
+      destinationCity: 'Ankara',
+      destinationDistrict: 'Cankaya',
+      transportType: 'ofis-tasima',
+      extraServices: ['Server/IT özel taşıma', 'Profesyonel Paketleme'],
+    });
+
+    expect(payload.transportType).toBe('ofis-tasima');
+    expect(payload.loadType).toBe('OFFICE');
+    expect(payload.originPlaceType).toBeUndefined();
+    expect(payload.destinationPlaceType).toBeUndefined();
+    expect(payload.extraServices).toEqual(['Server/IT özel taşıma', 'Profesyonel Paketleme']);
+  });
+
+  test('OfferRequest payload normalizes office place type before sending backend', () => {
+    const payload = buildShipmentPayloadFromForm({
+      originCity: 'Ankara',
+      originDistrict: 'Bala',
+      destinationCity: 'Aydın',
+      destinationDistrict: 'Germencik',
+      transportType: 'ofis-tasima',
+      placeType: 'Orta ofis',
+    });
+
+    expect(payload.loadDetails).toBe('ofis-tasima / Orta ofis');
+    expect(payload.originPlaceType).toBe('Ofis');
+    expect(payload.destinationPlaceType).toBe('Ofis');
   });
 
   test('contact safety warning copy is available to render on step 3', () => {

@@ -1,5 +1,6 @@
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import logoImg from '@/images/logo.png';
+import logoWhite from '@/images/logo-white.png';
 import { Truck, Mail, Phone, MapPin, Facebook, Twitter, Instagram, Linkedin, ArrowRight, ShieldCheck, IdCard, Rocket, Brain } from 'lucide-react';
 import { getSessionUser } from '@/lib/storage';
 import { getUserType } from '@/lib/auth';
@@ -83,7 +84,7 @@ export default function Footer() {
           {/* Company Info & Info Cards */}
           <div className="space-y-6">
             <div className="flex items-center space-x-3">
-              <img src={logoImg} alt="Taşıburada" className="h-16 w-auto brightness-0 invert scale-[3] origin-left ml-4" />
+              <img src={logoWhite} alt="Taşıburadan" className="h-32 w-auto object-contain" />
             </div>
             
             <p className="text-gray-300 text-lg leading-relaxed max-w-md mt-6">
@@ -137,28 +138,28 @@ export default function Footer() {
                 <div className="h-px flex-1 bg-gradient-to-r from-transparent via-gray-600 to-transparent mx-4"></div>
               </div>
               <div className="flex space-x-3">
-                <a href="https://facebook.com/tasiburada" target="_blank" rel="noopener noreferrer" 
+                <a href="https://facebook.com/tasiburadan" target="_blank" rel="noopener noreferrer" 
                    className="group relative p-3 bg-gray-800/50 hover:bg-blue-600 rounded-xl transition-all duration-300 transform hover:scale-105 border border-gray-700/50 hover:border-blue-500/50">
                   <Facebook className="h-5 w-5 group-hover:text-white transition-colors" />
                   <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">
                     Facebook
                   </div>
                 </a>
-                <a href="https://twitter.com/tasiburada" target="_blank" rel="noopener noreferrer" 
+                <a href="https://twitter.com/tasiburadan" target="_blank" rel="noopener noreferrer" 
                    className="group relative p-3 bg-gray-800/50 hover:bg-sky-500 rounded-xl transition-all duration-300 transform hover:scale-105 border border-gray-700/50 hover:border-sky-500/50">
                   <Twitter className="h-5 w-5 group-hover:text-white transition-colors" />
                   <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">
                     Twitter
                   </div>
                 </a>
-                <a href="https://instagram.com/tasiburada" target="_blank" rel="noopener noreferrer" 
+                <a href="https://instagram.com/tasiburadan" target="_blank" rel="noopener noreferrer" 
                    className="group relative p-3 bg-gray-800/50 hover:bg-pink-600 rounded-xl transition-all duration-300 transform hover:scale-105 border border-gray-700/50 hover:border-pink-500/50">
                   <Instagram className="h-5 w-5 group-hover:text-white transition-colors" />
                   <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">
                     Instagram
                   </div>
                 </a>
-                <a href="https://linkedin.com/company/tasiburada" target="_blank" rel="noopener noreferrer" 
+                <a href="https://linkedin.com/company/tasiburadan" target="_blank" rel="noopener noreferrer" 
                    className="group relative p-3 bg-gray-800/50 hover:bg-blue-700 rounded-xl transition-all duration-300 transform hover:scale-105 border border-gray-700/50 hover:border-blue-500/50">
                   <Linkedin className="h-5 w-5 group-hover:text-white transition-colors" />
                   <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 bg-gray-900 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">
@@ -211,7 +212,7 @@ export default function Footer() {
                 </div>
                 <div>
                   <p className="text-sm text-gray-400">E-posta</p>
-                  <a href="mailto:info@tasiburada.com" className="text-white hover:underline">info@tasiburada.com</a>
+                  <a href="mailto:info@tasiburadan.com" className="text-white hover:underline">info@tasiburadan.com</a>
                 </div>
               </li>
               <li className="flex items-center space-x-3 text-gray-300">
@@ -241,7 +242,7 @@ export default function Footer() {
         <div className="border-t border-gray-700 mt-12 pt-8">
           <div className="flex flex-col lg:flex-row justify-between items-center space-y-4 lg:space-y-0">
             <p className="text-gray-400 text-sm">
-              © 2026 Taşıburada.com. Tüm hakları saklıdır.
+              © 2026 Taşıburadan.com. Tüm hakları saklıdır.
             </p>
             <div className="flex flex-wrap gap-6">
                 <Link to="/gizlilik-politikasi" className="text-gray-400 hover:text-white text-sm transition-colors">

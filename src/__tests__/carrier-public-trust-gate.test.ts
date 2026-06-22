@@ -10,7 +10,7 @@ import { CarrierScopeOfWork } from '../domain/entities/CarrierScopeOfWork';
 import { ScopeOfWork } from '../domain/entities/ScopeOfWork';
 
 const BASE = '/api/v1';
-const ADMIN = { email: 'admin@tasiburada.com', password: 'Maviface2141' };
+const ADMIN = { email: 'admin@tasiburadan.com', password: 'Maviface2141' };
 const skipDB = () => process.env.SKIP_DB_TESTS === 'true';
 
 describe('Public carrier trust gate', () => {

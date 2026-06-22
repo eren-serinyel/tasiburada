@@ -17,7 +17,7 @@ import {
 
 const skipDB = () => process.env.SKIP_DB_TESTS === 'true';
 
-const ADMIN = { email: 'admin@tasiburada.com', password: 'Maviface2141' };
+const ADMIN = { email: 'admin@tasiburadan.com', password: 'Maviface2141' };
 const CUSTOMER = { email: 'ahmet.acar34@gmail.com', password: 'Maviface2141' };
 
 describe('Admin — Kaçak İletişim Logları (ContactFilterLogs)', () => {

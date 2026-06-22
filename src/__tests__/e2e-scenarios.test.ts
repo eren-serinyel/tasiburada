@@ -11,7 +11,7 @@ const skipDB = () => process.env.SKIP_DB_TESTS === 'true';
 
 const CUSTOMER = { email: 'ahmet.yilmaz0@gmail.com', password: 'Maviface2141' };
 const CARRIER = { email: 'info@silenakliyat.com', password: 'Maviface2141' };
-const ADMIN = { email: 'admin@tasiburada.com', password: 'Maviface2141' };
+const ADMIN = { email: 'admin@tasiburadan.com', password: 'Maviface2141' };
 
 describe('E2E Senaryolar — Tam Yaşam Döngüsü', () => {
   let customerToken: string;

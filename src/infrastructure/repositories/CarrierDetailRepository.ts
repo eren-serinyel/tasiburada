@@ -97,7 +97,7 @@ export class CarrierDetailRepository extends BaseRepository<Carrier> {
     super(Carrier);
   }
 
-  async getCarrierDetail(carrierId: string): Promise<CarrierDetailDto | null> {
+  async getCarrierDetail(carrierId: string, loadType?: ExtraServiceLoadType | null): Promise<CarrierDetailDto | null> {
     const qb = this.repository
       .createQueryBuilder('carrier')
       .leftJoinAndSelect('carrier.profileStatus', 'profileStatus')
@@ -179,24 +179,34 @@ export class CarrierDetailRepository extends BaseRepository<Carrier> {
       documents,
       documentsApproved: allDocumentsApproved,
       recentReviews: await this.fetchRecentReviews(carrierId),
-      services: await this.fetchServiceShowcase(carrierId)
+      services: await this.fetchServiceShowcase(carrierId, loadType)
     };
   }
 
-  private async fetchServiceShowcase(carrierId: string): Promise<CarrierDetailServiceGroupDto[]> {
-    const capabilities = await AppDataSource.getRepository(CarrierExtraServiceCapability)
+  private async fetchServiceShowcase(carrierId: string, loadType?: ExtraServiceLoadType | null): Promise<CarrierDetailServiceGroupDto[]> {
+    const capabilityQb = AppDataSource.getRepository(CarrierExtraServiceCapability)
       .createQueryBuilder('cap')
       .leftJoinAndSelect('cap.extraService', 'extraService')
       .where('cap.carrierId = :carrierId', { carrierId })
       .andWhere('cap.isActive = :isActive', { isActive: true })
-      .andWhere('(extraService.status = :status OR extraService.status IS NULL)', { status: 'ACTIVE' })
-      .getMany();
+      .andWhere('(extraService.status = :status OR extraService.status IS NULL)', { status: 'ACTIVE' });
 
-    const customServices = await AppDataSource.getRepository(CarrierCustomExtraService)
+    if (loadType) {
+      capabilityQb.andWhere('cap.loadType = :loadType', { loadType });
+    }
+
+    const capabilities = await capabilityQb.getMany();
+
+    const customServiceQb = AppDataSource.getRepository(CarrierCustomExtraService)
       .createQueryBuilder('customService')
       .where('customService.carrierId = :carrierId', { carrierId })
-      .andWhere('customService.isActive = :isActive', { isActive: true })
-      .getMany();
+      .andWhere('customService.isActive = :isActive', { isActive: true });
+
+    if (loadType) {
+      customServiceQb.andWhere('customService.loadType = :loadType', { loadType });
+    }
+
+    const customServices = await customServiceQb.getMany();
 
     const grouped = new Map<ExtraServiceLoadType, CarrierDetailServiceItemDto[]>();
     const pushItem = (loadType: ExtraServiceLoadType, item: CarrierDetailServiceItemDto) => {

@@ -16,6 +16,7 @@ import {
   Truck,
   XCircle,
 } from 'lucide-react';
+import { QuoteBlock, ToneBadge } from '@/components/shared/CorporateUI';
 
 export interface CustomerOfferCarrier {
   id: string;
@@ -282,6 +283,18 @@ export function CustomerOfferCard({
       ? [`Eksik ek hizmetler: ${missingExtraServices.join(', ')}`]
       : []),
   ];
+  const supportFacts = [
+    carrier?.hasInsurance ? 'Sigorta' : null,
+    compatibilityBadge,
+    capacityBadge,
+    carrier?.isVerified || carrier?.verifiedByAdmin ? 'Doğrulanmış' : null,
+    carrier?.localnessLabel,
+  ].filter(Boolean) as string[];
+  const verdictTone = !carrierEligibility.isEligible
+    ? 'danger'
+    : offer.matchScore != null && Number(offer.matchScore) < 67
+      ? 'warning'
+      : 'success';
 
   return (
     <article
@@ -335,61 +348,21 @@ export function CustomerOfferCard({
         </div>
       </div>
 
-      <div className="mb-3 flex flex-wrap gap-1.5">
-        <Badge variant="outline" className={matchBadge.className}>
-          {matchBadge.icon}
-          {matchBadge.label}
-        </Badge>
-        {offer.isRecommended && offer.status === 'pending' && (
-          <Badge className="bg-blue-50 text-blue-700 hover:bg-blue-50">Onerilen</Badge>
+      <div className="mb-3 space-y-2">
+        <ToneBadge tone={verdictTone}>
+          {carrierEligibility.isEligible ? matchBadge.label : carrierEligibility.label}
+        </ToneBadge>
+        {supportFacts.length > 0 && (
+          <p className="text-xs" style={{ color: 'var(--tb-ink-500)' }}>
+            {supportFacts.join(' · ')}
+          </p>
         )}
-        {offer.status === 'expired' && (
-          <Badge variant="outline" className="border-slate-200 bg-slate-100 text-slate-600">Suresi doldu</Badge>
-        )}
-        {offer.isLowestPrice && offer.status === 'pending' && (
-          <Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700">En uygun</Badge>
-        )}
-        {offer.isHighestRating && offer.status === 'pending' && (
-          <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700">En yuksek puan</Badge>
-        )}
-        {!carrierEligibility.isEligible && (
-          <Badge className="bg-rose-100 text-rose-800 hover:bg-rose-100">Tasiyici artik uygun degil</Badge>
-        )}
-        {!carrierEligibility.isEligible && (
-          <Badge variant="outline" className="border-rose-200 bg-rose-50 text-rose-700">{carrierEligibility.label}</Badge>
-        )}
-        {carrier?.isVerified && (
-          <Badge className="gap-1 bg-blue-100 text-blue-800 hover:bg-blue-100"><ShieldCheck className="h-3 w-3" /> Dogrulanmis Tasiyici</Badge>
-        )}
-        {carrier?.hasInsurance && (
-          <Badge className="gap-1 bg-emerald-100 text-emerald-800 hover:bg-emerald-100"><PackageCheck className="h-3 w-3" /> Sigorta Mevcut</Badge>
-        )}
-        {compatibilityBadge && (
-          <Badge
-            variant="outline"
-            className={offer.extraServiceCompatibility?.isFullyCompatible
-              ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-              : 'border-amber-200 bg-amber-50 text-amber-700'}
-          >
-            {compatibilityBadge}
-          </Badge>
-        )}
-        <Badge
-          variant="outline"
-          className={offer.capacityFit?.status === 'fit'
-            ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-            : offer.capacityFit?.status === 'low_possible'
-              ? 'border-rose-200 bg-rose-50 text-rose-700'
-              : 'border-slate-200 bg-slate-50 text-slate-600'}
-        >
-          {capacityBadge}
-        </Badge>
       </div>
 
       {decisionSignals.length > 0 && (
-        <div className="mb-3 rounded-md border border-slate-200 bg-slate-50 p-2.5">
-          <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Neden bu teklif?</p>
-          <p className="mt-1 text-xs text-slate-700">{decisionSignals.join(' • ')}</p>
+        <div className="mb-3 rounded-md border p-2.5" style={{ background: 'var(--tb-canvas)', borderColor: 'var(--tb-border)' }}>
+          <p className="text-[11px] font-semibold uppercase tracking-wide" style={{ color: 'var(--tb-ink-500)' }}>Neden bu teklif?</p>
+          <p className="mt-1 text-xs" style={{ color: 'var(--tb-ink-700)' }}>{decisionSignals.slice(0, 2).join(' · ')}</p>
         </div>
       )}
 
@@ -442,9 +415,9 @@ export function CustomerOfferCard({
       </div>
 
       {safeOfferMessage && (
-        <p className="mt-3 line-clamp-2 rounded-md border-l-2 border-slate-200 pl-3 text-sm leading-6 text-slate-600">
-          {safeOfferMessage}
-        </p>
+        <div className="mt-3 line-clamp-2">
+          <QuoteBlock>{safeOfferMessage}</QuoteBlock>
+        </div>
       )}
 
       <div className="mt-3 grid gap-2 text-xs text-slate-500 sm:grid-cols-2">

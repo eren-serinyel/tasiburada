@@ -15,12 +15,13 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { apiClient } from '@/lib/apiClient';
 import { toast } from '@/components/ui/sonner';
 import { formatLocation } from '@/utils/formatLocation';
+import { CorporateCard, DetailList, EmptyValue, QuoteBlock, RoutePair, ToneBadge } from '@/components/shared/CorporateUI';
 
 const API_BASE_URL = '/api/v1';
 
@@ -303,6 +304,9 @@ export default function CarrierOffers() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Teklif Güncelle</DialogTitle>
+            <DialogDescription>
+              Bekleyen teklifinizin fiyat, mesaj ve tahmini süre bilgisini güncelleyin.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <div>
@@ -329,6 +333,9 @@ export default function CarrierOffers() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Teklifi Geri Çek</DialogTitle>
+            <DialogDescription>
+              Bu işlem bekleyen teklifinizi müşterinin değerlendirmesinden kaldırır.
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             <p className="text-sm text-gray-600">Bu teklifi geri çekmek istediğinize emin misiniz?</p>
@@ -364,9 +371,12 @@ function OfferSection({
 }) {
   return (
     <section className="space-y-3">
-      <div>
-        <h2 className="text-lg font-semibold text-slate-900">{title}</h2>
-        <p className="text-sm text-slate-600">{description}</p>
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold" style={{ color: 'var(--tb-ink-900)' }}>{title}</h2>
+          <p className="text-sm" style={{ color: 'var(--tb-ink-500)' }}>{description}</p>
+        </div>
+        <ToneBadge tone={offers.length ? 'info' : 'neutral'}>{offers.length} teklif</ToneBadge>
       </div>
       {offers.length === 0 ? (
         <EmptyState title={emptyTitle} description={emptyDescription} compact />
@@ -397,60 +407,66 @@ function OfferCard({
   const shipmentStatus = getShipmentStatus(shipment?.status);
   const extraServices = normalizeExtraServices(shipment?.extraServices);
   const messagePreview = truncate(offer.message);
-  const route = shipment
-    ? `${formatLocationLine(shipment.originCity, shipment.originDistrict, shipment.origin)} → ${formatLocationLine(shipment.destinationCity, shipment.destinationDistrict, shipment.destination)}`
-    : offer.shipmentId;
+  const originText = shipment ? formatLocationLine(shipment.originCity, shipment.originDistrict, shipment.origin) : offer.shipmentId;
+  const destinationText = shipment ? formatLocationLine(shipment.destinationCity, shipment.destinationDistrict, shipment.destination) : '';
 
   return (
-    <Card className="hover:shadow-sm">
-      <CardHeader className="space-y-3">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-          <div className="space-y-2">
-            <CardTitle className="flex items-center gap-2 text-base">
-              <MapPin className="h-4 w-4 text-slate-500" />
-              <span>{route}</span>
-            </CardTitle>
-            <CardDescription>Teklif tarihi: {new Date(offer.offeredAt).toLocaleString('tr-TR')}</CardDescription>
+    <CorporateCard>
+      <div className="space-y-4">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0 flex-1 space-y-2">
+            <RoutePair
+              compact
+              originCity={shipment?.originCity}
+              originDistrict={shipment?.originDistrict}
+              destinationCity={shipment?.destinationCity}
+              destinationDistrict={shipment?.destinationDistrict}
+              originFallback={originText}
+              destinationFallback={destinationText}
+            />
+            <p className="text-sm" style={{ color: 'var(--tb-ink-500)' }}>Teklif tarihi: {new Date(offer.offeredAt).toLocaleString('tr-TR')}</p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge className={offerStatus.className}>Teklif: {offerStatus.label}</Badge>
-            <Badge variant="outline" className={shipmentStatus.className}>İlan: {shipmentStatus.label}</Badge>
-            <div className="text-xl font-bold text-green-700">₺{formatPrice(offer.price)}</div>
+          <div className="flex shrink-0 flex-col items-start gap-2 lg:items-end">
+            <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+              <ToneBadge tone={offer.status === 'accepted' ? 'success' : offer.status === 'pending' ? 'warning' : 'danger'}>Teklif: {offerStatus.label}</ToneBadge>
+              <ToneBadge tone={shipment?.status === 'matched' ? 'info' : shipment?.status === 'completed' ? 'success' : 'neutral'}>İlan: {shipmentStatus.label}</ToneBadge>
+            </div>
+            <div className="text-3xl font-bold" style={{ color: 'var(--tb-success)' }}>₺{formatPrice(offer.price)}</div>
           </div>
         </div>
-      </CardHeader>
 
-      <CardContent className="space-y-4">
-        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
-          <InfoItem icon={<CalendarDays className="h-4 w-4" />} label="Talep tarihi" value={formatDate(shipment?.shipmentDate)} />
-          <InfoItem icon={<Package className="h-4 w-4" />} label="Yük türü" value={formatLoadType(shipment)} />
-          <InfoItem icon={<Clock className="h-4 w-4" />} label="Tahmini süre" value={offer.estimatedDuration ? `${offer.estimatedDuration} saat` : '-'} />
-          <InfoItem icon={<Clock className="h-4 w-4" />} label="Geçerlilik" value={formatDate(offer.validUntil)} />
-          <InfoItem icon={<AlertCircle className="h-4 w-4" />} label="Ek hizmet" value={extraServices.length ? `${extraServices.length} hizmet` : '-'} />
-        </div>
+        <DetailList
+          rows={[
+            { label: 'Talep tarihi', value: formatDate(shipment?.shipmentDate) },
+            { label: 'Yük türü', value: formatLoadType(shipment) },
+            { label: 'Tahmini süre', value: offer.estimatedDuration ? `${offer.estimatedDuration} saat` : '-' },
+            { label: 'Geçerlilik', value: formatDate(offer.validUntil) },
+            { label: 'Ek hizmet', value: extraServices.length ? `${extraServices.length} hizmet` : '-' },
+          ]}
+        />
 
         {extraServices.length > 0 && (
           <div className="flex flex-wrap gap-2">
-            {extraServices.map((service) => <Badge key={service} variant="secondary">{service}</Badge>)}
+            {extraServices.map((service) => <ToneBadge key={service} tone="info">{service}</ToneBadge>)}
           </div>
+        )}
+        {extraServices.length === 0 && (
+          <p className="text-sm"><EmptyValue>Ek hizmet yok</EmptyValue></p>
         )}
 
         {messagePreview && (
-          <div className="flex gap-2 rounded-md border bg-slate-50 px-3 py-2 text-sm text-slate-700">
-            <MessageSquare className="mt-0.5 h-4 w-4 shrink-0 text-slate-500" />
-            <span>{messagePreview}</span>
-          </div>
+          <QuoteBlock>{messagePreview}</QuoteBlock>
         )}
 
         <div className="flex flex-col gap-3 border-t pt-3 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-sm text-slate-600">{getStatusExplanation(offer, shipment)}</p>
+          <p className="text-sm" style={{ color: 'var(--tb-ink-500)' }}>{getStatusExplanation(offer, shipment)}</p>
           <div className="flex shrink-0 gap-2">
             {offer.status === 'pending' && (
               <>
                 <Button size="sm" variant="outline" onClick={() => onEdit(offer)}>
                   <Pencil className="mr-1 h-4 w-4" /> Güncelle
                 </Button>
-                <Button size="sm" variant="outline" onClick={() => onWithdraw(offer)}>
+                <Button size="sm" variant="outline" className="border-[var(--tb-danger-border)] text-[var(--tb-danger)] hover:bg-[var(--tb-danger-bg)]" onClick={() => onWithdraw(offer)}>
                   <Trash2 className="mr-1 h-4 w-4" /> Geri Çek
                 </Button>
               </>
@@ -462,8 +478,8 @@ function OfferCard({
             )}
           </div>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </CorporateCard>
   );
 }
 

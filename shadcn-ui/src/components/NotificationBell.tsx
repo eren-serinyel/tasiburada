@@ -4,8 +4,9 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Bell, Package, TrendingUp, CheckCircle, X } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { apiClient } from '@/lib/apiClient';
+import { repairLegacyMojibake } from '@/lib/textEncoding';
 
 type NotificationApiClient = (input: string, init?: RequestInit) => Promise<Response>;
 
@@ -43,11 +44,12 @@ interface NotificationBellProps {
 function normalizeNotification(raw: ApiNotificationRaw): ApiNotification {
   const status = String(raw.status || '').toLowerCase();
   const entityId = raw.entityId ?? raw.relatedId ?? null;
+  const rawBody = raw.body && raw.body.trim() ? raw.body : raw.message;
   return {
     id: raw.id,
     type: raw.type,
-    title: raw.title || 'Bildirim',
-    body: raw.body || raw.message || '',
+    title: repairLegacyMojibake(raw.title || 'Bildirim'),
+    body: repairLegacyMojibake(rawBody || ''),
     isRead: typeof raw.isRead === 'boolean' ? raw.isRead : status === 'read',
     createdAt: raw.createdAt,
     entityType: raw.entityType ?? null,
@@ -62,6 +64,15 @@ function resolveNotificationPath(
 ): string {
   const targetId = notification.entityId || notification.relatedId;
   if (!targetId) return notificationsPagePath;
+  const type = notification.type.toLowerCase();
+
+  if (type === 'shipment_invite' || type === 'new_matching_request' || type.includes('matching_request')) {
+    return `/nakliyeci/yanit/${targetId}`;
+  }
+
+  if (type === 'customer.offer_received' || type === 'offer_received') {
+    return `/teklifler/${targetId}`;
+  }
 
   switch ((notification.entityType || '').toLowerCase()) {
     case 'shipment':
@@ -81,6 +92,7 @@ export default function NotificationBell({
   client = apiClient,
   notificationsPagePath = '/bildirimler',
 }: NotificationBellProps) {
+  const navigate = useNavigate();
   const [notifications, setNotifications] = useState<ApiNotification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [isOpen, setIsOpen] = useState(false);
@@ -251,6 +263,7 @@ export default function NotificationBell({
                     onClick={() => {
                       markAsRead(notification.id);
                       setIsOpen(false);
+                      if (targetPath) navigate(targetPath);
                     }}
                   >
                     <div className="flex items-start space-x-3">

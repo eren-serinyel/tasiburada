@@ -1,4 +1,4 @@
-import { ReactNode, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { AlertTriangle, CalendarDays, MapPin, Package, ShieldCheck } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/components/ui/sonner';
 import { apiClient } from '@/lib/apiClient';
-import { formatLocation } from '@/utils/formatLocation';
+import { CorporateCard, DetailList, InlineNotice, PageEyebrow, QuoteBlock, RoutePair, ToneBadge } from '@/components/shared/CorporateUI';
 
 const API_BASE_URL = '/api/v1';
 
@@ -22,6 +22,7 @@ interface BackendShipment {
   destinationCity?: string | null;
   destinationDistrict?: string | null;
   loadDetails?: string;
+  loadType?: string | null;
   transportType?: string;
   shipmentCategory?: 'HOME_MOVE' | 'OFFICE_MOVE' | 'PARTIAL_ITEM' | 'STORAGE' | string | null;
   weight?: number | string | null;
@@ -30,6 +31,8 @@ interface BackendShipment {
   shipmentDate?: string;
   extraServices?: Array<string | { name?: string; label?: string }>;
   note?: string | null;
+  originPlaceType?: string | null;
+  destinationPlaceType?: string | null;
   originFloor?: number | null;
   destinationFloor?: number | null;
   floor?: number | null;
@@ -55,26 +58,23 @@ interface OfferWarning {
   message?: string;
 }
 
-type LoadType = 'HOME' | 'OFFICE' | 'PARTIAL' | 'STORAGE';
-type PriceMode = 'NONE' | 'FIXED' | 'QUOTE';
-
-interface CustomExtraService {
-  id: string;
-  loadType: LoadType;
-  title: string;
-  description?: string | null;
-  isActive: boolean;
-  priceMode: PriceMode;
-  basePrice?: number | string | null;
-  quoteMinPrice?: number | string | null;
-  quoteMaxPrice?: number | string | null;
-}
-
 const shipmentCategoryLabel: Record<string, string> = {
-  HOME_MOVE: 'Ev taşıma',
-  OFFICE_MOVE: 'Ofis taşıma',
+  HOME_MOVE: 'Ev Eşyası',
+  OFFICE_MOVE: 'Ofis',
   PARTIAL_ITEM: 'Parça eşya',
   STORAGE: 'Depolama',
+  HOME: 'Ev Eşyası',
+  OFFICE: 'Ofis',
+  PARTIAL: 'Parça eşya',
+};
+
+const transportTypeLabel: Record<string, string> = {
+  'evden-eve': 'Ev Eşyası',
+  'ev-esyasi': 'Ev Eşyası',
+  'ofis-tasima': 'Ofis',
+  parca: 'Parça eşya',
+  'parca-esya': 'Parça eşya',
+  depolama: 'Depolama',
 };
 
 const insuranceLabel: Record<string, string> = {
@@ -85,9 +85,21 @@ const insuranceLabel: Record<string, string> = {
 };
 
 const dateFlexibilityLabel: Record<string, string> = {
-  EXACT: 'Sabit tarih',
-  FLEXIBLE: 'Esnek tarih',
-  WITHIN_WEEK: 'Hafta içinde esnek',
+  EXACT: 'Tam bu tarih',
+  FLEXIBLE: '±3 gün esnek',
+  WITHIN_WEEK: '±3 gün esnek',
+  PLUS_MINUS_1_DAY: '±1 gün esnek',
+  PLUS_MINUS_3_DAYS: '±3 gün esnek',
+};
+
+const timePreferenceLabel: Record<string, string> = {
+  sabah: 'Sabah',
+  ogle: 'Öğle',
+  öğle: 'Öğle',
+  aksam: 'Akşam',
+  akşam: 'Akşam',
+  farketmez: 'Farketmez',
+  esnek: 'Esnek',
 };
 
 const vehicleLabel: Record<string, string> = {
@@ -106,15 +118,30 @@ const formatDate = (value?: string) => {
 };
 
 const formatShipmentCategory = (shipment: BackendShipment) => {
-  const raw = shipment.shipmentCategory || shipment.transportType;
+  const loadDetailsType = String(shipment.loadDetails || '').split('/')[0]?.trim();
+  const raw = shipment.shipmentCategory || shipment.loadType || shipment.transportType || loadDetailsType;
   if (!raw) return '-';
-  return shipmentCategoryLabel[String(raw)] || String(raw);
+  const normalized = String(raw).trim();
+  const lower = normalized.toLocaleLowerCase('tr-TR');
+  return shipmentCategoryLabel[normalized] || transportTypeLabel[lower] || normalized;
 };
 
-const formatLocationLine = (city?: string | null, district?: string | null, fallback?: string) => {
-  const parts = [city, district].map((item) => item?.trim()).filter(Boolean);
-  if (parts.length) return parts.join(' / ');
-  return fallback ? formatLocation(fallback) : '-';
+const resolveCityDistrict = (city?: string | null, district?: string | null, fallback?: string) => {
+  const safeCity = String(city || '').trim();
+  const safeDistrict = String(district || '').trim();
+  if (safeCity || safeDistrict) {
+    return { city: safeCity || '-', district: safeDistrict || '-' };
+  }
+
+  const fallbackParts = String(fallback || '')
+    .split(',')
+    .map((part) => part.trim())
+    .filter(Boolean);
+
+  return {
+    city: fallbackParts[0] || '-',
+    district: fallbackParts[1] || '-',
+  };
 };
 
 const formatWeight = (shipment: BackendShipment) => {
@@ -125,6 +152,33 @@ const formatWeight = (shipment: BackendShipment) => {
 const formatFloor = (floor?: number | null) => {
   if (floor === null || floor === undefined || Number.isNaN(Number(floor))) return '-';
   return Number(floor) === 0 ? 'Giriş kat' : `${floor}. kat`;
+};
+
+const placeTypeLabel: Record<string, string> = {
+  Daire: 'Daire',
+  'Apartman Dairesi': 'Apartman Dairesi',
+  'Site İçi Daire': 'Site İçi Daire',
+  'Site Ä°Ã§i Daire': 'Site İçi Daire',
+  'Müstakil Ev': 'Müstakil Ev',
+  'MÃ¼stakil Ev': 'Müstakil Ev',
+  Villa: 'Villa',
+  Ofis: 'Ofis',
+  'Plaza/Ofis': 'Plaza/Ofis',
+  Depo: 'Depo',
+  Dükkan: 'Dükkan',
+  'DÃ¼kkan': 'Dükkan',
+  Diğer: 'Diğer',
+  'DiÄŸer': 'Diğer',
+};
+
+const formatPlaceType = (placeType?: string | null) => {
+  if (!placeType) return null;
+  return placeTypeLabel[String(placeType)] || placeType;
+};
+
+const formatPlaceAndFloor = (placeType?: string | null, floor?: number | null) => {
+  const parts = [formatPlaceType(placeType), formatFloor(floor)].filter((item) => item && item !== '-');
+  return parts.length ? parts.join(' — ') : '-';
 };
 
 const formatElevator = (value?: boolean | null) => {
@@ -150,6 +204,9 @@ const formatConverterVolume = (shipment: BackendShipment) => {
 const formatWarning = (warning: OfferWarning) => {
   if (warning.code === 'CAPACITY_MISMATCH') {
     return warning.message || 'Bu ilanın tahmini ağırlığı araç kapasitenizin üzerinde olabilir.';
+  }
+  if (warning.code === 'MISSING_EXTRA_SERVICE_CAPABILITY') {
+    return warning.message || 'Bazı ek hizmetler profilinizde aktif değil; teklifiniz kapsam farkı uyarısıyla kaydedildi.';
   }
   return warning.message || 'Teklifinizle ilgili dikkat edilmesi gereken bir uyarı var.';
 };
@@ -182,32 +239,6 @@ const getOfferErrorMessage = (json: any, fallback = 'Teklif gönderilemedi.') =>
   return message || fallback;
 };
 
-const inferLoadType = (shipment: BackendShipment): LoadType | null => {
-  switch (shipment.shipmentCategory) {
-    case 'HOME_MOVE':
-      return 'HOME';
-    case 'OFFICE_MOVE':
-      return 'OFFICE';
-    case 'PARTIAL_ITEM':
-      return 'PARTIAL';
-    case 'STORAGE':
-      return 'STORAGE';
-    default:
-      break;
-  }
-
-  const transportType = String(shipment.transportType || '').toLocaleLowerCase('tr-TR');
-  if (transportType.includes('ev') || transportType.includes('home')) return 'HOME';
-  if (transportType.includes('ofis') || transportType.includes('office')) return 'OFFICE';
-  if (transportType.includes('par') || transportType.includes('partial')) return 'PARTIAL';
-  if (transportType.includes('depo') || transportType.includes('storage')) return 'STORAGE';
-
-  return null;
-};
-
-const formatMoney = (value: number) =>
-  new Intl.NumberFormat('tr-TR', { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(value);
-
 export default function CarrierRespond() {
   const { requestId } = useParams();
   const navigate = useNavigate();
@@ -217,11 +248,10 @@ export default function CarrierRespond() {
   const [price, setPrice] = useState('');
   const [eta, setEta] = useState('');
   const [note, setNote] = useState('');
+  const [suggestedTime, setSuggestedTime] = useState('');
   const [priceError, setPriceError] = useState('');
   const [minOfferPrice, setMinOfferPrice] = useState(100);
   const [offerBlocked, setOfferBlocked] = useState<string | null>(null);
-  const [customServices, setCustomServices] = useState<CustomExtraService[]>([]);
-  const [selectedCustomIds, setSelectedCustomIds] = useState<string[]>([]);
 
   useEffect(() => {
     (async () => {
@@ -241,11 +271,10 @@ export default function CarrierRespond() {
     if (!requestId) return;
     (async () => {
       try {
-        const [res, statusRes, carrierRes, customRes] = await Promise.all([
+        const [res, statusRes, carrierRes] = await Promise.all([
           apiClient(`${API_BASE_URL}/shipments/${requestId}`),
           apiClient(`${API_BASE_URL}/carriers/me/profile-status`),
           apiClient(`${API_BASE_URL}/carriers/me`),
-          apiClient(`${API_BASE_URL}/carriers/me/custom-extra-services`),
         ]);
         const json = await res.json();
         if (res.ok && json?.success && json.data) {
@@ -256,10 +285,6 @@ export default function CarrierRespond() {
 
         const statusJson = await statusRes.json().catch(() => ({}));
         const carrierJson = await carrierRes.json().catch(() => ({}));
-        const customJson = await customRes.json().catch(() => ({}));
-        if (customRes.ok && customJson?.success && Array.isArray(customJson.data)) {
-          setCustomServices(customJson.data);
-        }
         const carrier = carrierJson?.data?.carrier ?? carrierJson?.data;
         const profilePercent = Number(statusJson?.data?.overallPercentage ?? 0);
         const adminApproved = Boolean(carrier?.verifiedByAdmin || carrier?.verificationStatus === 'verified');
@@ -296,8 +321,11 @@ export default function CarrierRespond() {
         shipmentId: shipment.id,
         price: priceNum,
       };
-      if (selectedCustomIds.length) body.customExtraServiceIds = selectedCustomIds;
-      if (note.trim()) body.message = note.trim();
+      const composedMessage = [
+        note.trim(),
+        suggestedTime.trim() ? `Önerilen saat: ${suggestedTime.trim()}` : '',
+      ].filter(Boolean).join('\n\n');
+      if (composedMessage) body.message = composedMessage;
       if (eta) body.estimatedDuration = Number(eta);
 
       const res = await apiClient(`${API_BASE_URL}/offers/`, {
@@ -322,9 +350,19 @@ export default function CarrierRespond() {
         if (warnings.length) setTimeout(redirect, 900);
         else redirect();
       } else {
-        toast.error(getOfferErrorMessage(json));
+        console.error('Offer create failed:', {
+          status: res.status,
+          response: json,
+          payload: body,
+          shipment,
+        });
+        toast.error(getOfferErrorMessage(json), {
+          description: json?.message && getOfferErrorMessage(json) !== json.message ? json.message : undefined,
+          duration: 7000,
+        });
       }
-    } catch {
+    } catch (error) {
+      console.error('Offer create request failed:', { error, shipmentId: shipment.id });
       toast.error('Teklif gönderilirken hata oluştu.');
     } finally {
       setSubmitting(false);
@@ -352,34 +390,6 @@ export default function CarrierRespond() {
   }
 
   const extraServices = normalizeExtraServices(shipment.extraServices);
-  const shipmentLoadType = inferLoadType(shipment);
-  const visibleCustomServices = customServices.filter((service) => (
-    service.isActive &&
-    (!shipmentLoadType || service.loadType === shipmentLoadType)
-  ));
-  const selectedCustomServices = visibleCustomServices.filter((service) => selectedCustomIds.includes(service.id));
-  const selectedCustomFixedTotal = selectedCustomServices.reduce((sum, service) => {
-    if (service.priceMode !== 'FIXED') return sum;
-    const amount = Number(service.basePrice || 0);
-    return Number.isFinite(amount) && amount > 0 ? sum + amount : sum;
-  }, 0);
-  const offerBasePrice = Number(price);
-  const previewTotal = Number.isFinite(offerBasePrice) && offerBasePrice > 0
-    ? offerBasePrice + selectedCustomFixedTotal
-    : selectedCustomFixedTotal;
-  const toggleCustom = (service: CustomExtraService) => {
-    const amount = Number(service.basePrice || 0);
-    if (service.priceMode !== 'FIXED' || !Number.isFinite(amount) || amount <= 0) {
-      toast.info('Görüşülür özel hizmetler bu aşamada teklif toplamına eklenmez.');
-      return;
-    }
-
-    setSelectedCustomIds(prev => (
-      prev.includes(service.id)
-        ? prev.filter(id => id !== service.id)
-        : [...prev, service.id]
-    ));
-  };
   const converterVolume = formatConverterVolume(shipment);
   const converterVehicle = shipment.converter?.converterRecommendedVehicleCode
     ? vehicleLabel[shipment.converter.converterRecommendedVehicleCode] || shipment.converter.converterRecommendedVehicleCode
@@ -392,29 +402,49 @@ export default function CarrierRespond() {
   const dateFlexibility = shipment.dateFlexibility
     ? dateFlexibilityLabel[String(shipment.dateFlexibility)] || shipment.dateFlexibility
     : '-';
+  const timePreference = shipment.timePreference
+    ? timePreferenceLabel[String(shipment.timePreference).toLocaleLowerCase('tr-TR')] || shipment.timePreference
+    : '-';
+  const canSuggestTime = String(shipment.timePreference || '').toLocaleLowerCase('tr-TR') === 'farketmez';
+  const originLocation = resolveCityDistrict(shipment.originCity, shipment.originDistrict, shipment.origin);
+  const destinationLocation = resolveCityDistrict(shipment.destinationCity, shipment.destinationDistrict, shipment.destination);
 
   return (
-    <div className="mx-auto max-w-3xl space-y-4 p-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Teklif Talebi</CardTitle>
-          <CardDescription>Müşteri talep özeti</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-5 text-sm">
-          <div className="grid gap-3 md:grid-cols-2">
-            <SummaryItem icon={<Package className="h-4 w-4" />} label="Yük türü" value={formatShipmentCategory(shipment)} />
-            <SummaryItem icon={<CalendarDays className="h-4 w-4" />} label="Talep edilen tarih" value={formatDate(shipment.shipmentDate)} />
-            <SummaryItem icon={<MapPin className="h-4 w-4" />} label="Çıkış" value={formatLocationLine(shipment.originCity, shipment.originDistrict, shipment.origin)} />
-            <SummaryItem icon={<MapPin className="h-4 w-4" />} label="Varış" value={formatLocationLine(shipment.destinationCity, shipment.destinationDistrict, shipment.destination)} />
-            <SummaryItem label="Tahmini ağırlık" value={formatWeight(shipment)} />
-            <SummaryItem label="Çıkış katı" value={formatFloor(shipment.originFloor ?? shipment.floor)} />
-            <SummaryItem label="Varış katı" value={formatFloor(shipment.destinationFloor)} />
-            <SummaryItem label="Çıkış asansörü" value={formatElevator(originElevator)} />
-            <SummaryItem label="Varış asansörü" value={formatElevator(destinationElevator)} />
-            <SummaryItem icon={<ShieldCheck className="h-4 w-4" />} label="Sigorta" value={insurance} />
-            <SummaryItem label="Tarih esnekliği" value={dateFlexibility} />
-            <SummaryItem label="Saat tercihi" value={shipment.timePreference || '-'} />
+    <div className="mx-auto max-w-4xl space-y-4 p-6" style={{ background: 'var(--tb-canvas)' }}>
+      <CorporateCard>
+        <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h1 className="text-2xl font-bold" style={{ color: 'var(--tb-ink-900)' }}>Teklif Talebi</h1>
+            <p className="mt-1 text-sm" style={{ color: 'var(--tb-ink-500)' }}>Müşteri talep özeti</p>
           </div>
+          <div className="flex flex-wrap gap-2">
+            <ToneBadge tone="info"><Package className="mr-1 h-3.5 w-3.5" />{formatShipmentCategory(shipment)}</ToneBadge>
+            <ToneBadge tone="neutral"><CalendarDays className="mr-1 h-3.5 w-3.5" />{formatDate(shipment.shipmentDate)}</ToneBadge>
+          </div>
+        </div>
+
+        <div className="space-y-5 text-sm">
+          <RoutePair
+            originCity={originLocation.city}
+            originDistrict={originLocation.district}
+            destinationCity={destinationLocation.city}
+            destinationDistrict={destinationLocation.district}
+            originFallback={shipment.origin}
+            destinationFallback={shipment.destination}
+          />
+
+          <DetailList
+            rows={[
+              { label: 'Tahmini ağırlık', value: formatWeight(shipment) },
+              { label: 'Çıkış yeri', value: formatPlaceAndFloor(shipment.originPlaceType, shipment.originFloor ?? shipment.floor) },
+              { label: 'Varış yeri', value: formatPlaceAndFloor(shipment.destinationPlaceType, shipment.destinationFloor ?? shipment.floor) },
+              { label: 'Çıkış asansörü', value: formatElevator(originElevator) },
+              { label: 'Varış asansörü', value: formatElevator(destinationElevator) },
+              { label: 'Sigorta', value: insurance },
+              { label: 'Tarih esnekliği', value: dateFlexibility },
+              { label: 'Saat tercihi', value: timePreference },
+            ]}
+          />
 
           {converterVolume && (
             <Alert className="border-blue-200 bg-blue-50 text-blue-950">
@@ -428,37 +458,33 @@ export default function CarrierRespond() {
           )}
 
           <div className="space-y-2">
-            <div className="font-medium text-slate-900">Yük detayı</div>
-            <p className="rounded-md border bg-slate-50 px-3 py-2 text-slate-700">{shipment.loadDetails || '-'}</p>
+            <PageEyebrow>Yük detayı</PageEyebrow>
+            <QuoteBlock>{shipment.loadDetails || '-'}</QuoteBlock>
           </div>
 
           <div className="space-y-2">
-            <div className="font-medium text-slate-900">Ek hizmetler</div>
+            <PageEyebrow>Müşterinin talep ettiği ek hizmetler</PageEyebrow>
             {extraServices.length ? (
               <div className="flex flex-wrap gap-2">
                 {extraServices.map((service) => (
-                  <Badge key={service} variant="secondary">{service}</Badge>
+                  <ToneBadge key={service} tone="info">{service}</ToneBadge>
                 ))}
               </div>
             ) : (
-              <p className="text-slate-500">Ek hizmet yok.</p>
+              <p className="text-sm" style={{ color: 'var(--tb-ink-400)' }}>Talep edilen ek hizmet yok.</p>
             )}
           </div>
 
           <div className="space-y-2">
-            <div className="font-medium text-slate-900">Müşteri notu</div>
-            <p className="rounded-md border bg-slate-50 px-3 py-2 text-slate-700">{shipment.note || '-'}</p>
+            <PageEyebrow>Müşteri notu</PageEyebrow>
+            <QuoteBlock>{shipment.note || '-'}</QuoteBlock>
           </div>
 
-          <Alert className="border-amber-200 bg-amber-50 text-amber-900">
-            <AlertTriangle className="h-4 w-4" />
-            <AlertTitle>İletişim ve açık adres gizli</AlertTitle>
-            <AlertDescription>
-              Telefon ve açık adres bilgileri teklif aşamasında maskeli tutulur.
-            </AlertDescription>
-          </Alert>
-        </CardContent>
-      </Card>
+          <InlineNotice tone="warning" icon={<AlertTriangle className="h-4 w-4" />}>
+            İletişim ve açık adres teklif aşamasında gizli tutulur.
+          </InlineNotice>
+        </div>
+      </CorporateCard>
 
       {offerBlocked && (
         <Card className="border-amber-200 bg-amber-50">
@@ -468,11 +494,14 @@ export default function CarrierRespond() {
         </Card>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Teklif Oluştur</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
+      <CorporateCard>
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div>
+            <h2 className="text-xl font-bold" style={{ color: 'var(--tb-ink-900)' }}>Teklif Oluştur</h2>
+            <p className="mt-1 text-sm" style={{ color: 'var(--tb-ink-500)' }}>Fiyat ve süre bilgisiyle müşteriye teklif gönderin.</p>
+          </div>
+        </div>
+        <div className="space-y-3">
           <div>
             <label className="text-sm">Fiyat (TL)</label>
             <Input
@@ -489,91 +518,35 @@ export default function CarrierRespond() {
             {priceError && <p className="mt-1 text-sm text-red-500">{priceError}</p>}
             <p className="mt-1 text-xs text-slate-500">Minimum teklif: ₺{minOfferPrice}</p>
           </div>
-          {visibleCustomServices.length > 0 && (
-            <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50/60 p-3">
-              <div>
-                <label className="text-sm font-semibold text-slate-700">Özel hizmetlerimden ekle (opsiyonel)</label>
-                <p className="mt-1 text-xs text-slate-500">
-                  Bu teklife kendi ek hizmetlerinizi ekleyebilirsiniz. Müşteri fiyat kırılımında “Nakliyeci önerisi” olarak görür.
-                </p>
-              </div>
-              <div className="space-y-2">
-                {visibleCustomServices.map((service) => {
-                  const checked = selectedCustomIds.includes(service.id);
-                  const amount = Number(service.basePrice || 0);
-                  const selectable = service.priceMode === 'FIXED' && Number.isFinite(amount) && amount > 0;
-
-                  return (
-                    <label
-                      key={service.id}
-                      className={`flex cursor-pointer items-center justify-between gap-3 rounded-xl border bg-white px-3 py-2.5 transition ${
-                        checked ? 'border-blue-600 bg-blue-50/70' : 'border-slate-200 hover:border-slate-300'
-                      } ${!selectable ? 'opacity-70' : ''}`}
-                    >
-                      <span className="flex min-w-0 items-center gap-2.5">
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          disabled={!selectable}
-                          onChange={() => toggleCustom(service)}
-                          className="accent-blue-600"
-                        />
-                        <span className="min-w-0 text-sm">
-                          <span className="block truncate font-medium text-slate-800">{service.title}</span>
-                          {service.description && <span className="mt-0.5 block line-clamp-2 text-xs text-slate-500">{service.description}</span>}
-                          {!selectable && <span className="mt-0.5 block text-xs text-amber-700">Görüşülür hizmetler bu aşamada fiyata eklenmez.</span>}
-                        </span>
-                      </span>
-                      <span className="shrink-0 text-sm font-semibold text-slate-700">
-                        {selectable ? `+${formatMoney(amount)} ₺` : 'Görüşülür'}
-                      </span>
-                    </label>
-                  );
-                })}
-              </div>
-              {(selectedCustomFixedTotal > 0 || (Number.isFinite(offerBasePrice) && offerBasePrice > 0)) && (
-                <div className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2 text-sm text-blue-900">
-                  <div className="flex items-center justify-between">
-                    <span>Toplam teklif önizlemesi</span>
-                    <span className="font-bold">₺{formatMoney(previewTotal)}</span>
-                  </div>
-                  {selectedCustomFixedTotal > 0 && (
-                    <p className="mt-1 text-xs text-blue-700">
-                      Taşıma bedeline ₺{formatMoney(selectedCustomFixedTotal)} özel hizmet eklendi.
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
           <div>
             <label className="text-sm">Tahmini Süre (saat)</label>
             <Input type="number" value={eta} onChange={(e) => setEta(e.target.value)} />
           </div>
+          {canSuggestTime && (
+            <div>
+              <label className="text-sm">Önerilen saat (opsiyonel)</label>
+              <Input
+                value={suggestedTime}
+                onChange={(e) => setSuggestedTime(e.target.value)}
+                placeholder="Örn. 10:00-12:00"
+              />
+              <p className="mt-1 text-xs text-slate-500">
+                Müşteri saat tercihini fark etmez seçtiği için uygun gördüğünüz zaman aralığını önerebilirsiniz.
+              </p>
+            </div>
+          )}
           <div>
             <label className="text-sm">Ek Not</label>
             <Textarea rows={3} value={note} onChange={(e) => setNote(e.target.value)} />
           </div>
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => navigate(-1)}>İptal</Button>
-            <Button onClick={submitOffer} disabled={submitting || !price || !!priceError || Boolean(offerBlocked)}>
+            <Button className="min-w-32" onClick={submitOffer} disabled={submitting || !price || !!priceError || Boolean(offerBlocked)}>
               {submitting ? 'Gönderiliyor...' : 'Gönder'}
             </Button>
           </div>
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
-
-function SummaryItem({ icon, label, value }: { icon?: ReactNode; label: string; value: ReactNode }) {
-  return (
-    <div className="rounded-md border bg-white px-3 py-2">
-      <div className="flex items-center gap-1.5 text-xs font-medium uppercase text-slate-500">
-        {icon}
-        <span>{label}</span>
-      </div>
-      <div className="mt-1 text-sm font-medium text-slate-900">{value}</div>
+        </div>
+      </CorporateCard>
     </div>
   );
 }

@@ -17,7 +17,7 @@ const skipDB = () => process.env.SKIP_DB_TESTS === 'true';
 
 const CUSTOMER = { email: 'ahmet.yilmaz0@gmail.com', password: 'Maviface2141' };
 const SECOND_CUSTOMER = { email: 'ayse.kaya1@gmail.com', password: 'Maviface2141' };
-const ADMIN    = { email: 'admin@tasiburada.com',      password: 'Maviface2141' };
+const ADMIN    = { email: 'admin@tasiburadan.com',      password: 'Maviface2141' };
 
 describe('Payment Akışı', () => {
   let customerToken: string;

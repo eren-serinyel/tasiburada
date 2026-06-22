@@ -67,7 +67,7 @@ export default function Navbar() {
           {/* Sol Alt - Logo */}
           <div className="flex items-center min-w-[170px]">
             <Link to={user ? '/home' : '/'} className="flex items-center space-x-2">
-              <img src={logoImg} alt="Taşıburada" className="h-11 w-auto max-w-none object-contain md:h-12 scale-[2.4] origin-left ml-4" />
+              <img src={logoImg} alt="Taşıburadan" className="h-20 w-auto object-contain md:h-24" />
             </Link>
           </div>
 

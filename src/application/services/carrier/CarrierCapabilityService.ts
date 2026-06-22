@@ -111,16 +111,19 @@ export class CarrierCapabilityService {
 
   /**
    * Add load type capability
-   * - Check duplicate (shouldn't happen due to unique constraint)
+   * - Idempotent: existing rows are reused and inactive rows are reactivated.
    */
   private async addLoadTypeCapability(carrierId: string, loadType: ExtraServiceLoadType): Promise<void> {
-    // Check for duplicate
     const existing = await this.loadTypeCapabilityRepo.findOne({
       where: { carrierId, loadType },
     });
 
     if (existing) {
-      throw new ValidationError(`Nakliyeci zaten ${loadType} yükleme türü yeteneğine sahip.`);
+      if (!existing.isActive) {
+        existing.isActive = true;
+        await this.loadTypeCapabilityRepo.save(existing);
+      }
+      return;
     }
 
     const capability = this.loadTypeCapabilityRepo.create({

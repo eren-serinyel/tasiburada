@@ -19,7 +19,7 @@ export class ShipmentInviteRepository extends BaseRepository<ShipmentInvite> {
     if (status) where.status = status;
     return this.repository.find({
       where,
-      relations: ['shipment', 'shipment.customer'],
+      relations: ['shipment', 'shipment.customer', 'shipment.extraServices', 'shipment.customExtraServices'],
       order: { createdAt: 'DESC' }
     });
   }

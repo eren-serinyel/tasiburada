@@ -23,6 +23,7 @@ import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { Separator } from '@/components/ui/separator';
 import { getAdminRole } from '@/lib/adminAuth';
+import logoWhite from '@/images/logo-white.png';
 
 interface SidebarProps {
   collapsed: boolean;
@@ -159,10 +160,10 @@ export function AdminSidebar({ collapsed, onToggle, pendingCount = 0 }: SidebarP
       {/* Logo */}
       <div className={cn('flex items-center border-b border-slate-800 h-14', collapsed ? 'justify-center px-2' : 'px-5')}>
         {collapsed ? (
-          <span className="text-lg font-bold text-orange-400">T</span>
+          <img src={logoWhite} alt="Taşıburadan" className="h-9 w-auto object-contain" />
         ) : (
-          <div>
-            <h1 className="text-base font-bold text-orange-400 leading-none">TaşıBurada</h1>
+          <div className="flex flex-col">
+            <img src={logoWhite} alt="Taşıburadan" className="h-9 w-auto object-contain self-start" />
             <p className="text-[10px] text-slate-500 mt-0.5">Admin Panel</p>
           </div>
         )}

@@ -2,7 +2,7 @@ export const VOLUME_CALCULATOR_ROUTE = '/nakliye-hacmi-hesapla';
 export const VOLUME_CALCULATOR_ALIAS_ROUTE = '/hacim-hesaplama';
 
 export const VOLUME_CALCULATOR_SEO = {
-  title: 'Nakliye Hacmi Hesaplama | Taşıburada',
+  title: 'Nakliye Hacmi Hesaplama | Taşıburadan',
   description:
     'Ev ve ofis taşıması için tahmini hacim ve ağırlık hesaplayın, doğru araç önerisiyle nakliye teklifi alın.',
 };

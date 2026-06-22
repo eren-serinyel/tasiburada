@@ -46,6 +46,43 @@ const PII_PATTERNS: RegExp[] = [
   /(https?:\/\/|www\.)/iu,
 ];
 
+const LEGACY_MOJIBAKE_REPLACEMENTS: Array<[string, string]> = [
+  ['â†’', '→'],
+  ['â‡’', '→'],
+  ['â‡', '→'],
+  ['Ã‡', 'Ç'],
+  ['Ã§', 'ç'],
+  ['Ã–', 'Ö'],
+  ['Ã¶', 'ö'],
+  ['Ãœ', 'Ü'],
+  ['Ã¼', 'ü'],
+  ['Ä°', 'İ'],
+  ['Ä±', 'ı'],
+  ['Äž', 'Ğ'],
+  ['ÄŸ', 'ğ'],
+  ['Åž', 'Ş'],
+  ['ÅŸ', 'ş'],
+  ['Â·', '·'],
+  ['Â³', '³'],
+  ['â‚º', '₺'],
+  ['â€œ', '"'],
+  ['â€�', '"'],
+  ['â€™', "'"],
+  ['â€“', '-'],
+  ['â€”', '-'],
+];
+
+const repairLegacyMojibake = (value?: string | null): string => {
+  let text = value ?? '';
+  if (!/[ÃÂâÄÅ]/u.test(text)) return text;
+
+  for (const [broken, fixed] of LEGACY_MOJIBAKE_REPLACEMENTS) {
+    text = text.split(broken).join(fixed);
+  }
+
+  return text;
+};
+
 export class NotificationService {
   private notificationRepository = new NotificationRepository();
 
@@ -87,13 +124,18 @@ export class NotificationService {
     isRead: boolean;
     relatedId: string | null;
   } {
-    const body = notification.body ?? notification.message ?? '';
+    const title = repairLegacyMojibake(notification.title ?? 'Bildirim');
+    const rawBody = notification.body && notification.body.trim()
+      ? notification.body
+      : notification.message;
+    const body = repairLegacyMojibake(rawBody ?? '');
     const status = notification.status
       ?? (notification.isRead ? NotificationStatus.READ : NotificationStatus.UNREAD);
     const entityId = notification.entityId ?? notification.relatedId ?? null;
 
     return {
       ...notification,
+      title,
       body,
       status,
       message: body,

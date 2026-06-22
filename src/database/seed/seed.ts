@@ -93,7 +93,7 @@ async function main() {
     }
     console.log('');
     console.log('🔑 Giriş bilgileri:');
-    console.log('   Admin:     superadmin@tasiburada.com / [seed şifresi]');
+    console.log('   Admin:     superadmin@tasiburadan.com / [seed şifresi]');
     console.log('   Nakliyeci: info@silenakliyat.com / [seed şifresi]');
     console.log('   Müşteri:   ahmet.yilmaz0@gmail.com / [seed şifresi]');
 

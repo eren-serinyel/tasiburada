@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
 import { Bell, Truck, Wallet, HandCoins, CheckCheck } from 'lucide-react';
 import { apiClient } from '@/lib/apiClient';
+import { repairLegacyMojibake } from '@/lib/textEncoding';
 
 interface ApiNotificationRaw {
   id: string;
@@ -54,10 +55,11 @@ function typeCategory(type: string, entityType?: string | null): 'offer' | 'paym
 function normalizeNotification(raw: ApiNotificationRaw): ApiNotification {
   const status = String(raw.status || '').toLowerCase();
   const entityId = raw.entityId ?? raw.relatedId ?? null;
+  const rawBody = raw.body && raw.body.trim() ? raw.body : raw.message;
   return {
     id: raw.id,
-    title: raw.title || 'Bildirim',
-    body: raw.body || raw.message || '',
+    title: repairLegacyMojibake(raw.title || 'Bildirim'),
+    body: repairLegacyMojibake(rawBody || ''),
     type: raw.type,
     isRead: typeof raw.isRead === 'boolean' ? raw.isRead : status === 'read',
     entityType: raw.entityType ?? null,
@@ -70,6 +72,15 @@ function normalizeNotification(raw: ApiNotificationRaw): ApiNotification {
 function routeForNotification(n: ApiNotification): string | null {
   const targetId = n.entityId || n.relatedId;
   if (!targetId) return null;
+  const type = n.type.toLowerCase();
+
+  if (type === 'shipment_invite' || type === 'new_matching_request' || type.includes('matching_request')) {
+    return `/nakliyeci/yanit/${targetId}`;
+  }
+
+  if (type === 'customer.offer_received' || type === 'offer_received') {
+    return `/teklifler/${targetId}`;
+  }
 
   switch ((n.entityType || '').toLowerCase()) {
     case 'shipment':

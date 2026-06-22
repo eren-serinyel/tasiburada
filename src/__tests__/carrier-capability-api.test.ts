@@ -255,7 +255,7 @@ describe('Carrier Capability Management API', () => {
       // Login as admin once
       const adminLogin = await request(testApp)
         .post('/api/v1/admin/login')
-        .send({ email: 'superadmin@tasiburada.com', password: 'Maviface2141' });
+        .send({ email: 'superadmin@tasiburadan.com', password: 'Maviface2141' });
 
       expect(adminLogin.status).toBe(200);
       adminToken = adminLogin.body.data?.token;

@@ -81,7 +81,7 @@ export default function HowItWorksCustomer() {
           </h1>
         </div>
         <p className="mt-3 text-gray-600 text-center">
-          Taşıburada'da talep oluşturur, uygun nakliyecilerden teklif alır ve seçtiğiniz firmayla kontrollü şekilde eşleşirsiniz.
+          Taşıburadan'da talep oluşturur, uygun nakliyecilerden teklif alır ve seçtiğiniz firmayla kontrollü şekilde eşleşirsiniz.
         </p>
       </div>
 

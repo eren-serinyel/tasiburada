@@ -139,6 +139,7 @@ export default function ServicesSection({ user, refreshProfileStatus }: SectionP
   const [selectedServiceNames, setSelectedServiceNames] = useState<string[]>([]);
   const [serviceTypeOptions, setServiceTypeOptions] = useState<string[]>([]);
   const [loadTypes, setLoadTypes] = useState<LoadType[]>([]);
+  const [activeLoadTypes, setActiveLoadTypes] = useState<LoadType[]>([]);
   const [capabilities, setCapabilities] = useState<Capability[]>([]);
   const [catalogByLoadType, setCatalogByLoadType] = useState<Record<string, CatalogService[]>>({});
   const [customServices, setCustomServices] = useState<CustomExtraService[]>([]);
@@ -254,6 +255,7 @@ export default function ServicesSection({ user, refreshProfileStatus }: SectionP
 
     setSelectedServiceNames(names);
     setLoadTypes(nextLoadTypes);
+    setActiveLoadTypes(activeCapabilityLoadTypes);
     setCapabilities(data.extraServices ?? []);
     setCustomServices(custom);
     setCatalogByLoadType(catalog);
@@ -288,13 +290,7 @@ export default function ServicesSection({ user, refreshProfileStatus }: SectionP
     const toRemove = previousLoadTypes.filter(loadType => !next.has(loadType));
 
     for (const loadType of toAdd) {
-      const res = await apiClient(`${API_BASE}/carriers/me/capabilities`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'add_load_type', loadType }),
-      });
-      const json = await res.json();
-      if (!res.ok || !json?.success) throw new Error(json?.message || json?.error?.details || 'Taşıma türü eklenemedi.');
+      await ensureLoadTypeCapability(loadType);
     }
 
     for (const loadType of toRemove) {
@@ -317,6 +313,54 @@ export default function ServicesSection({ user, refreshProfileStatus }: SectionP
     }
   };
 
+  const fetchActiveLoadTypes = async () => {
+    const res = await apiClient(`${API_BASE}/carriers/me/capabilities`, {
+      suppressErrorToast: true,
+    });
+    const json = await res.json().catch(() => null);
+    if (!res.ok || !json?.success) return activeLoadTypes;
+
+    const nextActiveLoadTypes = ((json.data?.loadTypes ?? []) as NonNullable<CapabilityProfile['loadTypes']>)
+      .filter(item => item?.isActive)
+      .map(item => item.loadType);
+    setActiveLoadTypes(nextActiveLoadTypes);
+    return nextActiveLoadTypes;
+  };
+
+  const ensureLoadTypeCapability = async (loadType: LoadType) => {
+    if (activeLoadTypes.includes(loadType)) return;
+
+    const freshActiveLoadTypes = await fetchActiveLoadTypes();
+    if (freshActiveLoadTypes.includes(loadType)) return;
+
+    const res = await apiClient(`${API_BASE}/carriers/me/capabilities`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'add_load_type', loadType }),
+      suppressErrorToast: true,
+    });
+    const json = await res.json().catch(() => null);
+    const message = String(json?.message || json?.error?.details || '');
+
+    if (res.status === 400 && message.toLocaleLowerCase('tr-TR').includes('zaten')) {
+      setActiveLoadTypes(prev => prev.includes(loadType) ? prev : [...prev, loadType]);
+      return;
+    }
+
+    if (!res.ok || !json?.success) {
+      throw new Error(json?.message || json?.error?.details || 'Tasima turu etkinlestirilemedi.');
+    }
+
+    const nextActiveLoadTypes = ((json.data?.loadTypes ?? []) as NonNullable<CapabilityProfile['loadTypes']>)
+      .filter(item => item?.isActive)
+      .map(item => item.loadType);
+    if (nextActiveLoadTypes.length) {
+      setActiveLoadTypes(nextActiveLoadTypes);
+    } else {
+      setActiveLoadTypes(prev => prev.includes(loadType) ? prev : [...prev, loadType]);
+    }
+  };
+
   const persistServiceTypes = async (names: string[]) => {
     const previousLoadTypes = loadTypes;
     const nextLoadTypes = serviceNamesToLoadTypes(names);
@@ -333,10 +377,16 @@ export default function ServicesSection({ user, refreshProfileStatus }: SectionP
       const capabilityRes = await apiClient(`${API_BASE}/carriers/me/capabilities`);
       const capabilityJson = await capabilityRes.json();
       const nextCapabilities = capabilityJson?.success ? capabilityJson.data.extraServices ?? [] : [];
+      const nextActiveLoadTypes = capabilityJson?.success
+        ? ((capabilityJson.data.loadTypes ?? []) as NonNullable<CapabilityProfile['loadTypes']>)
+          .filter(item => item?.isActive)
+          .map(item => item.loadType)
+        : [];
       const nextCustom = await fetchCustomServices();
 
       setSelectedServiceNames(names);
       setLoadTypes(nextLoadTypes);
+      setActiveLoadTypes(nextActiveLoadTypes);
       setCapabilities(nextCapabilities);
       setCustomServices(nextCustom);
       setCatalogByLoadType(catalog);
@@ -395,6 +445,8 @@ export default function ServicesSection({ user, refreshProfileStatus }: SectionP
         toast.error('Görüşülür için geçerli min-max fiyat aralığı girin.');
         return;
       }
+
+      await ensureLoadTypeCapability(loadType);
 
       const res = await apiClient(`${API_BASE}/carriers/me/capabilities`, {
         method: 'PUT',
@@ -491,6 +543,7 @@ export default function ServicesSection({ user, refreshProfileStatus }: SectionP
     setSavingKey(`custom-new:${loadType}`);
     try {
       const payload = buildCustomPayload(loadType, draft);
+      await ensureLoadTypeCapability(loadType);
       const res = await apiClient(`${API_BASE}/carriers/me/custom-extra-services`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -521,6 +574,7 @@ export default function ServicesSection({ user, refreshProfileStatus }: SectionP
     setSavingKey(`custom:${service.id}`);
     try {
       const payload = buildCustomPayload(service.loadType, draft);
+      await ensureLoadTypeCapability(service.loadType);
       const res = await apiClient(`${API_BASE}/carriers/me/custom-extra-services/${service.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },

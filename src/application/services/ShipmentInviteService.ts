@@ -5,6 +5,9 @@ import { NotificationService } from './NotificationService';
 import { NotFoundError, ConflictError, ValidationError } from '../../domain/errors/AppError';
 import { AppDataSource } from '../../infrastructure/database/data-source';
 import { Offer } from '../../domain/entities/Offer';
+import { CarrierCustomExtraService } from '../../domain/entities/CarrierCustomExtraService';
+import { ShipmentCustomExtraService } from '../../domain/entities/ShipmentCustomExtraService';
+import { In } from 'typeorm';
 
 export interface InviteRequestedServices {
   catalogServiceIds?: string[];
@@ -36,6 +39,42 @@ export class ShipmentInviteService {
     };
   }
 
+  private async snapshotRequestedCustomServices(
+    shipmentId: string,
+    carrierId: string,
+    customServiceIds: string[],
+  ): Promise<void> {
+    if (!customServiceIds.length) return;
+
+    const customServiceRepo = AppDataSource.getRepository(CarrierCustomExtraService);
+    const snapshotRepo = AppDataSource.getRepository(ShipmentCustomExtraService);
+    const services = await customServiceRepo.find({
+      where: {
+        id: In(customServiceIds),
+        carrierId,
+        isActive: true,
+      },
+    });
+
+    if (!services.length) return;
+
+    const existing = await snapshotRepo.find({ where: { shipmentId } });
+    const existingCustomIds = new Set(existing.map((item) => item.customExtraServiceId).filter(Boolean));
+    const snapshots = services
+      .filter((service) => !existingCustomIds.has(service.id))
+      .map((service) => snapshotRepo.create({
+        shipmentId,
+        customExtraServiceId: service.id,
+        carrierId: service.carrierId,
+        nameSnapshot: service.title,
+        priceSnapshot: service.basePrice == null ? null : Number(service.basePrice),
+      }));
+
+    if (snapshots.length) {
+      await snapshotRepo.save(snapshots);
+    }
+  }
+
   async invite(customerId: string, shipmentId: string, carrierId: string, requestedServices?: InviteRequestedServices | null) {
     const shipment = await this.shipmentRepo.findByIdAndCustomerId(shipmentId, customerId);
     if (!shipment) throw new NotFoundError('İlan bulunamadı');
@@ -46,21 +85,26 @@ export class ShipmentInviteService {
     const existing = await this.inviteRepo.findByShipmentAndCarrier(shipmentId, carrierId);
     if (existing) throw new ConflictError('Bu nakliyeciye zaten davet gönderilmiş');
 
+    const normalizedRequestedServices = this.normalizeRequestedServices(requestedServices);
+
     const invite = await this.inviteRepo.create({
       shipmentId,
       carrierId,
       status: 'pending',
-      requestedServices: this.normalizeRequestedServices(requestedServices),
+      requestedServices: normalizedRequestedServices,
     });
 
-    await this.notificationService.createNotification(
-      carrierId,
-      'carrier',
-      'shipment_invite',
-      'Yeni Davet',
-      'Daha önce çalıştığınız bir müşteri sizi yeni talebine davet etti.',
-      shipmentId
-    );
+    await this.snapshotRequestedCustomServices(shipmentId, carrierId, normalizedRequestedServices.customServiceIds);
+
+    await this.notificationService.createNotification({
+      recipientUserId: carrierId,
+      recipientRole: 'carrier',
+      type: 'shipment_invite',
+      title: 'Yeni Davet',
+      body: `Yeni Davet — ${shipment.origin} → ${shipment.destination} talebine davet edildiniz.`,
+      entityType: 'shipment',
+      entityId: shipmentId,
+    });
 
     return invite;
   }

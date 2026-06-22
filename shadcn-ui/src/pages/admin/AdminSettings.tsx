@@ -292,7 +292,7 @@ export default function AdminSettings() {
               <input
                 className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 value={general.platformName}
-                placeholder="TaşıBurada"
+                placeholder="Taşıburadan"
                 onChange={(e) => setGeneral((p) => ({ ...p, platformName: e.target.value }))}
               />
             </FieldGroup>
@@ -302,7 +302,7 @@ export default function AdminSettings() {
                 type="email"
                 className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 value={general.contactEmail}
-                placeholder="destek@tasiburada.com"
+                placeholder="destek@tasiburadan.com"
                 onChange={(e) => setGeneral((p) => ({ ...p, contactEmail: e.target.value }))}
               />
             </FieldGroup>

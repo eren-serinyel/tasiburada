@@ -46,6 +46,7 @@ import {
   CONTACT_SAFETY_WARNING,
   buildShipmentPayloadFromForm,
   getConverterAppliedSummary,
+  normalizePlaceTypeForBackend,
   type ConverterAppliedSummary,
 } from '@/lib/customerShipmentForm';
 
@@ -80,27 +81,18 @@ const filterAndDedupeServiceGroups = (
 ): CarrierDetailServiceGroup[] => {
   if (!targetLoadType) return [];
 
-  const byName = new Map<string, CarrierDetailServiceItem>();
+  const byNameAndSource = new Map<string, CarrierDetailServiceItem>();
 
   for (const group of services) {
     if (group.loadType !== targetLoadType) continue;
 
     for (const service of group.items ?? []) {
-      const key = normalizeServiceName(service.name);
-      const existing = byName.get(key);
-
-      if (!existing) {
-        byName.set(key, service);
-        continue;
-      }
-
-      if (service.source === 'catalog' && existing.source === 'custom') {
-        byName.set(key, service);
-      }
+      const key = `${normalizeServiceName(service.name)}|${service.source}`;
+      if (!byNameAndSource.has(key)) byNameAndSource.set(key, service);
     }
   }
 
-  const items = Array.from(byName.values());
+  const items = Array.from(byNameAndSource.values());
   return items.length > 0 ? [{ loadType: targetLoadType, items }] : [];
 };
 
@@ -147,8 +139,10 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
   const [form, setForm] = useState({
     originCity: '',
     originDistrict: '',
+    originAddressText: '',
     destinationCity: '',
     destinationDistrict: '',
+    destinationAddressText: '',
     date: '',
     scope: (localStorage.getItem('auto_scope') as 'sehirici' | 'sehirlerarasi' | null) || '' as '' | 'sehirici' | 'sehirlerarasi',
     transportType: '',
@@ -157,7 +151,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
     weightKg: '',
     floor: '',
     hasElevator: false,
-    dateFlexibility: 'EXACT' as 'EXACT' | 'FLEXIBLE' | 'WITHIN_WEEK',
+    dateFlexibility: 'EXACT' as 'EXACT' | 'PLUS_MINUS_1_DAY' | 'PLUS_MINUS_3_DAYS',
     timeWindow: '',
     extras: { asansor: false, sigorta: false, ambalaj: false },
     serviceOptions: {} as Record<string, string[]>,
@@ -819,6 +813,26 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
     });
   };
 
+  const getRequestedServicePayload = (carrierIds: string[]) => {
+    const requested = carrierIds.map((carrierId) =>
+      requestedServicesByCarrier[carrierId] ?? { catalogServiceIds: [], customServiceIds: [] }
+    );
+    return {
+      catalogServiceIds: Array.from(new Set(requested.flatMap((item) => item.catalogServiceIds || []))),
+      customServiceIds: Array.from(new Set(requested.flatMap((item) => item.customServiceIds || []))),
+    };
+  };
+
+  const getRequestedCarrierServicesPayload = (carrierIds: string[]) => (
+    carrierIds.reduce<RequestedCarrierServices>((acc, carrierId) => {
+      acc[carrierId] = requestedServicesByCarrier[carrierId] ?? {
+        catalogServiceIds: [],
+        customServiceIds: [],
+      };
+      return acc;
+    }, {})
+  );
+
   // Profil telefonunu güncelle (opsiyonel, sadece numara yoksa)
   const savePhoneIfNeeded = async () => {
     if (needsPhone && phone.trim()) {
@@ -846,22 +860,33 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
     try {
       await savePhoneIfNeeded();
       const token = localStorage.getItem('authToken');
+      const rawShipmentPayload = buildShipmentPayload();
+      const carrierIdsToInvite = selectedCarrierIds.length > 0
+        ? selectedCarrierIds.slice(0, 4)
+        : inviteCarrierId
+          ? [inviteCarrierId]
+          : [];
+      const requestedServicePayload = getRequestedServicePayload(carrierIdsToInvite);
+      const requestedCarrierServices = getRequestedCarrierServicesPayload(carrierIdsToInvite);
+      const shipmentPayload = {
+        ...rawShipmentPayload,
+        extraServices: requestedServicePayload.catalogServiceIds,
+        customExtraServices: requestedServicePayload.customServiceIds,
+        requestedCarrierServices,
+        originPlaceType: normalizePlaceTypeForBackend(rawShipmentPayload.originPlaceType ?? rawShipmentPayload.placeType),
+        destinationPlaceType: normalizePlaceTypeForBackend(rawShipmentPayload.destinationPlaceType ?? rawShipmentPayload.placeType),
+      };
       const res = await fetch('/api/v1/shipments/', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify(buildShipmentPayload()),
+        body: JSON.stringify(shipmentPayload),
       });
       const json = await res.json().catch(() => ({}));
       if (res.ok && json.success) {
         const newShipmentId = json.data.id;
-        const carrierIdsToInvite = selectedCarrierIds.length > 0
-          ? selectedCarrierIds.slice(0, 4)
-          : inviteCarrierId
-            ? [inviteCarrierId]
-            : [];
 
         if (carrierIdsToInvite.length > 0 && newShipmentId) {
           const inviteResults = await Promise.allSettled(carrierIdsToInvite.map((carrierId) =>
@@ -895,7 +920,16 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
         localStorage.removeItem(DRAFT_KEY);
         navigate('/ilanlarim');
       } else {
-        toast({ title: 'Hata', description: json.message || 'Talep oluşturulamadı.', variant: 'destructive' });
+        console.error('Shipment create failed:', {
+          status: res.status,
+          response: json,
+          payload: shipmentPayload,
+        });
+        toast({
+          title: 'Talep oluşturulamadı',
+          description: json?.message || 'Eksik veya geçersiz bir alan var.',
+          variant: 'destructive',
+        });
       }
     } catch {
       toast({ title: 'Bağlantı Hatası', description: 'Sunucuya bağlanılamadı.', variant: 'destructive' });
@@ -1191,6 +1225,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
                       if (addr) {
                         handleChange('originCity', addr.city);
                         handleChange('originDistrict', addr.district);
+                        handleChange('originAddressText', [addr.addressLine1, addr.addressLine2].filter(Boolean).join(' '));
                       }
                     }}
                   >
@@ -1238,6 +1273,19 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
                         <SelectContent>{originDistricts.map((d) => (<SelectItem key={d} value={d}>{d}</SelectItem>))}</SelectContent>
                       </Select>
                     </div>
+                    <div>
+                      <label style={labelStyle}>Çıkış açık adres (mahalle, sokak, bina/blok, kat, daire)</label>
+                      <Textarea
+                        value={form.originAddressText}
+                        maxLength={500}
+                        placeholder="Örn: Atatürk Mah. 5. Sok. A Blok, Kat 5, Daire 12"
+                        onChange={(e) => {
+                          if (!requireLoginForSelection()) return;
+                          handleChange('originAddressText', e.target.value);
+                        }}
+                        style={{ ...inputStyle, minHeight: '88px', resize: 'vertical' }}
+                      />
+                    </div>
                   </div>
                 </div>
 
@@ -1273,33 +1321,67 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
                         <SelectContent>{destinationDistricts.map((d) => (<SelectItem key={d} value={d}>{d}</SelectItem>))}</SelectContent>
                       </Select>
                     </div>
+                    <div>
+                      <label style={labelStyle}>Varış açık adres (mahalle, sokak, bina/blok, kat, daire)</label>
+                      <Textarea
+                        value={form.destinationAddressText}
+                        maxLength={500}
+                        placeholder="Örn: Cumhuriyet Mah. B Blok, Kat 3, Daire 7"
+                        onChange={(e) => {
+                          if (!requireLoginForSelection()) return;
+                          handleChange('destinationAddressText', e.target.value);
+                        }}
+                        style={{ ...inputStyle, minHeight: '88px', resize: 'vertical' }}
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
 
+              <div className="flex items-start" style={{ gap: '8px', marginTop: '14px', padding: '12px', borderRadius: '10px', border: '1px solid var(--tb-brand-100)', background: 'var(--tb-brand-50)', color: 'var(--tb-brand-700)', fontSize: '13px' }}>
+                <Info style={{ width: '16px', height: '16px', marginTop: '2px', flex: '0 0 auto' }} />
+                <span>Açık adres gizli kalır; sadece anlaştığınız nakliyeciye eşleşme sonrası gösterilir.</span>
+              </div>
+
               {/* Date */}
-              <div style={{ marginTop: '20px' }}>
-                <label style={labelStyle}>Taşıma Tarihi <span style={{ color: 'var(--tb-danger)' }}>*</span></label>
-                <div style={{ position: 'relative' }}>
-                  <Input
-                    type="date"
-                    value={form.date}
-                    min={todayStr}
-                    max={maxDateStr}
-                    onChange={(e) => {
-                      if (!requireLoginForSelection()) return;
-                      handleChange('date', e.target.value);
-                    }}
-                    aria-invalid={isDateTooFar}
-                    required
-                    style={inputStyle}
-                  />
+              <div className="grid md:grid-cols-2" style={{ marginTop: '20px', gap: '16px' }}>
+                <div>
+                  <label style={labelStyle}>Taşıma Tarihi <span style={{ color: 'var(--tb-danger)' }}>*</span></label>
+                  <div style={{ position: 'relative' }}>
+                    <Input
+                      type="date"
+                      value={form.date}
+                      min={todayStr}
+                      max={maxDateStr}
+                      onChange={(e) => {
+                        if (!requireLoginForSelection()) return;
+                        handleChange('date', e.target.value);
+                      }}
+                      aria-invalid={isDateTooFar}
+                      required
+                      style={inputStyle}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label style={labelStyle}>Tarih Esnekliği</label>
+                  <Select value={form.dateFlexibility} onValueChange={(v) => {
+                    if (!requireLoginForSelection()) return;
+                    handleChange('dateFlexibility', v);
+                  }}>
+                    <SelectTrigger style={inputStyle}><SelectValue placeholder="Seçin" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="EXACT">Tam bu tarih</SelectItem>
+                      <SelectItem value="PLUS_MINUS_1_DAY">±1 gün esnek</SelectItem>
+                      <SelectItem value="PLUS_MINUS_3_DAYS">±3 gün esnek</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
                 {isDateTooFar && (
-                  <div style={{ fontSize: '13px', color: 'var(--tb-danger)', marginTop: '6px' }}>30 günden ileri bir tarihte gün seçemezsiniz.</div>
+                  <div className="md:col-span-2" style={{ fontSize: '13px', color: 'var(--tb-danger)', marginTop: '-10px' }}>30 günden ileri bir tarihte gün seçemezsiniz.</div>
                 )}
                 {!isDateTooFar && (isCheckingAvailability || availabilitySummary) && (
-                  <div style={{ fontSize: '13px', marginTop: '6px' }}>
+                  <div className="md:col-span-2" style={{ fontSize: '13px', marginTop: '-10px' }}>
                     {isCheckingAvailability ? (
                       <span style={{ color: 'var(--tb-ink-500)' }}>Müsaitlik kontrol ediliyor...</span>
                     ) : availabilitySummary ? (
@@ -1520,6 +1602,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
                           role="checkbox"
                           aria-checked={checked}
                           tabIndex={0}
+                          onMouseDown={(event) => event.preventDefault()}
                           onClick={() => toggleCarrierService(carrierGroup.carrierId, service)}
                           onKeyDown={(event) => {
                             if (event.key !== 'Enter' && event.key !== ' ') return;
@@ -1560,7 +1643,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
                               <span style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', fontSize: '13px', fontWeight: checked ? 700 : 600, color: checked ? 'var(--tb-brand-900)' : 'var(--tb-ink-900)' }}>
                                 {service.name}
                                 {service.source === 'custom' && (
-                                  <span style={{ fontSize: '10px', background: 'var(--tb-brand-50)', color: 'var(--tb-brand-700)', padding: '1px 6px', borderRadius: '999px', fontWeight: 700, border: '1px solid var(--tb-brand-50)' }}>özel</span>
+                                  <span style={{ fontSize: '10px', background: 'var(--tb-brand-50)', color: 'var(--tb-brand-700)', padding: '1px 6px', borderRadius: '999px', fontWeight: 700, border: '1px solid var(--tb-brand-50)' }}>Özel</span>
                                 )}
                               </span>
                               {!compact && service.description && (
@@ -1634,6 +1717,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
                               <span
                                 role="button"
                                 tabIndex={0}
+                                onMouseDown={(event) => event.preventDefault()}
                                 onClick={(event) => {
                                   event.stopPropagation();
                                   toggleAllCarrierServices(carrierGroup);
@@ -2039,6 +2123,11 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
                     <div style={{ fontSize: '16px', fontWeight: 600, color: 'var(--tb-ink-900)', marginTop: '2px' }}>
                       {form.originCity}{form.originDistrict ? `, ${form.originDistrict}` : ''}
                     </div>
+                    {form.originAddressText && (
+                      <div style={{ fontSize: '12px', color: 'var(--tb-ink-500)', marginTop: '6px', lineHeight: 1.45 }}>
+                        {form.originAddressText}
+                      </div>
+                    )}
                   </div>
 
                   <div className="flex items-center justify-center" style={{ margin: '12px 0' }}>
@@ -2054,6 +2143,11 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
                     <div style={{ fontSize: '16px', fontWeight: 600, color: 'var(--tb-ink-900)', marginTop: '2px' }}>
                       {form.destinationCity}{form.destinationDistrict ? `, ${form.destinationDistrict}` : ''}
                     </div>
+                    {form.destinationAddressText && (
+                      <div style={{ fontSize: '12px', color: 'var(--tb-ink-500)', marginTop: '6px', lineHeight: 1.45 }}>
+                        {form.destinationAddressText}
+                      </div>
+                    )}
                   </div>
 
                   {form.date && (

@@ -4,7 +4,7 @@ const SMTP_HOST = process.env.SMTP_HOST || '';
 const SMTP_PORT = parseInt(process.env.SMTP_PORT || '587', 10);
 const SMTP_USER = process.env.SMTP_USER || '';
 const SMTP_PASS = process.env.SMTP_PASS || '';
-const SMTP_FROM = process.env.SMTP_FROM || `"Taşıburada" <noreply@tasiburada.com>`;
+const SMTP_FROM = process.env.SMTP_FROM || `"Taşıburadan" <noreply@tasiburadan.com>`;
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
 
 class EmailService {
@@ -48,7 +48,7 @@ class EmailService {
     await this.getTransporter().sendMail({
       from: SMTP_FROM,
       to,
-      subject: 'Şifre Sıfırlama Talebi — Taşıburada',
+      subject: 'Şifre Sıfırlama Talebi — Taşıburadan',
       html: `
         <div style="font-family:sans-serif;max-width:560px;margin:0 auto;padding:24px">
           <h2 style="color:#1d4ed8">Şifrenizi Sıfırlayın</h2>
@@ -75,7 +75,7 @@ class EmailService {
     await this.getTransporter().sendMail({
       from: SMTP_FROM,
       to,
-      subject: 'E-posta Adresinizi Doğrulayın — Taşıburada',
+      subject: 'E-posta Adresinizi Doğrulayın — Taşıburadan',
       html: `
         <div style="font-family:sans-serif;max-width:560px;margin:0 auto;padding:24px">
           <h2 style="color:#1d4ed8">E-posta Doğrulama</h2>

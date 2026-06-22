@@ -43,6 +43,7 @@ export class ShipmentRepository extends BaseRepository<Shipment> {
       .createQueryBuilder('shipment')
       .leftJoinAndSelect('shipment.customer', 'customer')
       .leftJoinAndSelect('shipment.extraServices', 'extraServices')
+      .leftJoinAndSelect('shipment.customExtraServices', 'customExtraServices')
       .where(
         `(
           (shipment.status = :pending AND shipment.shipmentDate >= :today)
@@ -65,6 +66,7 @@ export class ShipmentRepository extends BaseRepository<Shipment> {
       .createQueryBuilder('shipment')
       .leftJoinAndSelect('shipment.customer', 'customer')
       .leftJoinAndSelect('shipment.extraServices', 'extraServices')
+      .leftJoinAndSelect('shipment.customExtraServices', 'customExtraServices')
       .leftJoin('carriers', 'matchingCarrier', 'matchingCarrier.id = :carrierId', { carrierId })
       .leftJoin('carrier_stats', 'carrierStats', 'carrierStats.carrierId = matchingCarrier.id')
       .where('shipment.status IN (:...openStatuses)', {
@@ -81,6 +83,8 @@ export class ShipmentRepository extends BaseRepository<Shipment> {
   async findByCustomerIdWithOfferCount(customerId: string): Promise<Array<Shipment & { offerCount: number }>> {
     const rows = await this.repository
       .createQueryBuilder('shipment')
+      .leftJoinAndSelect('shipment.extraServices', 'extraServices')
+      .leftJoinAndSelect('shipment.customExtraServices', 'customExtraServices')
       .leftJoin('offers', 'offer', 'offer.shipmentId = shipment.id')
       .where('shipment.customerId = :customerId', { customerId })
       .select('shipment')
@@ -116,6 +120,7 @@ export class ShipmentRepository extends BaseRepository<Shipment> {
       .leftJoinAndSelect('shipment.carrier', 'carrier')
       .leftJoinAndSelect('shipment.customer', 'customer')
       .leftJoinAndSelect('shipment.extraServices', 'extraServices')
+      .leftJoinAndSelect('shipment.customExtraServices', 'customExtraServices')
       .leftJoinAndMapMany('shipment.offers', 'offers', 'offer', 'offer.shipmentId = shipment.id')
       .leftJoinAndSelect('offer.carrier', 'offerCarrier')
       .where('shipment.id = :shipmentId', { shipmentId })

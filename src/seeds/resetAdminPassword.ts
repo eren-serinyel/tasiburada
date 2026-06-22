@@ -9,7 +9,7 @@ async function resetAdminPassword() {
   }
 
   const adminRepo = AppDataSource.getRepository(Admin);
-  const email = process.env.ADMIN_EMAIL ?? 'admin@tasiburada.com';
+  const email = process.env.ADMIN_EMAIL ?? 'admin@tasiburadan.com';
   const newPassword = process.env.ADMIN_PASSWORD ?? 'Maviface2141';
 
   const admin = await adminRepo.findOne({ where: { email } });

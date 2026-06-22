@@ -79,7 +79,7 @@ const CarrierCard = ({ carrier, onInspect }: CarrierCardProps) => {
 								</AvatarFallback>
 							</Avatar>
 							{isVerified && (
-								<div className="absolute -bottom-1 -right-1 bg-blue-500 rounded-full p-0.5 border-2 border-white" title="Taşıburada tarafından doğrulanmış nakliyeci">
+								<div className="absolute -bottom-1 -right-1 bg-blue-500 rounded-full p-0.5 border-2 border-white" title="Taşıburadan tarafından doğrulanmış nakliyeci">
 									<ShieldCheck className="h-3 w-3 text-white" />
 								</div>
 							)}

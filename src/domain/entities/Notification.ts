@@ -37,10 +37,10 @@ export class Notification {
   @Column({ type: 'varchar', length: 40 })
   type: string;
 
-  @Column({ type: 'varchar', length: 255 })
+  @Column({ type: 'varchar', length: 255, charset: 'utf8mb4', collation: 'utf8mb4_unicode_ci' })
   title: string;
 
-  @Column({ type: 'text' })
+  @Column({ type: 'text', charset: 'utf8mb4', collation: 'utf8mb4_unicode_ci' })
   message: string;
 
   @Column({ type: 'boolean', default: false })
@@ -55,7 +55,7 @@ export class Notification {
   @Column({ type: 'varchar', length: 20, nullable: true })
   recipientRole?: NotificationRecipientRole | null;
 
-  @Column({ type: 'text', nullable: true })
+  @Column({ type: 'text', charset: 'utf8mb4', collation: 'utf8mb4_unicode_ci', nullable: true })
   body?: string | null;
 
   @Column({ type: 'varchar', length: 40, nullable: true })

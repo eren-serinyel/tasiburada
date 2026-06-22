@@ -238,6 +238,56 @@ describe('Offer + Shipment Akışı', () => {
     expect(log?.riskScore).toBeGreaterThanOrEqual(80);
   });
 
+  test('18. Offer create notifies customer and increments offer count', async () => {
+    if (skipDB() || !carrierToken || !customerToken) return;
+
+    const unique = Math.random().toString(36).slice(2, 10);
+    const futureDate = new Date(Date.now() + 5 * 86400000).toISOString().split('T')[0];
+    const shipmentRes = await request(testApp)
+      .post('/api/v1/shipments')
+      .set('Authorization', `Bearer ${customerToken}`)
+      .send({
+        origin: `Ankara Test ${unique}`,
+        destination: `Ardahan Test ${unique}`,
+        loadDetails: `Bildirim test yuk detayi ${unique}`,
+        shipmentDate: futureDate,
+      });
+    expect(shipmentRes.status).toBe(201);
+    const shipmentId = shipmentRes.body.data?.id;
+    expect(shipmentId).toBeTruthy();
+
+    const offerRes = await request(testApp)
+      .post('/api/v1/offers')
+      .set('Authorization', `Bearer ${carrierToken}`)
+      .send({
+        shipmentId,
+        price: 1500,
+        estimatedDuration: 4,
+      });
+    expect(offerRes.status).toBe(201);
+    expect(offerRes.body.success).toBe(true);
+
+    const myShipments = await request(testApp)
+      .get('/api/v1/shipments/my-shipments')
+      .set('Authorization', `Bearer ${customerToken}`);
+    expect(myShipments.status).toBe(200);
+    const createdShipment = (myShipments.body.data || []).find((item: any) => item.id === shipmentId);
+    expect(createdShipment).toBeTruthy();
+    expect(createdShipment.status).toBe('offer_received');
+    expect(Number(createdShipment.offerCount || 0)).toBeGreaterThanOrEqual(1);
+
+    const notifications = await request(testApp)
+      .get('/api/v1/notifications')
+      .set('Authorization', `Bearer ${customerToken}`);
+    expect(notifications.status).toBe(200);
+    const offerNotification = (notifications.body.data || []).find((item: any) =>
+      item.type === 'customer.offer_received' && (item.entityId === shipmentId || item.relatedId === shipmentId)
+    );
+    expect(offerNotification).toBeTruthy();
+    expect(offerNotification.message || offerNotification.body).toContain('teklif verdi');
+    expect(offerNotification.message || offerNotification.body).not.toMatch(/Ã|Â|â/);
+  });
+
   // ── Offer: Olmayan teklifi kabul et ──────────────────────────────────────
   test('18. Olmayan teklifi kabul etmek 400/404 dönmeli', async () => {
     if (skipDB() || !customerToken) return;

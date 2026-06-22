@@ -86,7 +86,7 @@ async function seed() {
     // ── Admin Users ──
     const adminPassword = await bcrypt.hash('admin123456', 10);
     const admins = [
-      { email: 'admin@tasiburada.com', role: 'superadmin' },
+      { email: 'admin@tasiburadan.com', role: 'superadmin' },
     ];
 
     for (const adm of admins) {
@@ -105,15 +105,15 @@ async function seed() {
     // ── Test Carrier ──
     const carrierExists = await qr.query(
       `SELECT id FROM carriers WHERE email = ? LIMIT 1`,
-      ['nakliyeci@tasiburada.com']
+      ['nakliyeci@tasiburadan.com']
     );
     if (carrierExists.length === 0) {
       const carrierPasswordHash = await bcrypt.hash('Test1234A!', 10);
       await qr.query(
         `INSERT INTO carriers (id, companyName, email, passwordHash, phone, taxNumber, contactName, foundedYear, isActive, verifiedByAdmin, profileCompletion, createdAt, updatedAt) VALUES (UUID(), ?, ?, ?, ?, ?, ?, ?, true, true, 100, NOW(), NOW())`,
-        ['Test Nakliyat', 'nakliyeci@tasiburada.com', carrierPasswordHash, '05559876543', '9999999999', 'Test Nakliyeci', 2010]
+        ['Test Nakliyat', 'nakliyeci@tasiburadan.com', carrierPasswordHash, '05559876543', '9999999999', 'Test Nakliyeci', 2010]
       );
-      console.log('✅ Test carrier oluşturuldu: nakliyeci@tasiburada.com');
+      console.log('✅ Test carrier oluşturuldu: nakliyeci@tasiburadan.com');
     } else {
       console.log('ℹ️  Test carrier zaten mevcut.');
     }

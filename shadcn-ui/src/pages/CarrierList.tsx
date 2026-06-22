@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import logoImg from '@/images/logo.png';
+import logoWhite from '@/images/logo-white.png';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -97,7 +97,7 @@ export default function CarrierList() {
 							</h1>
 
 							<p className="text-lg md:text-xl text-slate-500 max-w-2xl leading-relaxed mb-10 font-medium">
-								Taşıburada ile yüzlerce onaylı, puanlanmış ve profesyonel nakliyeci arasından güvenle seçim yapın. Zaman ve fiyattan tasarruf edin.
+								Taşıburadan ile yüzlerce onaylı, puanlanmış ve profesyonel nakliyeci arasından güvenle seçim yapın. Zaman ve fiyattan tasarruf edin.
 							</p>
 
 							<div className="flex flex-wrap gap-4">
@@ -129,7 +129,7 @@ export default function CarrierList() {
 								
 								<div className="relative z-10 flex justify-between items-start">
 									<div className="p-3 bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 overflow-visible">
-										<img src={logoImg} alt="Taşıburada" className="w-10 h-10 object-contain brightness-0 invert scale-[2.2] origin-center" />
+										<img src={logoWhite} alt="Taşıburadan" className="h-14 w-auto object-contain" />
 									</div>
 									<div className="text-right">
 										<div className="text-white/60 text-xs font-bold uppercase tracking-wider mb-1">Aktif Nakliyeci</div>
@@ -138,7 +138,7 @@ export default function CarrierList() {
 								</div>
 
 								<div className="relative z-10">
-									<h3 className="text-2xl font-bold text-white mb-2 leading-tight">Taşıburada Güvencesiyle<br />Hemen Yola Çıkın</h3>
+									<h3 className="text-2xl font-bold text-white mb-2 leading-tight">Taşıburadan Güvencesiyle<br />Hemen Yola Çıkın</h3>
 									<div className="flex items-center gap-2 text-white/80 text-sm font-medium">
 										<Shield className="w-4 h-4 text-sky-300" /> Tüm taşımalar sigorta kapsamında
 									</div>
@@ -355,7 +355,7 @@ function InlineCarrierCard({ carrier, navigate }: { carrier: CarrierSearchItem; 
 					
 					{isVerified && (
 						<div className="mt-1">
-							<Badge title="Taşıburada tarafından doğrulanmış nakliyeci" className="bg-emerald-50 text-emerald-600 border-none px-3 py-1 font-black text-[10px] tracking-widest uppercase flex items-center gap-1 hover:bg-emerald-100 transition-colors">
+							<Badge title="Taşıburadan tarafından doğrulanmış nakliyeci" className="bg-emerald-50 text-emerald-600 border-none px-3 py-1 font-black text-[10px] tracking-widest uppercase flex items-center gap-1 hover:bg-emerald-100 transition-colors">
 								<CheckCircle2 className="w-3 h-3" /> ONAYLI
 							</Badge>
 						</div>

@@ -49,3 +49,4 @@ export { ExtraServiceApplicability, ExtraServiceLoadType } from './ExtraServiceA
 export { CarrierLoadTypeCapability } from './CarrierLoadTypeCapability';
 export { CarrierExtraServiceCapability, CarrierExtraServicePriceMode } from './CarrierExtraServiceCapability';
 export { CarrierCustomExtraService, CarrierCustomExtraServicePriceMode } from './CarrierCustomExtraService';
+export { ShipmentCustomExtraService } from './ShipmentCustomExtraService';

@@ -70,6 +70,11 @@ interface OfferExtraServiceBreakdownItem {
   source: 'requested' | 'offered';
 }
 
+interface OfferWarning {
+  code: string;
+  message: string;
+}
+
 export class OfferService {
   private offerRepository = new OfferRepository();
   private shipmentRepository = new ShipmentRepository();
@@ -106,10 +111,10 @@ export class OfferService {
     return sanitized;
   }
 
-  private async assertCarrierCapabilityForShipment(carrierId: string, shipment: Shipment): Promise<void> {
+  private async assertCarrierCapabilityForShipment(carrierId: string, shipment: Shipment): Promise<OfferWarning[]> {
     const loadType = inferExtraServiceLoadTypeFromShipmentCategory(shipment.shipmentCategory);
     if (!loadType) {
-      return;
+      return [];
     }
 
     const loadTypeCapability = await AppDataSource.getRepository(CarrierLoadTypeCapability).findOne({
@@ -126,7 +131,7 @@ export class OfferService {
 
     const extraServices = Array.isArray(shipment.extraServices) ? shipment.extraServices : [];
     if (extraServices.length === 0) {
-      return;
+      return [];
     }
 
     const extraServiceIds = extraServices.map((item) => item.id);
@@ -143,9 +148,12 @@ export class OfferService {
       .filter((item) => !capableIds.has(item.id))
       .map((item) => item.name);
 
-    if (missingExtraServiceNames.length > 0) {
-      throw new ForbiddenError(`Bu ilandaki ek hizmetler icin yetkiniz yok: ${missingExtraServiceNames.join(', ')}`);
-    }
+    return missingExtraServiceNames.length > 0
+      ? [{
+          code: 'MISSING_EXTRA_SERVICE_CAPABILITY',
+          message: `Bu ilandaki bazı ek hizmetler profilinizde aktif değil: ${missingExtraServiceNames.join(', ')}. Teklifiniz kaydedildi; müşteri bu kapsam farkını değerlendirebilir.`,
+        }]
+      : [];
   }
 
   private async calculateOfferPricing(
@@ -160,6 +168,9 @@ export class OfferService {
     extraServicesBreakdown: OfferExtraServiceBreakdownItem[] | null;
   }> {
     const requestedExtraServices = Array.isArray(shipment.extraServices) ? shipment.extraServices : [];
+    const requestedCustomExtraServices = Array.isArray((shipment as any).customExtraServices)
+      ? (shipment as any).customExtraServices
+      : [];
     const loadType = inferExtraServiceLoadTypeFromShipmentCategory(shipment.shipmentCategory);
     const uniqueCustomIds = Array.from(new Set(
       (Array.isArray(customExtraServiceIds) ? customExtraServiceIds : [])
@@ -210,6 +221,19 @@ export class OfferService {
       }
     }
 
+    for (const service of requestedCustomExtraServices) {
+      if (service?.carrierId && service.carrierId !== carrierId) continue;
+      const price = Number(service?.priceSnapshot || 0);
+      if (price <= 0) continue;
+
+      extraServicesBreakdown.push({
+        customServiceId: service.customExtraServiceId ?? service.id,
+        name: service.nameSnapshot || 'Özel ek hizmet',
+        price,
+        source: 'requested',
+      });
+    }
+
     if (uniqueCustomIds.length > 0) {
       const customServices = await AppDataSource.getRepository(CarrierCustomExtraService).find({
         where: {
@@ -252,7 +276,11 @@ export class OfferService {
     };
   }
 
-  private async assertCarrierCanCreateOrUpdateOffer(carrierId: string, shipment: Shipment, payload: CreateOfferPayload): Promise<Carrier> {
+  private async assertCarrierCanCreateOrUpdateOffer(
+    carrierId: string,
+    shipment: Shipment,
+    payload: CreateOfferPayload,
+  ): Promise<{ carrier: Carrier; warnings: OfferWarning[] }> {
     const carrier = await this.carrierRepository.findById(carrierId, { relations: ['carrierVehicles'] } as any);
     if (!carrier || !carrier.isActive) {
       throw new ForbiddenError('Hesab\u0131n\u0131z aktif de\u011fil. L\u00fctfen destekle ileti\u015fime ge\u00e7in.');
@@ -270,7 +298,7 @@ export class OfferService {
       throw new ConflictError('Bu m\u00fc\u015fteri ile aktif e\u015fle\u015fme bekleme s\u00fcresi bulundu\u011fu i\u00e7in teklif verilemez.');
     }
 
-    await this.assertCarrierCapabilityForShipment(carrierId, shipment);
+    const warnings = await this.assertCarrierCapabilityForShipment(carrierId, shipment);
 
     await this.platformPolicy.enforceNoContactInfo({
       actorType: 'carrier',
@@ -280,7 +308,7 @@ export class OfferService {
       shipmentId: shipment.id,
     });
 
-    return carrier;
+    return { carrier, warnings: warnings ?? [] };
   }
 
   async createOffer(carrierId: string, payload: CreateOfferPayload): Promise<{ offer: Offer, isNew: boolean, warnings?: any[] }> {
@@ -301,7 +329,7 @@ export class OfferService {
     }
 
     const shipment = await this.shipmentRepository.findById(payload.shipmentId, {
-      relations: ['extraServices'],
+      relations: ['extraServices', 'customExtraServices'],
     });
     if (!shipment) {
       throw new NotFoundError('Taşıma talebi bulunamadı.');
@@ -315,14 +343,14 @@ export class OfferService {
       throw new ValidationError('Sadece teklif almaya açık taşıma taleplerine teklif verilebilir.');
     }
 
-    const eligibleCarrier = await this.assertCarrierCanCreateOrUpdateOffer(carrierId, shipment, payload);
+    const { carrier: eligibleCarrier, warnings: capabilityWarnings } = await this.assertCarrierCanCreateOrUpdateOffer(carrierId, shipment, payload);
 
     const hasSuspiciousContent = payload.message ? this.checkSuspiciousContent(payload.message) : false;
     const pricing = await this.calculateOfferPricing(carrierId, shipment, payload.price, payload.customExtraServiceIds);
     const validUntil = computeOfferValidUntil(shipment.shipmentDate);
 
     // BR11 — Araç Uygunluk Soft Warning:
-    const warnings: any[] = [];
+    const warnings: any[] = [...capabilityWarnings];
     if (shipment.estimatedWeight && eligibleCarrier.carrierVehicles?.length) {
       const maxCapacity = Math.max(...eligibleCarrier.carrierVehicles.map((v: any) => Number(v.capacityKg || 0)));
       if (maxCapacity < shipment.estimatedWeight) {

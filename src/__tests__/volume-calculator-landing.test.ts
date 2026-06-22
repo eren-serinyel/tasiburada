@@ -15,7 +15,7 @@ describe('volume calculator landing contract', () => {
   test('route and SEO metadata are stable', () => {
     expect(VOLUME_CALCULATOR_ROUTE).toBe('/nakliye-hacmi-hesapla');
     expect(VOLUME_CALCULATOR_ALIAS_ROUTE).toBe('/hacim-hesaplama');
-    expect(VOLUME_CALCULATOR_SEO.title).toBe('Nakliye Hacmi Hesaplama | Taşıburada');
+    expect(VOLUME_CALCULATOR_SEO.title).toBe('Nakliye Hacmi Hesaplama | Taşıburadan');
     expect(VOLUME_CALCULATOR_SEO.description).toBe(
       'Ev ve ofis taşıması için tahmini hacim ve ağırlık hesaplayın, doğru araç önerisiyle nakliye teklifi alın.',
     );

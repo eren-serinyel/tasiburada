@@ -259,7 +259,7 @@ const startServer = async (): Promise<void> => {
     // Express sunucusunu başlat
     app.listen(port, () => {
       console.log('🚀 ======================================');
-      console.log('🏗️  Taşıburada Backend Server Started');
+      console.log('🏗️  Taşıburadan Backend Server Started');
       console.log('🚀 ======================================');
       console.log(`🌐 Server running on port: ${port}`);
       console.log(`🔗 API Base URL: http://localhost:${port}/api/v1`);

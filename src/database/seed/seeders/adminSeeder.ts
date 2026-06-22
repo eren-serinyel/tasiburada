@@ -7,14 +7,14 @@ export async function seedAdmins(): Promise<Admin[]> {
 
   const admins = [
     {
-      email: 'superadmin@tasiburada.com',
+      email: 'superadmin@tasiburadan.com',
       password: 'Maviface2141',
       role: 'superadmin' as const,
       firstName: 'Süper',
       lastName: 'Admin',
     },
     {
-      email: 'admin@tasiburada.com',
+      email: 'admin@tasiburadan.com',
       password: 'Maviface2141',
       role: 'admin' as const,
       firstName: 'Platform',
@@ -39,7 +39,7 @@ export async function seedAdmins(): Promise<Admin[]> {
   }
 
   console.log(`  ✓ ${created.length} admin`);
-  console.log('  📧 superadmin@tasiburada.com / Maviface2141');
-  console.log('  📧 admin@tasiburada.com / Maviface2141');
+  console.log('  📧 superadmin@tasiburadan.com / Maviface2141');
+  console.log('  📧 admin@tasiburadan.com / Maviface2141');
   return created;
 }

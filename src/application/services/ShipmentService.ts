@@ -1,4 +1,4 @@
-﻿import { ShipmentRepository } from '../../infrastructure/repositories/ShipmentRepository';
+import { ShipmentRepository } from '../../infrastructure/repositories/ShipmentRepository';
 import { OfferRepository } from '../../infrastructure/repositories/OfferRepository';
 import { Shipment, ShipmentStatus, ShipmentCategory, PlaceType, InsuranceType, LoadProfile, AccessDistance, DateFlexibility } from '../../domain/entities/Shipment';
 import { Offer, OfferStatus } from '../../domain/entities/Offer';
@@ -17,6 +17,10 @@ import { ScopeOfWorkRepository } from '../../infrastructure/repositories/ScopeOf
 import { ServiceTypeRepository } from '../../infrastructure/repositories/ServiceTypeRepository';
 import { CustomerPreference } from '../../domain/entities/CustomerPreference';
 import { CustomerAddress } from '../../domain/entities/CustomerAddress';
+import { CarrierCustomExtraService } from '../../domain/entities/CarrierCustomExtraService';
+import { CarrierExtraServiceCapability } from '../../domain/entities/CarrierExtraServiceCapability';
+import { ShipmentCustomExtraService } from '../../domain/entities/ShipmentCustomExtraService';
+import { ShipmentInvite } from '../../domain/entities/ShipmentInvite';
 import { PlatformPolicyService } from './PlatformPolicyService';
 import { ContactFilterSurface } from '../../domain/entities';
 import { MatchingService } from './MatchingService';
@@ -62,6 +66,22 @@ interface CreateShipmentPayload {
   vehicleTypePreferenceId?: string;
   contactPhone?: string;
   extraServices?: string[];
+  customExtraServices?: string[];
+  customExtraServiceIds?: string[];
+  requestedCarrierServices?: RequestedCarrierServicesByCarrier;
+  loadType?: ExtraServiceLoadType | string | null;
+}
+
+interface RequestedCarrierServicesPayload {
+  catalogServiceIds?: string[];
+  customServiceIds?: string[];
+}
+
+type RequestedCarrierServicesByCarrier = Record<string, RequestedCarrierServicesPayload>;
+
+interface ValidatedCarrierRequestedServices {
+  catalogServiceIds: string[];
+  customServiceIds: string[];
 }
 
 interface UpdateShipmentPayload {
@@ -97,21 +117,24 @@ interface UpdateShipmentPayload {
   note?: string;
   vehicleTypePreferenceId?: string;
   extraServices?: string[];
+  customExtraServices?: string[];
+  customExtraServiceIds?: string[];
+  loadType?: ExtraServiceLoadType | string | null;
 }
 
 const EXTRA_SERVICE_ALIASES: Record<string, string> = {
-  asansor: 'AsansÃ¶rlÃ¼ TaÅŸÄ±ma',
+  asansor: 'Asansörlü Taşıma',
   paketleme: 'Profesyonel Paketleme',
   ambalaj: 'Profesyonel Paketleme',
   profesyonelpaket: 'Profesyonel Paketleme',
   koli: 'Koli/Ambalaj Malzemesi',
   soktak: 'Mobilya Montaj/Demontaj',
   mobilya_montaj: 'Mobilya Montaj/Demontaj',
-  beyaz_esya_montaj: 'Beyaz EÅŸya Montaj/Demontaj',
-  'AsansÃ¶rlÃ¼ TaÅŸÄ±ma': 'AsansÃ¶rlÃ¼ TaÅŸÄ±ma',
+  beyaz_esya_montaj: 'Beyaz Eşya Montaj/Demontaj',
+  'Asansörlü Taşıma': 'Asansörlü Taşıma',
   'Profesyonel Paketleme': 'Profesyonel Paketleme',
   'Mobilya Montaj/Demontaj': 'Mobilya Montaj/Demontaj',
-  'Beyaz EÅŸya Montaj/Demontaj': 'Beyaz EÅŸya Montaj/Demontaj',
+  'Beyaz Eşya Montaj/Demontaj': 'Beyaz Eşya Montaj/Demontaj',
   'Koli/Ambalaj Malzemesi': 'Koli/Ambalaj Malzemesi',
 };
 
@@ -194,20 +217,78 @@ export class ShipmentService {
   private normalizePlaceType(value?: string): PlaceType | null {
     if (!value) return null;
 
+    const normalized = value.trim();
+    if (!normalized) return null;
+
+    if (Object.values(PlaceType).includes(normalized as PlaceType)) {
+      return normalized as PlaceType;
+    }
+
+    const key = normalized
+      .toLocaleLowerCase('tr-TR')
+      .replace(/\s+/g, ' ')
+      .trim();
+
     const map: Record<string, PlaceType> = {
-      DAIRE: PlaceType.DAIRE,
-      APARTMAN_DAIRESI: PlaceType.APARTMAN_DAIRESI,
-      SITE_ICI_DAIRE: PlaceType.SITE_ICI_DAIRE,
-      MUSTAKIL: PlaceType.MUSTAKIL,
-      VILLA: PlaceType.VILLA,
-      OFIS: PlaceType.OFIS,
-      PLAZA_OFIS: PlaceType.PLAZA_OFIS,
-      DEPO: PlaceType.DEPO,
-      DUKKAN: PlaceType.DUKKAN,
-      DIGER: PlaceType.DIGER,
+      daire: PlaceType.DAIRE,
+      apartman: PlaceType.APARTMAN_DAIRESI,
+      'apartman dairesi': PlaceType.APARTMAN_DAIRESI,
+      'site içi daire': PlaceType.SITE_ICI_DAIRE,
+      'site ici daire': PlaceType.SITE_ICI_DAIRE,
+      müstakil: PlaceType.MUSTAKIL,
+      mustakil: PlaceType.MUSTAKIL,
+      'müstakil ev': PlaceType.MUSTAKIL,
+      'mustakil ev': PlaceType.MUSTAKIL,
+      villa: PlaceType.VILLA,
+      ofis: PlaceType.OFIS,
+      'küçük ofis': PlaceType.OFIS,
+      'kucuk ofis': PlaceType.OFIS,
+      'orta ofis': PlaceType.OFIS,
+      'büyük ofis': PlaceType.OFIS,
+      'buyuk ofis': PlaceType.OFIS,
+      'plaza ofis': PlaceType.PLAZA_OFIS,
+      'plaza/ofis': PlaceType.PLAZA_OFIS,
+      depo: PlaceType.DEPO,
+      dükkan: PlaceType.DUKKAN,
+      dükkân: PlaceType.DUKKAN,
+      dukkan: PlaceType.DUKKAN,
+      diğer: PlaceType.DIGER,
+      diger: PlaceType.DIGER,
+      '1+1': PlaceType.DAIRE,
+      '2+1': PlaceType.DAIRE,
+      '3+1': PlaceType.DAIRE,
+      '4+1': PlaceType.DAIRE,
+      '5+1': PlaceType.DAIRE,
+      '5+2': PlaceType.DAIRE,
+      '1+1 ev': PlaceType.DAIRE,
+      '2+1 ev': PlaceType.DAIRE,
+      '3+1 ev': PlaceType.DAIRE,
+      '4+1 ev': PlaceType.DAIRE,
+      '5+1 ev': PlaceType.DAIRE,
+      '5+2 ev': PlaceType.DAIRE,
+      'dubleks / müstakil': PlaceType.MUSTAKIL,
+      'dubleks / mustakil': PlaceType.MUSTAKIL,
+      'diğer / emin değilim': PlaceType.DIGER,
+      'diger / emin degilim': PlaceType.DIGER,
+      'sadece beyaz eşya': PlaceType.DIGER,
+      'sadece beyaz esya': PlaceType.DIGER,
+      'sadece mobilya': PlaceType.DIGER,
+      'tek parça eşya': PlaceType.DIGER,
+      'tek parca esya': PlaceType.DIGER,
+      'küçük depo': PlaceType.DEPO,
+      'kucuk depo': PlaceType.DEPO,
+      'orta depo': PlaceType.DEPO,
+      'büyük depo': PlaceType.DEPO,
+      'buyuk depo': PlaceType.DEPO,
     };
 
-    return map[value.trim()] ?? (value as PlaceType);
+    if (map[key]) return map[key];
+
+    const fuzzyMatch = Object.entries(map)
+      .sort(([left], [right]) => right.length - left.length)
+      .find(([candidate]) => key.includes(candidate));
+
+    return fuzzyMatch?.[1] ?? PlaceType.DIGER;
   }
 
   private normalizeInsuranceType(value?: string): InsuranceType {
@@ -217,6 +298,17 @@ export class ShipmentService {
     if (normalized === InsuranceType.STANDARD) return InsuranceType.STANDARD;
     if (normalized === InsuranceType.COMPREHENSIVE) return InsuranceType.COMPREHENSIVE;
     return InsuranceType.NONE;
+  }
+
+  private normalizeDateFlexibility(value?: string | DateFlexibility | null): DateFlexibility {
+    if (!value) return DateFlexibility.EXACT;
+    const normalized = String(value).trim().toUpperCase();
+    if (normalized === 'FLEXIBLE' || normalized === 'WITHIN_WEEK') {
+      return DateFlexibility.PLUS_MINUS_3_DAYS;
+    }
+    return Object.values(DateFlexibility).includes(normalized as DateFlexibility)
+      ? normalized as DateFlexibility
+      : DateFlexibility.EXACT;
   }
 
   private normalizeExtraServiceInputs(extraServices?: string[]): string[] {
@@ -245,9 +337,19 @@ export class ShipmentService {
   private resolveExtraServiceLoadType(
     shipmentCategory?: ShipmentCategory | string | null,
     transportType?: string | null,
+    loadType?: ExtraServiceLoadType | string | null,
   ): ExtraServiceLoadType | null {
-    return inferExtraServiceLoadTypeFromShipmentCategory(shipmentCategory)
+    return this.normalizeExtraServiceLoadType(loadType)
+      ?? inferExtraServiceLoadTypeFromShipmentCategory(shipmentCategory)
       ?? inferExtraServiceLoadTypeFromTransportType(transportType);
+  }
+
+  private normalizeExtraServiceLoadType(loadType?: ExtraServiceLoadType | string | null): ExtraServiceLoadType | null {
+    if (!loadType) return null;
+    const normalized = String(loadType).trim().toUpperCase();
+    return Object.values(ExtraServiceLoadType).includes(normalized as ExtraServiceLoadType)
+      ? normalized as ExtraServiceLoadType
+      : null;
   }
 
   private async getCustomerPreferenceSafe(customerId: string): Promise<CustomerPreference | null> {
@@ -259,12 +361,21 @@ export class ShipmentService {
     }
   }
 
-  private flattenExtraServices<T extends Shipment>(shipment: T): T {
-    if (Array.isArray((shipment as any).extraServices)) {
-      (shipment as any).extraServices = (shipment as any).extraServices
-        .map((item: any) => typeof item === 'string' ? item : item?.name)
-        .filter(Boolean);
-    }
+  private flattenExtraServices<T extends Shipment>(shipment: T, customCarrierId?: string | null): T {
+    const catalogNames = Array.isArray((shipment as any).extraServices)
+      ? (shipment as any).extraServices
+          .map((item: any) => typeof item === 'string' ? item : item?.name)
+          .filter(Boolean)
+      : [];
+    const customNames = Array.isArray((shipment as any).customExtraServices)
+      ? (shipment as any).customExtraServices
+          .filter((item: any) => !customCarrierId || !item?.carrierId || item.carrierId === customCarrierId)
+          .map((item: any) => item?.nameSnapshot)
+          .filter(Boolean)
+      : [];
+
+    (shipment as any).extraServices = Array.from(new Set([...catalogNames, ...customNames]));
+    delete (shipment as any).customExtraServices;
     return shipment;
   }
 
@@ -479,6 +590,171 @@ export class ShipmentService {
     return resolvedServices.map((item) => item.name);
   }
 
+  private normalizeCustomExtraServiceIds(...sources: Array<string[] | undefined>): string[] {
+    return Array.from(new Set(
+      sources
+        .flatMap((source) => Array.isArray(source) ? source : [])
+        .map((id) => String(id || '').trim())
+        .filter(Boolean)
+    ));
+  }
+
+  private normalizeRequestedCarrierServices(
+    requested?: RequestedCarrierServicesByCarrier,
+  ): RequestedCarrierServicesByCarrier {
+    if (!requested || typeof requested !== 'object' || Array.isArray(requested)) {
+      return {};
+    }
+
+    return Object.entries(requested).reduce<RequestedCarrierServicesByCarrier>((acc, [carrierId, services]) => {
+      const normalizedCarrierId = String(carrierId || '').trim();
+      if (!normalizedCarrierId || !services || typeof services !== 'object' || Array.isArray(services)) {
+        return acc;
+      }
+
+      acc[normalizedCarrierId] = {
+        catalogServiceIds: this.normalizeCustomExtraServiceIds(services.catalogServiceIds),
+        customServiceIds: this.normalizeCustomExtraServiceIds(services.customServiceIds),
+      };
+      return acc;
+    }, {});
+  }
+
+  private hasLooseExtraServicePayload(payload: CreateShipmentPayload): boolean {
+    return this.normalizeExtraServiceInputs(payload.extraServices).length > 0
+      || this.normalizeCustomExtraServiceIds(payload.customExtraServices, payload.customExtraServiceIds).length > 0;
+  }
+
+  private assertLoosePayloadMatchesCarrierSelection(
+    payload: CreateShipmentPayload,
+    validated: ValidatedCarrierRequestedServices,
+  ): void {
+    const catalogIds = new Set(validated.catalogServiceIds);
+    const customIds = new Set(validated.customServiceIds);
+    const looseCatalogValues = this.normalizeExtraServiceInputs(payload.extraServices);
+    const looseCustomValues = this.normalizeCustomExtraServiceIds(payload.customExtraServices, payload.customExtraServiceIds);
+
+    const hasUnknownCatalogValue = looseCatalogValues.some((value) => !catalogIds.has(value));
+    const hasUnknownCustomValue = looseCustomValues.some((value) => !customIds.has(value));
+    if (hasUnknownCatalogValue || hasUnknownCustomValue) {
+      throw new ValidationError('Seçilen ek hizmet bu nakliyeci tarafından sunulmuyor.');
+    }
+  }
+
+  private async validateRequestedCarrierServices(
+    requested: RequestedCarrierServicesByCarrier,
+    loadType: ExtraServiceLoadType | null,
+  ): Promise<ValidatedCarrierRequestedServices> {
+    const entries = Object.entries(requested);
+    if (!entries.length) {
+      return { catalogServiceIds: [], customServiceIds: [] };
+    }
+
+    const selectedCatalogIds = Array.from(new Set(entries.flatMap(([, services]) => services.catalogServiceIds ?? [])));
+    const selectedCustomIds = Array.from(new Set(entries.flatMap(([, services]) => services.customServiceIds ?? [])));
+
+    if ((selectedCatalogIds.length || selectedCustomIds.length) && !loadType) {
+      throw new ValidationError('Ek hizmet seçimi için yük türü gereklidir.');
+    }
+
+    const validCatalogIds = new Set<string>();
+    const validCustomIds = new Set<string>();
+    const capabilityRepo = AppDataSource.getRepository(CarrierExtraServiceCapability);
+    const customRepo = AppDataSource.getRepository(CarrierCustomExtraService);
+
+    for (const [carrierId, services] of entries) {
+      const catalogServiceIds = services.catalogServiceIds ?? [];
+      if (catalogServiceIds.length) {
+        const capabilities = await capabilityRepo
+          .createQueryBuilder('capability')
+          .innerJoin('capability.extraService', 'extraService')
+          .where('capability.carrierId = :carrierId', { carrierId })
+          .andWhere('capability.isActive = :isActive', { isActive: true })
+          .andWhere('capability.loadType = :loadType', { loadType })
+          .andWhere('capability.extraServiceId IN (:...catalogServiceIds)', { catalogServiceIds })
+          .andWhere('extraService.status = :status', { status: 'ACTIVE' })
+          .getMany();
+        const offeredIds = new Set(capabilities.map((capability) => capability.extraServiceId));
+        if (catalogServiceIds.some((id) => !offeredIds.has(id))) {
+          throw new ValidationError('Seçilen ek hizmet bu nakliyeci tarafından sunulmuyor.');
+        }
+        catalogServiceIds.forEach((id) => validCatalogIds.add(id));
+      }
+
+      const customServiceIds = services.customServiceIds ?? [];
+      if (customServiceIds.length) {
+        const customServices = await customRepo
+          .createQueryBuilder('customService')
+          .where('customService.carrierId = :carrierId', { carrierId })
+          .andWhere('customService.isActive = :isActive', { isActive: true })
+          .andWhere('customService.loadType = :loadType', { loadType })
+          .andWhere('customService.id IN (:...customServiceIds)', { customServiceIds })
+          .getMany();
+        const offeredIds = new Set(customServices.map((service) => service.id));
+        if (customServiceIds.some((id) => !offeredIds.has(id))) {
+          throw new ValidationError('Seçilen ek hizmet bu nakliyeci tarafından sunulmuyor.');
+        }
+        customServiceIds.forEach((id) => validCustomIds.add(id));
+      }
+    }
+
+    return {
+      catalogServiceIds: Array.from(validCatalogIds),
+      customServiceIds: Array.from(validCustomIds),
+    };
+  }
+
+  private async resolveValidatedCustomExtraServices(
+    ids: string[],
+    loadType: ExtraServiceLoadType | null,
+  ): Promise<CarrierCustomExtraService[]> {
+    if (!ids.length) return [];
+
+    const serviceRepo = AppDataSource.getRepository(CarrierCustomExtraService);
+    const qb = serviceRepo
+      .createQueryBuilder('customService')
+      .where('customService.id IN (:...ids)', { ids })
+      .andWhere('customService.isActive = :isActive', { isActive: true });
+
+    if (loadType) {
+      qb.andWhere('customService.loadType = :loadType', { loadType });
+    }
+
+    const services = await qb.getMany();
+    const foundIds = new Set(services.map((service) => service.id));
+    const missingIds = ids.filter((id) => !foundIds.has(id));
+    if (missingIds.length > 0) {
+      const messageBase = `Tanimsiz veya bu yuk turu icin gecersiz ozel hizmet(ler): ${missingIds.join(', ')}`;
+      throw new ValidationError(loadType ? `${messageBase}. loadType=${loadType}` : messageBase);
+    }
+
+    return services;
+  }
+
+  private async applyShipmentCustomExtraServices(
+    shipmentId: string,
+    customExtraServices: string[] | undefined,
+    customExtraServiceIds: string[] | undefined,
+    loadType: ExtraServiceLoadType | null,
+  ): Promise<ShipmentCustomExtraService[]> {
+    const ids = this.normalizeCustomExtraServiceIds(customExtraServices, customExtraServiceIds);
+    const repo = AppDataSource.getRepository(ShipmentCustomExtraService);
+
+    await repo.delete({ shipmentId });
+    const services = await this.resolveValidatedCustomExtraServices(ids, loadType);
+    if (!services.length) return [];
+
+    const snapshots = services.map((service) => repo.create({
+      shipmentId,
+      customExtraServiceId: service.id,
+      carrierId: service.carrierId,
+      nameSnapshot: service.title,
+      priceSnapshot: service.basePrice == null ? null : Number(service.basePrice),
+    }));
+
+    return repo.save(snapshots);
+  }
+
   async getPendingShipmentsForCarrier(carrierId: string): Promise<PendingShipmentListItem[]> {
     await this.expireStale();
 
@@ -502,7 +778,7 @@ export class ShipmentService {
     return visibleShipments.map(s => {
       s.contactPhone = null as any;
       this.maskOpenAddressForCarrier(s, false);
-      this.flattenExtraServices(s);
+      this.flattenExtraServices(s, carrierId);
       return {
         id: s.id,
         status: s.status,
@@ -597,18 +873,43 @@ export class ShipmentService {
     const normalizedShipmentCategory = (payload.shipmentCategory as ShipmentCategory | undefined)
       ?? inferShipmentCategoryFromTransportType(payload.transportType)
       ?? null;
-    const extraServiceLoadType = this.resolveExtraServiceLoadType(normalizedShipmentCategory, payload.transportType);
+    const extraServiceLoadType = this.resolveExtraServiceLoadType(
+      normalizedShipmentCategory,
+      payload.transportType,
+      payload.loadType,
+    );
+    const requestedCarrierServices = this.normalizeRequestedCarrierServices(payload.requestedCarrierServices);
+    const hasRequestedCarrierServices = Object.keys(requestedCarrierServices).length > 0;
+    let validatedRequestedServices: ValidatedCarrierRequestedServices = {
+      catalogServiceIds: [],
+      customServiceIds: [],
+    };
+
+    if (hasRequestedCarrierServices) {
+      validatedRequestedServices = await this.validateRequestedCarrierServices(
+        requestedCarrierServices,
+        extraServiceLoadType,
+      );
+      this.assertLoosePayloadMatchesCarrierSelection(payload, validatedRequestedServices);
+    } else if (this.hasLooseExtraServicePayload(payload)) {
+      throw new ValidationError('Seçilen ek hizmet bu nakliyeci tarafından sunulmuyor.');
+    }
+
+    await this.resolveValidatedCustomExtraServices(
+      validatedRequestedServices.customServiceIds,
+      extraServiceLoadType,
+    );
 
     const shipment = await this.shipmentRepository.createShipmentRecord({
       customerId,
       originCity,
-      originDistrict: payload.originDistrict ?? null,
+      originDistrict: originDistrict || null,
       originPlaceType: this.normalizePlaceType(payload.originPlaceType),
       originFloor: payload.originFloor ?? null,
       originHasElevator: payload.originHasElevator ?? false,
       originAccessDistance: payload.originAccessDistance as AccessDistance ?? null,
       destinationCity,
-      destinationDistrict: payload.destinationDistrict ?? null,
+      destinationDistrict: destinationDistrict || null,
       destinationPlaceType: this.normalizePlaceType(payload.destinationPlaceType),
       destinationFloor: payload.destinationFloor ?? null,
       destinationHasElevator: payload.destinationHasElevator ?? false,
@@ -622,7 +923,7 @@ export class ShipmentService {
       shipmentCategory: normalizedShipmentCategory,
       insuranceType: this.normalizeInsuranceType(payload.insuranceType),
       timePreference: payload.timePreference,
-      dateFlexibility: payload.dateFlexibility as DateFlexibility ?? DateFlexibility.EXACT,
+      dateFlexibility: this.normalizeDateFlexibility(payload.dateFlexibility),
       weight: payload.weight,
       estimatedWeight: payload.estimatedWeight ?? null,
       shipmentDate: new Date(payload.shipmentDate),
@@ -635,16 +936,23 @@ export class ShipmentService {
 
     shipment.extraServices = await this.applyShipmentExtraServices(
       shipment.id,
-      payload.extraServices,
+      validatedRequestedServices.catalogServiceIds,
       extraServiceLoadType,
     ) as any;
+    const customExtraServices = await this.applyShipmentCustomExtraServices(
+      shipment.id,
+      validatedRequestedServices.customServiceIds,
+      undefined,
+      extraServiceLoadType,
+    );
+    (shipment as any).customExtraServices = customExtraServices;
 
     // Fire-and-forget: notify eligible carriers about the new shipment
     this.notifyEligibleCarriers(shipment).catch(err =>
       console.error('[ShipmentService] notifyEligibleCarriers error:', err)
     );
 
-    return shipment;
+    return this.flattenExtraServices(shipment);
   }
 
     private async notifyEligibleCarriers(shipment: Shipment): Promise<void> {
@@ -654,7 +962,7 @@ export class ShipmentService {
     const originCity = shipment.originCity ?? this.extractCity(shipment.origin);
     const destCity = shipment.destinationCity ?? this.extractCity(shipment.destination);
     const isSameCity = originCity.toLowerCase() === destCity.toLowerCase();
-    const scopeName = isSameCity ? 'Åehir Ä°Ã§i' : 'ÅehirlerarasÄ±';
+    const scopeName = isSameCity ? 'Şehir İçi' : 'Şehirlerarası';
 
     // Resolve scope ID
     const scopes = await this.scopeOfWorkRepository.findAll();
@@ -687,7 +995,7 @@ export class ShipmentService {
           'carrier',
           'NEW_MATCHING_REQUEST',
           'Yeni Uygun Talep',
-          `${shipment.origin} â†’ ${shipment.destination} arasÄ±nda yeni bir taÅŸÄ±ma talebi var. Teklif vermek iÃ§in inceleyin.`,
+          `${shipment.origin} → ${shipment.destination} arasında yeni bir taşıma talebi var. Teklif vermek için inceleyin.`,
           shipment.id
         );
       } catch { /* individual notification failure should not block others */ }
@@ -719,7 +1027,7 @@ export class ShipmentService {
 
     // Admin her gÃ¶nderiyi gÃ¶rebilir
     if (requestingUserType === 'admin') {
-      return this.attachShipmentConverterSummary(shipment);
+      return this.attachShipmentConverterSummary(this.flattenExtraServices(shipment));
     }
 
     // MÃ¼ÅŸteri: sadece kendi gÃ¶nderisini gÃ¶rebilir
@@ -738,13 +1046,20 @@ export class ShipmentService {
       if (!canViewCarrierContact) {
         shipment.contactPhone = null as any;
       }
-      return this.attachShipmentConverterSummary(shipment);
+      return this.attachShipmentConverterSummary(this.flattenExtraServices(shipment));
     }
 
     // A) ShipmentService.getById() â€” requester tipine gÃ¶re maskeleme:
     if (requestingUserType === 'carrier') {
       const isAssigned = shipment.carrierId === requestingUserId;
+      const hasInvite = await AppDataSource.getRepository(ShipmentInvite).exist({
+        where: {
+          shipmentId: shipment.id,
+          carrierId: requestingUserId,
+        },
+      });
       const canViewDetails = isAssigned && this.platformPolicy.shouldRevealDirectContact(shipment, 'carrier', requestingUserId);
+      const canViewOpenAddress = canViewDetails || hasInvite;
 
       if (shipment.customer) {
         const maskedName = this.buildDisplayName(shipment.customer.firstName, shipment.customer.lastName);
@@ -766,13 +1081,13 @@ export class ShipmentService {
       if (!canViewDetails) {
         shipment.contactPhone = null as any;
       }
-      this.maskOpenAddressForCarrier(shipment, canViewDetails);
+      this.maskOpenAddressForCarrier(shipment, canViewOpenAddress);
       this.maskOfferCarriers(shipment);
       if (shipment.carrier) {
         this.maskCarrierDirectContact(shipment.carrier);
       }
 
-      return this.attachShipmentConverterSummary(shipment);
+      return this.attachShipmentConverterSummary(this.flattenExtraServices(shipment, requestingUserId));
     }
 
     throw new ForbiddenError('Bu gÃ¶nderiye eriÅŸim yetkiniz yok.');
@@ -807,7 +1122,11 @@ export class ShipmentService {
       ?? shipment.shipmentCategory
       ?? inferShipmentCategoryFromTransportType(payload.transportType)
       ?? null;
-    const extraServiceLoadType = this.resolveExtraServiceLoadType(normalizedShipmentCategory, payload.transportType);
+    const extraServiceLoadType = this.resolveExtraServiceLoadType(
+      normalizedShipmentCategory,
+      payload.transportType,
+      payload.loadType,
+    );
 
     const updatedShipment = await this.shipmentRepository.update(shipmentId, {
       originCity: payload.originCity,
@@ -831,7 +1150,7 @@ export class ShipmentService {
       shipmentCategory: normalizedShipmentCategory,
       insuranceType: payload.insuranceType ? this.normalizeInsuranceType(payload.insuranceType) : undefined,
       timePreference: payload.timePreference,
-      dateFlexibility: payload.dateFlexibility as DateFlexibility | undefined,
+      dateFlexibility: payload.dateFlexibility ? this.normalizeDateFlexibility(payload.dateFlexibility) : undefined,
       weight: payload.weight,
       estimatedWeight: payload.estimatedWeight,
       shipmentDate: payload.shipmentDate ? new Date(payload.shipmentDate) : undefined,
@@ -845,6 +1164,16 @@ export class ShipmentService {
         payload.extraServices,
         extraServiceLoadType,
       );
+    }
+
+    if (payload.customExtraServices !== undefined || payload.customExtraServiceIds !== undefined) {
+      (updatedShipment as any).customExtraServices = await this.applyShipmentCustomExtraServices(
+        shipmentId,
+        payload.customExtraServices,
+        payload.customExtraServiceIds,
+        extraServiceLoadType,
+      );
+      this.flattenExtraServices(updatedShipment as Shipment);
     }
 
     if (!updatedShipment) {
@@ -974,7 +1303,7 @@ export class ShipmentService {
 
     const updatedShipment = await this.shipmentRepository.findById(shipmentId);
     if (!updatedShipment) {
-      throw new NotFoundError('TaÅŸÄ±ma baÅŸlatÄ±ldÄ± ancak kayÄ±t getirilemedi.');
+      throw new NotFoundError('Taşıma başlatıldı ancak kayıt getirilemedi.');
     }
 
     try {
@@ -990,8 +1319,8 @@ export class ShipmentService {
           updatedShipment.customerId,
           'customer',
           'SHIPMENT_STARTED',
-          'TaÅŸÄ±manÄ±z BaÅŸladÄ±',
-          'Nakliyeci taÅŸÄ±manÄ±zÄ± baÅŸlattÄ±. TeslimatÄ± takip edebilirsiniz.',
+          'Taşımanız Başladı',
+          'Nakliyeci taşımanızı başlattı. Teslimatı takip edebilirsiniz.',
           shipmentId
         );
       }
@@ -1110,8 +1439,8 @@ export class ShipmentService {
           updatedShipment.customerId,
           'customer',
           'SHIPMENT_COMPLETED',
-          'TaÅŸÄ±manÄ±z TamamlandÄ±',
-          'EÅŸyalarÄ±nÄ±z teslim edildi. LÃ¼tfen nakliyeciyi deÄŸerlendirin.',
+          'Taşımanız Tamamlandı',
+          'Eşyalarınız teslim edildi. Lütfen nakliyeciyi değerlendirin.',
           shipmentId
         );
       }
@@ -1134,7 +1463,8 @@ export class ShipmentService {
       .createQueryBuilder('shipment')
       .leftJoinAndSelect('shipment.customer', 'customer')
       .leftJoinAndSelect('shipment.carrier', 'carrier')
-      .leftJoinAndSelect('shipment.extraServices', 'extraServices');
+      .leftJoinAndSelect('shipment.extraServices', 'extraServices')
+      .leftJoinAndSelect('shipment.customExtraServices', 'customExtraServices');
 
     if (origin) qb.andWhere('(shipment.originCity LIKE :origin OR shipment.originDistrict LIKE :origin)', { origin: `%${origin}%` });
     if (destination) qb.andWhere('(shipment.destinationCity LIKE :destination OR shipment.destinationDistrict LIKE :destination)', { destination: `%${destination}%` });

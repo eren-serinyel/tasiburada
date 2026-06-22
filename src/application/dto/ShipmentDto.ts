@@ -91,6 +91,11 @@ export class CreateShipmentDto {
   @IsArray()
   @IsString({ each: true })
   extraServices?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  customExtraServices?: string[];
 }
 
 export class UpdateShipmentDto {
@@ -192,6 +197,11 @@ export class UpdateShipmentDto {
   @IsArray()
   @IsString({ each: true })
   extraServices?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  customExtraServices?: string[];
 }
 
 export class ShipmentResponseDto {

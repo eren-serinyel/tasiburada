@@ -134,6 +134,27 @@ describe('OfferService approvalState alignment', () => {
     }));
   });
 
+  test('eksik ek hizmet yetkisi teklifi engellemez, warning olarak doner', async () => {
+    const service = buildService();
+    service.assertCarrierCapabilityForShipment = jest.fn().mockResolvedValue([
+      {
+        code: 'MISSING_EXTRA_SERVICE_CAPABILITY',
+        message: 'Bu ilandaki bazı ek hizmetler profilinizde aktif değil: Server/IT özel taşıma.',
+      },
+    ]);
+
+    const result = await service.createOffer('carrier-1', {
+      shipmentId: 'shipment-1',
+      price: 1500,
+    });
+
+    expect(result.isNew).toBe(false);
+    expect(result.warnings).toEqual([
+      expect.objectContaining({ code: 'MISSING_EXTRA_SERVICE_CAPABILITY' }),
+    ]);
+    expect(service.offerRepository.update).toHaveBeenCalled();
+  });
+
   test('FIXED ek hizmet fiyatlarini mevcut teklif guncellemesine ekler', async () => {
     settingSpy.mockRestore();
     jest.spyOn(AppDataSource, 'getRepository').mockImplementation((entity: any) => {

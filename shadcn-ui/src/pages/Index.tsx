@@ -83,7 +83,7 @@ export default function Index() {
               </Badge>
             </div>
             <h2 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-gray-900 mb-4 sm:mb-6">
-              Neden <span className="bg-gradient-to-r from-blue-600 to-sky-600 bg-clip-text text-transparent">Taşıburada</span>?
+              Neden <span className="bg-gradient-to-r from-blue-600 to-sky-600 bg-clip-text text-transparent">Taşıburadan</span>?
             </h2>
             <p className="text-base sm:text-lg md:text-xl text-gray-600 max-w-3xl mx-auto leading-relaxed">Hem müşteriler hem de nakliyeciler için tasarlanmış özellikler</p>
           </div>
@@ -373,9 +373,9 @@ export default function Index() {
                     <MessageCircle className="h-4 w-4" /> Canlı Destek / Destek Formu
                   </Button>
                 </Link>
-                <a href="mailto:support@tasiburada.com" className="block">
+                <a href="mailto:support@tasiburadan.com" className="block">
                   <Button variant="secondary" className="w-full justify-start gap-2">
-                    <Mail className="h-4 w-4" /> support@tasiburada.com
+                    <Mail className="h-4 w-4" /> support@tasiburadan.com
                   </Button>
                 </a>
                 <a href="tel:+905555555555" className="block">

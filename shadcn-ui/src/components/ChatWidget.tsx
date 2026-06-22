@@ -30,7 +30,7 @@ export default function Navbar() {
         <div className="flex justify-between items-center h-16">
           {/* Logo */}
           <Link to="/" className="flex items-center space-x-2">
-            <img src={logoImg} alt="Taşıburada" className="h-11 w-auto scale-[3] origin-left ml-3" />
+            <img src={logoImg} alt="Taşıburadan" className="h-11 w-auto scale-[3] origin-left ml-3" />
           </Link>
 
           {/* Desktop Navigation */}

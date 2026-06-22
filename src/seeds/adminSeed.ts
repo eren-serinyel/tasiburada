@@ -10,7 +10,7 @@ async function seedAdmin() {
 
   const adminRepo = AppDataSource.getRepository(Admin);
 
-  const email = process.env.ADMIN_EMAIL ?? 'admin@tasiburada.com';
+  const email = process.env.ADMIN_EMAIL ?? 'admin@tasiburadan.com';
   const rawPassword = process.env.ADMIN_PASSWORD ?? 'Maviface2141';
 
   if (process.env.NODE_ENV === 'production' && rawPassword === 'Maviface2141') {

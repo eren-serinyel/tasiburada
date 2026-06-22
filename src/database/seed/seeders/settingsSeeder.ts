@@ -11,7 +11,7 @@ export async function seedPlatformSettings() {
     description: string;
   }> = [
     { key: 'platform_name', value: 'TaşıBurada', type: 'string', description: 'Platform adı' },
-    { key: 'contact_email', value: 'destek@tasiburada.com', type: 'string', description: 'İletişim e-posta adresi' },
+    { key: 'contact_email', value: 'destek@tasiburadan.com', type: 'string', description: 'İletişim e-posta adresi' },
     { key: 'min_offer_price', value: '100', type: 'number', description: 'Minimum teklif fiyatı (₺)' },
     { key: 'max_cancellation_rate', value: '30', type: 'number', description: 'Maksimum iptal oranı (%)' },
     { key: 'auto_approve_carriers', value: 'false', type: 'boolean', description: 'Nakliyeci otomatik onay' },

@@ -30,7 +30,7 @@ describe('Admin offer detail audit view', () => {
 
     const login = await request(testApp)
       .post(`${BASE}/admin/login`)
-      .send({ email: 'admin@tasiburada.com', password: 'Maviface2141' });
+      .send({ email: 'admin@tasiburadan.com', password: 'Maviface2141' });
     adminToken = login.body.data?.token || '';
 
     const suffix = randomUUID();
