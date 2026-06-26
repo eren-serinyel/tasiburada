@@ -1059,7 +1059,7 @@ export class ShipmentService {
         },
       });
       const canViewDetails = isAssigned && this.platformPolicy.shouldRevealDirectContact(shipment, 'carrier', requestingUserId);
-      const canViewOpenAddress = canViewDetails || hasInvite;
+      const canViewOpenAddress = isAssigned && shipment.status === ShipmentStatus.IN_TRANSIT;
 
       if (shipment.customer) {
         const maskedName = this.buildDisplayName(shipment.customer.firstName, shipment.customer.lastName);

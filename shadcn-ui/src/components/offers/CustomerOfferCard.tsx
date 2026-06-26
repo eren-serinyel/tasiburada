@@ -283,10 +283,11 @@ export function CustomerOfferCard({
       ? [`Eksik ek hizmetler: ${missingExtraServices.join(', ')}`]
       : []),
   ];
+  const capacityEvaluable = offer.capacityFit && offer.capacityFit.status !== 'uncertain';
   const supportFacts = [
     carrier?.hasInsurance ? 'Sigorta' : null,
     compatibilityBadge,
-    capacityBadge,
+    capacityEvaluable ? capacityBadge : null,
     carrier?.isVerified || carrier?.verifiedByAdmin ? 'Doğrulanmış' : null,
     carrier?.localnessLabel,
   ].filter(Boolean) as string[];

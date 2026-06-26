@@ -148,12 +148,13 @@ export class OfferService {
       .filter((item) => !capableIds.has(item.id))
       .map((item) => item.name);
 
-    return missingExtraServiceNames.length > 0
-      ? [{
-          code: 'MISSING_EXTRA_SERVICE_CAPABILITY',
-          message: `Bu ilandaki bazı ek hizmetler profilinizde aktif değil: ${missingExtraServiceNames.join(', ')}. Teklifiniz kaydedildi; müşteri bu kapsam farkını değerlendirebilir.`,
-        }]
-      : [];
+    if (missingExtraServiceNames.length > 0) {
+      throw new ForbiddenError(
+        `Bu ilandaki bazı ek hizmetler profilinizde aktif değil: ${missingExtraServiceNames.join(', ')}. Teklif verebilmek için eksik hizmetleri profilinize ekleyin.`
+      );
+    }
+
+    return [];
   }
 
   private async calculateOfferPricing(

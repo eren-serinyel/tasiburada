@@ -176,7 +176,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
       }
       const { vehicleType: _vehicleType, insurance: _insurance, ...data } = draft.data;
       setForm(prev => ({ ...prev, ...data, photos: [] }));
-      if (draft.step === 2 || draft.step === 3 || draft.step === 4) setStep(draft.step as Step);
+      if (draft.step === 2 || draft.step === 3 || draft.step === 4) setStep(Math.min(draft.step, 4) as Step);
     } catch {
       localStorage.removeItem(DRAFT_KEY);
     }
@@ -646,7 +646,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
   useEffect(() => {
     let cancelled = false;
 
-    if (step !== 3 || selectedCarrierIds.length === 0) {
+    if (step !== 4 || selectedCarrierIds.length === 0) {
       setSelectedCarrierServices([]);
       return;
     }
@@ -761,6 +761,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
   const goPrev = () => setStep((s) => (s > 1 ? ((s - 1) as Step) : s));
 
   const handleGoToStep4 = () => setStep(4);
+  const handleGoToLoadDetail = () => setStep(2);
 
   useEffect(() => {
     if (searchParams.get('calculator') === '1') {
@@ -952,14 +953,14 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
   };
 
   useEffect(() => {
-    if (step === 2) {
+    if (step === 3) {
       setLoadingResults(true);
       const t = setTimeout(() => setLoadingResults(false), 400);
       return () => clearTimeout(t);
     }
   }, [step]);
   useEffect(() => {
-    if (step === 2) {
+    if (step === 3) {
       setLoadingResults(true);
       const t = setTimeout(() => setLoadingResults(false), 300);
       return () => clearTimeout(t);
@@ -974,24 +975,24 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
   /* ── step data ── */
   const stepTitles: Record<number, string> = {
     1: 'Rota & Yük Türü',
-    2: 'Uygun Nakliyeciler',
-    3: 'Diğer Ek Hizmetler',
-    4: 'Yük Detayı',
+    2: 'Yük Detayı',
+    3: 'Uygun Nakliyeciler',
+    4: 'Ek Hizmetler',
     5: 'Özet & Yayınla',
   };
   const stepSubtitles: Record<number, string> = {
     1: 'Çıkış, varış noktası, tarih ve yük türünü belirleyin',
-    2: 'Firmaları inceleyin ve birden fazla nakliyeci seçin',
-    3: 'Seçtiğiniz nakliyecilere özel hizmet tercihleri yapın',
-    4: 'Yer, kat, hacim, fotoğraf ve notları tamamlayın',
+    2: 'Yer, kat, hacim, fotoğraf ve notları tamamlayın',
+    3: 'Firmaları inceleyin ve birden fazla nakliyeci seçin',
+    4: 'Seçtiğiniz nakliyecilere özel hizmet tercihleri yapın',
     5: 'Bilgileri kontrol edin ve talebi yayınlayın',
   };
   /* ── step labels ── */
   const STEPS = [
     { id: 1, label: 'Rota & Yük Türü' },
-    { id: 2, label: 'Uygun Nakliyeciler' },
-    { id: 3, label: 'Ek Hizmetler' },
-    { id: 4, label: 'Yük Detayı' },
+    { id: 2, label: 'Yük Detayı' },
+    { id: 3, label: 'Uygun Nakliyeciler' },
+    { id: 4, label: 'Ek Hizmetler' },
     { id: 5, label: 'Özet & Yayınla' },
   ];
 
@@ -1441,8 +1442,8 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
             </form>
           )}
 
-          {/* ── STEP 2: UYGUN NAKLİYECİLER ── */}
-          {step === 2 && (
+          {/* ── STEP 3: UYGUN NAKLİYECİLER ── */}
+          {step === 3 && (
             <div style={{ padding: '32px' }}>
               <div className="flex items-center" style={{ gap: '12px', paddingBottom: '20px', borderBottom: '1px solid var(--tb-divider)', marginBottom: '24px' }}>
                 <div className="flex items-center justify-center" style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'var(--tb-brand-50)', color: 'var(--tb-brand-600)', fontWeight: 700, fontSize: '16px', flexShrink: 0 }}>2</div>
@@ -1553,8 +1554,8 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
             </div>
           )}
 
-          {/* ── STEP 3: DİĞER EK HİZMETLER ── */}
-          {step === 3 && (
+          {/* ── STEP 4: EK HİZMETLER ── */}
+          {step === 4 && (
             <div style={{ padding: '32px' }}>
               <div className="flex items-center" style={{ gap: '12px', paddingBottom: '20px', borderBottom: '1px solid var(--tb-divider)', marginBottom: '24px' }}>
                 <div className="flex items-center justify-center" style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'var(--tb-brand-50)', color: 'var(--tb-brand-700)', fontWeight: 700, fontSize: '16px', flexShrink: 0 }}>3</div>
@@ -1827,8 +1828,8 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
             </div>
           )}
 
-          {/* ── STEP 4: YÜK DETAYI ── */}
-          {step === 4 && (
+          {/* ── STEP 2: YÜK DETAYI ── */}
+          {step === 2 && (
             <form onSubmit={submitStep2} style={{ padding: '32px' }}>
               {/* Card header */}
               <div className="flex items-center" style={{ gap: '12px', paddingBottom: '20px', borderBottom: '1px solid var(--tb-divider)', marginBottom: '24px' }}>

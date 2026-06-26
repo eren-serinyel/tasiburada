@@ -198,7 +198,7 @@ const CarrierDetailPage = () => {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-muted/30">
+      <div className="min-h-screen" style={{ background: 'var(--tb-canvas)' }}>
         <div className="max-w-7xl mx-auto px-4 py-8">
           <DetailSkeleton />
         </div>
@@ -275,7 +275,7 @@ const CarrierDetailPage = () => {
 
   return (
     <>
-      <div className="min-h-screen bg-muted/30">
+      <div className="min-h-screen" style={{ background: 'var(--tb-canvas)' }}>
         {/* Breadcrumb */}
         <div className="max-w-7xl mx-auto px-4 pt-6 pb-2">
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -296,7 +296,7 @@ const CarrierDetailPage = () => {
         {/* ── Hero Section ── */}
         <div
           className="relative overflow-hidden"
-          style={{ background: 'linear-gradient(135deg, #0B1629 0%, #1E3A5F 100%)' }}
+          style={{ background: `linear-gradient(135deg, var(--tb-brand-900) 0%, #1E3A5F 100%)` }}
         >
           {/* Decorative circles */}
           <div className="absolute inset-0 pointer-events-none">

@@ -1,6 +1,6 @@
 import { Carrier, CarrierApprovalState } from '../../domain/entities/Carrier';
 import { inferExtraServiceLoadTypeFromShipmentCategory } from './extra-services/extraServiceApplicability';
-import { Shipment } from '../../domain/entities/Shipment';
+import { Shipment, DateFlexibility } from '../../domain/entities/Shipment';
 import { AppDataSource } from '../../infrastructure/database/data-source';
 
 const SCOPE_INTRA_CITY = 'Şehir İçi';
@@ -185,7 +185,31 @@ export class MatchingService {
       return true;
     }
 
-    return availableDates.includes(this.toDateOnly(shipment.shipmentDate));
+    const flexDays = this.getFlexibilityDays(shipment.dateFlexibility);
+    const shipmentDates = this.buildDateWindow(shipment.shipmentDate, flexDays);
+    return shipmentDates.some(date => availableDates.includes(date));
+  }
+
+  private getFlexibilityDays(flexibility?: DateFlexibility | null): number {
+    switch (flexibility) {
+      case DateFlexibility.PLUS_MINUS_1_DAY: return 1;
+      case DateFlexibility.PLUS_MINUS_3_DAYS: return 3;
+      default: return 0;
+    }
+  }
+
+  private buildDateWindow(baseDate: Date | string, flexDays: number): string[] {
+    const center = this.toDateOnly(baseDate);
+    if (flexDays === 0) return [center];
+
+    const dates: string[] = [];
+    const base = new Date(center + 'T12:00:00Z');
+    for (let offset = -flexDays; offset <= flexDays; offset++) {
+      const d = new Date(base);
+      d.setUTCDate(d.getUTCDate() + offset);
+      dates.push(d.toISOString().slice(0, 10));
+    }
+    return dates;
   }
 
   private parseAvailableDates(value?: string | string[] | null): string[] {

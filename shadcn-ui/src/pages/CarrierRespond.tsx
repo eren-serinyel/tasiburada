@@ -1,15 +1,24 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { AlertTriangle, CalendarDays, MapPin, Package, ShieldCheck } from 'lucide-react';
+import { AlertTriangle, CalendarDays, Package, Send } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/components/ui/sonner';
 import { apiClient } from '@/lib/apiClient';
-import { CorporateCard, DetailList, InlineNotice, PageEyebrow, QuoteBlock, RoutePair, ToneBadge } from '@/components/shared/CorporateUI';
+import {
+  CorporateCard,
+  DetailList,
+  InlineNotice,
+  PageContainer,
+  PageEyebrow,
+  QuoteBlock,
+  RoutePair,
+  SectionTitle,
+  ToneBadge,
+} from '@/components/shared/CorporateUI';
 
 const API_BASE_URL = '/api/v1';
 
@@ -45,6 +54,7 @@ interface BackendShipment {
   contactPhone?: string | null;
   originAddressText?: string | null;
   destinationAddressText?: string | null;
+  photoUrls?: string[] | null;
   converter?: {
     converterEstimatedVolumeMin?: number | string | null;
     converterEstimatedVolumeMax?: number | string | null;
@@ -126,24 +136,6 @@ const formatShipmentCategory = (shipment: BackendShipment) => {
   return shipmentCategoryLabel[normalized] || transportTypeLabel[lower] || normalized;
 };
 
-const resolveCityDistrict = (city?: string | null, district?: string | null, fallback?: string) => {
-  const safeCity = String(city || '').trim();
-  const safeDistrict = String(district || '').trim();
-  if (safeCity || safeDistrict) {
-    return { city: safeCity || '-', district: safeDistrict || '-' };
-  }
-
-  const fallbackParts = String(fallback || '')
-    .split(',')
-    .map((part) => part.trim())
-    .filter(Boolean);
-
-  return {
-    city: fallbackParts[0] || '-',
-    district: fallbackParts[1] || '-',
-  };
-};
-
 const formatWeight = (shipment: BackendShipment) => {
   const value = Number(shipment.estimatedWeight ?? shipment.weight);
   return Number.isFinite(value) && value > 0 ? `${value} kg` : '-';
@@ -181,6 +173,20 @@ const formatPlaceAndFloor = (placeType?: string | null, floor?: number | null) =
   return parts.length ? parts.join(' — ') : '-';
 };
 
+const formatFloorLine = (placeType?: string | null, floor?: number | null, hasElevator?: boolean | null): string => {
+  const parts: string[] = [];
+  if (placeType) {
+    const label = formatPlaceType(placeType);
+    if (label) parts.push(label);
+  }
+  if (floor != null && !Number.isNaN(Number(floor))) {
+    parts.push(Number(floor) === 0 ? 'Giriş kat' : `${floor}. kat`);
+  }
+  if (hasElevator === true) parts.push('(asansörlü)');
+  else if (hasElevator === false) parts.push('(asansör yok)');
+  return parts.length > 0 ? parts.join(' — ') : '-';
+};
+
 const formatElevator = (value?: boolean | null) => {
   if (value === true) return 'Var';
   if (value === false) return 'Yok';
@@ -206,12 +212,12 @@ const formatWarning = (warning: OfferWarning) => {
     return warning.message || 'Bu ilanın tahmini ağırlığı araç kapasitenizin üzerinde olabilir.';
   }
   if (warning.code === 'MISSING_EXTRA_SERVICE_CAPABILITY') {
-    return warning.message || 'Bazı ek hizmetler profilinizde aktif değil; teklifiniz kapsam farkı uyarısıyla kaydedildi.';
+    return warning.message || 'Bazı ek hizmetler profilinizde aktif değil.';
   }
   return warning.message || 'Teklifinizle ilgili dikkat edilmesi gereken bir uyarı var.';
 };
 
-const getOfferErrorMessage = (json: any, fallback = 'Teklif gönderilemedi.') => {
+const getOfferErrorMessage = (json: Record<string, unknown> | null, fallback = 'Teklif gönderilemedi.') => {
   const code = String(json?.code || '').toUpperCase();
   const message = String(json?.message || '');
   const normalized = message.toLocaleLowerCase('tr-TR');
@@ -371,21 +377,21 @@ export default function CarrierRespond() {
 
   if (loading) {
     return (
-      <div className="mx-auto max-w-3xl p-6">
+      <PageContainer>
         <Card>
           <CardContent className="py-10 text-center text-gray-600">Yükleniyor...</CardContent>
         </Card>
-      </div>
+      </PageContainer>
     );
   }
 
   if (!shipment) {
     return (
-      <div className="mx-auto max-w-3xl p-6">
+      <PageContainer>
         <Card>
           <CardContent className="py-10 text-center text-gray-600">Talep bulunamadı.</CardContent>
         </Card>
-      </div>
+      </PageContainer>
     );
   }
 
@@ -406,17 +412,23 @@ export default function CarrierRespond() {
     ? timePreferenceLabel[String(shipment.timePreference).toLocaleLowerCase('tr-TR')] || shipment.timePreference
     : '-';
   const canSuggestTime = String(shipment.timePreference || '').toLocaleLowerCase('tr-TR') === 'farketmez';
-  const originLocation = resolveCityDistrict(shipment.originCity, shipment.originDistrict, shipment.origin);
-  const destinationLocation = resolveCityDistrict(shipment.destinationCity, shipment.destinationDistrict, shipment.destination);
 
   return (
-    <div className="mx-auto max-w-4xl space-y-4 p-6" style={{ background: 'var(--tb-canvas)' }}>
+    <PageContainer className="space-y-5">
+      {/* Hero: Route */}
+      <RoutePair
+        originCity={shipment.originCity}
+        originDistrict={shipment.originDistrict}
+        destinationCity={shipment.destinationCity}
+        destinationDistrict={shipment.destinationDistrict}
+        originFallback={shipment.origin}
+        destinationFallback={shipment.destination}
+      />
+
+      {/* Shipment details card */}
       <CorporateCard>
         <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <h1 className="text-2xl font-bold" style={{ color: 'var(--tb-ink-900)' }}>Teklif Talebi</h1>
-            <p className="mt-1 text-sm" style={{ color: 'var(--tb-ink-500)' }}>Müşteri talep özeti</p>
-          </div>
+          <SectionTitle>Talep Detayları</SectionTitle>
           <div className="flex flex-wrap gap-2">
             <ToneBadge tone="info"><Package className="mr-1 h-3.5 w-3.5" />{formatShipmentCategory(shipment)}</ToneBadge>
             <ToneBadge tone="neutral"><CalendarDays className="mr-1 h-3.5 w-3.5" />{formatDate(shipment.shipmentDate)}</ToneBadge>
@@ -424,22 +436,11 @@ export default function CarrierRespond() {
         </div>
 
         <div className="space-y-5 text-sm">
-          <RoutePair
-            originCity={originLocation.city}
-            originDistrict={originLocation.district}
-            destinationCity={destinationLocation.city}
-            destinationDistrict={destinationLocation.district}
-            originFallback={shipment.origin}
-            destinationFallback={shipment.destination}
-          />
-
           <DetailList
             rows={[
               { label: 'Tahmini ağırlık', value: formatWeight(shipment) },
-              { label: 'Çıkış yeri', value: formatPlaceAndFloor(shipment.originPlaceType, shipment.originFloor ?? shipment.floor) },
-              { label: 'Varış yeri', value: formatPlaceAndFloor(shipment.destinationPlaceType, shipment.destinationFloor ?? shipment.floor) },
-              { label: 'Çıkış asansörü', value: formatElevator(originElevator) },
-              { label: 'Varış asansörü', value: formatElevator(destinationElevator) },
+              { label: 'Çıkış', value: formatFloorLine(shipment.originPlaceType, shipment.originFloor ?? shipment.floor, originElevator) },
+              { label: 'Varış', value: formatFloorLine(shipment.destinationPlaceType, shipment.destinationFloor ?? shipment.floor, destinationElevator) },
               { label: 'Sigorta', value: insurance },
               { label: 'Tarih esnekliği', value: dateFlexibility },
               { label: 'Saat tercihi', value: timePreference },
@@ -475,35 +476,49 @@ export default function CarrierRespond() {
             )}
           </div>
 
-          <div className="space-y-2">
-            <PageEyebrow>Müşteri notu</PageEyebrow>
-            <QuoteBlock>{shipment.note || '-'}</QuoteBlock>
-          </div>
+          {shipment.note && (
+            <div className="space-y-2">
+              <PageEyebrow>Müşteri notu</PageEyebrow>
+              <QuoteBlock>{shipment.note}</QuoteBlock>
+            </div>
+          )}
+
+          {shipment.photoUrls && shipment.photoUrls.length > 0 && (
+            <div className="space-y-2">
+              <PageEyebrow>Fotoğraflar</PageEyebrow>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
+                {shipment.photoUrls.map((url, i) => (
+                  <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="block overflow-hidden rounded-[var(--tb-radius-sm)] border" style={{ borderColor: 'var(--tb-border)' }}>
+                    <img src={url} alt={`Yük fotoğrafı ${i + 1}`} className="h-24 w-full object-cover" loading="lazy" />
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
 
           <InlineNotice tone="warning" icon={<AlertTriangle className="h-4 w-4" />}>
-            İletişim ve açık adres teklif aşamasında gizli tutulur.
+            İletişim ve açık adres bilgileri teklif aşamasında gizli tutulur; taşıma başladığında paylaşılır.
           </InlineNotice>
         </div>
       </CorporateCard>
 
+      {/* Blocked warning */}
       {offerBlocked && (
-        <Card className="border-amber-200 bg-amber-50">
-          <CardContent className="py-4 text-sm text-amber-800">
-            {offerBlocked}
-          </CardContent>
-        </Card>
+        <InlineNotice tone="danger" icon={<AlertTriangle className="h-4 w-4" />}>
+          {offerBlocked}
+        </InlineNotice>
       )}
 
+      {/* Offer creation form */}
       <CorporateCard>
-        <div className="mb-4 flex items-center justify-between gap-3">
+        <SectionTitle className="mb-4">Teklif Oluştur</SectionTitle>
+        <p className="mb-4 text-sm" style={{ color: 'var(--tb-ink-500)' }}>
+          Fiyat ve süre bilgisiyle müşteriye teklif gönderin.
+        </p>
+
+        <div className="grid gap-4 md:grid-cols-2">
           <div>
-            <h2 className="text-xl font-bold" style={{ color: 'var(--tb-ink-900)' }}>Teklif Oluştur</h2>
-            <p className="mt-1 text-sm" style={{ color: 'var(--tb-ink-500)' }}>Fiyat ve süre bilgisiyle müşteriye teklif gönderin.</p>
-          </div>
-        </div>
-        <div className="space-y-3">
-          <div>
-            <label className="text-sm">Fiyat (TL)</label>
+            <label className="mb-1 block text-sm font-medium" style={{ color: 'var(--tb-ink-700)' }}>Fiyat (TL)</label>
             <Input
               type="number"
               value={price}
@@ -516,37 +531,45 @@ export default function CarrierRespond() {
               }}
             />
             {priceError && <p className="mt-1 text-sm text-red-500">{priceError}</p>}
-            <p className="mt-1 text-xs text-slate-500">Minimum teklif: ₺{minOfferPrice}</p>
+            <p className="mt-1 text-xs" style={{ color: 'var(--tb-ink-400)' }}>Minimum teklif: ₺{minOfferPrice}</p>
           </div>
           <div>
-            <label className="text-sm">Tahmini Süre (saat)</label>
+            <label className="mb-1 block text-sm font-medium" style={{ color: 'var(--tb-ink-700)' }}>Tahmini Süre (saat)</label>
             <Input type="number" value={eta} onChange={(e) => setEta(e.target.value)} />
           </div>
-          {canSuggestTime && (
-            <div>
-              <label className="text-sm">Önerilen saat (opsiyonel)</label>
-              <Input
-                value={suggestedTime}
-                onChange={(e) => setSuggestedTime(e.target.value)}
-                placeholder="Örn. 10:00-12:00"
-              />
-              <p className="mt-1 text-xs text-slate-500">
-                Müşteri saat tercihini fark etmez seçtiği için uygun gördüğünüz zaman aralığını önerebilirsiniz.
-              </p>
-            </div>
-          )}
-          <div>
-            <label className="text-sm">Ek Not</label>
-            <Textarea rows={3} value={note} onChange={(e) => setNote(e.target.value)} />
+        </div>
+
+        {canSuggestTime && (
+          <div className="mt-4">
+            <label className="mb-1 block text-sm font-medium" style={{ color: 'var(--tb-ink-700)' }}>Önerilen saat (opsiyonel)</label>
+            <Input
+              value={suggestedTime}
+              onChange={(e) => setSuggestedTime(e.target.value)}
+              placeholder="Örn. 10:00-12:00"
+            />
+            <p className="mt-1 text-xs" style={{ color: 'var(--tb-ink-400)' }}>
+              Müşteri saat tercihini fark etmez seçtiği için uygun gördüğünüz zaman aralığını önerebilirsiniz.
+            </p>
           </div>
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => navigate(-1)}>İptal</Button>
-            <Button className="min-w-32" onClick={submitOffer} disabled={submitting || !price || !!priceError || Boolean(offerBlocked)}>
-              {submitting ? 'Gönderiliyor...' : 'Gönder'}
-            </Button>
-          </div>
+        )}
+
+        <div className="mt-4">
+          <label className="mb-1 block text-sm font-medium" style={{ color: 'var(--tb-ink-700)' }}>Ek Not</label>
+          <Textarea rows={3} value={note} onChange={(e) => setNote(e.target.value)} />
+        </div>
+
+        <div className="mt-6 flex justify-end gap-3">
+          <Button variant="outline" onClick={() => navigate(-1)}>İptal</Button>
+          <Button
+            className="min-w-36 bg-blue-600 text-white hover:bg-blue-700"
+            onClick={submitOffer}
+            disabled={submitting || !price || !!priceError || Boolean(offerBlocked)}
+          >
+            <Send className="mr-2 h-4 w-4" />
+            {submitting ? 'Gönderiliyor...' : 'Teklif Gönder'}
+          </Button>
         </div>
       </CorporateCard>
-    </div>
+    </PageContainer>
   );
 }

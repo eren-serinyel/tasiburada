@@ -6,6 +6,9 @@ import { ShipmentRepository } from '../../infrastructure/repositories/ShipmentRe
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from '../../domain/errors/AppError';
 import { ContactFilterSurface } from '../../domain/entities/ContactFilterLog';
 import { ContactSafetyService } from './contact-safety/ContactSafetyService';
+import { NotificationService } from './NotificationService';
+import { AppDataSource } from '../../infrastructure/database/data-source';
+import { Customer } from '../../domain/entities/Customer';
 
 export interface CarrierReviewResponse {
   id: string;
@@ -128,6 +131,22 @@ export class ReviewService {
     });
 
     await this.carrierRepository.updateRating(shipment.carrierId);
+
+    try {
+      const customer = await AppDataSource.getRepository(Customer).findOne({ where: { id: customerId } });
+      const customerName = [customer?.firstName, customer?.lastName?.charAt(0)].filter(Boolean).join(' ') || 'Müşteri';
+      const notificationService = new NotificationService();
+      await notificationService.createFromEvent('carrier.review_received', {
+        recipientUserId: shipment.carrierId,
+        entityId: review.id,
+        reviewId: review.id,
+        shipmentId: payload.shipmentId,
+        rating,
+        customerName,
+      });
+    } catch {
+      // best-effort
+    }
 
     const saved = await this.reviewRepository.findById(review.id);
     if (!saved) {

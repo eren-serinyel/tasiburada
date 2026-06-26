@@ -10,6 +10,7 @@ export type NotificationEventType =
   | 'carrier.offer_accepted'
   | 'carrier.payment_released'
   | 'carrier.profile_approved'
+  | 'carrier.review_received'
   | 'admin.carrier_submitted_for_approval'
   | 'admin.high_risk_contact_filter_log'
   | 'admin.repeated_contact_violation';
@@ -18,6 +19,7 @@ export type NotificationEntityType =
   | 'shipment'
   | 'carrier'
   | 'offer'
+  | 'review'
   | 'carrier_document'
   | 'contact_filter_log'
   | 'actor'
@@ -120,6 +122,22 @@ export const NOTIFICATION_EVENT_DEFINITIONS: Record<NotificationEventType, Notif
       const approvalVersion = asNumber(payload.approvalVersion);
       return `carrier:profile_approved:${asString(payload.entityId)}:${approvalVersion ?? 'v0'}`;
     },
+  },
+  'carrier.review_received': {
+    type: 'carrier.review_received',
+    recipientRole: NotificationRecipientRole.CARRIER,
+    severity: NotificationSeverity.HIGH,
+    entityType: 'review',
+    metadataWhitelist: ['reviewId', 'shipmentId', 'rating', 'customerName'],
+    buildTitle: () => 'Yeni değerlendirme aldınız',
+    buildBody: (payload) => {
+      const customerName = asString(payload.customerName, 'Müşteri');
+      const rating = asNumber(payload.rating);
+      return rating !== null
+        ? `${customerName} taşımanızı ${rating}/5 puan ile değerlendirdi.`
+        : `${customerName} taşımanızı değerlendirdi.`;
+    },
+    buildDedupeKey: (payload) => `carrier:review_received:${asString(payload.reviewId, asString(payload.entityId))}`,
   },
   'admin.carrier_submitted_for_approval': {
     type: 'admin.carrier_submitted_for_approval',

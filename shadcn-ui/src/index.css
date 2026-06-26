@@ -118,7 +118,8 @@
     --tb-border:    #E2E8F0;
     --tb-divider:   #F1F5F9;
     --tb-surface:   #FFFFFF;
-    --tb-canvas:    #F8FAFC;
+    --tb-surface-canvas: color-mix(in srgb, var(--tb-brand-50) 55%, var(--tb-surface));
+    --tb-canvas:    var(--tb-surface-canvas);
 
     --tb-success:        #16A34A;
     --tb-success-bg:     #F0FDF4;
@@ -174,6 +175,7 @@
   }
   body {
     @apply bg-background text-foreground;
+    background: var(--tb-surface-canvas);
   }
   /* Global h1: gradient text only (no aura/glow/shadow), safe descenders, NO bottom margin */
   h1, .prose h1 {

@@ -24,17 +24,25 @@ import { apiClient } from '@/lib/apiClient';
 import { getCarrierEligibilityComparisonText, isOfferAcceptDisabled } from '@/lib/customerOfferTrust';
 import { toast } from '@/components/ui/sonner';
 import { cn } from '@/lib/utils';
-import { CorporateCard, InlineNotice, RoutePair } from '@/components/shared/CorporateUI';
+import {
+  CorporateCard,
+  InlineNotice,
+  PageContainer,
+  RoutePair,
+  SectionTitle,
+  ToneBadge,
+  shipmentStatusTone,
+} from '@/components/shared/CorporateUI';
 
 type SortMode = 'backend' | 'recommended' | 'rating_desc' | 'price_asc' | 'duration_asc';
 
-const shipmentStatusConfig: Record<string, { label: string; bg: string; text: string }> = {
-  pending: { label: 'Teklif Bekleniyor', bg: 'bg-amber-50', text: 'text-amber-700' },
-  offer_received: { label: 'Teklif Geldi', bg: 'bg-blue-50', text: 'text-blue-700' },
-  matched: { label: 'Eslesme Yapildi', bg: 'bg-green-50', text: 'text-green-700' },
-  in_transit: { label: 'Tasinıyor', bg: 'bg-orange-50', text: 'text-orange-700' },
-  completed: { label: 'Tamamlandi', bg: 'bg-green-50', text: 'text-green-700' },
-  cancelled: { label: 'Iptal', bg: 'bg-gray-100', text: 'text-gray-500' },
+const shipmentStatusLabel: Record<string, string> = {
+  pending: 'Teklif Bekleniyor',
+  offer_received: 'Teklif Geldi',
+  matched: 'Eşleşme Yapıldı',
+  in_transit: 'Taşınıyor',
+  completed: 'Tamamlandı',
+  cancelled: 'İptal',
 };
 
 const fmtPrice = (n: number) =>
@@ -75,21 +83,21 @@ export default function OfferComparison() {
     }
   };
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { fetchOffers(); }, [shipmentId]);
 
   const openAcceptConfirm = (offer: CustomerOffer) => {
     if (isOfferAcceptDisabled(offer)) {
-      toast.error('Bu tasiyici artik teklif kabulu icin uygun degil.');
+      toast.error('Bu taşıyıcı artık teklif kabulü için uygun değil.');
       return;
     }
-
     setConfirmOffer(offer);
   };
 
   const decide = async (offerId: string, accept: boolean) => {
     const targetOffer = offers.find((offer) => offer.id === offerId);
     if (accept && targetOffer && isOfferAcceptDisabled(targetOffer)) {
-      toast.error('Bu tasiyici artik teklif kabulu icin uygun degil.');
+      toast.error('Bu taşıyıcı artık teklif kabulü için uygun değil.');
       return;
     }
 
@@ -104,10 +112,10 @@ export default function OfferComparison() {
         setDetailsOffer(null);
         await fetchOffers();
       } else {
-        toast.error(json?.message || 'Islem basarisiz.');
+        toast.error(json?.message || 'İşlem başarısız.');
       }
     } catch {
-      toast.error('Islem sirasinda hata olustu.');
+      toast.error('İşlem sırasında hata oluştu.');
     } finally {
       setDecidingId(null);
     }
@@ -133,7 +141,6 @@ export default function OfferComparison() {
   }, [offers, sortMode, verifiedOnly]);
 
   const shipment = offers[0]?.shipment;
-  const stCfg = shipmentStatusConfig[shipment?.status || ''] || { label: shipment?.status || '', bg: 'bg-gray-100', text: 'text-gray-600' };
   const pendingCount = offers.filter(o => o.status === 'pending').length;
   const topThree = sortedOffers.filter(o => o.status === 'pending').slice(0, 3);
 
@@ -153,38 +160,35 @@ export default function OfferComparison() {
 
   if (loading) {
     return (
-      <div className="flex min-h-[40vh] items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-gray-300 border-t-gray-800" />
-      </div>
+      <PageContainer className="flex min-h-[40vh] items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-t-2" style={{ borderColor: 'var(--tb-border)', borderTopColor: 'var(--tb-brand-600)' }} />
+      </PageContainer>
     );
   }
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6 lg:px-8">
+    <PageContainer className="space-y-5">
+      {/* Header */}
       <div>
-        <button onClick={() => navigate(-1)} className="mb-3 flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700">
+        <button onClick={() => navigate(-1)} className="mb-3 flex items-center gap-1 text-sm hover:underline" style={{ color: 'var(--tb-ink-500)' }}>
           <ArrowLeft className="h-3.5 w-3.5" /> Geri
         </button>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Teklif Degerlendirme</h1>
-            <p className="mt-1 text-[15px] text-gray-500">
+            <p className="mt-1 text-sm" style={{ color: 'var(--tb-ink-500)' }}>
               {shipment
-                ? `${shipment.origin || '?'} -> ${shipment.destination || '?'} tasimasi icin ${offers.length} teklif`
-                : 'Teklifleri fiyat, puan ve guven sinyallerine gore karsilastirin.'
-              }
+                ? `${shipment.origin || '?'} → ${shipment.destination || '?'} taşıması için ${offers.length} teklif`
+                : 'Teklifleri fiyat, puan ve güven sinyallerine göre karşılaştırın.'}
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             {shipment?.shipmentDate && (
-              <span className="inline-flex items-center rounded bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-600">
-                {fmtDate(shipment.shipmentDate)}
-              </span>
+              <ToneBadge tone="neutral">{fmtDate(shipment.shipmentDate)}</ToneBadge>
             )}
             {shipment && (
-              <span className={cn('inline-flex items-center rounded px-2.5 py-1 text-[11px] font-semibold', stCfg.bg, stCfg.text)}>
-                {stCfg.label}
-              </span>
+              <ToneBadge tone={shipmentStatusTone[shipment.status || ''] || 'neutral'}>
+                {shipmentStatusLabel[shipment.status || ''] || shipment.status}
+              </ToneBadge>
             )}
           </div>
         </div>
@@ -195,34 +199,37 @@ export default function OfferComparison() {
         )}
       </div>
 
+      {/* Metrics + Controls */}
       {offers.length > 0 && (
-        <CorporateCard className="grid gap-3 md:grid-cols-[1fr,auto] md:items-center">
-          <div className="grid gap-3 sm:grid-cols-3">
-            <Metric label="Aktif teklif" value={String(pendingCount)} />
-            <Metric label="En dusuk fiyat" value={`₺${fmtPrice(Math.min(...offers.map(o => Number(o.price))))}`} />
-            <Metric label="En yuksek puan" value={(Math.max(...offers.map(o => Number(o.carrier?.rating || 0))) || 0).toFixed(1)} />
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => setVerifiedOnly(v => !v)} className={verifiedOnly ? 'border-blue-300 bg-blue-50 text-blue-700' : ''}>
-              <SlidersHorizontal className="mr-1.5 h-4 w-4" />
-              Sadece onayli
-            </Button>
-            <Select value={sortMode} onValueChange={(value) => setSortMode(value as SortMode)}>
-              <SelectTrigger className="h-9 w-44">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="backend">Varsayilan</SelectItem>
-                <SelectItem value="recommended">Onerilen</SelectItem>
-                <SelectItem value="rating_desc">Puan yuksek</SelectItem>
-                <SelectItem value="price_asc">Fiyat dusuk</SelectItem>
-                <SelectItem value="duration_asc">Sure kisa</SelectItem>
-              </SelectContent>
-            </Select>
-            <Button size="sm" onClick={() => setCompareMode(true)} disabled={compareOffers.length < 2}>
-              <BarChart2 className="mr-1.5 h-4 w-4" />
-              Karsilastir
-            </Button>
+        <CorporateCard>
+          <div className="grid gap-4 md:grid-cols-[1fr,auto] md:items-center">
+            <div className="grid gap-3 sm:grid-cols-3">
+              <Metric label="Aktif teklif" value={String(pendingCount)} />
+              <Metric label="En düşük fiyat" value={`₺${fmtPrice(Math.min(...offers.map(o => Number(o.price))))}`} />
+              <Metric label="En yüksek puan" value={(Math.max(...offers.map(o => Number(o.carrier?.rating || 0))) || 0).toFixed(1)} />
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button variant="outline" size="sm" onClick={() => setVerifiedOnly(v => !v)} className={verifiedOnly ? 'border-blue-300 bg-blue-50 text-blue-700' : ''}>
+                <SlidersHorizontal className="mr-1.5 h-4 w-4" />
+                Sadece onaylı
+              </Button>
+              <Select value={sortMode} onValueChange={(value) => setSortMode(value as SortMode)}>
+                <SelectTrigger className="h-9 w-44">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="backend">Varsayılan</SelectItem>
+                  <SelectItem value="recommended">Önerilen</SelectItem>
+                  <SelectItem value="rating_desc">Puan yüksek</SelectItem>
+                  <SelectItem value="price_asc">Fiyat düşük</SelectItem>
+                  <SelectItem value="duration_asc">Süre kısa</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button size="sm" onClick={() => setCompareMode(true)} disabled={compareOffers.length < 2}>
+                <BarChart2 className="mr-1.5 h-4 w-4" />
+                Karşılaştır
+              </Button>
+            </div>
           </div>
         </CorporateCard>
       )}
@@ -231,27 +238,26 @@ export default function OfferComparison() {
         Taşıyıcıyla iletişim ve ödeme süreçlerini platform üzerinden sürdürün.
       </InlineNotice>
 
+      {/* Offer grid */}
       {sortedOffers.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-center">
-          <PackageOpen className="mb-4 h-12 w-12 text-gray-300" />
-          <p className="mb-1 text-[15px] text-gray-500">Bu ilan icin teklif bulunamadi.</p>
-          <p className="text-sm text-gray-400">
-            <Link to="/tekliflerim" className="font-medium text-blue-600 hover:text-blue-700">Tum tekliflere don</Link>
-          </p>
+          <PackageOpen className="mb-4 h-12 w-12" style={{ color: 'var(--tb-ink-300)' }} />
+          <p className="mb-1 text-sm" style={{ color: 'var(--tb-ink-500)' }}>Bu ilan için teklif bulunamadı.</p>
+          <Link to="/tekliflerim" className="text-sm font-medium" style={{ color: 'var(--tb-brand-600)' }}>Tüm tekliflere dön</Link>
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
           {sortedOffers.map(offer => (
             <div key={offer.id} className="space-y-2">
               {offer.status === 'pending' && (
-                <label className="inline-flex items-center gap-2 text-sm text-slate-600">
+                <label className="inline-flex items-center gap-2 text-sm" style={{ color: 'var(--tb-ink-500)' }}>
                   <input
                     type="checkbox"
                     checked={selectedForCompare.includes(offer.id)}
                     onChange={() => toggleCompare(offer.id)}
                     className="rounded"
                   />
-                  Karsilastirmaya ekle
+                  Karşılaştırmaya ekle
                 </label>
               )}
               <CustomerOfferCard
@@ -266,19 +272,21 @@ export default function OfferComparison() {
         </div>
       )}
 
+      {/* Comparison dialog */}
       <Dialog open={compareMode} onOpenChange={setCompareMode}>
         <DialogContent className="max-w-4xl">
           <DialogHeader>
-            <DialogTitle>Teklifleri Karsilastir</DialogTitle>
+            <DialogTitle>Teklifleri Karşılaştır</DialogTitle>
           </DialogHeader>
           <ComparisonTable offers={compareOffers} onChoose={(offer) => { setConfirmOffer(offer); setCompareMode(false); }} />
         </DialogContent>
       </Dialog>
 
+      {/* Details dialog */}
       <Dialog open={!!detailsOffer} onOpenChange={(open) => { if (!open) setDetailsOffer(null); }}>
         <DialogContent className="max-w-xl">
           <DialogHeader>
-            <DialogTitle>Teklif Detayi</DialogTitle>
+            <DialogTitle>Teklif Detayı</DialogTitle>
           </DialogHeader>
           {detailsOffer && (
             <CustomerOfferCard
@@ -292,13 +300,14 @@ export default function OfferComparison() {
         </DialogContent>
       </Dialog>
 
+      {/* Accept confirmation */}
       <AlertDialog open={!!confirmOffer} onOpenChange={(open) => { if (!open) setConfirmOffer(null); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Teklifi kabul et</AlertDialogTitle>
+            <AlertDialogTitle>Teklifi Kabul Et</AlertDialogTitle>
             <AlertDialogDescription>
               {confirmOffer && (
-                <div className="space-y-2 text-slate-700">
+                <div className="space-y-2" style={{ color: 'var(--tb-ink-700)' }}>
                   <p>
                     <strong>{confirmOffer.carrier?.displayName || confirmOffer.carrier?.companyName || 'Nakliyeci'}</strong>
                     {' '}teklifi kabul edilecek.
@@ -306,28 +315,32 @@ export default function OfferComparison() {
                   <p><strong>Fiyat:</strong> ₺{fmtPrice(Number(confirmOffer.price))}</p>
                   <p><strong>Ek hizmet uyumu:</strong> {getExtraServiceCompatibilityText(confirmOffer) || 'Ek hizmet gerekmiyor'}</p>
                   <p><strong>Kapasite durumu:</strong> {getCapacityDecisionText(confirmOffer)}</p>
-                  <p>Diger teklifler otomatik reddedilecek, iletisim platform kurallarina gore acilacak.</p>
+                  <p>Diğer teklifler otomatik reddedilecek, iletişim platform kurallarına göre açılacak.</p>
                 </div>
               )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={decidingId === confirmOffer?.id}>Vazgec</AlertDialogCancel>
-            <AlertDialogAction disabled={!confirmOffer || isOfferAcceptDisabled(confirmOffer, decidingId === confirmOffer.id)} className="bg-blue-600 text-white hover:bg-blue-700" onClick={() => confirmOffer && decide(confirmOffer.id, true)}>
+            <AlertDialogCancel disabled={decidingId === confirmOffer?.id}>Vazgeç</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={!confirmOffer || isOfferAcceptDisabled(confirmOffer, decidingId === confirmOffer.id)}
+              className="bg-blue-600 text-white hover:bg-blue-700"
+              onClick={() => confirmOffer && decide(confirmOffer.id, true)}
+            >
               Kabul Et
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </PageContainer>
   );
 }
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-md bg-slate-50 px-3 py-2">
-      <p className="text-xs text-slate-500">{label}</p>
-      <p className="text-lg font-semibold text-slate-950">{value}</p>
+    <div className="rounded-[var(--tb-radius-sm)] border px-3 py-2.5" style={{ background: 'var(--tb-canvas)', borderColor: 'var(--tb-border)' }}>
+      <p className="text-[11px] font-bold uppercase tracking-wide" style={{ color: 'var(--tb-ink-500)', letterSpacing: '0.06em' }}>{label}</p>
+      <p className="mt-0.5 text-lg font-bold" style={{ color: 'var(--tb-ink-900)' }}>{value}</p>
     </div>
   );
 }
@@ -340,20 +353,20 @@ function ComparisonTable({ offers, onChoose }: { offers: CustomerOffer[]; onChoo
         ? `₺${fmtPrice(Number(o.price))} (₺${fmtPrice(extras)} ek hizmet dahil)`
         : `₺${fmtPrice(Number(o.price))}`;
     }],
-    ['Sure', (o: CustomerOffer) => o.estimatedDuration ? `${o.estimatedDuration} saat` : 'Belirtilmedi'],
+    ['Süre', (o: CustomerOffer) => o.estimatedDuration ? `${o.estimatedDuration} saat` : 'Belirtilmedi'],
     ['Puan', (o: CustomerOffer) => o.carrier?.rating ? `${Number(o.carrier.rating).toFixed(1)} / 5 (${o.carrier?.ratingCount ?? 0} yorum)` : 'Yeni / yorum yok'],
-    ['Tasiyici uygunlugu', (o: CustomerOffer) => getCarrierEligibilityComparisonText(o)],
+    ['Taşıyıcı uygunluğu', (o: CustomerOffer) => getCarrierEligibilityComparisonText(o)],
     ['Ek hizmet uyumu', (o: CustomerOffer) => getExtraServiceCompatibilityText(o) || 'Gerekmiyor'],
     ['Kapasite', (o: CustomerOffer) => getCapacityDecisionText(o)],
-    ['Sigorta / dogrulama', (o: CustomerOffer) => {
+    ['Sigorta / doğrulama', (o: CustomerOffer) => {
       const sigorta = o.carrier?.hasInsurance ? 'Sigorta var' : 'Sigorta bilgisi yok';
-      const verify = (o.carrier?.isVerified || o.carrier?.verifiedByAdmin) ? 'Dogrulanmis' : 'Dogrulama yok';
-      return `${sigorta} • ${verify}`;
+      const verify = (o.carrier?.isVerified || o.carrier?.verifiedByAdmin) ? 'Doğrulanmış' : 'Doğrulama yok';
+      return `${sigorta} · ${verify}`;
     }],
     ['Son yorum', (o: CustomerOffer) => {
       const comment = o.carrier?.latestPositiveReview?.comment || o.carrier?.latestReview?.comment;
       if (!comment) return 'Yorum yok';
-      return comment.length > 70 ? `${comment.slice(0, 70)}...` : comment;
+      return comment.length > 70 ? `${comment.slice(0, 70)}…` : comment;
     }],
   ];
 
@@ -362,20 +375,20 @@ function ComparisonTable({ offers, onChoose }: { offers: CustomerOffer[]; onChoo
       <table className="w-full min-w-[640px] text-sm">
         <thead>
           <tr>
-            <th className="w-36 p-2 text-left font-normal text-slate-500">Kriter</th>
+            <th className="w-36 p-2 text-left font-medium" style={{ color: 'var(--tb-ink-500)' }}>Kriter</th>
             {offers.map(offer => (
-              <th key={offer.id} className="p-2 text-center font-semibold text-slate-900">
+              <th key={offer.id} className="p-2 text-center font-semibold" style={{ color: 'var(--tb-ink-900)' }}>
                 {offer.carrier?.displayName || offer.carrier?.companyName || 'Nakliyeci'}
               </th>
             ))}
           </tr>
         </thead>
-        <tbody className="divide-y">
+        <tbody>
           {rows.map(([label, render]) => (
-            <tr key={label as string}>
-              <td className="p-2 text-slate-500">{label as string}</td>
+            <tr key={label as string} style={{ borderBottom: '0.5px solid var(--tb-divider)' }}>
+              <td className="p-2" style={{ color: 'var(--tb-ink-500)' }}>{label as string}</td>
               {offers.map(offer => (
-                <td key={offer.id} className={cn('p-2 text-center', offer.isRecommended && 'bg-blue-50 font-semibold')}>
+                <td key={offer.id} className={cn('p-2 text-center', offer.isRecommended && 'font-semibold')} style={offer.isRecommended ? { background: 'var(--tb-brand-50)' } : undefined}>
                   {(render as (o: CustomerOffer) => string)(offer)}
                 </td>
               ))}
@@ -386,8 +399,8 @@ function ComparisonTable({ offers, onChoose }: { offers: CustomerOffer[]; onChoo
             {offers.map(offer => (
               <td key={offer.id} className="p-2">
                 {offer.status === 'pending' && (
-                  <Button className="w-full" size="sm" disabled={isOfferAcceptDisabled(offer)} onClick={() => onChoose(offer)}>
-                    Sec
+                  <Button className="w-full bg-blue-600 text-white hover:bg-blue-700" size="sm" disabled={isOfferAcceptDisabled(offer)} onClick={() => onChoose(offer)}>
+                    Seç
                   </Button>
                 )}
               </td>

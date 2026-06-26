@@ -3,6 +3,7 @@ import { AppDataSource } from '../database/data-source';
 import { Carrier, CarrierApprovalState } from '../../domain/entities/Carrier';
 import { Offer } from '../../domain/entities/Offer';
 import { CarrierDocument, CarrierDocumentStatus } from '../../domain/entities/CarrierDocument';
+import { CarrierVehicle } from '../../domain/entities/CarrierVehicle';
 import { CarrierVehicleType } from '../../domain/entities/CarrierVehicleType';
 import { Review } from '../../domain/entities/Review';
 import { CarrierExtraServiceCapability } from '../../domain/entities/CarrierExtraServiceCapability';
@@ -104,6 +105,8 @@ export class CarrierDetailRepository extends BaseRepository<Carrier> {
       .leftJoinAndSelect('carrier.activity', 'activity')
       .leftJoinAndSelect('carrier.vehicleTypeLinks', 'vehicleLink')
       .leftJoinAndSelect('vehicleLink.vehicleType', 'vehicleType')
+      .leftJoinAndSelect('carrier.carrierVehicles', 'carrierVehicle', 'carrierVehicle.is_active = :cvActive', { cvActive: true })
+      .leftJoinAndSelect('carrierVehicle.vehicleType', 'cvVehicleType')
       .leftJoinAndSelect('carrier.documents', 'documents')
       .leftJoinAndSelect('carrier.earnings', 'earnings')
       .leftJoin(
@@ -131,7 +134,10 @@ export class CarrierDetailRepository extends BaseRepository<Carrier> {
 
     const pricingRow = raw[0] ?? {};
     const serviceAreas = this.parseServiceAreas(carrierEntity.activity?.serviceAreasJson);
-    const vehicles = this.mapVehicles(carrierEntity.vehicleTypeLinks || []);
+    const vehicles = this.mapVehiclesFromBothSources(
+      carrierEntity.carrierVehicles || [],
+      carrierEntity.vehicleTypeLinks || [],
+    );
     const documents = this.mapDocuments(carrierEntity.documents || []);
     const allDocumentsApproved = documents.length > 0 && documents.every(doc => doc.isApproved);
 
@@ -301,19 +307,40 @@ export class CarrierDetailRepository extends BaseRepository<Carrier> {
     return [];
   }
 
-  private mapVehicles(links: CarrierVehicleType[]): CarrierDetailVehicleDto[] {
-    const unique = new Map<string, CarrierDetailVehicleDto>();
-    links.forEach(link => {
-      if (!link || !link.id) return;
-      unique.set(link.id, {
+  private mapVehiclesFromBothSources(
+    actualVehicles: CarrierVehicle[],
+    typeLinks: CarrierVehicleType[],
+  ): CarrierDetailVehicleDto[] {
+    const result = new Map<string, CarrierDetailVehicleDto>();
+
+    for (const vehicle of actualVehicles) {
+      if (!vehicle?.id) continue;
+      const capacity = Number(vehicle.capacityKg || 0);
+      result.set(vehicle.id, {
+        id: vehicle.id,
+        typeName: vehicle.vehicleType?.name ?? 'Araç',
+        capacityKg: capacity > 0 ? capacity : vehicle.vehicleType?.defaultCapacityKg ?? null,
+      });
+    }
+
+    for (const link of typeLinks) {
+      if (!link?.id) continue;
+      const alreadyHasType = Array.from(result.values()).some(
+        v => v.typeName === (link.vehicleType?.name ?? ''),
+      );
+      if (alreadyHasType) continue;
+
+      const linkCapacity = this.toNullableNumber(link.capacityKg);
+      result.set(link.id, {
         id: link.id,
         typeName: link.vehicleType?.name ?? 'Araç',
-        capacityKg: link.capacityKg !== undefined && link.capacityKg !== null
-          ? Number(link.capacityKg)
-          : link.vehicleType?.defaultCapacityKg ?? null
+        capacityKg: linkCapacity && linkCapacity > 0
+          ? linkCapacity
+          : link.vehicleType?.defaultCapacityKg ?? null,
       });
-    });
-    return Array.from(unique.values());
+    }
+
+    return Array.from(result.values());
   }
 
   private mapDocuments(docs: CarrierDocument[]): CarrierDetailDocumentDto[] {

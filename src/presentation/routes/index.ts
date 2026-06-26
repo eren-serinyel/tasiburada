@@ -13,6 +13,7 @@ import paymentRoutes from './paymentRoutes';
 import configRoutes from './configRoutes';
 import aiRoutes from './aiRoutes';
 import converterRoutes from './converterRoutes';
+import messageRoutes from './messageRoutes';
 
 const router = Router();
 router.use('/', commonRoutes);
@@ -39,6 +40,7 @@ router.use('/payments', paymentRoutes);
 router.use('/ai', aiRoutes);
 router.use('/converter', converterRoutes);
 router.use('/', reviewRoutes);
+router.use('/messages', messageRoutes);
 router.use('/admin', adminRoutes);
 router.use('/config', configRoutes);
 

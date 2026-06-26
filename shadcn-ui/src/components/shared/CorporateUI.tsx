@@ -2,15 +2,23 @@ import { ReactNode } from 'react';
 import { ArrowRight, Info, MapPin } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-type Tone = 'neutral' | 'info' | 'success' | 'warning' | 'danger';
+export type Tone = 'neutral' | 'info' | 'success' | 'warning' | 'danger';
 
-const toneStyle: Record<Tone, { color: string; bg: string; border: string }> = {
+export const toneStyle: Record<Tone, { color: string; bg: string; border: string }> = {
   neutral: { color: 'var(--tb-ink-700)', bg: 'var(--tb-divider)', border: 'var(--tb-border)' },
   info: { color: 'var(--tb-brand-700)', bg: 'var(--tb-brand-50)', border: 'var(--tb-brand-50)' },
   success: { color: 'var(--tb-success)', bg: 'var(--tb-success-bg)', border: 'var(--tb-success-border)' },
   warning: { color: 'var(--tb-warning)', bg: 'var(--tb-warning-bg)', border: 'var(--tb-warning-border)' },
   danger: { color: 'var(--tb-danger)', bg: 'var(--tb-danger-bg)', border: 'var(--tb-danger-border)' },
 };
+
+export function PageContainer({ children, className }: { children: ReactNode; className?: string }) {
+  return (
+    <div className={cn('mx-auto w-full max-w-7xl px-6 py-8 md:px-8', className)}>
+      {children}
+    </div>
+  );
+}
 
 export function CorporateCard({ children, className }: { children: ReactNode; className?: string }) {
   return (
@@ -90,16 +98,20 @@ export function RoutePair({
 
   return (
     <div
-      className={cn('grid items-stretch gap-3 sm:grid-cols-[1fr,auto,1fr]', compact && 'gap-2')}
-      style={{ color: 'var(--tb-ink-900)' }}
+      className={cn('rounded-[var(--tb-radius)] border p-4', compact && 'p-3')}
+      style={{ background: 'var(--tb-canvas)', borderColor: 'var(--tb-border)', color: 'var(--tb-ink-900)' }}
     >
-      <RouteEndpoint label="Çıkış" city={origin.city} district={origin.district} compact={compact} />
-      <div className="hidden items-center sm:flex">
-        <div className="flex h-9 w-9 items-center justify-center rounded-full" style={{ background: 'var(--tb-brand-50)', color: 'var(--tb-brand-700)' }}>
-          <ArrowRight className="h-4 w-4" />
+      <div className="grid items-center gap-3 sm:grid-cols-[minmax(0,1fr),auto,minmax(0,1fr)]">
+        <RouteEndpoint label="Çıkış" city={origin.city} district={origin.district} compact={compact} />
+        <div className="hidden items-center gap-2 sm:flex" aria-hidden="true">
+          <div className="h-px w-8" style={{ background: 'var(--tb-border)' }} />
+          <div className="flex h-9 w-9 items-center justify-center rounded-full" style={{ background: 'var(--tb-brand-50)', color: 'var(--tb-brand-700)' }}>
+            <ArrowRight className="h-4 w-4" />
+          </div>
+          <div className="h-px w-8" style={{ background: 'var(--tb-border)' }} />
         </div>
+        <RouteEndpoint label="Varış" city={destination.city} district={destination.district} compact={compact} />
       </div>
-      <RouteEndpoint label="Varış" city={destination.city} district={destination.district} compact={compact} />
     </div>
   );
 }
@@ -107,10 +119,7 @@ export function RoutePair({
 function RouteEndpoint({ label, city, district, compact }: { label: string; city: string; district: string; compact: boolean }) {
   const empty = city === '-' && district === '-';
   return (
-    <div
-      className={cn('rounded-[var(--tb-radius-sm)] border', compact ? 'px-3 py-2' : 'px-4 py-3')}
-      style={{ background: 'var(--tb-canvas)', borderColor: 'var(--tb-border)' }}
-    >
+    <div className={cn(compact ? 'px-1 py-1' : 'px-2 py-1')}>
       <div className="mb-1 flex items-center gap-1.5" style={{ color: 'var(--tb-ink-500)', fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
         <MapPin className="h-3.5 w-3.5" />
         {label}
@@ -130,15 +139,19 @@ function RouteEndpoint({ label, city, district, compact }: { label: string; city
 export function DetailList({ rows }: { rows: Array<{ label: string; value: ReactNode; hideWhenEmpty?: boolean }> }) {
   const visibleRows = rows.filter((row) => !(row.hideWhenEmpty && isEmptyValue(row.value)));
   return (
-    <dl className="divide-y" style={{ borderColor: 'var(--tb-divider)' }}>
+    <dl className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
       {visibleRows.map((row) => {
         const empty = isEmptyValue(row.value);
         return (
-          <div key={row.label} className="grid gap-1 py-3 sm:grid-cols-[180px,1fr] sm:items-start">
+          <div
+            key={row.label}
+            className="rounded-[var(--tb-radius-sm)] border px-3 py-2.5"
+            style={{ background: 'var(--tb-surface)', borderColor: 'var(--tb-border)' }}
+          >
             <dt style={{ color: 'var(--tb-ink-500)', fontSize: 12, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
               {row.label}
             </dt>
-            <dd className="sm:text-right" style={{ color: empty ? 'var(--tb-ink-400)' : 'var(--tb-ink-900)', fontSize: 14, fontWeight: empty ? 500 : 700 }}>
+            <dd className="mt-1" style={{ color: empty ? 'var(--tb-ink-400)' : 'var(--tb-ink-900)', fontSize: 14, fontWeight: empty ? 500 : 700 }}>
               {empty ? '-' : row.value}
             </dd>
           </div>
@@ -171,6 +184,38 @@ function splitLocation(city?: string | null, district?: string | null, fallback?
 
   return { city: parts[0] || '-', district: parts[1] || '-' };
 }
+
+export function SectionTitle({ children, count, className }: { children: ReactNode; count?: number; className?: string }) {
+  return (
+    <div className={cn('flex items-center gap-3', className)}>
+      <h2 className="text-base font-bold" style={{ color: 'var(--tb-ink-900)', background: 'none', WebkitBackgroundClip: 'unset', WebkitTextFillColor: 'unset', backgroundImage: 'none' }}>
+        {children}
+      </h2>
+      {count != null && (
+        <ToneBadge tone="info">{count}</ToneBadge>
+      )}
+    </div>
+  );
+}
+
+export const offerStatusTone: Record<string, Tone> = {
+  pending: 'warning',
+  accepted: 'success',
+  rejected: 'danger',
+  withdrawn: 'neutral',
+  cancelled: 'neutral',
+  expired: 'neutral',
+};
+
+export const shipmentStatusTone: Record<string, Tone> = {
+  pending: 'warning',
+  offer_received: 'info',
+  matched: 'info',
+  in_transit: 'info',
+  completed: 'success',
+  cancelled: 'danger',
+  expired: 'neutral',
+};
 
 function isEmptyValue(value: ReactNode) {
   return value === null || value === undefined || value === '' || value === '-' || value === 'Yok' || value === '—';
