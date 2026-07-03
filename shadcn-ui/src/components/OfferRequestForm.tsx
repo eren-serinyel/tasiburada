@@ -171,6 +171,8 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
   const [appliedConverterSummary, setAppliedConverterSummary] = useState<ConverterAppliedSummary | null>(null);
   const [converterDraftValues, setConverterDraftValues] = useState<VolumeCalculatorDraftValues | null>(null);
   const [weightEditMode, setWeightEditMode] = useState(false);
+  const formShellRef = useRef<HTMLDivElement | null>(null);
+  const keepFormInViewOnStepChangeRef = useRef(false);
   const landingEstimateAppliedRef = useRef(false);
   const draftRestoreRef = useRef(false);
   const restoredDraftRef = useRef(false);
@@ -200,6 +202,8 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
     weightKg: '',
     floor: '',
     hasElevator: false,
+    destinationFloor: '',
+    destinationHasElevator: false,
     dateFlexibility: 'EXACT' as 'EXACT' | 'PLUS_MINUS_1_DAY' | 'PLUS_MINUS_3_DAYS',
     timeWindow: '',
     extras: { asansor: false, sigorta: false, ambalaj: false },
@@ -232,6 +236,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
         const params = new URLSearchParams({ date: form.date });
         if (form.originCity) params.set('serviceCity', form.originCity);
         if (requestedScope) params.set('scope', requestedScope);
+        if (form.dateFlexibility && form.dateFlexibility !== 'EXACT') params.set('dateFlexibility', form.dateFlexibility);
         const res = await fetch(`/api/v1/carriers/availability-summary?${params.toString()}`);
         const json = await res.json();
         if (res.ok && json.success) {
@@ -246,7 +251,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
     return () => {
       if (availabilityTimerRef.current) clearTimeout(availabilityTimerRef.current);
     };
-  }, [form.date, form.originCity, requestedScope]);
+  }, [form.date, form.originCity, form.dateFlexibility, requestedScope]);
 
   // Load saved addresses for authenticated customers
   useEffect(() => {
@@ -256,7 +261,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
         .then((d) => { if (d.success) setSavedAddresses(d.data ?? []); })
         .catch(() => {});
     }
-  }, [isAuthenticated, user?.type]);
+  }, [isAuthenticated, user]);
 
   // Load profile phone for pre-fill
   useEffect(() => {
@@ -738,6 +743,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
     const params = new URLSearchParams({ availableDate: form.date, limit: '50' });
     params.set('serviceCity', form.originCity);
     if (requestedScope) params.set('scope', requestedScope);
+    if (form.dateFlexibility && form.dateFlexibility !== 'EXACT') params.set('dateFlexibility', form.dateFlexibility);
 
     const token = localStorage.getItem('authToken');
     fetch(`/api/v1/carriers/search?${params.toString()}`, {
@@ -751,7 +757,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
       })
       .catch(() => {})
       .finally(() => setLoadingResults(false));
-  }, [step, form.originCity, form.destinationCity, form.date, requestedScope]);
+  }, [step, form.originCity, form.destinationCity, form.date, form.dateFlexibility, requestedScope]);
 
   const [minRating, setMinRating] = useState(0);
   const [sortBy, setSortBy] = useState<'rating' | 'reviews' | 'capacity'>('rating');
@@ -958,11 +964,41 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
     });
   };
 
-  const goNext = () => setStep((s) => (s < 4 ? ((s + 1) as Step) : s));
-  const goPrev = () => setStep((s) => (s > 1 ? ((s - 1) as Step) : s));
+  const goToStepKeepingFormInView = (nextStep: Step) => {
+    keepFormInViewOnStepChangeRef.current = true;
+    setStep(nextStep);
+  };
 
-  const handleGoToStep4 = () => setStep(4);
-  const handleGoToLoadDetail = () => setStep(2);
+  useEffect(() => {
+    if (!keepFormInViewOnStepChangeRef.current) return;
+    keepFormInViewOnStepChangeRef.current = false;
+
+    const frame = window.requestAnimationFrame(() => {
+      const el = formShellRef.current;
+      if (!el) return;
+
+      const targetTop = Math.max(el.getBoundingClientRect().top + window.scrollY - 88, 0);
+      if (window.scrollY > targetTop) {
+        window.scrollTo({ top: targetTop, left: 0, behavior: 'auto' });
+      }
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [step]);
+
+  const goNext = () => setStep((s) => {
+    if (s >= 4) return s;
+    keepFormInViewOnStepChangeRef.current = true;
+    return (s + 1) as Step;
+  });
+  const goPrev = () => setStep((s) => {
+    if (s <= 1) return s;
+    keepFormInViewOnStepChangeRef.current = true;
+    return (s - 1) as Step;
+  });
+
+  const handleGoToStep4 = () => goToStepKeepingFormInView(4);
+  const handleGoToLoadDetail = () => goToStepKeepingFormInView(2);
 
   useEffect(() => {
     if (searchParams.get('calculator') === '1') {
@@ -1390,7 +1426,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
                     onClick={() => {
                       if (!clickable) return;
                       setShowSummaryModal(false);
-                      setStep(st.id as Step);
+                      goToStepKeepingFormInView(st.id as Step);
                     }}
                   >
                     {done ? (
@@ -1431,7 +1467,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
       <div className="offer-grid" style={{ maxWidth: '1400px', margin: '0 auto', padding: '28px 32px 64px', display: 'grid', gridTemplateColumns: '1fr 340px', gap: '24px', alignItems: 'start' }}>
 
         {/* ── LEFT: FORM CARD ── */}
-        <div style={tb.shellCard}>
+        <div ref={formShellRef} style={tb.shellCard}>
 
           {/* ── STEP 1: ROTA + YÜK TÜRÜ ── */}
           {step === 1 && (
@@ -1536,6 +1572,37 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
                     <span style={tb.sectionLabel}>Varış Noktası</span>
                   </div>
                   <div className="flex flex-col" style={{ gap: '10px' }}>
+                    {savedAddresses.length > 0 && (
+                      <div>
+                        <label style={{ ...labelStyle, color: 'var(--tb-brand-700)' }}>
+                          <MapPin style={{ width: '14px', height: '14px', verticalAlign: '-2px', marginRight: '6px' }} />
+                          Kayıtlı adreslerden varış noktası seç
+                        </label>
+                        <Select
+                          value=""
+                          onValueChange={(val) => {
+                            if (!requireLoginForSelection()) return;
+                            const addr = savedAddresses.find((a) => String(a.id) === val);
+                            if (addr) {
+                              handleChange('destinationCity', addr.city);
+                              handleChange('destinationDistrict', addr.district);
+                            }
+                          }}
+                        >
+                          <SelectTrigger style={{ ...inputStyle, background: 'white' }}>
+                            <SelectValue placeholder="Kayıtlı adres seçin..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {savedAddresses.map((a) => (
+                              <SelectItem key={a.id} value={String(a.id)}>
+                                {a.label ? `${a.label} — ` : ''}{a.city}, {a.district}
+                                {a.isDefault ? ' (Varsayılan)' : ''}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
                     <div>
                       <label style={labelStyle}>Şehir <span style={{ color: 'var(--tb-danger)' }}>*</span></label>
                       <Select value={form.destinationCity} onValueChange={(v) => {
@@ -2052,9 +2119,16 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
                 </button>
                 <button
                   type="button"
-                  onClick={handleGoToStep4}
+                  disabled={!canPublish}
+                  onClick={() => setShowSummaryModal(true)}
                   className="hover:shadow-[0_4px_12px_rgba(37,99,235,0.3)]"
-                  style={{ ...tb.ctaPrimary, padding: '12px 32px', fontSize: '15px' }}
+                  style={{
+                    ...tb.ctaPrimary,
+                    background: canPublish ? 'var(--tb-brand-700)' : 'var(--tb-ink-400)',
+                    padding: '12px 32px',
+                    fontSize: '15px',
+                    cursor: canPublish ? 'pointer' : 'not-allowed',
+                  }}
                 >
                   Devam →
                 </button>
@@ -2067,7 +2141,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
             <form onSubmit={submitStep2} style={{ padding: '32px' }}>
               {/* Card header */}
               <div className="flex items-center" style={{ gap: '12px', paddingBottom: '20px', borderBottom: '1px solid var(--tb-divider)', marginBottom: '24px' }}>
-                <div className="flex items-center justify-center" style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'var(--tb-brand-50)', color: 'var(--tb-brand-600)', fontWeight: 700, fontSize: '16px', flexShrink: 0 }}>4</div>
+                <div className="flex items-center justify-center" style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'var(--tb-brand-50)', color: 'var(--tb-brand-600)', fontWeight: 700, fontSize: '16px', flexShrink: 0 }}>2</div>
                 <div>
                   <div style={{ fontSize: '17px', fontWeight: 600, color: 'var(--tb-ink-900)' }}>Yük Detayı</div>
                   <div style={{ fontSize: '13px', color: 'var(--tb-ink-500)' }}>Yer, kat, hacim, ek hizmet ve notları tamamlayın</div>
@@ -2176,7 +2250,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
                   )}
                 </div>
                 <div>
-                  <label style={labelStyle}>Kat</label>
+                  <label style={labelStyle}>Çıkış Katı</label>
                   <Input
                     type="number"
                     min={0}
@@ -2188,10 +2262,8 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
                     placeholder="Örn. 3"
                     style={inputStyle}
                   />
-                </div>
-                {form.floor && (
-                  <div className="flex items-end" style={{ paddingBottom: '8px' }}>
-                    <label className="flex items-center cursor-pointer" style={{ gap: '8px' }}>
+                  {form.floor && (
+                    <label className="flex items-center cursor-pointer" style={{ gap: '8px', marginTop: '6px' }}>
                       <input
                         type="checkbox"
                         checked={form.hasElevator}
@@ -2201,10 +2273,38 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
                         }}
                         style={{ accentColor: 'var(--tb-brand-600)', width: '16px', height: '16px' }}
                       />
-                      <span style={{ fontSize: '13px', color: 'var(--tb-ink-700)' }}>Bina Asansörü Var</span>
+                      <span style={{ fontSize: '13px', color: 'var(--tb-ink-700)' }}>Çıkış Asansörü Var</span>
                     </label>
-                  </div>
-                )}
+                  )}
+                </div>
+                <div>
+                  <label style={labelStyle}>Varış Katı</label>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={form.destinationFloor}
+                    onChange={(e) => {
+                      if (!requireLoginForSelection()) return;
+                      handleChange('destinationFloor', e.target.value);
+                    }}
+                    placeholder="Örn. 5"
+                    style={inputStyle}
+                  />
+                  {form.destinationFloor && (
+                    <label className="flex items-center cursor-pointer" style={{ gap: '8px', marginTop: '6px' }}>
+                      <input
+                        type="checkbox"
+                        checked={form.destinationHasElevator}
+                        onChange={(e) => {
+                          if (!requireLoginForSelection()) return;
+                          handleChange('destinationHasElevator', e.target.checked);
+                        }}
+                        style={{ accentColor: 'var(--tb-brand-600)', width: '16px', height: '16px' }}
+                      />
+                      <span style={{ fontSize: '13px', color: 'var(--tb-ink-700)' }}>Varış Asansörü Var</span>
+                    </label>
+                  )}
+                </div>
                 <div>
                   <label style={labelStyle}>Zaman Tercihi</label>
                   <Select value={form.timeWindow} onValueChange={(v) => {
@@ -2300,6 +2400,24 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
                   </span>
                 </div>
               )}
+
+              <div className="flex justify-between items-center" style={{ paddingTop: '24px', borderTop: '1px solid var(--tb-divider)' }}>
+                <button
+                  type="button"
+                  onClick={goPrev}
+                  className="hover:!bg-[var(--tb-canvas)] transition-colors"
+                  style={tb.ctaSecondary}
+                >
+                  ← Geri
+                </button>
+                <button
+                  type="submit"
+                  className="hover:shadow-[0_4px_12px_rgba(37,99,235,0.3)]"
+                  style={{ ...tb.ctaPrimary, padding: '12px 32px', fontSize: '15px' }}
+                >
+                  Devam →
+                </button>
+              </div>
 
             </form>
           )}
@@ -2531,9 +2649,9 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
 
               {/* Edit links */}
               <div className="flex" style={{ gap: '16px', marginTop: '8px', marginBottom: '24px' }}>
-                <span onClick={() => { setShowSummaryModal(false); setStep(1); }} className="hover:underline" style={{ fontSize: '13px', color: 'var(--tb-brand-600)', cursor: 'pointer' }}> Adım 1'i Düzenle</span>
-                <span onClick={() => { setShowSummaryModal(false); setStep(2); }} className="hover:underline" style={{ fontSize: '13px', color: 'var(--tb-brand-600)', cursor: 'pointer' }}> Adım 2'yi Düzenle</span>
-                <span onClick={() => { setShowSummaryModal(false); setStep(3); }} className="hover:underline" style={{ fontSize: '13px', color: 'var(--tb-brand-600)', cursor: 'pointer' }}> Adım 3'ü Düzenle</span>
+                <span onClick={() => { setShowSummaryModal(false); goToStepKeepingFormInView(1); }} className="hover:underline" style={{ fontSize: '13px', color: 'var(--tb-brand-600)', cursor: 'pointer' }}> Adım 1'i Düzenle</span>
+                <span onClick={() => { setShowSummaryModal(false); goToStepKeepingFormInView(2); }} className="hover:underline" style={{ fontSize: '13px', color: 'var(--tb-brand-600)', cursor: 'pointer' }}> Adım 2'yi Düzenle</span>
+                <span onClick={() => { setShowSummaryModal(false); goToStepKeepingFormInView(3); }} className="hover:underline" style={{ fontSize: '13px', color: 'var(--tb-brand-600)', cursor: 'pointer' }}> Adım 3'ü Düzenle</span>
               </div>
 
               {/* Action bar */}
@@ -3156,7 +3274,8 @@ function CarrierCard({
   onReview: () => void;
 }) {
   const weight = Number(form.weightKg || 0);
-  const capacityOk = !weight || carrier.vehicle.capacity >= weight;
+  const capacityEvaluable = weight > 0 && carrier.vehicle.capacity > 0;
+  const capacityOk = !capacityEvaluable || carrier.vehicle.capacity >= weight;
   const selectedExtraServices = Array.isArray(form.extraServices) ? form.extraServices : [];
   const insuranceNeeded = form.extras.sigorta
     || selectedExtraServices.includes('Ek sigorta')
@@ -3188,7 +3307,7 @@ function CarrierCard({
     || selectedExtraServices.includes('Ambalajlama');
   const hasPackaging = (carrier.badges || []).some((b) => ['Profesyonel', 'Altın Taşıyıcı'].includes(b));
   const extrasOk = (!wantsPackaging || hasPackaging) && (!form.extras.sigorta || hasInsurance);
-  const allCompatible = originMatch && scopeOk && capacityOk && insuranceOk && extrasOk;
+  const allCompatible = originMatch && scopeOk && (capacityOk || !capacityEvaluable) && insuranceOk && extrasOk;
   const selectBtn = (selected: boolean): React.CSSProperties => ({
     display: 'inline-flex',
     alignItems: 'center',
@@ -3208,7 +3327,9 @@ function CarrierCard({
   const compatChips = [
     { ok: originMatch, label: routeLabel },
     { ok: scopeOk, label: 'Kapsam uygun' },
-    { ok: capacityOk, label: 'Kapasite yeterli' },
+    ...(capacityEvaluable
+      ? [{ ok: capacityOk, label: capacityOk ? 'Kapasite yeterli' : `Kapasite yetersiz (${carrier.vehicle.capacity.toLocaleString('tr-TR')} kg)` }]
+      : []),
     { ok: insuranceOk, label: 'Sigorta uygun' },
     { ok: extrasOk, label: 'Ekler uyumlu' },
   ];

@@ -1,7 +1,7 @@
 import { MatchingService } from '../application/services/MatchingService';
 import { Carrier, CarrierApprovalState } from '../domain/entities/Carrier';
 import { ExtraServiceLoadType } from '../domain/entities/ExtraServiceApplicability';
-import { Shipment, ShipmentCategory } from '../domain/entities/Shipment';
+import { DateFlexibility, Shipment, ShipmentCategory } from '../domain/entities/Shipment';
 
 function buildCarrier(overrides: Partial<Carrier> = {}): Carrier {
   return {
@@ -196,5 +196,114 @@ describe('MatchingService MVP hardening', () => {
     const reason = (service as any).getMismatchReason(shipment, carrier);
 
     expect(reason).toBe('extra_service_mismatch');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tarih esnekliği — MatchingService birim testleri (FAZ 2.2)
+// ---------------------------------------------------------------------------
+describe('MatchingService — tarih esnekliği', () => {
+  let service: MatchingService;
+
+  beforeEach(() => {
+    service = new MatchingService();
+  });
+
+  // Senaryo 1: ana regresyon
+  test('Senaryo 1 — Hedef 29.06, esneklik ±3, nakliyeci 01.07 müsait → eşleşir', () => {
+    const carrier = buildCarrier({ activity: { availableDates: ['2026-07-01'] } as any });
+    const shipment = buildShipment({
+      shipmentDate: new Date('2026-06-29T12:00:00.000Z'),
+      dateFlexibility: DateFlexibility.PLUS_MINUS_3_DAYS,
+    });
+    expect(service.isShipmentMatchingCarrier(shipment, carrier)).toBe(true);
+  });
+
+  // Senaryo 2: alt sınır inclusive
+  test('Senaryo 2 — Hedef 29.06, esneklik ±3, nakliyeci 26.06 (alt sınır) müsait → eşleşir', () => {
+    const carrier = buildCarrier({ activity: { availableDates: ['2026-06-26'] } as any });
+    const shipment = buildShipment({
+      shipmentDate: new Date('2026-06-29T12:00:00.000Z'),
+      dateFlexibility: DateFlexibility.PLUS_MINUS_3_DAYS,
+    });
+    expect(service.isShipmentMatchingCarrier(shipment, carrier)).toBe(true);
+  });
+
+  // Senaryo 3: üst sınır inclusive
+  test('Senaryo 3 — Hedef 29.06, esneklik ±3, nakliyeci 02.07 (üst sınır) müsait → eşleşir', () => {
+    const carrier = buildCarrier({ activity: { availableDates: ['2026-07-02'] } as any });
+    const shipment = buildShipment({
+      shipmentDate: new Date('2026-06-29T12:00:00.000Z'),
+      dateFlexibility: DateFlexibility.PLUS_MINUS_3_DAYS,
+    });
+    expect(service.isShipmentMatchingCarrier(shipment, carrier)).toBe(true);
+  });
+
+  // Senaryo 4: pencere dışı
+  test('Senaryo 4 — Hedef 29.06, esneklik ±3, nakliyeci 03.07 (pencere dışı) → eşleşmez', () => {
+    const carrier = buildCarrier({ activity: { availableDates: ['2026-07-03'] } as any });
+    const shipment = buildShipment({
+      shipmentDate: new Date('2026-06-29T12:00:00.000Z'),
+      dateFlexibility: DateFlexibility.PLUS_MINUS_3_DAYS,
+    });
+    expect(service.isShipmentMatchingCarrier(shipment, carrier)).toBe(false);
+  });
+
+  // Senaryo 5: esneklik yok
+  test('Senaryo 5 — Hedef 29.06, esneklik yok, nakliyeci 01.07 müsait → eşleşmez', () => {
+    const carrier = buildCarrier({ activity: { availableDates: ['2026-07-01'] } as any });
+    const shipment = buildShipment({
+      shipmentDate: new Date('2026-06-29T12:00:00.000Z'),
+      dateFlexibility: DateFlexibility.EXACT,
+    });
+    expect(service.isShipmentMatchingCarrier(shipment, carrier)).toBe(false);
+  });
+
+  // Senaryo 6: dedupe — birden fazla tarih olsa da bir nakliyeci
+  test('Senaryo 6 — Nakliyeci pencerede 3 günde müsait; isShipmentMatchingCarrier true döner (tek eşleşme)', () => {
+    const carrier = buildCarrier({
+      activity: { availableDates: ['2026-06-29', '2026-06-30', '2026-07-01'] } as any,
+    });
+    const shipment = buildShipment({
+      shipmentDate: new Date('2026-06-29T12:00:00.000Z'),
+      dateFlexibility: DateFlexibility.PLUS_MINUS_3_DAYS,
+    });
+    expect(service.isShipmentMatchingCarrier(shipment, carrier)).toBe(true);
+  });
+
+  // Senaryo 7: diğer filtreler
+  test('Senaryo 7 — Tarih aralığında müsait ama yük tipi uyumsuz → eşleşmez', () => {
+    const carrier = buildCarrier({
+      loadTypeCapabilities: [] as any, // HOME capability yok
+      activity: { availableDates: ['2026-07-01'] } as any,
+    });
+    const shipment = buildShipment({
+      shipmentDate: new Date('2026-06-29T12:00:00.000Z'),
+      dateFlexibility: DateFlexibility.PLUS_MINUS_3_DAYS,
+      shipmentCategory: ShipmentCategory.HOME_MOVE,
+    });
+    expect(service.isShipmentMatchingCarrier(shipment, carrier)).toBe(false);
+  });
+
+  // Senaryo 8: yıl geçişi
+  test('Senaryo 8 — Hedef 31.12.2026, esneklik ±2, nakliyeci 01.01.2027 müsait → eşleşir', () => {
+    const carrier = buildCarrier({ activity: { availableDates: ['2027-01-01'] } as any });
+    const shipment = buildShipment({
+      shipmentDate: new Date('2026-12-31T12:00:00.000Z'),
+      dateFlexibility: DateFlexibility.PLUS_MINUS_3_DAYS,
+    });
+    expect(service.isShipmentMatchingCarrier(shipment, carrier)).toBe(true);
+  });
+
+  // Ek: availableDates JSON string olarak saklansa da (DB formatı) parseAvailableDates doğru çalışmalı
+  test('availableDates JSON string formatında saklanmış olsa da tarih esnekliği doğru çalışır', () => {
+    const carrier = buildCarrier({
+      activity: { availableDates: '["2026-07-01"]' } as any,
+    });
+    const shipment = buildShipment({
+      shipmentDate: new Date('2026-06-29T12:00:00.000Z'),
+      dateFlexibility: DateFlexibility.PLUS_MINUS_3_DAYS,
+    });
+    expect(service.isShipmentMatchingCarrier(shipment, carrier)).toBe(true);
   });
 });
