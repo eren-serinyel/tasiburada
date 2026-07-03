@@ -19,6 +19,7 @@ import { CarrierApprovalService } from './carrier/CarrierApprovalService';
 import { ContactSafetyService } from './contact-safety/ContactSafetyService';
 import * as bcrypt from 'bcryptjs';
 import { NotFoundError, ValidationError } from '../../domain/errors/AppError';
+import { In } from 'typeorm';
 
 export interface ContactFilterLogDto {
   id: number;
@@ -423,7 +424,12 @@ export class AdminService {
     const shipmentRepo = AppDataSource.getRepository(Shipment);
     const query = shipmentRepo
       .createQueryBuilder('shipment')
-      .leftJoinAndSelect('shipment.customer', 'customer');
+      .select('shipment.id', 'id')
+      .addSelect('shipment.createdAt', 'createdAt');
+
+    if (search) {
+      query.leftJoin('shipment.customer', 'customer');
+    }
 
     if (status && status !== 'all') {
       if (status === 'active') {
@@ -450,8 +456,22 @@ export class AdminService {
       );
     }
 
-    query.orderBy('shipment.createdAt', 'DESC').take(limit).skip((page - 1) * limit);
-    const [shipments, total] = await query.getManyAndCount();
+    const total = await query.clone().getCount();
+    const rows = await query
+      .orderBy('shipment.createdAt', 'DESC')
+      .limit(limit)
+      .offset((page - 1) * limit)
+      .getRawMany<{ id: string }>();
+    const ids = rows.map((row) => row.id).filter(Boolean);
+
+    const shipments = ids.length
+      ? await shipmentRepo.find({
+          where: { id: In(ids) },
+          relations: ['customer'],
+        })
+      : [];
+    const order = new Map(ids.map((id, index) => [id, index]));
+    shipments.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
 
     return {
       shipments,

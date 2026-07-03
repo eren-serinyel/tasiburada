@@ -12,6 +12,7 @@ import { getLastEmail, setLastEmail } from '@/lib/storage';
 import { useAuth } from '@/context/AuthContext';
 import { apiClient } from '@/lib/apiClient';
 import { useToast } from '@/hooks/use-toast';
+import { isSafeRelativePath } from '@/lib/guestOfferDraft';
 
 // API Base URL - using Vite proxy
 const API_BASE_URL = '/api/v1';
@@ -101,7 +102,7 @@ export default function Login() {
         toast({ title: 'Giriş başarılı', description: 'Yönlendiriliyor...' });
         setTimeout(() => {
           const redirect = searchParams.get('redirect');
-          navigate(redirect || '/home');
+          navigate(isSafeRelativePath(redirect) ? redirect : '/home');
         }, 1000);
       } else {
         const status = response.status;

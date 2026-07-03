@@ -3,13 +3,21 @@ import path from 'node:path';
 
 describe('offer request login gate frontend contract', () => {
   const filePath = path.resolve(process.cwd(), 'shadcn-ui/src/components/OfferRequestForm.tsx');
+  const draftHelperPath = path.resolve(process.cwd(), 'shadcn-ui/src/lib/guestOfferDraft.ts');
   const source = fs.readFileSync(filePath, 'utf8');
+  const draftHelper = fs.readFileSync(draftHelperPath, 'utf8');
 
   test('guest draft flow allows form selection and gates only publish', () => {
-    expect(source).toContain("const DRAFT_KEY = 'tasiburada:shipment-draft:v1';");
+    expect(draftHelper).toContain("export const GUEST_OFFER_DRAFT_KEY = 'tasiburadan:guest-offer-draft:v1';");
+    expect(draftHelper).toContain('export const GUEST_OFFER_DRAFT_TTL_MS = 24 * 60 * 60 * 1000;');
+    expect(draftHelper).toContain('window.sessionStorage');
+    expect(draftHelper).toContain('indexedDB.open');
+    expect(draftHelper).toContain("export const LEGACY_SHIPMENT_DRAFT_KEY = 'tasiburada:shipment-draft:v1';");
     expect(source).toContain('const requireLoginForSelection = (_message?: string) => true;');
-    expect(source).toContain("localStorage.setItem(DRAFT_KEY, JSON.stringify({ step, data, savedAt: Date.now() }))");
-    expect(source).toContain('if (!isLoggedIn) { setShowLoginModal(true); return; }');
+    expect(source).toContain('await saveCurrentGuestDraft({ markIntent: true });');
+    expect(source).toContain("params.set('resumeGuestDraft', '1');");
+    expect(source).toContain("searchParams.get('resumeGuestDraft') === '1'");
+    expect(source).toContain('setShowLoginModal(true);');
     expect(source).toContain('reason=shipment-draft');
   });
 
@@ -31,15 +39,22 @@ describe('offer request login gate frontend contract', () => {
 
   test('step 4 no longer renders duplicate general extra-service picker', () => {
     expect(source).not.toContain('Ek hizmet ara ve ekle');
-    expect(source).not.toContain('Aradığınız hizmet yok mu? Özel istek ekleyin');
+    expect(source).not.toContain('Aradiginiz hizmet yok mu? Ozel istek ekleyin');
     expect(source).not.toContain('const toggleExtraService = (id: string)');
   });
 
   test('guest publish CTA stays active and explains login requirement', () => {
-    expect(source).toContain('Giriş yap ve yayınla');
-    expect(source).toContain('Talebinizi yayınlamak için giriş yapmanız gerekir.');
-    expect(source).toContain('Yayınlamak için giriş gerekir. Bilgileriniz kaybolmaz.');
     expect(source).toContain('disabled={submitting}');
+    expect(source).toContain('disabled={Boolean(authRedirecting)}');
     expect(source).not.toContain('disabled={submitting || !canPublish}');
+  });
+
+  test('auth pages only follow safe relative redirects', () => {
+    const login = fs.readFileSync(path.resolve(process.cwd(), 'shadcn-ui/src/pages/Login.tsx'), 'utf8');
+    const register = fs.readFileSync(path.resolve(process.cwd(), 'shadcn-ui/src/pages/RegisterUser.tsx'), 'utf8');
+
+    expect(draftHelper).toContain('export const isSafeRelativePath');
+    expect(login).toContain("navigate(isSafeRelativePath(redirect) ? redirect : '/home');");
+    expect(register).toContain("navigate(isSafeRelativePath(redirect) ? redirect : '/');");
   });
 });

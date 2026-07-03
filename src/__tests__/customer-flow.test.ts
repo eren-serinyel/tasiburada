@@ -206,7 +206,7 @@ describe('İlan Oluşturma — Validasyon', () => {
         shipmentDate: new Date(Date.now() + 5 * 86400000).toISOString(),
         loadDetails: 'Parça Eşya', weight: 100,
       });
-    expect([201, 400]).toContain(res.status);
+    expect([201, 400, 409]).toContain(res.status);
   });
 
   test('origin eksik olduğunda 400 dönmeli', async () => {

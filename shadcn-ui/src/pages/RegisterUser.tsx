@@ -4,10 +4,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Shield, Clock, Star, Eye, EyeOff, Loader2 } from 'lucide-react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useToast } from '@/hooks/use-toast';
 import { apiClient } from '@/lib/apiClient';
 import { useAuth } from '@/context/AuthContext';
+import { isSafeRelativePath } from '@/lib/guestOfferDraft';
 
 const API_BASE_URL = '/api/v1';
 
@@ -42,6 +43,7 @@ export default function RegisterUser() {
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { toast } = useToast();
   const { login } = useAuth();
 
@@ -117,7 +119,8 @@ export default function RegisterUser() {
           title: 'Kayıt başarılı!',
           description: 'E-posta adresinize doğrulama linki gönderdik.',
         });
-        navigate('/');
+        const redirect = searchParams.get('redirect');
+        navigate(isSafeRelativePath(redirect) ? redirect : '/');
       } else {
         toast({
           title: 'Hata',

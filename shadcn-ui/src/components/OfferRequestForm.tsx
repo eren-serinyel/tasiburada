@@ -31,8 +31,18 @@ import { isAuthenticated as hasValidAuthSession } from '@/lib/auth';
 import { apiClient } from '@/lib/apiClient';
 import { mapPlaceTypeToConverterPropertyType } from '@/lib/placeType';
 import VolumeCalculatorModal from '@/components/converter/VolumeCalculatorModal';
-import type { VolumeCalculatorInitialValues } from '@/components/converter/VolumeCalculatorModal';
+import type { VolumeCalculatorDraftValues, VolumeCalculatorInitialValues } from '@/components/converter/VolumeCalculatorModal';
 import type { EstimateConverterResponse } from '@/lib/converterApi';
+import {
+  clearGuestOfferDraft,
+  clearGuestOfferPendingIntent,
+  hasGuestOfferPendingIntent,
+  loadGuestOfferDraft,
+  loadGuestOfferFiles,
+  markGuestOfferPendingIntent,
+  saveGuestOfferDraft,
+  saveGuestOfferFiles,
+} from '@/lib/guestOfferDraft';
 import {
   getExtraServiceLoadType,
   estimateServicesTotal,
@@ -71,6 +81,40 @@ type SelectedCarrierServices = {
   carrierId: string;
   carrierName: string;
   services: CarrierDetailServiceGroup[];
+};
+
+const FORM_DRAFT_FIELDS = [
+  'originCity',
+  'originDistrict',
+  'originAddressText',
+  'destinationCity',
+  'destinationDistrict',
+  'destinationAddressText',
+  'date',
+  'scope',
+  'transportType',
+  'placeType',
+  'loadType',
+  'weightKg',
+  'floor',
+  'hasElevator',
+  'dateFlexibility',
+  'timeWindow',
+  'extras',
+  'serviceOptions',
+  'extraServices',
+  'note',
+] as const;
+
+const parseCalendarDate = (value: string) => {
+  const [year, month, day] = value.split('-').map(Number);
+  if (!year || !month || !day) return null;
+  return new Date(year, month - 1, day);
+};
+
+const formatCalendarDate = (value: string) => {
+  const date = parseCalendarDate(value);
+  return date ? date.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' }) : value;
 };
 
 const normalizeServiceName = (name: string) => name.trim().replace(/\s+/g, ' ').toLocaleLowerCase('tr-TR');
@@ -116,6 +160,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
   const [loadingResults, setLoadingResults] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [showSummaryModal, setShowSummaryModal] = useState(false);
+  const [authRedirecting, setAuthRedirecting] = useState<null | 'login' | 'register'>(null);
   const [carriers, setCarriers] = useState<Carrier[]>([]);
   const [savedAddresses, setSavedAddresses] = useState<CustomerAddress[]>([]);
   const [needsPhone, setNeedsPhone] = useState(false);
@@ -124,8 +169,12 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
   const [inviteCarrierName, setInviteCarrierName] = useState<string | null>(null);
   const [isVolumeCalculatorOpen, setIsVolumeCalculatorOpen] = useState(false);
   const [appliedConverterSummary, setAppliedConverterSummary] = useState<ConverterAppliedSummary | null>(null);
+  const [converterDraftValues, setConverterDraftValues] = useState<VolumeCalculatorDraftValues | null>(null);
   const [weightEditMode, setWeightEditMode] = useState(false);
   const landingEstimateAppliedRef = useRef(false);
+  const draftRestoreRef = useRef(false);
+  const restoredDraftRef = useRef(false);
+  const carrierReconcileRef = useRef(false);
   const [availableExtraServices, setAvailableExtraServices] = useState<ExtraServiceOption[]>([]);
   const [selectedCarrierIds, setSelectedCarrierIds] = useState<string[]>([]);
   const [reviewCarrierId, setReviewCarrierId] = useState<string | null>(null);
@@ -160,40 +209,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
     note: '',
   });
 
-  // Misafir taslagi: form localStorage'da saklanir, login donusunde restore edilir.
-  const DRAFT_KEY = 'tasiburada:shipment-draft:v1';
-  const DRAFT_TTL_MS = 24 * 60 * 60 * 1000; // 24 saat
   const VOLUME_ESTIMATE_DRAFT_KEY = 'tasiburada:volume-calculator-estimate:v1';
-
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(DRAFT_KEY);
-      if (!raw) return;
-      const draft = JSON.parse(raw);
-      if (!draft.data || Date.now() - (draft.savedAt ?? 0) > DRAFT_TTL_MS) {
-        localStorage.removeItem(DRAFT_KEY);
-        return;
-      }
-      const { vehicleType: _vehicleType, insurance: _insurance, ...data } = draft.data;
-      setForm(prev => ({ ...prev, ...data, photos: [] }));
-      if (draft.step === 2 || draft.step === 3 || draft.step === 4) setStep(Math.min(draft.step, 4) as Step);
-    } catch {
-      localStorage.removeItem(DRAFT_KEY);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    const t = setTimeout(() => {
-      try {
-        const { photos: _photos, ...data } = form;
-        localStorage.setItem(DRAFT_KEY, JSON.stringify({ step, data, savedAt: Date.now() }));
-      } catch {
-        // localStorage quota/private mode errors should not block the form.
-      }
-    }, 400);
-    return () => clearTimeout(t);
-  }, [form, step]);
 
   const [availabilitySummary, setAvailabilitySummary] = useState<{ total: number; available: number } | null>(null);
   const [isCheckingAvailability, setIsCheckingAvailability] = useState(false);
@@ -423,8 +439,168 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
   const handleChange = (field: string, value: any) => setForm((f) => ({ ...f, [field]: value }));
 
   // Misafir kullanici formu serbestce doldurabilir; giris yalnizca
-  // yayinlama aninda istenir. Taslak localStorage'da saklanir.
+  // yayinlama aninda istenir. Taslak auth akisi icin sessionStorage/IndexedDB ile saklanir.
   const requireLoginForSelection = (_message?: string) => true;
+
+  const getResumeReturnPath = () => {
+    const params = new URLSearchParams();
+    if (typeParam) params.set('type', typeParam);
+    if (carrierIdParam) params.set('carrierId', carrierIdParam);
+    params.set('resumeGuestDraft', '1');
+    return `/teklif-talebi?${params.toString()}`;
+  };
+
+  const hasMeaningfulDraftData = () => Boolean(
+    form.originCity ||
+    form.originDistrict ||
+    form.originAddressText ||
+    form.destinationCity ||
+    form.destinationDistrict ||
+    form.destinationAddressText ||
+    form.date ||
+    form.transportType ||
+    form.placeType ||
+    form.loadType ||
+    form.weightKg ||
+    form.floor ||
+    form.hasElevator ||
+    form.timeWindow ||
+    form.note ||
+    form.photos.length ||
+    selectedCarrierIds.length ||
+    Object.values(requestedServicesByCarrier).some((item) => item.catalogServiceIds.length || item.customServiceIds.length) ||
+    converterDraftValues ||
+    appliedConverterSummary
+  );
+
+  const getSafeRestoreTarget = (draftStep: number, showSummary: boolean, data: Record<string, unknown>) => {
+    const routeReady = Boolean(data.originCity && data.originDistrict && data.destinationCity && data.destinationDistrict && data.date && data.transportType);
+    const hasLoadDetail = Boolean(data.placeType || data.loadType || data.weightKg || appliedConverterSummary);
+    if (!routeReady) return { nextStep: 1 as Step, nextSummary: false };
+    if (showSummary && hasLoadDetail) return { nextStep: 4 as Step, nextSummary: true };
+    const boundedStep = ([1, 2, 3, 4].includes(draftStep) ? draftStep : 1) as Step;
+    if (boundedStep >= 3 && !hasLoadDetail) return { nextStep: 2 as Step, nextSummary: false };
+    return { nextStep: boundedStep, nextSummary: false };
+  };
+
+  const saveCurrentGuestDraft = async ({ markIntent = false }: { markIntent?: boolean } = {}) => {
+    const formData = FORM_DRAFT_FIELDS.reduce<Record<string, unknown>>((acc, field) => {
+      acc[field] = (form as Record<string, unknown>)[field];
+      return acc;
+    }, {});
+
+    await saveGuestOfferFiles(form.photos);
+    const draft = saveGuestOfferDraft({
+      activeStep: step,
+      showSummaryModal,
+      returnPath: getResumeReturnPath(),
+      pendingAction: 'submit-offer-request',
+      formData,
+      converterData: {
+        draftValues: converterDraftValues,
+        appliedSummary: appliedConverterSummary,
+      },
+      selectedCarrierIds,
+      requestedServicesByCarrier,
+      expandedCarrierServices,
+      showAllCarrierServices,
+      inviteCarrierId,
+      inviteCarrierName,
+    });
+
+    if (markIntent) markGuestOfferPendingIntent('submit-offer-request');
+    return draft;
+  };
+
+  useEffect(() => {
+    if (draftRestoreRef.current) return;
+    draftRestoreRef.current = true;
+
+    const shouldResume = searchParams.get('resumeGuestDraft') === '1' || hasGuestOfferPendingIntent();
+    if (!shouldResume) {
+      loadGuestOfferDraft();
+      return;
+    }
+
+    const draft = loadGuestOfferDraft();
+    if (!draft) {
+      clearGuestOfferPendingIntent();
+      return;
+    }
+
+    const restoredFormData = FORM_DRAFT_FIELDS.reduce<Record<string, unknown>>((acc, field) => {
+      if (Object.prototype.hasOwnProperty.call(draft.formData, field)) {
+        acc[field] = draft.formData[field];
+      }
+      return acc;
+    }, {});
+    const converterData = draft.converterData as {
+      draftValues?: VolumeCalculatorDraftValues | null;
+      appliedSummary?: ConverterAppliedSummary | null;
+    } | null | undefined;
+    const { nextStep, nextSummary } = getSafeRestoreTarget(draft.activeStep, Boolean(draft.showSummaryModal), restoredFormData);
+
+    setForm(prev => ({ ...prev, ...restoredFormData, photos: [] }));
+    setConverterDraftValues(converterData?.draftValues ?? null);
+    setAppliedConverterSummary(converterData?.appliedSummary ?? null);
+    setSelectedCarrierIds(Array.isArray(draft.selectedCarrierIds) ? draft.selectedCarrierIds : []);
+    setRequestedServicesByCarrier((draft.requestedServicesByCarrier as RequestedCarrierServices | undefined) ?? {});
+    setExpandedCarrierServices(draft.expandedCarrierServices ?? {});
+    setShowAllCarrierServices(draft.showAllCarrierServices ?? {});
+    setInviteCarrierId(draft.inviteCarrierId ?? null);
+    setInviteCarrierName(draft.inviteCarrierName ?? null);
+    setStep(nextStep);
+    setShowSummaryModal(nextSummary);
+    restoredDraftRef.current = true;
+
+    loadGuestOfferFiles()
+      .then((files) => {
+        if (files.length) setForm(prev => ({ ...prev, photos: files }));
+      })
+      .catch(() => {
+        toast({
+          title: 'FotoÄŸraflar geri yÃ¼klenemedi',
+          description: 'Form bilgileriniz korundu; fotoÄŸraflarÄ± tekrar ekleyebilirsiniz.',
+          variant: 'destructive',
+        });
+      });
+
+    clearGuestOfferPendingIntent();
+    if (searchParams.get('resumeGuestDraft') === '1') {
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.delete('resumeGuestDraft');
+      const nextSearch = nextParams.toString();
+      navigate(`/teklif-talebi${nextSearch ? `?${nextSearch}` : ''}`, { replace: true });
+    }
+    toast({
+      title: 'Bilgileriniz geri yÃ¼klendi',
+      description: 'Talebinizi kontrol ederek gÃ¶nderebilirsiniz.',
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!hasMeaningfulDraftData()) return;
+    const t = setTimeout(() => {
+      saveCurrentGuestDraft().catch(() => {
+        // Debounced guest draft errors should not interrupt form filling.
+      });
+    }, 400);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    form,
+    step,
+    showSummaryModal,
+    selectedCarrierIds,
+    requestedServicesByCarrier,
+    expandedCarrierServices,
+    showAllCarrierServices,
+    converterDraftValues,
+    appliedConverterSummary,
+    inviteCarrierId,
+    inviteCarrierName,
+  ]);
 
   const converterInitialValues = useMemo<VolumeCalculatorInitialValues>(() => {
     return {
@@ -507,7 +683,11 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
   const maxDateStr = useMemo(() => { const d = new Date(); d.setDate(d.getDate() + 30); return formatDateYYYYMMDD(d); }, []);
   const isDateTooFar = useMemo(() => {
     if (!form.date) return false;
-    try { return new Date(form.date) > new Date(maxDateStr); } catch { return false; }
+    try {
+      const selectedDate = parseCalendarDate(form.date);
+      const maxDate = parseCalendarDate(maxDateStr);
+      return Boolean(selectedDate && maxDate && selectedDate > maxDate);
+    } catch { return false; }
   }, [form.date, maxDateStr]);
 
   const canNextFrom1 = form.originCity && form.originDistrict && form.destinationCity && form.destinationDistrict && form.date && !isDateTooFar && !!form.transportType;
@@ -593,6 +773,27 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
       .filter(Boolean) as Carrier[],
     [carriers, selectedCarrierIds],
   );
+
+  useEffect(() => {
+    if (!restoredDraftRef.current || carrierReconcileRef.current || carriers.length === 0 || selectedCarrierIds.length === 0) return;
+    carrierReconcileRef.current = true;
+    const validIds = new Set(carriers.map(carrier => carrier.id));
+    const nextIds = selectedCarrierIds.filter(id => validIds.has(id));
+    if (nextIds.length === selectedCarrierIds.length) return;
+
+    setSelectedCarrierIds(nextIds);
+    setRequestedServicesByCarrier(prev => {
+      const next: RequestedCarrierServices = {};
+      for (const id of nextIds) {
+        if (prev[id]) next[id] = prev[id];
+      }
+      return next;
+    });
+    toast({
+      title: 'Nakliyeci seÃ§imleri gÃ¼ncellendi',
+      description: 'ArtÄ±k uygun olmayan nakliyeci seÃ§imleri kaldÄ±rÄ±ldÄ±.',
+    });
+  }, [carriers, selectedCarrierIds, toast]);
 
   const toggleCarrierSelection = (carrierId: string) => {
     const removing = selectedCarrierIds.includes(carrierId);
@@ -848,7 +1049,20 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
 
   // Talebi yayınla — nakliyeci seçmeden marketplace'e gönderir
   const publishRequest = async () => {
-    if (!isLoggedIn) { setShowLoginModal(true); return; }
+    if (submitting) return;
+    if (!isLoggedIn) {
+      try {
+        await saveCurrentGuestDraft({ markIntent: true });
+        setShowLoginModal(true);
+      } catch {
+        toast({
+          title: 'Bilgileriniz kaydedilemedi',
+          description: 'LÃ¼tfen tekrar deneyin.',
+          variant: 'destructive',
+        });
+      }
+      return;
+    }
     if (!canPublish) {
       toast({ title: 'Yük detayı gerekli', description: 'Yayınlamadan önce yer tipi seçin veya Hacim Hesapla ile ağırlığı doldurun.', variant: 'destructive' });
       return;
@@ -918,7 +1132,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
         } else {
           toast({ title: 'Talep yayınlandı!', description: 'Nakliyecilerden teklifler gelmeye başlayacak.' });
         }
-        localStorage.removeItem(DRAFT_KEY);
+        clearGuestOfferDraft();
         navigate('/ilanlarim');
       } else {
         console.error('Shipment create failed:', {
@@ -970,6 +1184,26 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
 
   const closeLoginModal = () => {
     setShowLoginModal(false);
+  };
+
+  const handleAuthRedirect = async (target: 'login' | 'register') => {
+    if (authRedirecting) return;
+    setAuthRedirecting(target);
+    try {
+      await saveCurrentGuestDraft({ markIntent: true });
+      const redirect = encodeURIComponent(getResumeReturnPath());
+      const authPath = target === 'login'
+        ? `/giris?redirect=${redirect}&reason=shipment-draft`
+        : `/musteri-kayit?redirect=${redirect}&reason=shipment-draft`;
+      navigate(authPath);
+    } catch {
+      setAuthRedirecting(null);
+      toast({
+        title: 'Bilgileriniz kaydedilemedi',
+        description: 'LÃ¼tfen tekrar deneyin.',
+        variant: 'destructive',
+      });
+    }
   };
 
   /* ── step data ── */
@@ -2155,7 +2389,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
                     <div style={{ borderTop: '1px solid var(--tb-border)', paddingTop: '14px', marginTop: '14px' }}>
                       <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--tb-ink-900)' }}>
                         <CalendarDays style={{ width: '14px', height: '14px', verticalAlign: '-2px', marginRight: '6px' }} />
-                        {new Date(form.date).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' })}
+                        {formatCalendarDate(form.date)}
                       </span>
                     </div>
                   )}
@@ -2361,7 +2595,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
                   {form.date && (
                     <div style={{ marginTop: '8px', fontSize: '12px', color: 'var(--tb-ink-500)', display: 'flex', alignItems: 'center', gap: '5px' }}>
                       <CalendarDays style={{ width: '13px', height: '13px' }} />
-                      {new Date(form.date).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' })}
+                      {formatCalendarDate(form.date)}
                     </div>
                   )}
                 </div>
@@ -2526,22 +2760,24 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
 
                 <div style={{ marginTop: '24px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
                   <button
-                    onClick={() => navigate(`/giris?redirect=${encodeURIComponent(window.location.pathname + window.location.search)}&reason=shipment-draft`)}
+                    onClick={() => handleAuthRedirect('login')}
+                    disabled={Boolean(authRedirecting)}
                     style={{
                       width: '100%', padding: '13px', border: 'none', borderRadius: '12px',
                       background: 'linear-gradient(135deg, var(--tb-brand-600) 0%, var(--tb-brand-700) 100%)',
-                      color: 'white', fontSize: '15px', fontWeight: 700, cursor: 'pointer',
+                      color: 'white', fontSize: '15px', fontWeight: 700, cursor: authRedirecting ? 'not-allowed' : 'pointer',
                       boxShadow: '0 4px 14px rgba(37,99,235,0.35)',
                     }}
                   >
                     Giriş Yap
                   </button>
                   <button
-                    onClick={() => navigate(`/musteri-kayit?redirect=${encodeURIComponent(window.location.pathname + window.location.search)}`)}
+                    onClick={() => handleAuthRedirect('register')}
+                    disabled={Boolean(authRedirecting)}
                     style={{
                       width: '100%', padding: '12px', borderRadius: '12px',
                       border: '1.5px solid var(--tb-border)', background: 'white',
-                      color: 'var(--tb-ink-700)', fontSize: '15px', fontWeight: 600, cursor: 'pointer',
+                      color: 'var(--tb-ink-700)', fontSize: '15px', fontWeight: 600, cursor: authRedirecting ? 'not-allowed' : 'pointer',
                     }}
                   >
                     Üye Ol
@@ -2812,6 +3048,8 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
         onApplyEstimate={applyConverterEstimateToForm}
         loadType={currentExtraServiceLoadType}
         initialValues={converterInitialValues}
+        draftValues={converterDraftValues}
+        onDraftChange={setConverterDraftValues}
         applyLabel="Bu bilgileri talebime ekle"
       />
     </div>

@@ -33,12 +33,22 @@ export interface VolumeCalculatorInitialValues {
   propertyType?: ConverterPropertyType;
 }
 
+export interface VolumeCalculatorDraftValues {
+  moveType: ConverterMoveType;
+  propertyType: ConverterPropertyType;
+  selectedItems: Record<string, number>;
+  customItems: ConverterCustomItemInput[];
+  result: EstimateConverterResponse | null;
+}
+
 interface VolumeCalculatorModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onApplyEstimate: (result: EstimateConverterResponse) => void;
   loadType?: ExtraServiceLoadType | null;
   initialValues?: VolumeCalculatorInitialValues;
+  draftValues?: VolumeCalculatorDraftValues | null;
+  onDraftChange?: (draft: VolumeCalculatorDraftValues) => void;
   applyLabel?: string;
 }
 
@@ -108,6 +118,8 @@ export default function VolumeCalculatorModal({
   onApplyEstimate,
   loadType,
   initialValues,
+  draftValues,
+  onDraftChange,
   applyLabel = 'Bu bilgileri talebime ekle',
 }: VolumeCalculatorModalProps) {
   const [moveType, setMoveType] = useState<ConverterMoveType>('household');
@@ -137,16 +149,24 @@ export default function VolumeCalculatorModal({
   useEffect(() => {
     if (!open) return;
 
-    setMoveType(initialValues?.moveType ?? 'household');
-    setPropertyType(initialValues?.propertyType ?? '2+1');
-    setCustomItems([]);
+    setMoveType(draftValues?.moveType ?? initialValues?.moveType ?? 'household');
+    setPropertyType(draftValues?.propertyType ?? initialValues?.propertyType ?? '2+1');
+    setSelectedItems(draftValues?.selectedItems ?? {});
+    setCustomItems(draftValues?.customItems ?? []);
     setShowCustomForm(false);
     setCustomName('');
     setCustomSizeClass(null);
     setCustomQty(0);
-    setResult(null);
+    setResult(draftValues?.result ?? null);
     setErrorMessage('');
-  }, [open, initialValues]);
+    // Hydrate only when the dialog opens; parent draft updates should not reset edits in progress.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  useEffect(() => {
+    if (!open || !onDraftChange) return;
+    onDraftChange({ moveType, propertyType, selectedItems, customItems, result });
+  }, [customItems, moveType, onDraftChange, open, propertyType, result, selectedItems]);
 
   useEffect(() => {
     if (!open) return;
