@@ -38,6 +38,9 @@ export class CustomerAddress {
   @Column({ type: 'boolean', default: false })
   isDefault: boolean;
 
+  @Column({ type: 'varchar', length: 20, nullable: true, default: 'ev' })
+  type: 'ev' | 'ofis' | 'diger' | null;
+
   @CreateDateColumn()
   createdAt: Date;
 }

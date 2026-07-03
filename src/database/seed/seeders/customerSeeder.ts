@@ -69,17 +69,21 @@ export async function seedCustomers(): Promise<Customer[]> {
         city,
         district,
         isDefault: true,
+        type: 'ev',
       }));
 
       if (chance(isFixtureCustomer ? 0.65 : 0.3)) {
         const secondaryCity = chance(0.7) ? city : randomWeightedCity();
+        const secondaryLabel = chance(0.5) ? 'İş' : 'Yazlık';
+        const isOffice = secondaryLabel === 'İş';
         await addressRepo.save(addressRepo.create({
           customerId: savedCustomer.id,
-          label: chance(0.5) ? 'İş' : 'Yazlık',
+          label: secondaryLabel,
           addressLine1: `${randomFrom(['Mehmet Akif Sok.', 'Barış Cad.', 'Lale Sok.', 'Orkide Apt.'])} No:${randomInt(1, 90)}`,
           city: secondaryCity,
           district: randomDistrict(secondaryCity),
           isDefault: false,
+          type: isOffice ? 'ofis' : 'diger',
         }));
       }
     }

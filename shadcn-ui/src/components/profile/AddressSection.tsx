@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -18,10 +18,24 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { Plus, PencilLine, Trash2, Star, Loader2 } from 'lucide-react';
+import { Plus, PencilLine, Trash2, Star, Loader2, Home, Building2, MapPin } from 'lucide-react';
 import { apiClient } from '@/lib/apiClient';
 import { CITIES_TR, getDistrictsForCity } from '@/lib/locations';
 import type { SectionProps } from './types';
+
+type AddressType = 'ev' | 'ofis' | 'diger';
+
+const ADDRESS_TYPE_LABELS: Record<AddressType, string> = {
+  ev: 'Ev',
+  ofis: 'Ofis',
+  diger: 'Diğer',
+};
+
+const ADDRESS_TYPE_ICONS: Record<AddressType, React.ElementType> = {
+  ev: Home,
+  ofis: Building2,
+  diger: MapPin,
+};
 
 interface CustomerAddress {
   id: number;
@@ -31,6 +45,7 @@ interface CustomerAddress {
   city: string;
   district: string;
   isDefault: boolean;
+  type?: AddressType | null;
 }
 
 type FormData = {
@@ -40,6 +55,7 @@ type FormData = {
   city: string;
   district: string;
   isDefault: boolean;
+  type: AddressType;
 };
 
 const EMPTY_FORM: FormData = {
@@ -49,6 +65,7 @@ const EMPTY_FORM: FormData = {
   city: '',
   district: '',
   isDefault: false,
+  type: 'ev',
 };
 
 export default function AddressSection({ user: _user }: SectionProps) {
@@ -100,6 +117,7 @@ export default function AddressSection({ user: _user }: SectionProps) {
       city: a.city,
       district: a.district,
       isDefault: a.isDefault,
+      type: (a.type as AddressType) ?? 'ev',
     });
     setModalOpen(true);
   };
@@ -127,6 +145,7 @@ export default function AddressSection({ user: _user }: SectionProps) {
         city: form.city,
         district: form.district,
         isDefault: form.isDefault,
+        type: form.type,
       };
 
       let res: Response;
@@ -210,57 +229,63 @@ export default function AddressSection({ user: _user }: SectionProps) {
             <CardContent className="p-8 text-center text-slate-500">Henüz adres eklemediniz.</CardContent>
           </Card>
         )}
-        {addresses.map((a) => (
-          <Card key={a.id} className="bg-white rounded-2xl shadow-md">
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between flex-wrap gap-2">
-                <div className="flex items-center gap-2">
-                  <CardTitle className="text-slate-800">{a.label || 'Adres'}</CardTitle>
-                  {a.isDefault && <Badge className="bg-green-100 text-green-700 border-green-300">Varsayılan</Badge>}
-                </div>
-                <div className="flex gap-2 flex-wrap">
-                  {!a.isDefault && (
-                    <Button size="sm" variant="outline" onClick={() => handleSetDefault(a.id)}>
-                      <Star className="h-4 w-4 mr-1" /> Varsayılan Yap
-                    </Button>
-                  )}
-                  <Button size="sm" variant="outline" onClick={() => openEdit(a)}>
-                    <PencilLine className="h-4 w-4 mr-1" /> Düzenle
-                  </Button>
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <Button size="sm" variant="destructive">
-                        <Trash2 className="h-4 w-4 mr-1" /> Sil
+        {addresses.map((a) => {
+          const addrType = (a.type as AddressType) ?? 'ev';
+          const TypeIcon = ADDRESS_TYPE_ICONS[addrType] ?? MapPin;
+          return (
+            <Card key={a.id} className="bg-white rounded-2xl shadow-md">
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-2">
+                    <TypeIcon className="h-4 w-4 text-slate-500" />
+                    <CardTitle className="text-slate-800">{a.label || 'Adres'}</CardTitle>
+                    <Badge variant="outline" className="text-xs text-slate-500">{ADDRESS_TYPE_LABELS[addrType]}</Badge>
+                    {a.isDefault && <Badge className="bg-green-100 text-green-700 border-green-300">Varsayılan</Badge>}
+                  </div>
+                  <div className="flex gap-2 flex-wrap">
+                    {!a.isDefault && (
+                      <Button size="sm" variant="outline" onClick={() => handleSetDefault(a.id)}>
+                        <Star className="h-4 w-4 mr-1" /> Varsayılan Yap
                       </Button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>Adresi sil</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          Bu adresi kalıcı olarak silmek istediğinizden emin misiniz?
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>İptal</AlertDialogCancel>
-                        <AlertDialogAction onClick={() => handleDelete(a.id)}>Sil</AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
+                    )}
+                    <Button size="sm" variant="outline" onClick={() => openEdit(a)}>
+                      <PencilLine className="h-4 w-4 mr-1" /> Düzenle
+                    </Button>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button size="sm" variant="destructive">
+                          <Trash2 className="h-4 w-4 mr-1" /> Sil
+                        </Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Adresi sil</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Bu adresi kalıcı olarak silmek istediğinizden emin misiniz?
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>İptal</AlertDialogCancel>
+                          <AlertDialogAction onClick={() => handleDelete(a.id)}>Sil</AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </div>
                 </div>
-              </div>
-            </CardHeader>
-            <CardContent className="grid md:grid-cols-2 gap-4 text-sm">
-              <div>
-                <span className="text-slate-500">Adres:</span>{' '}
-                <span className="text-slate-800">{a.addressLine1}{a.addressLine2 ? `, ${a.addressLine2}` : ''}</span>
-              </div>
-              <div>
-                <span className="text-slate-500">Konum:</span>{' '}
-                <span className="text-slate-800">{a.district}, {a.city}</span>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+              </CardHeader>
+              <CardContent className="grid md:grid-cols-2 gap-4 text-sm">
+                <div>
+                  <span className="text-slate-500">Adres:</span>{' '}
+                  <span className="text-slate-800">{a.addressLine1}{a.addressLine2 ? `, ${a.addressLine2}` : ''}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500">Konum:</span>{' '}
+                  <span className="text-slate-800">{a.district}, {a.city}</span>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
 
       {/* Add / Edit Modal */}
@@ -270,6 +295,19 @@ export default function AddressSection({ user: _user }: SectionProps) {
             <DialogTitle>{editingId ? 'Adresi Düzenle' : 'Yeni Adres Ekle'}</DialogTitle>
           </DialogHeader>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5 py-2">
+            <div className="md:col-span-2">
+              <Label>Adres Tipi</Label>
+              <Select value={form.type} onValueChange={(v) => setForm((p) => ({ ...p, type: v as AddressType }))}>
+                <SelectTrigger className="mt-1">
+                  <SelectValue placeholder="Tip seçin" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ev">Ev</SelectItem>
+                  <SelectItem value="ofis">Ofis</SelectItem>
+                  <SelectItem value="diger">Diğer</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <div className="md:col-span-2">
               <Label>Adres Etiketi (opsiyonel)</Label>
               <Input

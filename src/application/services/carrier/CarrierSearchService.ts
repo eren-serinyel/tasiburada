@@ -21,6 +21,7 @@ export interface CarrierSearchQuery {
 	serviceCity?: string;
 	serviceDistrict?: string;
 	availableDate?: string;
+	dateFlexibility?: string;
 	sortBy?: CarrierSearchSort;
 	limit?: number;
 	offset?: number;
@@ -81,7 +82,8 @@ export class CarrierSearchService {
 		const date = typeof query.date === 'string' ? query.date.trim() : '';
 		const serviceCity = typeof query.serviceCity === 'string' ? query.serviceCity.trim() : undefined;
 		const scopeFilters = this.normalizeScopeValues((query as any).scope ?? (query as any).scopes ?? (query as any).scopeIds);
-		return this.carrierRepository.countByAvailableDate(date, serviceCity || undefined, scopeFilters);
+		const dateWindow = this.buildDateWindow(date, typeof query.dateFlexibility === 'string' ? query.dateFlexibility : undefined);
+		return this.carrierRepository.countByAvailableDate(date, serviceCity || undefined, scopeFilters, dateWindow);
 	}
 
 	private normalizeFilters(query: CarrierSearchQuery | Record<string, unknown>): CarrierSearchFilters {
@@ -173,6 +175,10 @@ export class CarrierSearchService {
 			? true
 			: undefined;
 
+		const availableDate = toText((query as any).availableDate);
+		const dateFlexibilityRaw = toText((query as any).dateFlexibility);
+		const availableDates = availableDate ? this.buildDateWindow(availableDate, dateFlexibilityRaw) : undefined;
+
 		return {
 			city: baseCity,
 			serviceCity,
@@ -185,7 +191,8 @@ export class CarrierSearchService {
 			minCapacityKg: toInt((query as any).minCapacityKg),
 			maxCapacityKg: toInt((query as any).maxCapacityKg),
 			searchText: toText((query as any).searchText),
-			availableDate: toText((query as any).availableDate),
+			availableDate,
+			availableDates,
 			scopeIds,
 			scopeNames,
 			loadTypes: loadTypes.length ? loadTypes : undefined,
@@ -194,6 +201,23 @@ export class CarrierSearchService {
 			limit,
 			offset
 		};
+	}
+
+	private buildDateWindow(baseDate: string, flexibility?: string): string[] {
+		let flexDays = 0;
+		if (flexibility === 'PLUS_MINUS_1_DAY') flexDays = 1;
+		else if (flexibility === 'PLUS_MINUS_3_DAYS') flexDays = 3;
+
+		if (flexDays === 0) return [baseDate];
+
+		const dates: string[] = [];
+		const base = new Date(baseDate + 'T12:00:00Z');
+		for (let offset = -flexDays; offset <= flexDays; offset++) {
+			const d = new Date(base);
+			d.setUTCDate(d.getUTCDate() + offset);
+			dates.push(d.toISOString().slice(0, 10));
+		}
+		return dates;
 	}
 
 	private normalizeScopeValues(value: unknown): Pick<CarrierSearchFilters, 'scopeIds' | 'scopeNames'> {

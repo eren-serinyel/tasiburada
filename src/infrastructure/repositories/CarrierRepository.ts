@@ -17,6 +17,7 @@ export interface CarrierSearchFilters {
   maxCapacityKg?: number;
   searchText?: string;
   availableDate?: string;
+  availableDates?: string[];
   scopeIds?: string[];
   scopeNames?: string[];
   serviceTypeIds?: string[];
@@ -390,7 +391,17 @@ export class CarrierRepository extends BaseRepository<Carrier> {
       }));
     }
 
-    if (filters.availableDate) {
+    if (filters.availableDates && filters.availableDates.length > 0) {
+      qb.andWhere(new Brackets(bqb => {
+        filters.availableDates!.forEach((date, i) => {
+          const param = `flexDate${i}`;
+          bqb.orWhere(
+            `(activity.availableDates IS NOT NULL AND JSON_SEARCH(activity.availableDates, 'one', :${param}) IS NOT NULL)`,
+            { [param]: date }
+          );
+        });
+      }));
+    } else if (filters.availableDate) {
       qb.andWhere(
         "(activity.availableDates IS NOT NULL AND JSON_SEARCH(activity.availableDates, 'one', :availDate) IS NOT NULL)",
         { availDate: filters.availableDate }
@@ -445,7 +456,8 @@ export class CarrierRepository extends BaseRepository<Carrier> {
   async countByAvailableDate(
     date: string,
     serviceCity?: string,
-    scopeFilters?: Pick<CarrierSearchFilters, 'scopeIds' | 'scopeNames'>
+    scopeFilters?: Pick<CarrierSearchFilters, 'scopeIds' | 'scopeNames'>,
+    dateWindow?: string[]
   ): Promise<{ total: number; available: number }> {
     const totalQb = this.repository
       .createQueryBuilder('carrier')
@@ -465,12 +477,18 @@ export class CarrierRepository extends BaseRepository<Carrier> {
     this.applyPublicTrustGate(availableQb);
     this.applyServiceCityFilter(availableQb, serviceCity);
     this.applyScopeFilter(availableQb, scopeFilters);
-    const availableCount = await availableQb
-      .andWhere(
-        "(activity.availableDates IS NOT NULL AND JSON_SEARCH(activity.availableDates, 'one', :date) IS NOT NULL)",
-        { date }
-      )
-      .getCount();
+
+    const dates = dateWindow && dateWindow.length > 0 ? dateWindow : [date];
+    availableQb.andWhere(new Brackets(bqb => {
+      dates.forEach((d, i) => {
+        const param = `countDate${i}`;
+        bqb.orWhere(
+          `(activity.availableDates IS NOT NULL AND JSON_SEARCH(activity.availableDates, 'one', :${param}) IS NOT NULL)`,
+          { [param]: d }
+        );
+      });
+    }));
+    const availableCount = await availableQb.getCount();
 
     return { total: totalCount, available: availableCount };
   }

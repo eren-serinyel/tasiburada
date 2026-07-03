@@ -42,6 +42,9 @@ const normalizeProfileTab = (raw: string | null, isCarrier: boolean): SidebarKey
     hizmetlerim: 'services',
     hizmetler: 'services',
     services: 'services',
+    adreslerim: 'addresses',
+    adresler: 'addresses',
+    addresses: 'addresses',
     guvenlik: 'security',
     güvenlik: 'security',
     security: 'security',
@@ -346,6 +349,7 @@ export default function Profile() {
                 ) : (
                   <>
                     <Item id="account" label="Hesap Bilgileri" icon={User} />
+                    <Item id="addresses" label="Adreslerim" icon={MapPin} />
                     <Item id="security" label="Güvenlik" icon={Lock} />
                   </>
                 )}

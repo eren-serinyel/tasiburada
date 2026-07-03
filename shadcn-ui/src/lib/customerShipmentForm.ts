@@ -153,11 +153,11 @@ export const buildShipmentPayloadFromForm = (
       : undefined;
 
   const originPlaceType = normalizePlaceTypeForBackend(toOptionalString(form.originPlaceType) || toOptionalString(form.placeType));
-  const destinationPlaceType = normalizePlaceTypeForBackend(toOptionalString(form.destinationPlaceType) || toOptionalString(form.placeType));
+  const destinationPlaceType = normalizePlaceTypeForBackend(toOptionalString(form.destinationPlaceType));
   const originFloor = toOptionalNumber(form.originFloor ?? form.floor);
-  const destinationFloor = toOptionalNumber(form.destinationFloor ?? form.floor);
+  const destinationFloor = toOptionalNumber(form.destinationFloor);
   const originHasElevator = toOptionalBoolean(form.originHasElevator) ?? toOptionalBoolean(form.hasElevator);
-  const destinationHasElevator = toOptionalBoolean(form.destinationHasElevator) ?? toOptionalBoolean(form.hasElevator);
+  const destinationHasElevator = toOptionalBoolean(form.destinationHasElevator);
 
   const explicitWeight = toOptionalNumber(form.weightKg);
   const estimatedWeight = explicitWeight

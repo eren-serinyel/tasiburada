@@ -7,7 +7,7 @@ import { toast } from '@/components/ui/sonner';
 import { apiClient } from '@/lib/apiClient';
 import { setSessionUser } from '@/lib/storage';
 import { useAuth } from '@/context/AuthContext';
-import { Camera, Save, AlertCircle, Loader2, CheckCircle2 } from 'lucide-react';
+import { Camera, Save, AlertCircle, Loader2 } from 'lucide-react';
 import type { SectionProps } from './types';
 import { API_BASE, Section } from './helpers';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -19,8 +19,6 @@ export default function AccountSection({ user, onUserUpdate }: SectionProps) {
   const [isUploadingPicture, setIsUploadingPicture] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [form, setForm] = useState({ name: user.name || '', surname: user.surname || '', email: user.email || '', phone: user.phone || '' });
-  const [customerProfile, setCustomerProfile] = useState({ city: '', district: '', addressLine1: '', addressLine2: '' });
-  const [customerProfileInitial, setCustomerProfileInitial] = useState({ city: '', district: '', addressLine1: '', addressLine2: '' });
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
@@ -38,10 +36,7 @@ export default function AccountSection({ user, onUserUpdate }: SectionProps) {
         if (!res.ok || !json?.success) throw new Error(json?.message || 'Profil bilgileri sunucudan alınamadı.');
         const data = json?.data || {};
         const updatedForm = { name: data.firstName ?? form.name, surname: data.lastName ?? form.surname, email: data.email ?? form.email, phone: data.phone ?? form.phone };
-        const updatedAddr = { city: data.city ?? '', district: data.district ?? '', addressLine1: data.addressLine1 ?? '', addressLine2: data.addressLine2 ?? '' };
         setForm(updatedForm);
-        setCustomerProfile(updatedAddr);
-        setCustomerProfileInitial(updatedAddr);
         if (data.pictureUrl) setPictureUrl(data.pictureUrl);
       } catch (err: any) {
         const msg = err?.message || 'Profil bilgileri alınamadı.';
@@ -57,10 +52,8 @@ export default function AccountSection({ user, onUserUpdate }: SectionProps) {
   // Dirty detection
   useEffect(() => {
     const baseDirty = form.name !== (user.name || '') || form.surname !== (user.surname || '') || form.email !== (user.email || '') || form.phone !== (user.phone || '');
-    if (isCarrier) { setDirty(baseDirty); return; }
-    const addrDirty = customerProfile.city !== customerProfileInitial.city || customerProfile.district !== customerProfileInitial.district || customerProfile.addressLine1 !== customerProfileInitial.addressLine1 || customerProfile.addressLine2 !== customerProfileInitial.addressLine2;
-    setDirty(baseDirty || addrDirty);
-  }, [form, user, customerProfile, customerProfileInitial, isCarrier]);
+    setDirty(baseDirty);
+  }, [form, user]);
 
   const handlePictureChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -120,18 +113,13 @@ export default function AccountSection({ user, onUserUpdate }: SectionProps) {
       const res = await apiClient(`${API_BASE}/customers/profile`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          firstName: form.name, lastName: form.surname, phone: form.phone,
-          city: customerProfile.city, district: customerProfile.district,
-          addressLine1: customerProfile.addressLine1, addressLine2: customerProfile.addressLine2 || undefined,
-        }),
+        body: JSON.stringify({ firstName: form.name, lastName: form.surname, phone: form.phone }),
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok || !json?.success) throw new Error(json?.message || 'Profil güncellenemedi.');
       const updated = { ...user, name: form.name, surname: form.surname, email: form.email, phone: form.phone, pictureUrl: pictureUrl ?? user.pictureUrl };
       setSessionUser(updated);
       onUserUpdate?.(updated);
-      setCustomerProfileInitial(customerProfile);
       setDirty(false);
       toast.success('Profil bilgileri güncellendi.');
     } catch (err: any) {
@@ -149,11 +137,11 @@ export default function AccountSection({ user, onUserUpdate }: SectionProps) {
             <div>
               <CardTitle className="text-2xl font-black text-[#0F172A] tracking-tight">Hesap Bilgileri</CardTitle>
               <CardDescription className="text-slate-500 font-medium">
-                {isCarrier ? 'Temel iletişim bilgilerinizi yönetin.' : 'Kişisel profil ve adres detaylarınızı güncelleyin.'}
+                {isCarrier ? 'Temel iletişim bilgilerinizi yönetin.' : 'Kişisel profil bilgilerinizi güncelleyin.'}
               </CardDescription>
             </div>
             {dirty && !isSaving && (
-              <Badge variant="secondary" className="bg-amber-50 text-amber-600 border-none px-3 py-1 font-bold animate-pulse">
+              <Badge className="bg-amber-50 text-amber-600 border-none px-3 py-1 font-bold animate-pulse">
                 Değişiklikler Kaydedilmedi
               </Badge>
             )}
@@ -177,7 +165,7 @@ export default function AccountSection({ user, onUserUpdate }: SectionProps) {
                   </div>
                 )}
               </div>
-              <button 
+              <button
                 onClick={() => fileInputRef.current?.click()}
                 className="absolute -bottom-2 -right-2 w-10 h-10 bg-white shadow-lg rounded-2xl flex items-center justify-center text-blue-600 border border-slate-100 hover:bg-blue-600 hover:text-white transition-all active:scale-95"
               >
@@ -187,9 +175,9 @@ export default function AccountSection({ user, onUserUpdate }: SectionProps) {
             <div className="text-center sm:text-left">
               <h4 className="font-bold text-[#0F172A] mb-1">Profil Fotoğrafı</h4>
               <p className="text-xs text-slate-500 mb-4 max-w-[200px]">En fazla 5MB boyutunda JPG, PNG veya WebP yükleyebilirsiniz.</p>
-              <Button 
-                variant="outline" 
-                size="sm" 
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => fileInputRef.current?.click()}
                 className="rounded-xl border-slate-200 font-bold text-xs h-9 px-4"
               >
@@ -223,27 +211,14 @@ export default function AccountSection({ user, onUserUpdate }: SectionProps) {
                 <FormField label="Soyad" value={form.surname} onChange={v => setForm(f => ({ ...f, surname: v }))} placeholder="Soyadınız" />
                 <FormField label="E-posta" value={form.email} disabled />
                 <FormField label="Telefon" value={form.phone} onChange={v => setForm(f => ({ ...f, phone: v }))} placeholder="+90" />
-                
-                {!isCarrier && (
-                  <>
-                    <FormField label="Şehir" value={customerProfile.city} onChange={v => setCustomerProfile(f => ({ ...f, city: v }))} placeholder="Şehir seçin" />
-                    <FormField label="İlçe" value={customerProfile.district} onChange={v => setCustomerProfile(f => ({ ...f, district: v }))} placeholder="İlçe seçin" />
-                    <div className="md:col-span-2">
-                       <FormField label="Adres Satırı 1" value={customerProfile.addressLine1} onChange={v => setCustomerProfile(f => ({ ...f, addressLine1: v }))} placeholder="Mahalle, Cadde, Sokak..." />
-                    </div>
-                    <div className="md:col-span-2">
-                       <FormField label="Adres Satırı 2 (Opsiyonel)" value={customerProfile.addressLine2} onChange={v => setCustomerProfile(f => ({ ...f, addressLine2: v }))} placeholder="Daire, Kat, Kapı No..." />
-                    </div>
-                  </>
-                )}
               </motion.div>
             )}
           </AnimatePresence>
 
           <div className="flex justify-end pt-4 border-t border-slate-50">
-            <Button 
-              onClick={save} 
-              disabled={!dirty || isSaving || isLoading} 
+            <Button
+              onClick={save}
+              disabled={!dirty || isSaving || isLoading}
               className="h-12 px-8 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-bold shadow-lg shadow-blue-200 transition-all active:scale-95 disabled:opacity-50"
             >
               {isSaving ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <Save className="w-5 h-5 mr-2" />}
@@ -260,9 +235,9 @@ function FormField({ label, value, onChange, placeholder, disabled }: { label: s
   return (
     <div className="space-y-2 group">
       <Label className="text-[11px] font-black text-slate-400 uppercase tracking-widest ml-1">{label}</Label>
-      <Input 
-        value={value} 
-        onChange={e => onChange?.(e.target.value)} 
+      <Input
+        value={value}
+        onChange={e => onChange?.(e.target.value)}
         placeholder={placeholder}
         disabled={disabled}
         className="h-12 px-4 rounded-2xl border-[#F1F5F9] bg-white focus-visible:ring-blue-600/20 focus-visible:border-blue-600 transition-all font-semibold text-slate-700 disabled:bg-slate-50 disabled:text-slate-400 shadow-sm"
@@ -271,6 +246,6 @@ function FormField({ label, value, onChange, placeholder, disabled }: { label: s
   );
 }
 
-function Badge({ children, variant, className }: any) {
-  return <div className={`inline-flex items-center rounded-full text-xs font-semibold ${className}`}>{children}</div>;
+function Badge({ children, className }: { children: React.ReactNode; className?: string }) {
+  return <div className={`inline-flex items-center rounded-full text-xs font-semibold ${className ?? ''}`}>{children}</div>;
 }

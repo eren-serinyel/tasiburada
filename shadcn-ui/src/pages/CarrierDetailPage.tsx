@@ -241,14 +241,14 @@ const CarrierDetailPage = () => {
   const ratingCount = activeReviews.length;
   const initials = buildInitials(data.companyName);
   const successRatePercent = normalizeSuccessRate(data.stats.successRate);
-  const experienceText = data.experienceYears !== null
+  const experienceText = data.experienceYears != null && data.experienceYears > 0
     ? `${data.experienceYears} yıl deneyim`
     : 'Deneyim bilgisi paylaşılmadı';
   const serviceAreas = data.serviceAreas?.length ? data.serviceAreas : [];
   const serviceShowcase = data.services ?? [];
   const vehicles = data.vehicles ?? [];
   const documents = data.documents ?? [];
-  const startingPriceText = typeof data.startingPrice === 'number'
+  const startingPriceText = typeof data.startingPrice === 'number' && data.startingPrice > 0
     ? formatPrice(data.startingPrice)
     : 'Belirtilmedi';
 
