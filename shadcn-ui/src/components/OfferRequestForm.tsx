@@ -59,6 +59,13 @@ import {
   normalizePlaceTypeForBackend,
   type ConverterAppliedSummary,
 } from '@/lib/customerShipmentForm';
+import {
+  normalizeRequestedCarrierServices,
+  normalizeServiceId,
+  reconcileRequestedCarrierServices,
+  type RequestedCarrierServices,
+} from '@/lib/offerRequestServices';
+import { normalizeOfferRequestDraftFormData } from '@/lib/offerRequestHydration';
 
 type Step = 1 | 2 | 3 | 4;
 
@@ -71,11 +78,6 @@ interface CustomerAddress {
   district: string;
   isDefault: boolean;
 }
-
-type RequestedCarrierServices = Record<string, {
-  catalogServiceIds: string[];
-  customServiceIds: string[];
-}>;
 
 type SelectedCarrierServices = {
   carrierId: string;
@@ -98,6 +100,8 @@ const FORM_DRAFT_FIELDS = [
   'weightKg',
   'floor',
   'hasElevator',
+  'destinationFloor',
+  'destinationHasElevator',
   'dateFlexibility',
   'timeWindow',
   'extras',
@@ -270,10 +274,11 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
         .then((r) => r.json())
         .then((d) => {
           if (d.success) {
-            if (!d.data?.phone) {
+            const profilePhone = String(d.data?.phone ?? '').trim();
+            if (!profilePhone) {
               setNeedsPhone(true);
             } else {
-              setPhone(d.data.phone);
+              setPhone((prev) => prev.trim() ? prev : profilePhone);
             }
           }
         })
@@ -478,9 +483,14 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
     appliedConverterSummary
   );
 
-  const getSafeRestoreTarget = (draftStep: number, showSummary: boolean, data: Record<string, unknown>) => {
+  const getSafeRestoreTarget = (
+    draftStep: number,
+    showSummary: boolean,
+    data: Record<string, unknown>,
+    restoredConverterSummary?: ConverterAppliedSummary | null,
+  ) => {
     const routeReady = Boolean(data.originCity && data.originDistrict && data.destinationCity && data.destinationDistrict && data.date && data.transportType);
-    const hasLoadDetail = Boolean(data.placeType || data.loadType || data.weightKg || appliedConverterSummary);
+    const hasLoadDetail = Boolean(data.placeType || data.loadType || data.weightKg || restoredConverterSummary);
     if (!routeReady) return { nextStep: 1 as Step, nextSummary: false };
     if (showSummary && hasLoadDetail) return { nextStep: 4 as Step, nextSummary: true };
     const boundedStep = ([1, 2, 3, 4].includes(draftStep) ? draftStep : 1) as Step;
@@ -501,6 +511,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
       returnPath: getResumeReturnPath(),
       pendingAction: 'submit-offer-request',
       formData,
+      phone: phone.trim(),
       converterData: {
         draftValues: converterDraftValues,
         appliedSummary: appliedConverterSummary,
@@ -533,7 +544,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
       return;
     }
 
-    const restoredFormData = FORM_DRAFT_FIELDS.reduce<Record<string, unknown>>((acc, field) => {
+    const rawRestoredFormData = FORM_DRAFT_FIELDS.reduce<Record<string, unknown>>((acc, field) => {
       if (Object.prototype.hasOwnProperty.call(draft.formData, field)) {
         acc[field] = draft.formData[field];
       }
@@ -543,13 +554,21 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
       draftValues?: VolumeCalculatorDraftValues | null;
       appliedSummary?: ConverterAppliedSummary | null;
     } | null | undefined;
-    const { nextStep, nextSummary } = getSafeRestoreTarget(draft.activeStep, Boolean(draft.showSummaryModal), restoredFormData);
+    const { formData: restoredFormData, warnings } = normalizeOfferRequestDraftFormData(rawRestoredFormData);
+    const restoredConverterSummary = converterData?.appliedSummary ?? null;
+    const { nextStep, nextSummary } = getSafeRestoreTarget(
+      draft.activeStep,
+      Boolean(draft.showSummaryModal),
+      restoredFormData,
+      restoredConverterSummary,
+    );
 
     setForm(prev => ({ ...prev, ...restoredFormData, photos: [] }));
     setConverterDraftValues(converterData?.draftValues ?? null);
-    setAppliedConverterSummary(converterData?.appliedSummary ?? null);
+    setAppliedConverterSummary(restoredConverterSummary);
+    setPhone(draft.phone?.trim() ?? '');
     setSelectedCarrierIds(Array.isArray(draft.selectedCarrierIds) ? draft.selectedCarrierIds : []);
-    setRequestedServicesByCarrier((draft.requestedServicesByCarrier as RequestedCarrierServices | undefined) ?? {});
+    setRequestedServicesByCarrier(normalizeRequestedCarrierServices(draft.requestedServicesByCarrier));
     setExpandedCarrierServices(draft.expandedCarrierServices ?? {});
     setShowAllCarrierServices(draft.showAllCarrierServices ?? {});
     setInviteCarrierId(draft.inviteCarrierId ?? null);
@@ -581,6 +600,13 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
       title: 'Bilgileriniz geri yÃ¼klendi',
       description: 'Talebinizi kontrol ederek gÃ¶nderebilirsiniz.',
     });
+    if (warnings.length > 0) {
+      toast({
+        title: 'Rota bilgileri kontrol edilmeli',
+        description: warnings.join(' '),
+        variant: 'destructive',
+      });
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -695,9 +721,87 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
     } catch { return false; }
   }, [form.date, maxDateStr]);
 
-  const canNextFrom1 = form.originCity && form.originDistrict && form.destinationCity && form.destinationDistrict && form.date && !isDateTooFar && !!form.transportType;
+  const routeValidation = useMemo(() => {
+    const missingFields = [
+      !form.originCity ? 'çıkış şehri' : '',
+      !form.originDistrict ? 'çıkış ilçesi' : '',
+      !form.destinationCity ? 'varış şehri' : '',
+      !form.destinationDistrict ? 'varış ilçesi' : '',
+      !form.date ? 'taşıma tarihi' : '',
+      !form.transportType ? 'taşıma tipi' : '',
+    ].filter(Boolean);
+
+    if (missingFields.length > 0) {
+      return {
+        valid: false,
+        title: 'Rota bilgileri eksik',
+        message: `Lütfen ${missingFields.join(', ')} alanlarını tamamlayın.`,
+        targetStep: 1 as Step,
+      };
+    }
+    if (isDateTooFar) {
+      return {
+        valid: false,
+        title: 'Tarih aralığı uygun değil',
+        message: 'Taşıma tarihi en fazla 30 gün sonrası için seçilebilir.',
+        targetStep: 1 as Step,
+      };
+    }
+    return { valid: true, title: '', message: '', targetStep: 1 as Step };
+  }, [
+    form.date,
+    form.destinationCity,
+    form.destinationDistrict,
+    form.originCity,
+    form.originDistrict,
+    form.transportType,
+    isDateTooFar,
+  ]);
+  const canNextFrom1 = routeValidation.valid;
   const hasLoadEstimate = !!form.placeType || !!form.weightKg || !!appliedConverterSummary;
-  const canPublish = !!canNextFrom1 && hasLoadEstimate;
+  const loadValidation = useMemo(() => {
+    if (hasLoadEstimate) return { valid: true, title: '', message: '', targetStep: 2 as Step };
+    return {
+      valid: false,
+      title: 'Yük detayı gerekli',
+      message: 'Yayınlamadan önce yer tipi seçin veya Hacim Hesapla ile ağırlığı doldurun.',
+      targetStep: 2 as Step,
+    };
+  }, [hasLoadEstimate]);
+  const publishValidation = useMemo(() => {
+    if (!routeValidation.valid) return routeValidation;
+    if (!loadValidation.valid) return loadValidation;
+    return { valid: true, title: '', message: '', targetStep: 4 as Step };
+  }, [loadValidation, routeValidation]);
+  const canPublish = publishValidation.valid;
+  const summaryValidation = useMemo(() => {
+    if (!publishValidation.valid) return publishValidation;
+    if (step === 4 && selectedCarrierIds.length > 0 && carrierServicesLoading) {
+      return {
+        valid: false,
+        title: 'Ek hizmetler yükleniyor',
+        message: 'Ek hizmet bilgileri henüz yükleniyor. Lütfen birkaç saniye sonra tekrar deneyin.',
+        targetStep: 4 as Step,
+      };
+    }
+    return { valid: true, title: '', message: '', targetStep: 4 as Step };
+  }, [carrierServicesLoading, publishValidation, selectedCarrierIds.length, step]);
+  const isSummaryLoadingBlocked = step === 4 && selectedCarrierIds.length > 0 && carrierServicesLoading;
+  const openSummaryStep = () => {
+    if (!summaryValidation.valid) {
+      toast({
+        title: summaryValidation.title || 'Özet adımına geçilemedi',
+        description: summaryValidation.message,
+        variant: summaryValidation.targetStep === 4 ? undefined : 'destructive',
+      });
+      if (summaryValidation.targetStep !== step) {
+        setShowSummaryModal(false);
+        goToStepKeepingFormInView(summaryValidation.targetStep);
+      }
+      return;
+    }
+    setShowSummaryModal(true);
+  };
   const availabilityHint = useMemo(() => {
     if (!canPublish) return null;
     if (typeof availabilitySummary?.available !== 'number') return null;
@@ -898,25 +1002,47 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
     };
   }, [carriers, currentExtraServiceLoadType, selectedCarrierIds, step]);
 
+  useEffect(() => {
+    if (step !== 4 || carrierServicesLoading || selectedCarrierServices.length === 0) return;
+
+    const { next, removedCount } = reconcileRequestedCarrierServices(
+      requestedServicesByCarrier,
+      selectedCarrierServices,
+    );
+
+    if (JSON.stringify(next) === JSON.stringify(normalizeRequestedCarrierServices(requestedServicesByCarrier))) return;
+
+    setRequestedServicesByCarrier(next);
+    if (removedCount > 0) {
+      toast({
+        title: 'Ek hizmet seçimleri güncellendi',
+        description: 'Seçtiğiniz hizmetlerden artık sunulmayanlar kaldırıldı; geçerli seçimler korundu.',
+      });
+    }
+  }, [carrierServicesLoading, requestedServicesByCarrier, selectedCarrierServices, step, toast]);
+
   const isCarrierServiceSelected = (carrierId: string, service: CarrierDetailServiceItem) => {
-    const carrierServices = requestedServicesByCarrier[carrierId];
+    const carrierServices = requestedServicesByCarrier[normalizeServiceId(carrierId)];
     if (!carrierServices) return false;
+    const serviceId = normalizeServiceId(service.id);
     return service.source === 'custom'
-      ? carrierServices.customServiceIds.includes(service.id)
-      : carrierServices.catalogServiceIds.includes(service.id);
+      ? carrierServices.customServiceIds.includes(serviceId)
+      : carrierServices.catalogServiceIds.includes(serviceId);
   };
 
   const toggleCarrierService = (carrierId: string, service: CarrierDetailServiceItem) => {
     setRequestedServicesByCarrier(prev => {
-      const current = prev[carrierId] ?? { catalogServiceIds: [], customServiceIds: [] };
+      const normalizedCarrierId = normalizeServiceId(carrierId);
+      const serviceId = normalizeServiceId(service.id);
+      const current = prev[normalizedCarrierId] ?? { catalogServiceIds: [], customServiceIds: [] };
       const bucketKey = service.source === 'custom' ? 'customServiceIds' : 'catalogServiceIds';
       const currentBucket = new Set(current[bucketKey]);
-      if (currentBucket.has(service.id)) currentBucket.delete(service.id);
-      else currentBucket.add(service.id);
+      if (currentBucket.has(serviceId)) currentBucket.delete(serviceId);
+      else currentBucket.add(serviceId);
 
       return {
         ...prev,
-        [carrierId]: {
+        [normalizedCarrierId]: {
           ...current,
           [bucketKey]: Array.from(currentBucket),
         },
@@ -939,19 +1065,20 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
 
   const toggleAllCarrierServices = (carrierGroup: SelectedCarrierServices) => {
     const services = getCarrierServiceItems(carrierGroup);
-    const catalogIds = services.filter((service) => service.source !== 'custom').map((service) => service.id);
-    const customIds = services.filter((service) => service.source === 'custom').map((service) => service.id);
+    const normalizedCarrierId = normalizeServiceId(carrierGroup.carrierId);
+    const catalogIds = services.filter((service) => service.source !== 'custom').map((service) => normalizeServiceId(service.id));
+    const customIds = services.filter((service) => service.source === 'custom').map((service) => normalizeServiceId(service.id));
 
     setRequestedServicesByCarrier((prev) => {
-      const current = prev[carrierGroup.carrierId] ?? { catalogServiceIds: [], customServiceIds: [] };
+      const current = prev[normalizedCarrierId] ?? { catalogServiceIds: [], customServiceIds: [] };
       const allSelected = services.length > 0 && services.every((service) => {
         const bucket = service.source === 'custom' ? current.customServiceIds : current.catalogServiceIds;
-        return bucket.includes(service.id);
+        return bucket.includes(normalizeServiceId(service.id));
       });
 
       return {
         ...prev,
-        [carrierGroup.carrierId]: allSelected
+        [normalizedCarrierId]: allSelected
           ? {
               catalogServiceIds: current.catalogServiceIds.filter((id) => !catalogIds.includes(id)),
               customServiceIds: current.customServiceIds.filter((id) => !customIds.includes(id)),
@@ -963,6 +1090,19 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
       };
     });
   };
+
+  const requestedCarrierServiceSummary = selectedCarrierServices
+    .map((carrierGroup) => {
+      const services = getCarrierServiceItems(carrierGroup)
+        .filter((service) => isCarrierServiceSelected(carrierGroup.carrierId, service))
+        .map((service) => service.name);
+      return {
+        carrierId: carrierGroup.carrierId,
+        carrierName: carrierGroup.carrierName,
+        services,
+      };
+    })
+    .filter((row) => row.services.length > 0);
 
   const goToStepKeepingFormInView = (nextStep: Step) => {
     keepFormInViewOnStepChangeRef.current = true;
@@ -1018,29 +1158,53 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
   }, [form.originCity, form.destinationCity]);
 
   useEffect(() => {
+    let cancelled = false;
+    const originCity = form.originCity;
+
     (async () => {
-      if (form.originCity) {
-        const list = await getDistrictsForCity(form.originCity);
+      if (originCity) {
+        const list = await getDistrictsForCity(originCity);
+        if (cancelled) return;
         setOriginDistricts(list);
-        if (!list.includes(form.originDistrict)) handleChange('originDistrict', '');
+        setForm((prev) => {
+          if (prev.originCity !== originCity) return prev;
+          if (!prev.originDistrict || list.includes(prev.originDistrict)) return prev;
+          return { ...prev, originDistrict: '' };
+        });
       } else {
+        if (cancelled) return;
         setOriginDistricts([]);
-        handleChange('originDistrict', '');
+        setForm((prev) => prev.originDistrict ? { ...prev, originDistrict: '' } : prev);
       }
     })();
+    return () => {
+      cancelled = true;
+    };
   }, [form.originCity]);
 
   useEffect(() => {
+    let cancelled = false;
+    const destinationCity = form.destinationCity;
+
     (async () => {
-      if (form.destinationCity) {
-        const list = await getDistrictsForCity(form.destinationCity);
+      if (destinationCity) {
+        const list = await getDistrictsForCity(destinationCity);
+        if (cancelled) return;
         setDestinationDistricts(list);
-        if (!list.includes(form.destinationDistrict)) handleChange('destinationDistrict', '');
+        setForm((prev) => {
+          if (prev.destinationCity !== destinationCity) return prev;
+          if (!prev.destinationDistrict || list.includes(prev.destinationDistrict)) return prev;
+          return { ...prev, destinationDistrict: '' };
+        });
       } else {
+        if (cancelled) return;
         setDestinationDistricts([]);
-        handleChange('destinationDistrict', '');
+        setForm((prev) => prev.destinationDistrict ? { ...prev, destinationDistrict: '' } : prev);
       }
     })();
+    return () => {
+      cancelled = true;
+    };
   }, [form.destinationCity]);
 
   // Tüm form verilerinden shipment payload'u üretir
@@ -1100,6 +1264,14 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
       return;
     }
     if (!canPublish) {
+      toast({
+        title: publishValidation.title || 'Talep yayınlanamadı',
+        description: publishValidation.message || 'Lütfen eksik bilgileri tamamlayın.',
+        variant: 'destructive',
+      });
+      setShowSummaryModal(false);
+      goToStepKeepingFormInView(publishValidation.targetStep);
+      return;
       toast({ title: 'Yük detayı gerekli', description: 'Yayınlamadan önce yer tipi seçin veya Hacim Hesapla ile ağırlığı doldurun.', variant: 'destructive' });
       return;
     }
@@ -2119,15 +2291,15 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
                 </button>
                 <button
                   type="button"
-                  disabled={!canPublish}
-                  onClick={() => setShowSummaryModal(true)}
+                  disabled={isSummaryLoadingBlocked}
+                  onClick={openSummaryStep}
                   className="hover:shadow-[0_4px_12px_rgba(37,99,235,0.3)]"
                   style={{
                     ...tb.ctaPrimary,
-                    background: canPublish ? 'var(--tb-brand-700)' : 'var(--tb-ink-400)',
+                    background: summaryValidation.valid ? 'var(--tb-brand-700)' : 'var(--tb-ink-400)',
                     padding: '12px 32px',
                     fontSize: '15px',
-                    cursor: canPublish ? 'pointer' : 'not-allowed',
+                    cursor: isSummaryLoadingBlocked ? 'not-allowed' : 'pointer',
                   }}
                 >
                   Devam →
@@ -2599,6 +2771,26 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
                 </div>
               )}
 
+              {requestedCarrierServiceSummary.length > 0 && (
+                <div style={{ marginBottom: '16px', padding: '14px 16px', background: 'var(--tb-canvas)', border: '1px solid var(--tb-border)', borderRadius: '12px' }}>
+                  <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--tb-ink-700)', marginBottom: '10px' }}>Nakliyeciye özel ek hizmetler</div>
+                  <div className="flex flex-col" style={{ gap: '10px' }}>
+                    {requestedCarrierServiceSummary.map((row) => (
+                      <div key={row.carrierId} style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                        <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--tb-ink-900)', minWidth: '150px' }}>{row.carrierName}</span>
+                        <span className="flex flex-wrap justify-end" style={{ gap: '6px' }}>
+                          {row.services.map((serviceName) => (
+                            <span key={`${row.carrierId}-${serviceName}`} style={{ background: 'white', border: '1px solid var(--tb-border)', borderRadius: '8px', padding: '4px 8px', fontSize: '12px', color: 'var(--tb-ink-700)' }}>
+                              {serviceName}
+                            </span>
+                          ))}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Invite banner */}
               {inviteCarrierId && inviteCarrierName && (
                 <div style={{ marginBottom: '16px', padding: '12px 16px', background: 'var(--tb-brand-50)', border: '1px solid var(--tb-brand-50)', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -2779,13 +2971,13 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
                   )}
                   <button
                     type="button"
-                    disabled={!canPublish}
-                    onClick={() => setShowSummaryModal(true)}
+                    disabled={isSummaryLoadingBlocked}
+                    onClick={openSummaryStep}
                     style={{
                       width: '100%', padding: '14px', border: 'none', borderRadius: 'var(--tb-radius)',
-                      background: canPublish ? 'var(--tb-brand-700)' : 'var(--tb-ink-400)',
+                      background: summaryValidation.valid ? 'var(--tb-brand-700)' : 'var(--tb-ink-400)',
                       color: 'white', fontSize: '15px', fontWeight: 700,
-                      cursor: canPublish ? 'pointer' : 'not-allowed',
+                      cursor: isSummaryLoadingBlocked ? 'not-allowed' : 'pointer',
                       boxShadow: '0 4px 16px rgba(37,99,235,0.35)',
                       display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
                     }}

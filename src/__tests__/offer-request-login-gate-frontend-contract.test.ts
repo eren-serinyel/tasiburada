@@ -54,7 +54,14 @@ describe('offer request login gate frontend contract', () => {
     const register = fs.readFileSync(path.resolve(process.cwd(), 'shadcn-ui/src/pages/RegisterUser.tsx'), 'utf8');
 
     expect(draftHelper).toContain('export const isSafeRelativePath');
-    expect(login).toContain("navigate(isSafeRelativePath(redirect) ? redirect : '/home');");
+    expect(login).toContain('const getPostAuthRedirect = () => {');
+    expect(login).toContain("searchParams.get('reason') === 'shipment-draft'");
+    expect(login).toContain("return '/teklif-talebi?resumeGuestDraft=1';");
+    expect(login).toContain("navigate(getPostAuthRedirect(), { replace: searchParams.get('reason') === 'shipment-draft' });");
+    expect(login).not.toContain('setTimeout(() => {');
     expect(register).toContain("navigate(isSafeRelativePath(redirect) ? redirect : '/');");
+    expect(register).toContain('const loginPath = (() => {');
+    expect(register).toContain('to={loginPath}');
+    expect(login).toContain('to={customerRegisterPath}');
   });
 });

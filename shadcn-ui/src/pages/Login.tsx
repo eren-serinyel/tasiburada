@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -12,7 +12,7 @@ import { getLastEmail, setLastEmail } from '@/lib/storage';
 import { useAuth } from '@/context/AuthContext';
 import { apiClient } from '@/lib/apiClient';
 import { useToast } from '@/hooks/use-toast';
-import { isSafeRelativePath } from '@/lib/guestOfferDraft';
+import { isSafeRelativePath, loadGuestOfferDraft } from '@/lib/guestOfferDraft';
 
 // API Base URL - using Vite proxy
 const API_BASE_URL = '/api/v1';
@@ -32,6 +32,29 @@ export default function Login() {
   const navigate = useNavigate();
   const { login: authLogin } = useAuth();
   const { toast } = useToast();
+
+  const getPostAuthRedirect = () => {
+    const redirect = searchParams.get('redirect');
+    if (isSafeRelativePath(redirect)) return redirect;
+
+    if (searchParams.get('reason') === 'shipment-draft') {
+      const draftReturnPath = loadGuestOfferDraft()?.returnPath;
+      if (isSafeRelativePath(draftReturnPath)) return draftReturnPath;
+      return '/teklif-talebi?resumeGuestDraft=1';
+    }
+
+    return '/home';
+  };
+
+  const customerRegisterPath = useMemo(() => {
+    if (searchParams.get('reason') !== 'shipment-draft') return '/musteri-kayit';
+
+    const params = new URLSearchParams();
+    params.set('redirect', getPostAuthRedirect());
+    params.set('reason', 'shipment-draft');
+    return `/musteri-kayit?${params.toString()}`;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   useEffect(() => {
     const typeParam = searchParams.get('type');
@@ -100,10 +123,7 @@ export default function Login() {
         }
 
         toast({ title: 'Giriş başarılı', description: 'Yönlendiriliyor...' });
-        setTimeout(() => {
-          const redirect = searchParams.get('redirect');
-          navigate(isSafeRelativePath(redirect) ? redirect : '/home');
-        }, 1000);
+        navigate(getPostAuthRedirect(), { replace: searchParams.get('reason') === 'shipment-draft' });
       } else {
         const status = response.status;
         setErrorStatus(status);
@@ -379,7 +399,7 @@ export default function Login() {
                   </p>
                   <div className="grid grid-cols-2 gap-3">
                     <Link 
-                      to="/musteri-kayit" 
+                      to={customerRegisterPath}
                       className="group p-3 bg-gradient-to-r from-green-500/10 to-emerald-500/10 backdrop-blur-sm border border-green-200/50 text-green-700 rounded-xl hover:from-green-500/20 hover:to-emerald-500/20 transition-all duration-300 text-center font-medium hover:scale-105"
                     >
                       Müşteri Kaydı

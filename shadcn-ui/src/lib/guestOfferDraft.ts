@@ -16,6 +16,7 @@ export interface GuestOfferDraftV1 {
   returnPath: string;
   pendingAction: GuestOfferPendingAction;
   formData: Record<string, unknown>;
+  phone?: string;
   converterData?: Record<string, unknown> | null;
   selectedCarrierIds?: string[];
   requestedServicesByCarrier?: Record<string, unknown>;

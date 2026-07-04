@@ -47,6 +47,17 @@ export default function RegisterUser() {
   const { toast } = useToast();
   const { login } = useAuth();
 
+  const loginPath = (() => {
+    const redirect = searchParams.get('redirect');
+    if (!isSafeRelativePath(redirect)) return '/giris';
+
+    const params = new URLSearchParams();
+    params.set('redirect', redirect);
+    const reason = searchParams.get('reason');
+    if (reason) params.set('reason', reason);
+    return `/giris?${params.toString()}`;
+  })();
+
   const handleChange = (field: string, value: string | boolean) => {
     setFormData((p) => ({ ...p, [field]: value }));
     if (typeof value === 'string') {
@@ -318,7 +329,7 @@ export default function RegisterUser() {
             <div className="text-center pt-4 border-t mt-4">
               <p className="text-sm text-gray-600">
                 Zaten hesabınız var mı?{' '}
-                <Link to="/giris" className="text-blue-600 hover:underline font-medium">Giriş yapın</Link>
+                <Link to={loginPath} className="text-blue-600 hover:underline font-medium">Giriş yapın</Link>
               </p>
             </div>
           </CardContent>
