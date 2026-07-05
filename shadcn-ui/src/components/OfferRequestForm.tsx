@@ -65,7 +65,7 @@ import {
   reconcileRequestedCarrierServices,
   type RequestedCarrierServices,
 } from '@/lib/offerRequestServices';
-import { normalizeOfferRequestDraftFormData } from '@/lib/offerRequestHydration';
+import { findLocationOption, normalizeOfferRequestDraftFormData } from '@/lib/offerRequestHydration';
 
 type Step = 1 | 2 | 3 | 4;
 
@@ -144,6 +144,19 @@ const filterAndDedupeServiceGroups = (
   return items.length > 0 ? [{ loadType: targetLoadType, items }] : [];
 };
 
+const mergeDistrictOptions = (districts: string[], selectedDistrict: string) => {
+  const current = selectedDistrict.trim();
+  if (!current || findLocationOption(current, districts)) return districts;
+  return [current, ...districts];
+};
+
+const isDraftValueEmpty = (value: unknown) => {
+  if (value === undefined || value === null || value === '') return true;
+  if (Array.isArray(value)) return value.length === 0;
+  if (typeof value === 'object') return Object.keys(value as Record<string, unknown>).length === 0;
+  return false;
+};
+
 const CONVERTER_TO_VEHICLE_TYPE_NAME: Record<EstimateConverterResponse['recommendedVehicle'], string> = {
   panelvan: 'Panel Van',
   short_chassis_van: 'Kamyonet',
@@ -180,6 +193,8 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
   const landingEstimateAppliedRef = useRef(false);
   const draftRestoreRef = useRef(false);
   const restoredDraftRef = useRef(false);
+  const restoredDraftFormDataRef = useRef<Record<string, unknown> | null>(null);
+  const publishSucceededRef = useRef(false);
   const carrierReconcileRef = useRef(false);
   const [availableExtraServices, setAvailableExtraServices] = useState<ExtraServiceOption[]>([]);
   const [selectedCarrierIds, setSelectedCarrierIds] = useState<string[]>([]);
@@ -191,6 +206,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
   const [requestedServicesByCarrier, setRequestedServicesByCarrier] = useState<RequestedCarrierServices>({});
   const [expandedCarrierServices, setExpandedCarrierServices] = useState<Record<string, boolean>>({});
   const [showAllCarrierServices, setShowAllCarrierServices] = useState<Record<string, boolean>>({});
+  const [showValidationErrors, setShowValidationErrors] = useState(false);
   const [form, setForm] = useState({
     originCity: '',
     originDistrict: '',
@@ -216,6 +232,18 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
     photos: [] as File[],
     note: '',
   });
+
+  const logDraftRestore = (event: string, payload: Record<string, unknown>) => {
+    try {
+      const enabled =
+        searchParams.get('debugDraftRestore') === '1'
+        || localStorage.getItem('tasiburadaDebugDraftRestore') === '1';
+      if (!enabled) return;
+      console.debug(`[OfferRequest restore] ${event}`, payload);
+    } catch {
+      // Debug logging should never affect the form flow.
+    }
+  };
 
   const VOLUME_ESTIMATE_DRAFT_KEY = 'tasiburada:volume-calculator-estimate:v1';
 
@@ -499,8 +527,13 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
   };
 
   const saveCurrentGuestDraft = async ({ markIntent = false }: { markIntent?: boolean } = {}) => {
+    const restoredFormData = restoredDraftFormDataRef.current;
     const formData = FORM_DRAFT_FIELDS.reduce<Record<string, unknown>>((acc, field) => {
-      acc[field] = (form as Record<string, unknown>)[field];
+      const currentValue = (form as Record<string, unknown>)[field];
+      const restoredValue = restoredFormData?.[field];
+      acc[field] = isDraftValueEmpty(currentValue) && !isDraftValueEmpty(restoredValue)
+        ? restoredValue
+        : currentValue;
       return acc;
     }, {});
 
@@ -525,6 +558,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
     });
 
     if (markIntent) markGuestOfferPendingIntent('submit-offer-request');
+    restoredDraftFormDataRef.current = formData;
     return draft;
   };
 
@@ -562,8 +596,38 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
       restoredFormData,
       restoredConverterSummary,
     );
+    logDraftRestore('restore:target', {
+      draftActiveStep: draft.activeStep,
+      draftShowSummaryModal: Boolean(draft.showSummaryModal),
+      nextStep,
+      nextSummary,
+      routeReady: Boolean(
+        restoredFormData.originCity
+        && restoredFormData.originDistrict
+        && restoredFormData.destinationCity
+        && restoredFormData.destinationDistrict
+        && restoredFormData.date
+        && restoredFormData.transportType
+      ),
+      hasLoadDetail: Boolean(restoredFormData.placeType || restoredFormData.loadType || restoredFormData.weightKg || restoredConverterSummary),
+    });
 
-    setForm(prev => ({ ...prev, ...restoredFormData, photos: [] }));
+    setForm(prev => {
+      const next = { ...prev, ...restoredFormData, photos: [] };
+      logDraftRestore('restore:setForm', {
+        restoredOriginCity: restoredFormData.originCity,
+        restoredOriginDistrict: restoredFormData.originDistrict,
+        restoredDestinationCity: restoredFormData.destinationCity,
+        restoredDestinationDistrict: restoredFormData.destinationDistrict,
+        prevOriginCity: prev.originCity,
+        prevOriginDistrict: prev.originDistrict,
+        nextOriginCity: next.originCity,
+        nextOriginDistrict: next.originDistrict,
+        nextDestinationCity: next.destinationCity,
+        nextDestinationDistrict: next.destinationDistrict,
+      });
+      return next;
+    });
     setConverterDraftValues(converterData?.draftValues ?? null);
     setAppliedConverterSummary(restoredConverterSummary);
     setPhone(draft.phone?.trim() ?? '');
@@ -573,6 +637,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
     setShowAllCarrierServices(draft.showAllCarrierServices ?? {});
     setInviteCarrierId(draft.inviteCarrierId ?? null);
     setInviteCarrierName(draft.inviteCarrierName ?? null);
+    restoredDraftFormDataRef.current = restoredFormData;
     setStep(nextStep);
     setShowSummaryModal(nextSummary);
     restoredDraftRef.current = true;
@@ -587,14 +652,20 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
           description: 'Form bilgileriniz korundu; fotoÄŸraflarÄ± tekrar ekleyebilirsiniz.',
           variant: 'destructive',
         });
-      });
+    });
 
     clearGuestOfferPendingIntent();
     if (searchParams.get('resumeGuestDraft') === '1') {
       const nextParams = new URLSearchParams(searchParams);
       nextParams.delete('resumeGuestDraft');
       const nextSearch = nextParams.toString();
-      navigate(`/teklif-talebi${nextSearch ? `?${nextSearch}` : ''}`, { replace: true });
+      window.setTimeout(() => {
+        window.history.replaceState(
+          window.history.state,
+          '',
+          `/teklif-talebi${nextSearch ? `?${nextSearch}` : ''}`,
+        );
+      }, 1000);
     }
     toast({
       title: 'Bilgileriniz geri yÃ¼klendi',
@@ -611,6 +682,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
   }, []);
 
   useEffect(() => {
+    if (publishSucceededRef.current) return;
     if (!hasMeaningfulDraftData()) return;
     const t = setTimeout(() => {
       saveCurrentGuestDraft().catch(() => {
@@ -789,6 +861,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
   const isSummaryLoadingBlocked = step === 4 && selectedCarrierIds.length > 0 && carrierServicesLoading;
   const openSummaryStep = () => {
     if (!summaryValidation.valid) {
+      setShowValidationErrors(true);
       toast({
         title: summaryValidation.title || 'Özet adımına geçilemedi',
         description: summaryValidation.message,
@@ -800,6 +873,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
       }
       return;
     }
+    setShowValidationErrors(false);
     setShowSummaryModal(true);
   };
   const availabilityHint = useMemo(() => {
@@ -1165,22 +1239,47 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
       if (originCity) {
         const list = await getDistrictsForCity(originCity);
         if (cancelled) return;
-        setOriginDistricts(list);
+        logDraftRestore('originDistricts:optionsLoaded', {
+          originCity,
+          selectedOriginDistrict: form.originDistrict,
+          optionCount: list.length,
+          hasSelectedOption: Boolean(findLocationOption(form.originDistrict, list)),
+        });
+        setOriginDistricts(mergeDistrictOptions(list, form.originDistrict));
         setForm((prev) => {
           if (prev.originCity !== originCity) return prev;
-          if (!prev.originDistrict || list.includes(prev.originDistrict)) return prev;
-          return { ...prev, originDistrict: '' };
+          const matchedDistrict = findLocationOption(prev.originDistrict, list);
+          if (!prev.originDistrict || !matchedDistrict || matchedDistrict === prev.originDistrict) return prev;
+          logDraftRestore('originDistricts:normalizedValue', {
+            before: prev.originDistrict,
+            after: matchedDistrict,
+          });
+          return { ...prev, originDistrict: matchedDistrict };
         });
       } else {
         if (cancelled) return;
         setOriginDistricts([]);
-        setForm((prev) => prev.originDistrict ? { ...prev, originDistrict: '' } : prev);
+        setForm((prev) => {
+          if (prev.originCity) {
+            logDraftRestore('originDistricts:skipStaleEmptyCityClear', {
+              effectOriginCity: originCity,
+              currentOriginCity: prev.originCity,
+              currentOriginDistrict: prev.originDistrict,
+            });
+            return prev;
+          }
+          if (!prev.originDistrict) return prev;
+          logDraftRestore('originDistricts:clearNoCity', {
+            previousOriginDistrict: prev.originDistrict,
+          });
+          return { ...prev, originDistrict: '' };
+        });
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [form.originCity]);
+  }, [form.originCity, form.originDistrict]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1190,22 +1289,47 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
       if (destinationCity) {
         const list = await getDistrictsForCity(destinationCity);
         if (cancelled) return;
-        setDestinationDistricts(list);
+        logDraftRestore('destinationDistricts:optionsLoaded', {
+          destinationCity,
+          selectedDestinationDistrict: form.destinationDistrict,
+          optionCount: list.length,
+          hasSelectedOption: Boolean(findLocationOption(form.destinationDistrict, list)),
+        });
+        setDestinationDistricts(mergeDistrictOptions(list, form.destinationDistrict));
         setForm((prev) => {
           if (prev.destinationCity !== destinationCity) return prev;
-          if (!prev.destinationDistrict || list.includes(prev.destinationDistrict)) return prev;
-          return { ...prev, destinationDistrict: '' };
+          const matchedDistrict = findLocationOption(prev.destinationDistrict, list);
+          if (!prev.destinationDistrict || !matchedDistrict || matchedDistrict === prev.destinationDistrict) return prev;
+          logDraftRestore('destinationDistricts:normalizedValue', {
+            before: prev.destinationDistrict,
+            after: matchedDistrict,
+          });
+          return { ...prev, destinationDistrict: matchedDistrict };
         });
       } else {
         if (cancelled) return;
         setDestinationDistricts([]);
-        setForm((prev) => prev.destinationDistrict ? { ...prev, destinationDistrict: '' } : prev);
+        setForm((prev) => {
+          if (prev.destinationCity) {
+            logDraftRestore('destinationDistricts:skipStaleEmptyCityClear', {
+              effectDestinationCity: destinationCity,
+              currentDestinationCity: prev.destinationCity,
+              currentDestinationDistrict: prev.destinationDistrict,
+            });
+            return prev;
+          }
+          if (!prev.destinationDistrict) return prev;
+          logDraftRestore('destinationDistricts:clearNoCity', {
+            previousDestinationDistrict: prev.destinationDistrict,
+          });
+          return { ...prev, destinationDistrict: '' };
+        });
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [form.destinationCity]);
+  }, [form.destinationCity, form.destinationDistrict]);
 
   // Tüm form verilerinden shipment payload'u üretir
   const buildShipmentPayload = () => {
@@ -1264,6 +1388,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
       return;
     }
     if (!canPublish) {
+      setShowValidationErrors(true);
       toast({
         title: publishValidation.title || 'Talep yayınlanamadı',
         description: publishValidation.message || 'Lütfen eksik bilgileri tamamlayın.',
@@ -1272,10 +1397,9 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
       setShowSummaryModal(false);
       goToStepKeepingFormInView(publishValidation.targetStep);
       return;
-      toast({ title: 'Yük detayı gerekli', description: 'Yayınlamadan önce yer tipi seçin veya Hacim Hesapla ile ağırlığı doldurun.', variant: 'destructive' });
-      return;
     }
-    if (needsPhone && !phone.trim()) {
+    if (!phone.trim()) {
+      setShowValidationErrors(true);
       toast({ title: 'Telefon gerekli', description: 'Nakliyecilerin sizi arayabilmesi için telefon numarası gereklidir.', variant: 'destructive' });
       return;
     }
@@ -1293,6 +1417,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
       const requestedCarrierServices = getRequestedCarrierServicesPayload(carrierIdsToInvite);
       const shipmentPayload = {
         ...rawShipmentPayload,
+        contactPhone: phone.trim(),
         extraServices: requestedServicePayload.catalogServiceIds,
         customExtraServices: requestedServicePayload.customServiceIds,
         requestedCarrierServices,
@@ -1340,6 +1465,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
         } else {
           toast({ title: 'Talep yayınlandı!', description: 'Nakliyecilerden teklifler gelmeye başlayacak.' });
         }
+        publishSucceededRef.current = true;
         clearGuestOfferDraft();
         navigate('/ilanlarim');
       } else {
@@ -1363,7 +1489,16 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
 
   const submitStep1 = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!canNextFrom1) return;
+    if (!canNextFrom1) {
+      setShowValidationErrors(true);
+      toast({
+        title: routeValidation.title || 'Rota bilgileri eksik',
+        description: routeValidation.message || 'Lütfen zorunlu alanları tamamlayın.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    setShowValidationErrors(false);
     const autoScope: 'sehirici' | 'sehirlerarasi' = form.originCity === form.destinationCity ? 'sehirici' : 'sehirlerarasi';
     setForm(f => ({ ...f, scope: autoScope }));
     try { localStorage.setItem('auto_scope', autoScope); } catch {}
@@ -1524,6 +1659,14 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
   /* ── shared input style (geriye uyumlu alias) ── */
   const inputStyle = tb.input;
   const labelStyle = tb.label;
+  const fieldInvalidStyle = (invalid: boolean): React.CSSProperties => (
+    showValidationErrors && invalid ? { borderColor: 'var(--tb-danger)' } : {}
+  );
+  const fieldError = (invalid: boolean, message: string) => (
+    showValidationErrors && invalid
+      ? <div style={{ fontSize: '12px', color: 'var(--tb-danger)', marginTop: '5px' }}>{message}</div>
+      : null
+  );
   const cardSel = (active: boolean): React.CSSProperties => ({
     border: active ? '2px solid var(--tb-brand-700)' : '1px solid var(--tb-border)',
     background: active ? 'var(--tb-brand-50)' : 'var(--tb-surface)',
@@ -1700,11 +1843,16 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
                       <label style={labelStyle}>Şehir <span style={{ color: 'var(--tb-danger)' }}>*</span></label>
                       <Select value={form.originCity} onValueChange={(v) => {
                         if (!requireLoginForSelection()) return;
-                        handleChange('originCity', v);
+                        setForm((prev) => ({
+                          ...prev,
+                          originCity: v,
+                          originDistrict: prev.originCity === v ? prev.originDistrict : '',
+                        }));
                       }}>
-                        <SelectTrigger style={inputStyle}><SelectValue placeholder="Şehir seçin" /></SelectTrigger>
+                        <SelectTrigger style={{ ...inputStyle, ...fieldInvalidStyle(!form.originCity) }}><SelectValue placeholder="Şehir seçin" /></SelectTrigger>
                         <SelectContent>{CITIES_TR.map((c) => (<SelectItem key={c} value={c}>{c}</SelectItem>))}</SelectContent>
                       </Select>
+                      {fieldError(!form.originCity, 'Çıkış şehri gerekli.')}
                     </div>
                     <div>
                       <label style={labelStyle}>İlçe <span style={{ color: 'var(--tb-danger)' }}>*</span></label>
@@ -1712,9 +1860,10 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
                         if (!requireLoginForSelection()) return;
                         handleChange('originDistrict', v);
                       }}>
-                        <SelectTrigger style={inputStyle}><SelectValue placeholder="İlçe seçin" /></SelectTrigger>
+                        <SelectTrigger style={{ ...inputStyle, ...fieldInvalidStyle(!form.originDistrict) }}><SelectValue placeholder="İlçe seçin" /></SelectTrigger>
                         <SelectContent>{originDistricts.map((d) => (<SelectItem key={d} value={d}>{d}</SelectItem>))}</SelectContent>
                       </Select>
+                      {fieldError(!form.originDistrict, 'Çıkış ilçesi gerekli.')}
                     </div>
                     <div>
                       <label style={labelStyle}>Çıkış açık adres (mahalle, sokak, bina/blok, kat, daire)</label>
@@ -1779,11 +1928,16 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
                       <label style={labelStyle}>Şehir <span style={{ color: 'var(--tb-danger)' }}>*</span></label>
                       <Select value={form.destinationCity} onValueChange={(v) => {
                         if (!requireLoginForSelection()) return;
-                        handleChange('destinationCity', v);
+                        setForm((prev) => ({
+                          ...prev,
+                          destinationCity: v,
+                          destinationDistrict: prev.destinationCity === v ? prev.destinationDistrict : '',
+                        }));
                       }}>
-                        <SelectTrigger style={inputStyle}><SelectValue placeholder="Şehir seçin" /></SelectTrigger>
+                        <SelectTrigger style={{ ...inputStyle, ...fieldInvalidStyle(!form.destinationCity) }}><SelectValue placeholder="Şehir seçin" /></SelectTrigger>
                         <SelectContent>{CITIES_TR.map((c) => (<SelectItem key={c} value={c}>{c}</SelectItem>))}</SelectContent>
                       </Select>
+                      {fieldError(!form.destinationCity, 'Varış şehri gerekli.')}
                     </div>
                     <div>
                       <label style={labelStyle}>İlçe <span style={{ color: 'var(--tb-danger)' }}>*</span></label>
@@ -1791,9 +1945,10 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
                         if (!requireLoginForSelection()) return;
                         handleChange('destinationDistrict', v);
                       }}>
-                        <SelectTrigger style={inputStyle}><SelectValue placeholder="İlçe seçin" /></SelectTrigger>
+                        <SelectTrigger style={{ ...inputStyle, ...fieldInvalidStyle(!form.destinationDistrict) }}><SelectValue placeholder="İlçe seçin" /></SelectTrigger>
                         <SelectContent>{destinationDistricts.map((d) => (<SelectItem key={d} value={d}>{d}</SelectItem>))}</SelectContent>
                       </Select>
+                      {fieldError(!form.destinationDistrict, 'Varış ilçesi gerekli.')}
                     </div>
                     <div>
                       <label style={labelStyle}>Varış açık adres (mahalle, sokak, bina/blok, kat, daire)</label>
@@ -1831,11 +1986,12 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
                         if (!requireLoginForSelection()) return;
                         handleChange('date', e.target.value);
                       }}
-                      aria-invalid={isDateTooFar}
+                      aria-invalid={showValidationErrors && (!form.date || isDateTooFar)}
                       required
-                      style={inputStyle}
+                      style={{ ...inputStyle, ...fieldInvalidStyle(!form.date || isDateTooFar) }}
                     />
                   </div>
+                  {fieldError(!form.date, 'Taşıma tarihi gerekli.')}
                 </div>
                 <div>
                   <label style={labelStyle}>Tarih Esnekliği</label>
@@ -1866,6 +2022,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
                     ) : null}
                   </div>
                 )}
+                {fieldError(isDateTooFar, 'Taşıma tarihi en fazla 30 gün sonrası için seçilebilir.')}
               </div>
 
               {/* Transport type cards */}
@@ -1900,14 +2057,15 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
                     );
                   })}
                 </div>
+                {fieldError(!form.transportType, 'Yük türü gerekli.')}
               </div>
 
               {/* Action bar */}
               <div className="flex justify-end" style={{ paddingTop: '24px', borderTop: '1px solid var(--tb-divider)', marginTop: '24px' }}>
                 <button
                   type="submit"
-                  disabled={!canNextFrom1}
-                  style={{ ...tb.ctaPrimary, background: canNextFrom1 ? 'var(--tb-brand-700)' : 'var(--tb-ink-400)', padding: '12px 32px', fontSize: '15px', cursor: canNextFrom1 ? 'pointer' : 'not-allowed' }}
+                  aria-disabled={!canNextFrom1}
+                  style={{ ...tb.ctaPrimary, background: 'var(--tb-brand-700)', padding: '12px 32px', fontSize: '15px', cursor: 'pointer' }}
                 >
                   Devam →
                 </button>
@@ -2512,6 +2670,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
                   </Button>
                 </div>
               </div>
+              {fieldError(!hasLoadEstimate, 'Yayınlamadan önce yer tipi seçin veya Hacim Hesapla ile ağırlığı doldurun.')}
 
               {/* Photos */}
               <div style={{ marginBottom: '24px' }}>
@@ -2830,8 +2989,9 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
                   placeholder="5XX XXX XX XX"
-                  style={{ ...inputStyle, background: 'white' }}
+                  style={{ ...inputStyle, background: 'white', ...fieldInvalidStyle(!phone.trim()) }}
                 />
+                {fieldError(!phone.trim(), 'Telefon numarası gerekli.')}
                 {!needsPhone && (
                   <p style={{ fontSize: '12px', color: 'var(--tb-ink-400)', marginTop: '6px' }}>
                     Profilinizdeki numara kullanılıyor. Bu talep için farklı bir numara girebilirsiniz.

@@ -27,6 +27,8 @@ export const findLocationOption = (value: unknown, options: string[]) => {
   return options.find((option) => foldLocationName(option) === normalized) ?? '';
 };
 
+const toTrimmedString = (value: unknown) => String(value ?? '').trim();
+
 const normalizeStringArray = (value: unknown) => (
   Array.isArray(value)
     ? Array.from(new Set(value.map((item) => String(item ?? '').trim()).filter(Boolean)))
@@ -49,8 +51,10 @@ export const normalizeOfferRequestDraftFormData = (
   const warnings: string[] = [];
   const formData: OfferRequestDraftFormData = { ...draftFormData };
 
-  const originCity = findLocationOption(formData.originCity, CITIES_TR);
-  const destinationCity = findLocationOption(formData.destinationCity, CITIES_TR);
+  const matchedOriginCity = findLocationOption(formData.originCity, CITIES_TR);
+  const matchedDestinationCity = findLocationOption(formData.destinationCity, CITIES_TR);
+  const originCity = matchedOriginCity || toTrimmedString(formData.originCity);
+  const destinationCity = matchedDestinationCity || toTrimmedString(formData.destinationCity);
 
   if (formData.originCity && !originCity) warnings.push('Çıkış şehri mevcut şehir listesinde bulunamadı.');
   if (formData.destinationCity && !destinationCity) warnings.push('Varış şehri mevcut şehir listesinde bulunamadı.');
@@ -58,12 +62,14 @@ export const normalizeOfferRequestDraftFormData = (
   formData.originCity = originCity;
   formData.destinationCity = destinationCity;
 
-  const originDistrict = originCity
+  const matchedOriginDistrict = originCity
     ? findLocationOption(formData.originDistrict, getDistrictsForCitySync(originCity))
     : '';
-  const destinationDistrict = destinationCity
+  const matchedDestinationDistrict = destinationCity
     ? findLocationOption(formData.destinationDistrict, getDistrictsForCitySync(destinationCity))
     : '';
+  const originDistrict = matchedOriginDistrict || (originCity ? toTrimmedString(formData.originDistrict) : '');
+  const destinationDistrict = matchedDestinationDistrict || (destinationCity ? toTrimmedString(formData.destinationDistrict) : '');
 
   if (formData.originDistrict && !originDistrict) warnings.push('Çıkış ilçesi mevcut ilçe listesinde bulunamadı.');
   if (formData.destinationDistrict && !destinationDistrict) warnings.push('Varış ilçesi mevcut ilçe listesinde bulunamadı.');
