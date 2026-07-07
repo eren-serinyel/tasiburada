@@ -18,6 +18,7 @@ export interface CarrierSearchFilters {
   searchText?: string;
   availableDate?: string;
   availableDates?: string[];
+  availabilityTimeFilter?: CarrierAvailabilityTimeFilter;
   scopeIds?: string[];
   scopeNames?: string[];
   serviceTypeIds?: string[];
@@ -28,6 +29,10 @@ export interface CarrierSearchFilters {
   limit: number;
   offset: number;
 }
+
+export type CarrierAvailabilityTimeFilter =
+  | { mode: 'overlap'; startSeconds: number; endSeconds: number }
+  | { mode: 'contains'; startSeconds: number; endSeconds: number };
 
 export interface CarrierSearchRepositoryItem {
   carrier: Carrier;
@@ -101,6 +106,62 @@ export class CarrierRepository extends BaseRepository<Carrier> {
         }
       }
     }));
+  }
+
+  private applyAvailabilityFilter(
+    qb: SelectQueryBuilder<Carrier>,
+    dates?: string[],
+    timeFilter?: CarrierAvailabilityTimeFilter,
+  ): SelectQueryBuilder<Carrier> {
+    const normalizedDates = Array.from(new Set((dates ?? []).filter(Boolean)));
+    if (!normalizedDates.length) return qb;
+
+    const dateParams = normalizedDates.reduce<Record<string, string>>((params, date, index) => {
+      params[`availabilityDate${index}`] = date;
+      return params;
+    }, {});
+    const datePlaceholders = normalizedDates.map((_, index) => `:availabilityDate${index}`).join(', ');
+
+    let timeClause = '';
+    const timeParams: Record<string, number> = {};
+
+    if (timeFilter) {
+      const effectiveStart = 'TIME_TO_SEC(COALESCE(available_date.start_time, activity.default_availability_start))';
+      const effectiveEnd = `
+        CASE
+          WHEN TIME_TO_SEC(COALESCE(available_date.end_time, activity.default_availability_end)) = 0 THEN 86400
+          ELSE TIME_TO_SEC(COALESCE(available_date.end_time, activity.default_availability_end))
+        END
+      `;
+
+      timeParams.availabilityStartSeconds = timeFilter.startSeconds;
+      timeParams.availabilityEndSeconds = timeFilter.endSeconds;
+
+      timeClause = timeFilter.mode === 'contains'
+        ? `
+          AND COALESCE(available_date.start_time, activity.default_availability_start) IS NOT NULL
+          AND COALESCE(available_date.end_time, activity.default_availability_end) IS NOT NULL
+          AND ${effectiveStart} <= :availabilityStartSeconds
+          AND ${effectiveEnd} > :availabilityStartSeconds
+        `
+        : `
+          AND COALESCE(available_date.start_time, activity.default_availability_start) IS NOT NULL
+          AND COALESCE(available_date.end_time, activity.default_availability_end) IS NOT NULL
+          AND ${effectiveStart} < :availabilityEndSeconds
+          AND ${effectiveEnd} > :availabilityStartSeconds
+        `;
+    }
+
+    return qb.andWhere(
+      `EXISTS (
+        SELECT 1
+        FROM carrier_available_dates available_date
+        WHERE available_date.carrierId = carrier.id
+          AND available_date.date IN (${datePlaceholders})
+          ${timeClause}
+      )`,
+      { ...dateParams, ...timeParams },
+    );
   }
 
   async findFullById(id: string): Promise<Carrier | null> {
@@ -391,22 +452,13 @@ export class CarrierRepository extends BaseRepository<Carrier> {
       }));
     }
 
-    if (filters.availableDates && filters.availableDates.length > 0) {
-      qb.andWhere(new Brackets(bqb => {
-        filters.availableDates!.forEach((date, i) => {
-          const param = `flexDate${i}`;
-          bqb.orWhere(
-            `(activity.availableDates IS NOT NULL AND JSON_SEARCH(activity.availableDates, 'one', :${param}) IS NOT NULL)`,
-            { [param]: date }
-          );
-        });
-      }));
-    } else if (filters.availableDate) {
-      qb.andWhere(
-        "(activity.availableDates IS NOT NULL AND JSON_SEARCH(activity.availableDates, 'one', :availDate) IS NOT NULL)",
-        { availDate: filters.availableDate }
-      );
-    }
+    this.applyAvailabilityFilter(
+      qb,
+      filters.availableDates && filters.availableDates.length > 0
+        ? filters.availableDates
+        : filters.availableDate ? [filters.availableDate] : undefined,
+      filters.availabilityTimeFilter,
+    );
 
     if (filters.maxCapacityKg !== undefined) {
       qb.andWhere(
@@ -457,7 +509,8 @@ export class CarrierRepository extends BaseRepository<Carrier> {
     date: string,
     serviceCity?: string,
     scopeFilters?: Pick<CarrierSearchFilters, 'scopeIds' | 'scopeNames'>,
-    dateWindow?: string[]
+    dateWindow?: string[],
+    availabilityTimeFilter?: CarrierAvailabilityTimeFilter,
   ): Promise<{ total: number; available: number }> {
     const totalQb = this.repository
       .createQueryBuilder('carrier')
@@ -479,15 +532,7 @@ export class CarrierRepository extends BaseRepository<Carrier> {
     this.applyScopeFilter(availableQb, scopeFilters);
 
     const dates = dateWindow && dateWindow.length > 0 ? dateWindow : [date];
-    availableQb.andWhere(new Brackets(bqb => {
-      dates.forEach((d, i) => {
-        const param = `countDate${i}`;
-        bqb.orWhere(
-          `(activity.availableDates IS NOT NULL AND JSON_SEARCH(activity.availableDates, 'one', :${param}) IS NOT NULL)`,
-          { [param]: d }
-        );
-      });
-    }));
+    this.applyAvailabilityFilter(availableQb, dates, availabilityTimeFilter);
     const availableCount = await availableQb.getCount();
 
     return { total: totalCount, available: availableCount };

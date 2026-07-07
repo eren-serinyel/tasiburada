@@ -22,10 +22,56 @@ function normalizeAvailableDates(dates: unknown): string[] {
   return Array.from(
     new Set(
       dates
-        .map((date) => String(date).trim())
+        .map((date) => {
+          if (typeof date === 'object' && date !== null && 'date' in date) {
+            return String((date as { date?: unknown }).date ?? '').trim();
+          }
+          return String(date).trim();
+        })
         .filter((date) => /^\d{4}-\d{2}-\d{2}$/.test(date)),
     ),
   ).sort();
+}
+
+type DateOverride = {
+  startTime: string | null;
+  endTime: string | null;
+};
+
+function normalizeTime(value: unknown): string {
+  const text = String(value ?? '').trim();
+  const match = text.match(/^([01]\d|2[0-3]):([0-5]\d)/);
+  return match ? `${match[1]}:${match[2]}` : '';
+}
+
+function normalizeOverrides(values: unknown): Record<string, DateOverride> {
+  if (!Array.isArray(values)) return {};
+
+  return values.reduce<Record<string, DateOverride>>((acc, value) => {
+    if (typeof value !== 'object' || value === null) return acc;
+
+    const item = value as { date?: unknown; startTime?: unknown; endTime?: unknown };
+    const date = String(item.date ?? '').trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return acc;
+
+    const startTime = normalizeTime(item.startTime);
+    const endTime = normalizeTime(item.endTime);
+    if (startTime && endTime) {
+      acc[date] = { startTime, endTime };
+    }
+
+    return acc;
+  }, {});
+}
+
+function buildTimeOptions(): string[] {
+  const options: string[] = [];
+  for (let minutes = 0; minutes < 24 * 60; minutes += 30) {
+    const hour = String(Math.floor(minutes / 60)).padStart(2, '0');
+    const minute = String(minutes % 60).padStart(2, '0');
+    options.push(`${hour}:${minute}`);
+  }
+  return options;
 }
 
 interface CalendarDay {
@@ -41,12 +87,20 @@ const MONTH_NAMES = [
   'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık',
 ];
 const DAY_NAMES = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
+const TIME_OPTIONS = buildTimeOptions();
 
 export default function CarrierCalendar() {
   const [user, setUser] = useState<Carrier | null>(null);
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [availableDates, setAvailableDates] = useState<string[]>([]);
   const [initialDates, setInitialDates] = useState<string[]>([]);
+  const [defaultStart, setDefaultStart] = useState('08:00');
+  const [defaultEnd, setDefaultEnd] = useState('17:00');
+  const [initialDefaultStart, setInitialDefaultStart] = useState('08:00');
+  const [initialDefaultEnd, setInitialDefaultEnd] = useState('17:00');
+  const [dateOverrides, setDateOverrides] = useState<Record<string, DateOverride>>({});
+  const [initialDateOverrides, setInitialDateOverrides] = useState<Record<string, DateOverride>>({});
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [existingActivity, setExistingActivity] = useState<Record<string, unknown> | null>(null);
   const [calendarDays, setCalendarDays] = useState<CalendarDay[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -56,8 +110,22 @@ export default function CarrierCalendar() {
   const hasChanges = useMemo(() => {
     const sorted = [...availableDates].sort().join(',');
     const sortedInitial = [...initialDates].sort().join(',');
-    return sorted !== sortedInitial;
-  }, [availableDates, initialDates]);
+    return (
+      sorted !== sortedInitial ||
+      defaultStart !== initialDefaultStart ||
+      defaultEnd !== initialDefaultEnd ||
+      JSON.stringify(dateOverrides) !== JSON.stringify(initialDateOverrides)
+    );
+  }, [
+    availableDates,
+    dateOverrides,
+    defaultEnd,
+    defaultStart,
+    initialDateOverrides,
+    initialDates,
+    initialDefaultEnd,
+    initialDefaultStart,
+  ]);
 
   useEffect(() => {
     const storedUser = localStorage.getItem('currentUser');
@@ -81,8 +149,18 @@ export default function CarrierCalendar() {
         if (res.ok && json?.success) {
           const activity = json.data ?? {};
           const dates = normalizeAvailableDates(activity.availableDates);
+          const overrides = normalizeOverrides(activity.availableDateOverrides);
+          const savedDefaultStart = normalizeTime(activity.defaultAvailabilityStart) || '08:00';
+          const savedDefaultEnd = normalizeTime(activity.defaultAvailabilityEnd) || '17:00';
           setAvailableDates(dates);
           setInitialDates(dates);
+          setDefaultStart(savedDefaultStart);
+          setDefaultEnd(savedDefaultEnd);
+          setInitialDefaultStart(savedDefaultStart);
+          setInitialDefaultEnd(savedDefaultEnd);
+          setDateOverrides(overrides);
+          setInitialDateOverrides(overrides);
+          setSelectedDate(dates[0] ?? null);
           setExistingActivity(activity);
         }
       } catch {
@@ -141,23 +219,63 @@ export default function CarrierCalendar() {
     if (!user || day.isPast) return;
 
     const dateString = formatDateKey(day.date);
-    const newAvailableDates = availableDates.includes(dateString)
-      ? availableDates.filter((d) => d !== dateString)
-      : [...availableDates, dateString];
+    if (availableDates.includes(dateString)) {
+      setSelectedDate(dateString);
+      return;
+    }
 
-    setAvailableDates(normalizeAvailableDates(newAvailableDates));
+    setAvailableDates(normalizeAvailableDates([...availableDates, dateString]));
+    setSelectedDate(dateString);
+  };
+
+  const removeSelectedDate = () => {
+    if (!selectedDate) return;
+    setAvailableDates((dates) => dates.filter((date) => date !== selectedDate));
+    setDateOverrides((overrides) => {
+      const next = { ...overrides };
+      delete next[selectedDate];
+      return next;
+    });
+    setSelectedDate(null);
+  };
+
+  const setSelectedOverride = (field: keyof DateOverride, value: string) => {
+    if (!selectedDate) return;
+    setDateOverrides((overrides) => ({
+      ...overrides,
+      [selectedDate]: {
+        startTime: field === 'startTime' ? value || null : overrides[selectedDate]?.startTime ?? null,
+        endTime: field === 'endTime' ? value || null : overrides[selectedDate]?.endTime ?? null,
+      },
+    }));
+  };
+
+  const clearSelectedOverride = () => {
+    if (!selectedDate) return;
+    setDateOverrides((overrides) => {
+      const next = { ...overrides };
+      delete next[selectedDate];
+      return next;
+    });
   };
 
   const handleSave = async () => {
     if (!user || isSaving) return;
     setIsSaving(true);
     try {
+      const datePayload = normalizeAvailableDates(availableDates).map((date) => ({
+        date,
+        startTime: dateOverrides[date]?.startTime ?? null,
+        endTime: dateOverrides[date]?.endTime ?? null,
+      }));
       const body = {
         city: (existingActivity?.city as string) ?? '',
         district: existingActivity?.district,
         address: existingActivity?.address,
         serviceAreas: (existingActivity?.serviceAreas as string[]) ?? [],
-        availableDates: normalizeAvailableDates(availableDates),
+        defaultAvailabilityStart: defaultStart,
+        defaultAvailabilityEnd: defaultEnd,
+        availableDates: datePayload,
       };
       const res = await apiClient('/api/v1/carriers/me/activity', {
         method: 'PUT',
@@ -172,8 +290,18 @@ export default function CarrierCalendar() {
       const json = await res.json().catch(() => ({}));
       const savedActivity = json?.data ?? body;
       const savedDates = normalizeAvailableDates(savedActivity.availableDates);
+      const savedOverrides = normalizeOverrides(savedActivity.availableDateOverrides);
+      const savedDefaultStart = normalizeTime(savedActivity.defaultAvailabilityStart) || defaultStart;
+      const savedDefaultEnd = normalizeTime(savedActivity.defaultAvailabilityEnd) || defaultEnd;
       setAvailableDates(savedDates);
       setInitialDates(savedDates);
+      setDefaultStart(savedDefaultStart);
+      setDefaultEnd(savedDefaultEnd);
+      setInitialDefaultStart(savedDefaultStart);
+      setInitialDefaultEnd(savedDefaultEnd);
+      setDateOverrides(savedOverrides);
+      setInitialDateOverrides(savedOverrides);
+      setSelectedDate(savedDates.includes(selectedDate ?? '') ? selectedDate : savedDates[0] ?? null);
       setExistingActivity(savedActivity);
       toast.success('Müsaitlik takvimi kaydedildi.');
     } catch {
@@ -225,6 +353,24 @@ export default function CarrierCalendar() {
           </button>
         </div>
       </div>
+
+      <Card className="border shadow-sm">
+        <CardContent className="p-4">
+          <div className="flex flex-col sm:flex-row sm:items-end gap-4">
+            <div className="flex-1">
+              <label className="block text-sm font-semibold text-gray-800 mb-1">
+                Varsayılan çalışma saatiniz
+              </label>
+              <p className="text-xs text-gray-500">Saat girmediğiniz tarihlerde bu aralık geçerli olur.</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <TimeSelect value={defaultStart} onChange={setDefaultStart} ariaLabel="Varsayılan başlangıç saati" />
+              <span className="text-sm text-gray-400">-</span>
+              <TimeSelect value={defaultEnd} onChange={setDefaultEnd} ariaLabel="Varsayılan bitiş saati" />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Calendar */}
       <Card className="border shadow-sm">
@@ -298,6 +444,44 @@ export default function CarrierCalendar() {
         </CardContent>
       </Card>
 
+      {selectedDate && availableDates.includes(selectedDate) && (
+        <Card className="border shadow-sm">
+          <CardContent className="p-4">
+            <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+              <div>
+                <h2 className="text-sm font-semibold text-gray-900">{selectedDate}</h2>
+                <p className="text-xs text-gray-500 mt-1">
+                  Farklı saat seçilmezse {defaultStart}-{defaultEnd} geçerli olur.
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <TimeSelect
+                  value={dateOverrides[selectedDate]?.startTime ?? ''}
+                  onChange={(value) => setSelectedOverride('startTime', value)}
+                  includeEmpty
+                  emptyLabel="Başlangıç"
+                  ariaLabel="Tarihe özel başlangıç saati"
+                />
+                <span className="text-sm text-gray-400">-</span>
+                <TimeSelect
+                  value={dateOverrides[selectedDate]?.endTime ?? ''}
+                  onChange={(value) => setSelectedOverride('endTime', value)}
+                  includeEmpty
+                  emptyLabel="Bitiş"
+                  ariaLabel="Tarihe özel bitiş saati"
+                />
+                <Button type="button" variant="outline" onClick={clearSelectedOverride} className="h-9">
+                  Varsayılanı kullan
+                </Button>
+                <Button type="button" variant="outline" onClick={removeSelectedDate} className="h-9 text-red-600">
+                  Tarihi kaldır
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Save button */}
       <div className="flex justify-end">
         <Button
@@ -314,6 +498,36 @@ export default function CarrierCalendar() {
         </Button>
       </div>
     </div>
+  );
+}
+
+function TimeSelect({
+  value,
+  onChange,
+  ariaLabel,
+  includeEmpty = false,
+  emptyLabel = 'Saat seçin',
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  ariaLabel: string;
+  includeEmpty?: boolean;
+  emptyLabel?: string;
+}) {
+  return (
+    <select
+      aria-label={ariaLabel}
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      className="h-9 rounded-md border border-gray-200 bg-white px-3 text-sm font-medium text-gray-800"
+    >
+      {includeEmpty && <option value="">{emptyLabel}</option>}
+      {TIME_OPTIONS.map((time) => (
+        <option key={time} value={time}>
+          {time}
+        </option>
+      ))}
+    </select>
   );
 }
 

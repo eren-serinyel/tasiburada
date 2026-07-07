@@ -7,6 +7,8 @@ type ActivityPayload = {
   address?: string;
   serviceAreas?: string[];
   availableDates?: string[];
+  defaultAvailabilityStart?: string | null;
+  defaultAvailabilityEnd?: string | null;
 };
 
 export class CarrierActivityRepository extends BaseRepository<CarrierActivity> {
@@ -27,6 +29,8 @@ export class CarrierActivityRepository extends BaseRepository<CarrierActivity> {
       address: payload.address,
       serviceAreasJson: payload.serviceAreas ?? null,
       availableDates: payload.availableDates ? JSON.stringify(payload.availableDates) : undefined,
+      defaultAvailabilityStart: payload.defaultAvailabilityStart ?? null,
+      defaultAvailabilityEnd: payload.defaultAvailabilityEnd ?? null,
     };
 
     if (existing) {

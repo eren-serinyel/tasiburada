@@ -121,6 +121,32 @@ const formatCalendarDate = (value: string) => {
   return date ? date.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' }) : value;
 };
 
+const SPECIFIC_TIME_OPTIONS = Array.from({ length: 48 }, (_, index) => {
+  const minutes = index * 30;
+  const hour = String(Math.floor(minutes / 60)).padStart(2, '0');
+  const minute = String(minutes % 60).padStart(2, '0');
+  return `${hour}:${minute}`;
+});
+
+const getTimePreferenceMode = (value?: string) => {
+  if (!value) return 'farketmez';
+  const normalized = value.toLocaleLowerCase('tr-TR');
+  if (normalized === 'ogle' || normalized === 'öğle') return 'farketmez';
+  return normalized.startsWith('belirli:') ? 'belirli' : normalized;
+};
+
+const getSpecificTimeFromPreference = (value?: string) => (
+  value?.startsWith('belirli:') ? value.slice('belirli:'.length) : '14:00'
+);
+
+const formatTimePreferenceLabel = (value?: string) => {
+  const mode = getTimePreferenceMode(value);
+  if (mode === 'sabah') return 'Sabah (08:00-17:00)';
+  if (mode === 'aksam') return 'Akşam (17:00-00:00)';
+  if (mode === 'belirli') return `Belirli saat (${getSpecificTimeFromPreference(value)})`;
+  return 'Fark etmez';
+};
+
 const normalizeServiceName = (name: string) => name.trim().replace(/\s+/g, ' ').toLocaleLowerCase('tr-TR');
 
 const filterAndDedupeServiceGroups = (
@@ -225,7 +251,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
     destinationFloor: '',
     destinationHasElevator: false,
     dateFlexibility: 'EXACT' as 'EXACT' | 'PLUS_MINUS_1_DAY' | 'PLUS_MINUS_3_DAYS',
-    timeWindow: '',
+    timeWindow: 'farketmez',
     extras: { asansor: false, sigorta: false, ambalaj: false },
     serviceOptions: {} as Record<string, string[]>,
     extraServices: [] as string[],
@@ -269,6 +295,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
         if (form.originCity) params.set('serviceCity', form.originCity);
         if (requestedScope) params.set('scope', requestedScope);
         if (form.dateFlexibility && form.dateFlexibility !== 'EXACT') params.set('dateFlexibility', form.dateFlexibility);
+        if (form.timeWindow && form.timeWindow !== 'farketmez') params.set('timePreference', form.timeWindow);
         const res = await fetch(`/api/v1/carriers/availability-summary?${params.toString()}`);
         const json = await res.json();
         if (res.ok && json.success) {
@@ -283,7 +310,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
     return () => {
       if (availabilityTimerRef.current) clearTimeout(availabilityTimerRef.current);
     };
-  }, [form.date, form.originCity, form.dateFlexibility, requestedScope]);
+  }, [form.date, form.originCity, form.dateFlexibility, form.timeWindow, requestedScope]);
 
   // Load saved addresses for authenticated customers
   useEffect(() => {
@@ -502,7 +529,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
     form.weightKg ||
     form.floor ||
     form.hasElevator ||
-    form.timeWindow ||
+    (form.timeWindow && form.timeWindow !== 'farketmez') ||
     form.note ||
     form.photos.length ||
     selectedCarrierIds.length ||
@@ -922,6 +949,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
     params.set('serviceCity', form.originCity);
     if (requestedScope) params.set('scope', requestedScope);
     if (form.dateFlexibility && form.dateFlexibility !== 'EXACT') params.set('dateFlexibility', form.dateFlexibility);
+    if (form.timeWindow && form.timeWindow !== 'farketmez') params.set('timePreference', form.timeWindow);
 
     const token = localStorage.getItem('authToken');
     fetch(`/api/v1/carriers/search?${params.toString()}`, {
@@ -935,7 +963,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
       })
       .catch(() => {})
       .finally(() => setLoadingResults(false));
-  }, [step, form.originCity, form.destinationCity, form.date, form.dateFlexibility, requestedScope]);
+  }, [step, form.originCity, form.destinationCity, form.date, form.dateFlexibility, form.timeWindow, requestedScope]);
 
   const [minRating, setMinRating] = useState(0);
   const [sortBy, setSortBy] = useState<'rating' | 'reviews' | 'capacity'>('rating');
@@ -2637,18 +2665,40 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
                 </div>
                 <div>
                   <label style={labelStyle}>Zaman Tercihi</label>
-                  <Select value={form.timeWindow} onValueChange={(v) => {
+                  <Select value={getTimePreferenceMode(form.timeWindow)} onValueChange={(v) => {
                     if (!requireLoginForSelection()) return;
                     handleChange('timeWindow', v);
+                    if (v === 'belirli') handleChange('timeWindow', 'belirli:14:00');
                   }}>
                     <SelectTrigger style={inputStyle}><SelectValue placeholder="Seçin" /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="sabah">Sabah (08:00-12:00)</SelectItem>
-                      <SelectItem value="ogle">Öğlen (12:00-17:00)</SelectItem>
-                      <SelectItem value="aksam">Akşam (17:00-22:00)</SelectItem>
+                      <SelectItem value="sabah">Sabah (08:00-17:00)</SelectItem>
+                      <SelectItem value="aksam">Akşam (17:00-00:00)</SelectItem>
+                      <SelectItem value="belirli">Belirli saat</SelectItem>
                       <SelectItem value="farketmez">Fark etmez</SelectItem>
                     </SelectContent>
                   </Select>
+                  {getTimePreferenceMode(form.timeWindow) === 'belirli' && (
+                    <div style={{ marginTop: '8px' }}>
+                      <Select
+                        value={getSpecificTimeFromPreference(form.timeWindow)}
+                        onValueChange={(v) => {
+                          if (!requireLoginForSelection()) return;
+                          handleChange('timeWindow', `belirli:${v}`);
+                        }}
+                      >
+                        <SelectTrigger style={inputStyle}><SelectValue placeholder="Saat seçin" /></SelectTrigger>
+                        <SelectContent>
+                          {SPECIFIC_TIME_OPTIONS.map((time) => (
+                            <SelectItem key={time} value={time}>{time}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <div style={{ fontSize: '12px', color: 'var(--tb-ink-500)', marginTop: '6px' }}>
+                        Nakliyecinin çalışma aralığında bu saate uygun olanlar listelenir.
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -2885,7 +2935,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
                     {form.timeWindow && (
                       <div className="flex justify-between">
                         <span style={{ fontSize: '12px', color: 'var(--tb-ink-500)' }}>Zaman</span>
-                        <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--tb-ink-900)' }}>{form.timeWindow}</span>
+                        <span style={{ fontSize: '14px', fontWeight: 500, color: 'var(--tb-ink-900)' }}>{formatTimePreferenceLabel(form.timeWindow)}</span>
                       </div>
                     )}
                     {/* Extra services chips */}
@@ -3200,6 +3250,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
 
               <div style={{ padding: '32px 32px 28px', textAlign: 'center' }}>
                 <button
+                  type="button"
                   onClick={closeLoginModal}
                   style={{
                     position: 'absolute', right: '16px', top: '20px',
@@ -3230,6 +3281,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
 
                 <div style={{ marginTop: '24px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
                   <button
+                    type="button"
                     onClick={() => handleAuthRedirect('login')}
                     disabled={Boolean(authRedirecting)}
                     style={{
@@ -3242,6 +3294,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
                     Giriş Yap
                   </button>
                   <button
+                    type="button"
                     onClick={() => handleAuthRedirect('register')}
                     disabled={Boolean(authRedirecting)}
                     style={{
@@ -3313,6 +3366,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
                     </div>
                   </div>
                   <button
+                    type="button"
                     onClick={() => setReviewCarrierId(null)}
                     style={{
                       background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: '8px',
@@ -3578,7 +3632,7 @@ function SummaryCard({ step, form, onEditStep }: { step: Step; form: any; onEdit
                 {form.loadType && <div>Yük Türü: {LOAD_TYPES[form.loadType as keyof typeof LOAD_TYPES]}</div>}
                 <div className="flex flex-wrap gap-2 pt-1">
                   {form.hasElevator && <Badge variant="secondary">Bina asansörü</Badge>}
-                  {form.timeWindow && <Badge variant="secondary">Zaman: {form.timeWindow}</Badge>}
+                  {form.timeWindow && <Badge variant="secondary">Zaman: {formatTimePreferenceLabel(form.timeWindow)}</Badge>}
                   {summaryGroupKey && (
                     <Badge variant="secondary">
                       {SPECIAL_SERVICES[summaryGroupKey] || summaryGroupKey}

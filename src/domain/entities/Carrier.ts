@@ -11,6 +11,7 @@ import { CarrierScopeOfWork } from './CarrierScopeOfWork';
 import { CarrierLoadTypeCapability } from './CarrierLoadTypeCapability';
 import { CarrierExtraServiceCapability } from './CarrierExtraServiceCapability';
 import { CarrierCustomExtraService } from './CarrierCustomExtraService';
+import { CarrierAvailableDate } from './CarrierAvailableDate';
 
 export enum CarrierApprovalState {
   DRAFT = 'DRAFT',
@@ -196,4 +197,7 @@ export class Carrier {
 
   @OneToMany(() => CarrierCustomExtraService, service => service.carrier)
   customExtraServices: CarrierCustomExtraService[];
+
+  @OneToMany(() => CarrierAvailableDate, availableDate => availableDate.carrier)
+  availableDateOverrides: CarrierAvailableDate[];
 }

@@ -4,6 +4,7 @@ import { testApp } from './helpers/testApp';
 import { AppDataSource } from '../infrastructure/database/data-source';
 import { Carrier, CarrierApprovalState } from '../domain/entities/Carrier';
 import { CarrierActivity } from '../domain/entities/CarrierActivity';
+import { CarrierAvailableDate } from '../domain/entities/CarrierAvailableDate';
 
 describe('Carrier availability origin filter', () => {
   const createdCarrierIds: string[] = [];
@@ -14,6 +15,7 @@ describe('Carrier availability origin filter', () => {
       return;
     }
 
+    await AppDataSource.getRepository(CarrierAvailableDate).delete({ carrierId: In(createdCarrierIds) } as any);
     await AppDataSource.getRepository(CarrierActivity).delete({ carrierId: In(createdCarrierIds) } as any);
     await AppDataSource.getRepository(Carrier).delete({ id: In(createdCarrierIds) } as any);
     createdCarrierIds.length = 0;
@@ -48,8 +50,19 @@ describe('Carrier availability origin filter', () => {
       district: 'Merkez',
       address: `${city} depo`,
       serviceAreasJson: serviceAreas,
+      defaultAvailabilityStart: '08:00',
+      defaultAvailabilityEnd: '17:00',
       availableDates: JSON.stringify(availableDates),
     });
+
+    await AppDataSource.getRepository(CarrierAvailableDate).save(
+      availableDates.map(date => ({
+        carrierId: carrier.id,
+        date,
+        startTime: null,
+        endTime: null,
+      })),
+    );
 
     createdCarrierIds.push(carrier.id);
     return carrier;
@@ -92,5 +105,26 @@ describe('Carrier availability origin filter', () => {
     const mersinIds = (mersinSearch.body.data.items || []).map((item: any) => item.id);
     expect(mersinIds).toContain(mersinCarrier.id);
     expect(mersinIds).not.toContain(sakaryaCarrier.id);
+  });
+
+  test('carrier search filters by customer time preference against date-based availability', async () => {
+    if (process.env.SKIP_DB_TESTS === 'true') return;
+
+    const date = '2026-07-07';
+    const city = `TimeCity-${Date.now()}`;
+    const carrier = await createApprovedCarrier('Time', city, [city], [date]);
+
+    const searchIds = async (timePreference: string) => {
+      const res = await request(testApp)
+        .get('/api/v1/carriers/search')
+        .query({ availableDate: date, serviceCity: city, timePreference, limit: 50 });
+      expect(res.status).toBe(200);
+      return (res.body.data.items || []).map((item: any) => item.id);
+    };
+
+    await expect(searchIds('belirli:14:00')).resolves.toContain(carrier.id);
+    await expect(searchIds('aksam')).resolves.not.toContain(carrier.id);
+    await expect(searchIds('sabah')).resolves.toContain(carrier.id);
+    await expect(searchIds('farketmez')).resolves.toContain(carrier.id);
   });
 });

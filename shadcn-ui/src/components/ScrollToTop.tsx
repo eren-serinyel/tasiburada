@@ -1,9 +1,11 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 
 // Sayfa rotası değiştiğinde otomatik olarak en üste kaydırır.
 export default function ScrollToTop() {
   const { pathname, state } = useLocation() as { pathname: string; state?: any };
+  const scrollTarget = (state as any)?.scrollTo;
+  const previousResetLocationRef = useRef<{ pathname: string; scrollTarget: unknown } | null>(null);
 
   // Tarayıcının otomatik scroll geri yüklemesini kapat
   useEffect(() => {
@@ -20,12 +22,20 @@ export default function ScrollToTop() {
   }, []);
 
   useEffect(() => {
+    const previousResetLocation = previousResetLocationRef.current;
+    const isSameResetLocation =
+      previousResetLocation?.pathname === pathname
+      && previousResetLocation?.scrollTarget === scrollTarget;
+    previousResetLocationRef.current = { pathname, scrollTarget };
+
+    if (isSameResetLocation) return;
+
     // Odağı temizle (bazı input'lar odak alınca sayfayı aşağı kaydırabilir)
     try { (document.activeElement as HTMLElement | null)?.blur?.(); } catch {}
 
     // Eğer belirli bir elemana kaydırma isteği varsa (örn. Footer Yardım -> anasayfa SSS),
     // otomatik olarak en üste sıfırlamayı atla. Hedefe kaydırmayı ilgili sayfa (Index) yönetecek.
-    const hasScrollTarget = Boolean((state as any)?.scrollTo);
+    const hasScrollTarget = Boolean(scrollTarget);
     if (hasScrollTarget) {
       return;
     }
@@ -55,7 +65,7 @@ export default function ScrollToTop() {
       clearTimeout(t2);
       clearTimeout(t3);
     };
-  }, [pathname, state]);
+  }, [pathname, scrollTarget]);
 
   return null;
 }

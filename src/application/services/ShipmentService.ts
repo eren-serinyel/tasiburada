@@ -979,6 +979,9 @@ export class ShipmentService {
       scopeIds,
       serviceTypeIds,
       loadTypes: loadType ? [loadType] : [],
+      availableDate: this.formatDateForCarrierSearch(shipment.shipmentDate),
+      availableDates: this.buildCarrierSearchDateWindow(shipment.shipmentDate, shipment.dateFlexibility),
+      availabilityTimeFilter: this.parseCarrierSearchTimePreference(shipment.timePreference),
       isVerified: preferVerified ? true : undefined,
       hasDocuments: true,
       limit: 30,
@@ -1000,6 +1003,53 @@ export class ShipmentService {
         );
       } catch { /* individual notification failure should not block others */ }
     }
+  }
+
+  private formatDateForCarrierSearch(date: Date | string): string {
+    if (typeof date === 'string') return date.slice(0, 10);
+    return date.toISOString().slice(0, 10);
+  }
+
+  private buildCarrierSearchDateWindow(date: Date | string, flexibility?: DateFlexibility | null): string[] {
+    const center = this.formatDateForCarrierSearch(date);
+    const flexDays = flexibility === DateFlexibility.PLUS_MINUS_1_DAY
+      ? 1
+      : flexibility === DateFlexibility.PLUS_MINUS_3_DAYS ? 3 : 0;
+    if (flexDays === 0) return [center];
+
+    const dates: string[] = [];
+    const base = new Date(center + 'T12:00:00Z');
+    for (let offset = -flexDays; offset <= flexDays; offset++) {
+      const next = new Date(base);
+      next.setUTCDate(next.getUTCDate() + offset);
+      dates.push(next.toISOString().slice(0, 10));
+    }
+    return dates;
+  }
+
+  private parseCarrierSearchTimePreference(timePreference?: string | null) {
+    const normalized = String(timePreference ?? '').trim().toLocaleLowerCase('tr-TR');
+    const toSeconds = (time: string, isEndTime = false) => {
+      const match = time.match(/^([01]\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?$/);
+      if (!match) return Number.NaN;
+      const seconds = Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3] ?? 0);
+      return isEndTime && seconds === 0 ? 24 * 3600 : seconds;
+    };
+
+    if (!normalized || normalized === 'farketmez' || normalized === 'esnek') return undefined;
+    if (normalized === 'sabah') {
+      return { mode: 'overlap' as const, startSeconds: toSeconds('08:00'), endSeconds: toSeconds('17:00') };
+    }
+    if (normalized === 'aksam' || normalized === 'akşam') {
+      return { mode: 'overlap' as const, startSeconds: toSeconds('17:00'), endSeconds: toSeconds('00:00', true) };
+    }
+    if (normalized.startsWith('belirli:')) {
+      const selectedSeconds = toSeconds(normalized.slice('belirli:'.length));
+      return Number.isFinite(selectedSeconds)
+        ? { mode: 'contains' as const, startSeconds: selectedSeconds, endSeconds: selectedSeconds }
+        : undefined;
+    }
+    return undefined;
   }
 
   async getMyShipments(customerId: string): Promise<Array<Shipment & { offerCount: number }>> {

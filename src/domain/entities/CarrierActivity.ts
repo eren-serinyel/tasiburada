@@ -25,6 +25,12 @@ export class CarrierActivity {
   @Column({ type: 'text', nullable: true })
   availableDates?: string;
 
+  @Column({ name: 'default_availability_start', type: 'time', nullable: true })
+  defaultAvailabilityStart?: string | null;
+
+  @Column({ name: 'default_availability_end', type: 'time', nullable: true })
+  defaultAvailabilityEnd?: string | null;
+
   @CreateDateColumn()
   createdAt: Date;
 

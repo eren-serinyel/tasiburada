@@ -121,7 +121,15 @@ export class CarrierActivityDto {
 
   @IsOptional()
   @IsArray()
-  availableDates?: string[];
+  availableDates?: Array<string | { date: string; startTime?: string | null; endTime?: string | null }>;
+
+  @IsOptional()
+  @IsString()
+  defaultAvailabilityStart?: string | null;
+
+  @IsOptional()
+  @IsString()
+  defaultAvailabilityEnd?: string | null;
 }
 
 export class CarrierVehicleSelectionDto {

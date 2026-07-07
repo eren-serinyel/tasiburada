@@ -11,6 +11,7 @@ import { testApp } from './helpers/testApp';
 import { AppDataSource } from '../infrastructure/database/data-source';
 import { Carrier, CarrierApprovalState } from '../domain/entities/Carrier';
 import { CarrierActivity } from '../domain/entities/CarrierActivity';
+import { CarrierAvailableDate } from '../domain/entities/CarrierAvailableDate';
 
 // ---------------------------------------------------------------------------
 // helpers
@@ -23,6 +24,7 @@ afterEach(async () => {
     createdCarrierIds.length = 0;
     return;
   }
+  await AppDataSource.getRepository(CarrierAvailableDate).delete({ carrierId: In(createdCarrierIds) } as any);
   await AppDataSource.getRepository(CarrierActivity).delete({ carrierId: In(createdCarrierIds) } as any);
   await AppDataSource.getRepository(Carrier).delete({ id: In(createdCarrierIds) } as any);
   createdCarrierIds.length = 0;
@@ -56,8 +58,19 @@ async function createApprovedCarrier(
     district: 'Merkez',
     address: `${city} depo`,
     serviceAreasJson: [city],
+    defaultAvailabilityStart: '08:00',
+    defaultAvailabilityEnd: '17:00',
     availableDates: JSON.stringify(availableDates),
   });
+
+  await AppDataSource.getRepository(CarrierAvailableDate).save(
+    availableDates.map(date => ({
+      carrierId: carrier.id,
+      date,
+      startTime: null,
+      endTime: null,
+    })),
+  );
 
   createdCarrierIds.push(carrier.id);
   return carrier;

@@ -8,6 +8,7 @@ export { ReviewRepository } from './ReviewRepository';
 export { VehicleTypeRepository } from './VehicleTypeRepository';
 export { CarrierProfileStatusRepository } from './CarrierProfileStatusRepository';
 export { CarrierActivityRepository } from './CarrierActivityRepository';
+export { CarrierAvailableDateRepository } from './CarrierAvailableDateRepository';
 export { CarrierDocumentRepository } from './CarrierDocumentRepository';
 export { CarrierEarningsRepository } from './CarrierEarningsRepository';
 export { CarrierSecuritySettingsRepository } from './CarrierSecuritySettingsRepository';

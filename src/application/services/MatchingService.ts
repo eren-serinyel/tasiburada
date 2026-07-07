@@ -31,6 +31,7 @@ export class MatchingService {
         'extraServiceCapabilities',
         'vehicleTypeLinks',
         'vehicleTypeLinks.vehicleType',
+        'availableDateOverrides',
       ],
     });
   }
@@ -61,6 +62,7 @@ export class MatchingService {
         'extraServiceCapabilities',
         'vehicleTypeLinks',
         'vehicleTypeLinks.vehicleType',
+        'availableDateOverrides',
       ],
     });
 
@@ -178,16 +180,43 @@ export class MatchingService {
   }
 
   private isCarrierAvailableForShipmentDate(shipment: Shipment, carrier: Carrier): boolean {
-    const rawAvailableDates = carrier.activity?.availableDates;
-    const availableDates = this.parseAvailableDates(rawAvailableDates);
-
-    if (availableDates.length === 0) {
-      return true;
-    }
-
     const flexDays = this.getFlexibilityDays(shipment.dateFlexibility);
     const shipmentDates = this.buildDateWindow(shipment.shipmentDate, flexDays);
-    return shipmentDates.some(date => availableDates.includes(date));
+    const availabilityRows = carrier.availableDateOverrides ?? [];
+
+    return shipmentDates.some(date => {
+      const row = availabilityRows.find(availableDate => availableDate.date === date);
+      if (!row) return false;
+      return this.matchesTimePreference(shipment.timePreference, row, carrier);
+    });
+  }
+
+  private matchesTimePreference(timePreference: string | null | undefined, availability: any, carrier: Carrier): boolean {
+    const normalized = String(timePreference ?? '').trim().toLocaleLowerCase('tr-TR');
+    if (!normalized || normalized === 'farketmez' || normalized === 'esnek') return true;
+
+    const carrierStart = this.timeToSeconds(availability.startTime ?? carrier.activity?.defaultAvailabilityStart);
+    const carrierEnd = this.timeToSeconds(availability.endTime ?? carrier.activity?.defaultAvailabilityEnd, true);
+    if (!Number.isFinite(carrierStart) || !Number.isFinite(carrierEnd)) return false;
+
+    if (normalized === 'sabah') {
+      const blockStart = this.timeToSeconds('08:00');
+      const blockEnd = this.timeToSeconds('17:00');
+      return carrierStart < blockEnd && carrierEnd > blockStart;
+    }
+
+    if (normalized === 'aksam' || normalized === 'akşam') {
+      const blockStart = this.timeToSeconds('17:00');
+      const blockEnd = this.timeToSeconds('00:00', true);
+      return carrierStart < blockEnd && carrierEnd > blockStart;
+    }
+
+    if (normalized.startsWith('belirli:')) {
+      const selected = this.timeToSeconds(normalized.slice('belirli:'.length));
+      return carrierStart <= selected && selected < carrierEnd;
+    }
+
+    return true;
   }
 
   private getFlexibilityDays(flexibility?: DateFlexibility | null): number {
@@ -212,20 +241,6 @@ export class MatchingService {
     return dates;
   }
 
-  private parseAvailableDates(value?: string | string[] | null): string[] {
-    if (!value) return [];
-    if (Array.isArray(value)) {
-      return value.map(item => String(item)).filter(Boolean);
-    }
-
-    try {
-      const parsed = JSON.parse(value);
-      return Array.isArray(parsed) ? parsed.map(item => String(item)).filter(Boolean) : [];
-    } catch {
-      return [];
-    }
-  }
-
   private toDateOnly(value: Date | string): string {
     if (typeof value === 'string') {
       return value.slice(0, 10);
@@ -237,6 +252,13 @@ export class MatchingService {
       month: '2-digit',
       day: '2-digit',
     }).format(value);
+  }
+
+  private timeToSeconds(value?: string | null, isEndTime = false): number {
+    const match = String(value ?? '').trim().match(/^([01]\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?$/);
+    if (!match) return Number.NaN;
+    const seconds = Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3] ?? 0);
+    return isEndTime && seconds === 0 ? 24 * 3600 : seconds;
   }
 
   private normalizeCity(value?: string | null): string {

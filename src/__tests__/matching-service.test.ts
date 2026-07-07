@@ -3,6 +3,10 @@ import { Carrier, CarrierApprovalState } from '../domain/entities/Carrier';
 import { ExtraServiceLoadType } from '../domain/entities/ExtraServiceApplicability';
 import { DateFlexibility, Shipment, ShipmentCategory } from '../domain/entities/Shipment';
 
+function availableDateOverrides(dates: string[]) {
+  return dates.map(date => ({ date, startTime: null, endTime: null })) as any;
+}
+
 function buildCarrier(overrides: Partial<Carrier> = {}): Carrier {
   return {
     id: 'carrier-1',
@@ -14,7 +18,8 @@ function buildCarrier(overrides: Partial<Carrier> = {}): Carrier {
     loadTypeCapabilities: [{ loadType: ExtraServiceLoadType.HOME, isActive: true }] as any,
     extraServiceCapabilities: [{ extraServiceId: 'es-1', loadType: ExtraServiceLoadType.HOME, isActive: true }] as any,
     vehicleTypeLinks: [{ vehicleTypeId: 'vt-1' }] as any,
-    activity: { availableDates: [] } as any,
+    activity: { defaultAvailabilityStart: '08:00', defaultAvailabilityEnd: '17:00' } as any,
+    availableDateOverrides: availableDateOverrides(['2026-05-01']),
     ...overrides,
   } as Carrier;
 }
@@ -98,14 +103,14 @@ describe('MatchingService MVP hardening', () => {
   });
 
   test('availableDates boşsa true', () => {
-    const carrier = buildCarrier({ activity: { availableDates: [] } as any });
+    const carrier = buildCarrier({ availableDateOverrides: [] as any });
     const shipment = buildShipment({ shipmentDate: new Date('2026-05-01T10:00:00.000Z') });
 
-    expect(service.isShipmentMatchingCarrier(shipment, carrier)).toBe(true);
+    expect(service.isShipmentMatchingCarrier(shipment, carrier)).toBe(false);
   });
 
   test('availableDates dolu ve tarih eşleşmezse false', () => {
-    const carrier = buildCarrier({ activity: { availableDates: ['2026-05-02'] } as any });
+    const carrier = buildCarrier({ availableDateOverrides: availableDateOverrides(['2026-05-02']) });
     const shipment = buildShipment({ shipmentDate: new Date('2026-05-01T10:00:00.000Z') });
 
     expect(service.isShipmentMatchingCarrier(shipment, carrier)).toBe(false);
@@ -211,7 +216,7 @@ describe('MatchingService — tarih esnekliği', () => {
 
   // Senaryo 1: ana regresyon
   test('Senaryo 1 — Hedef 29.06, esneklik ±3, nakliyeci 01.07 müsait → eşleşir', () => {
-    const carrier = buildCarrier({ activity: { availableDates: ['2026-07-01'] } as any });
+    const carrier = buildCarrier({ availableDateOverrides: availableDateOverrides(['2026-07-01']) });
     const shipment = buildShipment({
       shipmentDate: new Date('2026-06-29T12:00:00.000Z'),
       dateFlexibility: DateFlexibility.PLUS_MINUS_3_DAYS,
@@ -221,7 +226,7 @@ describe('MatchingService — tarih esnekliği', () => {
 
   // Senaryo 2: alt sınır inclusive
   test('Senaryo 2 — Hedef 29.06, esneklik ±3, nakliyeci 26.06 (alt sınır) müsait → eşleşir', () => {
-    const carrier = buildCarrier({ activity: { availableDates: ['2026-06-26'] } as any });
+    const carrier = buildCarrier({ availableDateOverrides: availableDateOverrides(['2026-06-26']) });
     const shipment = buildShipment({
       shipmentDate: new Date('2026-06-29T12:00:00.000Z'),
       dateFlexibility: DateFlexibility.PLUS_MINUS_3_DAYS,
@@ -231,7 +236,7 @@ describe('MatchingService — tarih esnekliği', () => {
 
   // Senaryo 3: üst sınır inclusive
   test('Senaryo 3 — Hedef 29.06, esneklik ±3, nakliyeci 02.07 (üst sınır) müsait → eşleşir', () => {
-    const carrier = buildCarrier({ activity: { availableDates: ['2026-07-02'] } as any });
+    const carrier = buildCarrier({ availableDateOverrides: availableDateOverrides(['2026-07-02']) });
     const shipment = buildShipment({
       shipmentDate: new Date('2026-06-29T12:00:00.000Z'),
       dateFlexibility: DateFlexibility.PLUS_MINUS_3_DAYS,
@@ -241,7 +246,7 @@ describe('MatchingService — tarih esnekliği', () => {
 
   // Senaryo 4: pencere dışı
   test('Senaryo 4 — Hedef 29.06, esneklik ±3, nakliyeci 03.07 (pencere dışı) → eşleşmez', () => {
-    const carrier = buildCarrier({ activity: { availableDates: ['2026-07-03'] } as any });
+    const carrier = buildCarrier({ availableDateOverrides: availableDateOverrides(['2026-07-03']) });
     const shipment = buildShipment({
       shipmentDate: new Date('2026-06-29T12:00:00.000Z'),
       dateFlexibility: DateFlexibility.PLUS_MINUS_3_DAYS,
@@ -251,7 +256,7 @@ describe('MatchingService — tarih esnekliği', () => {
 
   // Senaryo 5: esneklik yok
   test('Senaryo 5 — Hedef 29.06, esneklik yok, nakliyeci 01.07 müsait → eşleşmez', () => {
-    const carrier = buildCarrier({ activity: { availableDates: ['2026-07-01'] } as any });
+    const carrier = buildCarrier({ availableDateOverrides: availableDateOverrides(['2026-07-01']) });
     const shipment = buildShipment({
       shipmentDate: new Date('2026-06-29T12:00:00.000Z'),
       dateFlexibility: DateFlexibility.EXACT,
@@ -262,7 +267,7 @@ describe('MatchingService — tarih esnekliği', () => {
   // Senaryo 6: dedupe — birden fazla tarih olsa da bir nakliyeci
   test('Senaryo 6 — Nakliyeci pencerede 3 günde müsait; isShipmentMatchingCarrier true döner (tek eşleşme)', () => {
     const carrier = buildCarrier({
-      activity: { availableDates: ['2026-06-29', '2026-06-30', '2026-07-01'] } as any,
+      availableDateOverrides: availableDateOverrides(['2026-06-29', '2026-06-30', '2026-07-01']),
     });
     const shipment = buildShipment({
       shipmentDate: new Date('2026-06-29T12:00:00.000Z'),
@@ -275,7 +280,7 @@ describe('MatchingService — tarih esnekliği', () => {
   test('Senaryo 7 — Tarih aralığında müsait ama yük tipi uyumsuz → eşleşmez', () => {
     const carrier = buildCarrier({
       loadTypeCapabilities: [] as any, // HOME capability yok
-      activity: { availableDates: ['2026-07-01'] } as any,
+      availableDateOverrides: availableDateOverrides(['2026-07-01']),
     });
     const shipment = buildShipment({
       shipmentDate: new Date('2026-06-29T12:00:00.000Z'),
@@ -287,7 +292,7 @@ describe('MatchingService — tarih esnekliği', () => {
 
   // Senaryo 8: yıl geçişi
   test('Senaryo 8 — Hedef 31.12.2026, esneklik ±2, nakliyeci 01.01.2027 müsait → eşleşir', () => {
-    const carrier = buildCarrier({ activity: { availableDates: ['2027-01-01'] } as any });
+    const carrier = buildCarrier({ availableDateOverrides: availableDateOverrides(['2027-01-01']) });
     const shipment = buildShipment({
       shipmentDate: new Date('2026-12-31T12:00:00.000Z'),
       dateFlexibility: DateFlexibility.PLUS_MINUS_3_DAYS,
@@ -298,12 +303,36 @@ describe('MatchingService — tarih esnekliği', () => {
   // Ek: availableDates JSON string olarak saklansa da (DB formatı) parseAvailableDates doğru çalışmalı
   test('availableDates JSON string formatında saklanmış olsa da tarih esnekliği doğru çalışır', () => {
     const carrier = buildCarrier({
-      activity: { availableDates: '["2026-07-01"]' } as any,
+      activity: { availableDates: '["2099-01-01"]', defaultAvailabilityStart: '08:00', defaultAvailabilityEnd: '17:00' } as any,
+      availableDateOverrides: availableDateOverrides(['2026-07-01']),
     });
     const shipment = buildShipment({
       shipmentDate: new Date('2026-06-29T12:00:00.000Z'),
       dateFlexibility: DateFlexibility.PLUS_MINUS_3_DAYS,
     });
     expect(service.isShipmentMatchingCarrier(shipment, carrier)).toBe(true);
+  });
+
+  test('specific time and evening preference use carrier working range', () => {
+    const carrier = buildCarrier({
+      activity: { defaultAvailabilityStart: '08:00', defaultAvailabilityEnd: '17:00' } as any,
+      availableDateOverrides: availableDateOverrides(['2026-07-01']),
+    });
+
+    expect(service.isShipmentMatchingCarrier(
+      buildShipment({
+        shipmentDate: new Date('2026-07-01T12:00:00.000Z'),
+        timePreference: 'belirli:14:00',
+      }),
+      carrier,
+    )).toBe(true);
+
+    expect(service.isShipmentMatchingCarrier(
+      buildShipment({
+        shipmentDate: new Date('2026-07-01T12:00:00.000Z'),
+        timePreference: 'aksam',
+      }),
+      carrier,
+    )).toBe(false);
   });
 });

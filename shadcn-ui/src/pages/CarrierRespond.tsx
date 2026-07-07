@@ -104,12 +104,17 @@ const dateFlexibilityLabel: Record<string, string> = {
 
 const timePreferenceLabel: Record<string, string> = {
   sabah: 'Sabah',
-  ogle: 'Öğle',
-  öğle: 'Öğle',
   aksam: 'Akşam',
   akşam: 'Akşam',
   farketmez: 'Farketmez',
   esnek: 'Esnek',
+};
+
+const formatTimePreference = (value?: string | null) => {
+  const text = String(value || '').trim();
+  const normalized = text.toLocaleLowerCase('tr-TR');
+  if (normalized.startsWith('belirli:')) return `Belirli saat (${text.slice('belirli:'.length)})`;
+  return timePreferenceLabel[normalized] || text;
 };
 
 const vehicleLabel: Record<string, string> = {
@@ -408,9 +413,7 @@ export default function CarrierRespond() {
   const dateFlexibility = shipment.dateFlexibility
     ? dateFlexibilityLabel[String(shipment.dateFlexibility)] || shipment.dateFlexibility
     : '-';
-  const timePreference = shipment.timePreference
-    ? timePreferenceLabel[String(shipment.timePreference).toLocaleLowerCase('tr-TR')] || shipment.timePreference
-    : '-';
+  const timePreference = shipment.timePreference ? formatTimePreference(shipment.timePreference) : '-';
   const canSuggestTime = String(shipment.timePreference || '').toLocaleLowerCase('tr-TR') === 'farketmez';
 
   return (

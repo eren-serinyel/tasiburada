@@ -1,6 +1,12 @@
 import { Carrier } from '../../../domain/entities/Carrier';
 import { CarrierExtraServiceCapability } from '../../../domain/entities/CarrierExtraServiceCapability';
-import { CarrierRepository, CarrierSearchFilters, CarrierSearchRepositoryItem, CarrierSearchSort } from '../../../infrastructure/repositories/CarrierRepository';
+import {
+	CarrierAvailabilityTimeFilter,
+	CarrierRepository,
+	CarrierSearchFilters,
+	CarrierSearchRepositoryItem,
+	CarrierSearchSort,
+} from '../../../infrastructure/repositories/CarrierRepository';
 import { AppDataSource } from '../../../infrastructure/database/data-source';
 import { PRODUCT_SCOPE_OF_WORK_NAMES } from '../../../infrastructure/repositories/ScopeOfWorkRepository';
 
@@ -22,6 +28,8 @@ export interface CarrierSearchQuery {
 	serviceDistrict?: string;
 	availableDate?: string;
 	dateFlexibility?: string;
+	timePreference?: string;
+	specificTime?: string;
 	sortBy?: CarrierSearchSort;
 	limit?: number;
 	offset?: number;
@@ -83,7 +91,17 @@ export class CarrierSearchService {
 		const serviceCity = typeof query.serviceCity === 'string' ? query.serviceCity.trim() : undefined;
 		const scopeFilters = this.normalizeScopeValues((query as any).scope ?? (query as any).scopes ?? (query as any).scopeIds);
 		const dateWindow = this.buildDateWindow(date, typeof query.dateFlexibility === 'string' ? query.dateFlexibility : undefined);
-		return this.carrierRepository.countByAvailableDate(date, serviceCity || undefined, scopeFilters, dateWindow);
+		const availabilityTimeFilter = this.parseAvailabilityTimeFilter(
+			(query as any).timePreference ?? (query as any).timeWindow,
+			(query as any).specificTime ?? (query as any).selectedTime,
+		);
+		return this.carrierRepository.countByAvailableDate(
+			date,
+			serviceCity || undefined,
+			scopeFilters,
+			dateWindow,
+			availabilityTimeFilter,
+		);
 	}
 
 	private normalizeFilters(query: CarrierSearchQuery | Record<string, unknown>): CarrierSearchFilters {
@@ -178,6 +196,10 @@ export class CarrierSearchService {
 		const availableDate = toText((query as any).availableDate);
 		const dateFlexibilityRaw = toText((query as any).dateFlexibility);
 		const availableDates = availableDate ? this.buildDateWindow(availableDate, dateFlexibilityRaw) : undefined;
+		const availabilityTimeFilter = this.parseAvailabilityTimeFilter(
+			(query as any).timePreference ?? (query as any).timeWindow,
+			(query as any).specificTime ?? (query as any).selectedTime,
+		);
 
 		return {
 			city: baseCity,
@@ -193,6 +215,7 @@ export class CarrierSearchService {
 			searchText: toText((query as any).searchText),
 			availableDate,
 			availableDates,
+			availabilityTimeFilter,
 			scopeIds,
 			scopeNames,
 			loadTypes: loadTypes.length ? loadTypes : undefined,
@@ -201,6 +224,50 @@ export class CarrierSearchService {
 			limit,
 			offset
 		};
+	}
+
+	private parseAvailabilityTimeFilter(
+		rawPreference: unknown,
+		rawSpecificTime?: unknown,
+	): CarrierAvailabilityTimeFilter | undefined {
+		const preference = typeof rawPreference === 'string'
+			? rawPreference.trim().toLocaleLowerCase('tr-TR')
+			: '';
+		const specificTime = typeof rawSpecificTime === 'string' ? rawSpecificTime.trim() : '';
+
+		if (!preference || preference === 'farketmez' || preference === 'esnek') {
+			return undefined;
+		}
+
+		if (preference === 'sabah') {
+			return { mode: 'overlap', startSeconds: this.timeToSeconds('08:00'), endSeconds: this.timeToSeconds('17:00') };
+		}
+
+		if (preference === 'aksam' || preference === 'akşam') {
+			return { mode: 'overlap', startSeconds: this.timeToSeconds('17:00'), endSeconds: this.timeToSeconds('00:00', true) };
+		}
+
+		const embeddedSpecificTime = preference.startsWith('belirli:')
+			? preference.slice('belirli:'.length)
+			: preference.startsWith('specific:')
+				? preference.slice('specific:'.length)
+				: '';
+		const requestedTime = embeddedSpecificTime || (preference === 'belirli' || preference === 'specific' ? specificTime : '');
+		if (requestedTime) {
+			const selectedSeconds = this.timeToSeconds(requestedTime);
+			return Number.isFinite(selectedSeconds)
+				? { mode: 'contains', startSeconds: selectedSeconds, endSeconds: selectedSeconds }
+				: undefined;
+		}
+
+		return undefined;
+	}
+
+	private timeToSeconds(value: string, isEndTime = false): number {
+		const match = String(value).trim().match(/^([01]\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?$/);
+		if (!match) return Number.NaN;
+		const seconds = Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3] ?? 0);
+		return isEndTime && seconds === 0 ? 24 * 3600 : seconds;
 	}
 
 	private buildDateWindow(baseDate: string, flexibility?: string): string[] {
