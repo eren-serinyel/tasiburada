@@ -67,6 +67,13 @@ const EMAIL_SLUG_OVERRIDES: Record<string, string> = {
   'Ankara Ekspres Taşımacılık': 'ankaraekspres',
 };
 
+function resolveDefaultAvailabilityWindow(index: number): { start: string; end: string } {
+  const variant = index % 5;
+  if (variant === 0) return { start: '17:00', end: '00:00' };
+  if (variant === 1) return { start: '08:00', end: '00:00' };
+  return { start: '08:00', end: '17:00' };
+}
+
 export async function seedCarriers(
   vehicleTypeMap: Record<string, VehicleType>,
   serviceTypeMap: Record<string, ServiceType>,
@@ -230,6 +237,7 @@ export async function seedCarriers(
 
     // Carrier Activity Guarantee (Adım 6 - 150/150)
     const serviceAreas = resolveSuggestedServiceAreas(company.city);
+    const defaultAvailability = resolveDefaultAvailabilityWindow(index);
 
     await activityRepo.save(activityRepo.create({
       carrierId: savedCarrier.id,
@@ -237,6 +245,8 @@ export async function seedCarriers(
       district,
       address: `${district} ${randomFrom(['Lojistik Merkezi', 'Depo Bölgesi', 'Sanayi Sitesi'])}`,
       serviceAreasJson: serviceAreas,
+      defaultAvailabilityStart: defaultAvailability.start,
+      defaultAvailabilityEnd: defaultAvailability.end,
       availableDates: JSON.stringify(availableDates),
     }));
 

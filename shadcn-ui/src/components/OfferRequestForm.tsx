@@ -183,6 +183,11 @@ const isDraftValueEmpty = (value: unknown) => {
   return false;
 };
 
+const getRestoredDraftString = (data: Record<string, unknown> | null, key: string) => {
+  const value = data?.[key];
+  return String(value ?? '').trim();
+};
+
 const CONVERTER_TO_VEHICLE_TYPE_NAME: Record<EstimateConverterResponse['recommendedVehicle'], string> = {
   panelvan: 'Panel Van',
   short_chassis_van: 'Kamyonet',
@@ -503,6 +508,42 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
 
   const handleChange = (field: string, value: any) => setForm((f) => ({ ...f, [field]: value }));
 
+  const restoreDistrictFromDraftIfMissing = (
+    side: 'origin' | 'destination',
+    city: string,
+    districtOptions: string[],
+    reason: string,
+  ) => {
+    const restored = restoredDraftFormDataRef.current;
+    if (!restored) return;
+
+    const cityKey = side === 'origin' ? 'originCity' : 'destinationCity';
+    const districtKey = side === 'origin' ? 'originDistrict' : 'destinationDistrict';
+    const restoredCity = getRestoredDraftString(restored, cityKey);
+    const restoredDistrict = getRestoredDraftString(restored, districtKey);
+    if (!restoredCity || !restoredDistrict || restoredCity !== city) return;
+
+    setForm((prev) => {
+      const currentCity = side === 'origin' ? prev.originCity : prev.destinationCity;
+      const currentDistrict = side === 'origin' ? prev.originDistrict : prev.destinationDistrict;
+      if (currentCity !== restoredCity || currentDistrict) return prev;
+
+      const district = findLocationOption(restoredDistrict, districtOptions) || restoredDistrict;
+      restoredDraftFormDataRef.current = { ...restored, [districtKey]: district };
+      logDraftRestore(`${districtKey}:rehydratedAfterOptions`, {
+        reason,
+        city: restoredCity,
+        restoredDistrict,
+        appliedDistrict: district,
+        optionCount: districtOptions.length,
+      });
+
+      return side === 'origin'
+        ? { ...prev, originDistrict: district }
+        : { ...prev, destinationDistrict: district };
+    });
+  };
+
   // Misafir kullanici formu serbestce doldurabilir; giris yalnizca
   // yayinlama aninda istenir. Taslak auth akisi icin sessionStorage/IndexedDB ile saklanir.
   const requireLoginForSelection = (_message?: string) => true;
@@ -639,6 +680,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
       hasLoadDetail: Boolean(restoredFormData.placeType || restoredFormData.loadType || restoredFormData.weightKg || restoredConverterSummary),
     });
 
+    restoredDraftFormDataRef.current = restoredFormData;
     setForm(prev => {
       const next = { ...prev, ...restoredFormData, photos: [] };
       logDraftRestore('restore:setForm', {
@@ -664,7 +706,6 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
     setShowAllCarrierServices(draft.showAllCarrierServices ?? {});
     setInviteCarrierId(draft.inviteCarrierId ?? null);
     setInviteCarrierName(draft.inviteCarrierName ?? null);
-    restoredDraftFormDataRef.current = restoredFormData;
     setStep(nextStep);
     setShowSummaryModal(nextSummary);
     restoredDraftRef.current = true;
@@ -1274,6 +1315,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
           hasSelectedOption: Boolean(findLocationOption(form.originDistrict, list)),
         });
         setOriginDistricts(mergeDistrictOptions(list, form.originDistrict));
+        restoreDistrictFromDraftIfMissing('origin', originCity, list, 'originDistricts:optionsLoaded');
         setForm((prev) => {
           if (prev.originCity !== originCity) return prev;
           const matchedDistrict = findLocationOption(prev.originDistrict, list);
@@ -1324,6 +1366,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
           hasSelectedOption: Boolean(findLocationOption(form.destinationDistrict, list)),
         });
         setDestinationDistricts(mergeDistrictOptions(list, form.destinationDistrict));
+        restoreDistrictFromDraftIfMissing('destination', destinationCity, list, 'destinationDistricts:optionsLoaded');
         setForm((prev) => {
           if (prev.destinationCity !== destinationCity) return prev;
           const matchedDistrict = findLocationOption(prev.destinationDistrict, list);

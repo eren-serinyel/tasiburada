@@ -26,6 +26,7 @@ describe('Carrier availability origin filter', () => {
     city: string,
     serviceAreas: string[],
     availableDates: string[],
+    availability: { start: string; end: string } = { start: '08:00', end: '17:00' },
   ): Promise<Carrier> => {
     const unique = `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
     const carrier = await AppDataSource.getRepository(Carrier).save({
@@ -50,8 +51,8 @@ describe('Carrier availability origin filter', () => {
       district: 'Merkez',
       address: `${city} depo`,
       serviceAreasJson: serviceAreas,
-      defaultAvailabilityStart: '08:00',
-      defaultAvailabilityEnd: '17:00',
+      defaultAvailabilityStart: availability.start,
+      defaultAvailabilityEnd: availability.end,
       availableDates: JSON.stringify(availableDates),
     });
 
@@ -112,7 +113,8 @@ describe('Carrier availability origin filter', () => {
 
     const date = '2026-07-07';
     const city = `TimeCity-${Date.now()}`;
-    const carrier = await createApprovedCarrier('Time', city, [city], [date]);
+    const morningCarrier = await createApprovedCarrier('Time Morning', city, [city], [date]);
+    const eveningCarrier = await createApprovedCarrier('Time Evening', city, [city], [date], { start: '17:00', end: '00:00' });
 
     const searchIds = async (timePreference: string) => {
       const res = await request(testApp)
@@ -122,9 +124,12 @@ describe('Carrier availability origin filter', () => {
       return (res.body.data.items || []).map((item: any) => item.id);
     };
 
-    await expect(searchIds('belirli:14:00')).resolves.toContain(carrier.id);
-    await expect(searchIds('aksam')).resolves.not.toContain(carrier.id);
-    await expect(searchIds('sabah')).resolves.toContain(carrier.id);
-    await expect(searchIds('farketmez')).resolves.toContain(carrier.id);
+    await expect(searchIds('belirli:14:00')).resolves.toContain(morningCarrier.id);
+    await expect(searchIds('belirli:14:00')).resolves.not.toContain(eveningCarrier.id);
+    await expect(searchIds('aksam')).resolves.not.toContain(morningCarrier.id);
+    await expect(searchIds('aksam')).resolves.toContain(eveningCarrier.id);
+    await expect(searchIds('sabah')).resolves.toContain(morningCarrier.id);
+    await expect(searchIds('sabah')).resolves.not.toContain(eveningCarrier.id);
+    await expect(searchIds('farketmez')).resolves.toEqual(expect.arrayContaining([morningCarrier.id, eveningCarrier.id]));
   });
 });

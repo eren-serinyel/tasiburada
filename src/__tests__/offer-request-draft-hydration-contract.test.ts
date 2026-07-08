@@ -43,6 +43,10 @@ describe('offer request draft hydration contract', () => {
     expect(formSource).toContain("logDraftRestore('destinationDistricts:skipStaleEmptyCityClear'");
     expect(formSource).toContain('originDistrict: prev.originCity === v ? prev.originDistrict :');
     expect(formSource).toContain('destinationDistrict: prev.destinationCity === v ? prev.destinationDistrict :');
+    expect(formSource).toContain('restoreDistrictFromDraftIfMissing(');
+    expect(formSource).toContain("restoreDistrictFromDraftIfMissing('origin', originCity, list, 'originDistricts:optionsLoaded')");
+    expect(formSource).toContain("restoreDistrictFromDraftIfMissing('destination', destinationCity, list, 'destinationDistricts:optionsLoaded')");
+    expect(formSource).toContain("logDraftRestore(`${districtKey}:rehydratedAfterOptions`");
   });
 
   test('phone and final restore metadata survive authentication resume until successful publish', () => {
@@ -61,6 +65,9 @@ describe('offer request draft hydration contract', () => {
     expect(formSource).toContain('isDraftValueEmpty(currentValue) && !isDraftValueEmpty(restoredValue)');
     expect(formSource).toContain('restoredDraftFormDataRef.current = restoredFormData;');
     expect(formSource).toContain('restoredDraftFormDataRef.current = formData;');
+    const restoreAssignmentIndex = formSource.indexOf('restoredDraftFormDataRef.current = restoredFormData;');
+    const restoreSetFormIndex = formSource.indexOf('setForm(prev => {', restoreAssignmentIndex);
+    expect(restoreAssignmentIndex).toBeLessThan(restoreSetFormIndex);
   });
 
   test('successful publish clears draft without allowing autosave to recreate it', () => {
