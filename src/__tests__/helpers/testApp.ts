@@ -7,7 +7,6 @@ import path from 'node:path';
 import fs from 'node:fs';
 import routes from '../../presentation/routes';
 import { AppError } from '../../domain/errors/AppError';
-import { authenticateToken } from '../../presentation/middleware/auth';
 
 /**
  * Creates a fully configured Express app for integration tests.
@@ -40,17 +39,15 @@ function buildTestApp(): express.Application {
     return filePath;
   };
 
+  const isShipmentPictureFilename = (filename: string): boolean => filename.startsWith('shipment-');
+
   app.get('/uploads/pictures/:filename', (req: Request, res: Response): void => {
     const { filename } = req.params;
+    if (isShipmentPictureFilename(filename)) {
+      res.status(404).json({ success: false, message: 'Dosya bulunamadÄ±.' });
+      return;
+    }
     const filePath = resolveUploadFile('pictures', filename);
-    if (!filePath) { res.status(400).json({ success: false, message: 'Geçersiz dosya adı.' }); return; }
-    if (!fs.existsSync(filePath)) { res.status(404).json({ success: false, message: 'Dosya bulunamadı.' }); return; }
-    res.sendFile(filePath);
-  });
-
-  app.get('/uploads/documents/:filename', authenticateToken, (req: Request, res: Response): void => {
-    const { filename } = req.params;
-    const filePath = resolveUploadFile('documents', filename);
     if (!filePath) { res.status(400).json({ success: false, message: 'Geçersiz dosya adı.' }); return; }
     if (!fs.existsSync(filePath)) { res.status(404).json({ success: false, message: 'Dosya bulunamadı.' }); return; }
     res.sendFile(filePath);

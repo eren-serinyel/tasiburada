@@ -1,5 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import * as jwt from 'jsonwebtoken';
+import { AppDataSource } from '../../infrastructure/database/data-source';
+import { Carrier, CarrierApprovalState } from '../../domain/entities/Carrier';
 
 interface JwtPayload {
   customerId?: string;
@@ -118,6 +120,48 @@ export const authenticateCarrier = (req: Request, res: Response, next: NextFunct
     }
     next();
   });
+};
+
+export const requireVerifiedCarrier = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const carrierId = req.user?.carrierId || req.carrierId;
+    if (!carrierId) {
+      res.status(401).json({
+        success: false,
+        message: 'Kimlik dogrulamasi gerekli.',
+      });
+      return;
+    }
+
+    const carrier = await AppDataSource.getRepository(Carrier).findOne({
+      where: { id: carrierId },
+      select: ['id', 'isActive', 'verifiedByAdmin', 'approvalState'],
+    });
+
+    if (!carrier || !carrier.isActive) {
+      res.status(403).json({
+        success: false,
+        message: 'Hesabiniz aktif degil. Lutfen destekle iletisime gecin.',
+      });
+      return;
+    }
+
+    if (!carrier.verifiedByAdmin || carrier.approvalState !== CarrierApprovalState.APPROVED) {
+      res.status(403).json({
+        success: false,
+        code: 'CARRIER_VERIFICATION_REQUIRED',
+        message: 'Marketplace islemleri icin belgelerinizin yuklenmis ve admin tarafindan onaylanmis olmasi gerekir.',
+      });
+      return;
+    }
+
+    next();
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      message: error?.message || 'Nakliyeci dogrulama kontrolu yapilamadi.',
+    });
+  }
 };
 
 

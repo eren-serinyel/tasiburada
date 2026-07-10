@@ -55,8 +55,8 @@ export const validateEstimateConverterRequest = (req: Request, res: Response, ne
       res.status(400).json({ success: false, message: `items[${index}].itemCode zorunludur.` });
       return;
     }
-    if (!Number.isInteger(item.quantity) || item.quantity < 0 || item.quantity > 999) {
-      res.status(400).json({ success: false, message: `items[${index}].quantity 0 ile 999 arasında tam sayı olmalıdır.` });
+    if (!Number.isInteger(item.quantity) || item.quantity < 0 || item.quantity > 200) {
+      res.status(400).json({ success: false, message: `items[${index}].quantity 0 ile 200 arasında tam sayı olmalıdır.` });
       return;
     }
   }
@@ -97,8 +97,8 @@ export const validateEstimateConverterRequest = (req: Request, res: Response, ne
         res.status(400).json({ success: false, message: `customItems[${index}].sizeClass geçersiz.` });
         return;
       }
-      if (!Number.isInteger(item.quantity) || item.quantity < 1 || item.quantity > 50) {
-        res.status(400).json({ success: false, message: `customItems[${index}].quantity 1 ile 50 arasında tam sayı olmalıdır.` });
+      if (!Number.isInteger(item.quantity) || item.quantity < 1 || item.quantity > 5) {
+        res.status(400).json({ success: false, message: `customItems[${index}].quantity 1 ile 5 arasında tam sayı olmalıdır.` });
         return;
       }
       item.name = name;
@@ -116,4 +116,3 @@ export const validateApplyConverterRequest = (req: Request, res: Response, next:
   }
   next();
 };
-

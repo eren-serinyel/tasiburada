@@ -10,12 +10,16 @@ import { emailService } from './EmailService';
 export class AuthService {
   private customerRepository = new CustomerRepository();
   private carrierRepository = new CarrierRepository();
+  private readonly passwordResetTtlMs = 60 * 60 * 1000;
+  private readonly genericPasswordResetMessage = 'Bu e-posta kayitliysa bir sifre sifirlama baglantisi gonderildi.';
 
   private generateToken(): string {
-    // 32 byte = 64 hex karakter — kriptografik olarak güvenli
     return crypto.randomBytes(32).toString('hex');
   }
 
+  private hashToken(token: string): string {
+    return crypto.createHash('sha256').update(token, 'utf8').digest('hex');
+  }
   private getRepository(userType: 'customer' | 'carrier') {
     return userType === 'customer' ? this.customerRepository : this.carrierRepository;
   }
@@ -28,30 +32,28 @@ export class AuthService {
 
   async requestPasswordReset(email: string, userType: 'customer' | 'carrier') {
     const repo = this.getRepository(userType);
-    const user = await repo.findByEmail(email);
+    const normalizedEmail = email.trim().toLowerCase();
+    const user = await repo.findByEmail(normalizedEmail);
     if (!user) {
-      throw new Error('Bu e-posta adresiyle kayıtlı kullanıcı bulunamadı.');
+      return { success: true, message: this.genericPasswordResetMessage };
     }
 
     const resetToken = this.generateToken();
-    const resetTokenExpiry = new Date(Date.now() + 60 * 60 * 1000); // 60 dakika
+    const resetTokenHash = this.hashToken(resetToken);
+    const resetTokenExpiry = new Date(Date.now() + this.passwordResetTtlMs);
 
     await repo.update(user.id, {
-      resetToken,
+      resetToken: resetTokenHash,
       resetTokenExpiry,
     } as any);
 
-    // Geliştirme ortamında token konsola basılır (test edilebilirlik için)
-    if (process.env.NODE_ENV !== 'production') {
-      console.log(`[DEV] Reset token (${userType} — ${email}):`, resetToken);
+    if (emailService.isConfigured()) {
+      emailService.sendPasswordReset(normalizedEmail, resetToken, userType).catch((err) => {
+        console.error('[EmailService] sendPasswordReset failed:', err?.message || 'unknown error');
+      });
     }
 
-    // E-posta gönderimini arka planda yap (fire-and-forget)
-    emailService.sendPasswordReset(email, resetToken, userType).catch((err) => {
-      console.error('[EmailService] sendPasswordReset failed:', err);
-    });
-
-    return { success: true, message: 'Şifre sıfırlama talebi alındı. E-posta adresinizi kontrol edin.' };
+    return { success: true, message: this.genericPasswordResetMessage };
   }
 
   async resetPassword(token: string, newPassword: string, userType: 'customer' | 'carrier') {
@@ -59,19 +61,24 @@ export class AuthService {
     const repo = this.getRepository(userType);
 
     const alias = userType;
+    const tokenHash = this.hashToken(token);
     const user = await typeormRepo
       .createQueryBuilder(alias)
       .addSelect(`${alias}.resetToken`)
       .addSelect(`${alias}.resetTokenExpiry`)
-      .where(`${alias}.resetToken = :token`, { token })
+      .where(`${alias}.resetToken = :tokenHash`, { tokenHash })
       .getOne();
 
     if (!user) {
-      throw new Error('Geçersiz sıfırlama kodu.');
+      throw new Error('Sifirlama baglantisi gecersiz. Lutfen yeni bir baglanti isteyin.');
     }
 
     if (!user.resetTokenExpiry || user.resetTokenExpiry < new Date()) {
-      throw new Error('Sıfırlama kodunun süresi dolmuş.');
+      await repo.update(user.id, {
+        resetToken: null,
+        resetTokenExpiry: null,
+      } as any);
+      throw new Error('Sifirlama baglantisinin suresi dolmus. Lutfen yeni bir baglanti isteyin.');
     }
 
     const passwordHash = await bcrypt.hash(newPassword, 12);
@@ -82,7 +89,7 @@ export class AuthService {
       resetTokenExpiry: null,
     } as any);
 
-    return { success: true, message: 'Şifre başarıyla sıfırlandı.' };
+    return { success: true, message: 'Sifre basariyla sifirlandi.' };
   }
 
   async verifyEmail(token: string, userType: 'customer' | 'carrier') {

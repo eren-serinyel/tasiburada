@@ -251,11 +251,7 @@ describe('CarrierProfileController', () => {
 
     expect(uploadRes.status).toBe(200);
 
-    const listRes = await request(testApp)
-      .get('/api/v1/carriers/me/documents')
-      .set('Authorization', `Bearer ${carrierToken}`);
-
-    const createdDoc = (listRes.body?.data?.documents || []).find((doc: any) => String(doc.fileUrl || '').includes('temp-download-license'));
+    const createdDoc = uploadRes.body?.document;
     expect(createdDoc?.id).toBeDefined();
 
     const downloadRes = await request(testApp)
@@ -276,11 +272,7 @@ describe('CarrierProfileController', () => {
 
     expect(uploadRes.status).toBe(200);
 
-    const listRes = await request(testApp)
-      .get('/api/v1/carriers/me/documents')
-      .set('Authorization', `Bearer ${carrierToken}`);
-
-    const createdDoc = (listRes.body?.data?.documents || []).find((doc: any) => String(doc.fileUrl || '').includes('temp-delete-license'));
+    const createdDoc = uploadRes.body?.document;
     expect(createdDoc?.id).toBeDefined();
 
     const deleteRes = await request(testApp)

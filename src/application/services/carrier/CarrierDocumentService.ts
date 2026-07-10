@@ -40,8 +40,19 @@ export class CarrierDocumentService {
     return { fileUrl: normalizedUrl, filePath: resolvedPath };
   }
 
+  private toPublicDocument(doc: CarrierDocument): CarrierDocument & { storageUrl: string; downloadUrl: string } {
+    const publicUrl = `/api/v1/carriers/documents/${doc.id}`;
+    return {
+      ...(doc as any),
+      storageUrl: doc.fileUrl,
+      fileUrl: publicUrl,
+      downloadUrl: `${publicUrl}?download=1`,
+    };
+  }
+
   async saveDocumentsDraft(carrierId: string, docs: DocumentInput[]) {
     const entries = Array.isArray(docs) ? docs : [];
+    const savedDocuments: CarrierDocument[] = [];
 
     for (const doc of entries) {
       const type = this.normalizeType(doc.type);
@@ -54,10 +65,10 @@ export class CarrierDocumentService {
       }
 
       if (type === CarrierDocumentType.VEHICLE_LICENSE) {
-        await this.carrierDocumentRepo.addVehicleLicenseDocument(carrierId, storedUpload.fileUrl);
+        savedDocuments.push(await this.carrierDocumentRepo.addVehicleLicenseDocument(carrierId, storedUpload.fileUrl));
       } else {
         const isRequired = this.REQUIRED_TYPES.includes(type);
-        await this.carrierDocumentRepo.upsertSingleRequired(carrierId, type, storedUpload.fileUrl, isRequired);
+        savedDocuments.push(await this.carrierDocumentRepo.upsertSingleRequired(carrierId, type, storedUpload.fileUrl, isRequired));
       }
     }
 
@@ -66,7 +77,10 @@ export class CarrierDocumentService {
 
     await this.profileStatusService.updateProfileCompletion(carrierId);
 
-    return { allRequiredHaveDoc };
+    return {
+      allRequiredHaveDoc,
+      documents: savedDocuments.map((doc) => this.toPublicDocument(doc)),
+    };
   }
 
   async getDocumentsForCarrier(carrierId: string) {
@@ -75,13 +89,13 @@ export class CarrierDocumentService {
 
     for (const doc of docs) {
       if (doc.type === CarrierDocumentType.VEHICLE_LICENSE) {
-        grouped.vehicleLicenses.push(doc);
+        grouped.vehicleLicenses.push(this.toPublicDocument(doc));
       } else {
-        grouped[doc.type] = doc;
+        grouped[doc.type] = this.toPublicDocument(doc);
       }
     }
 
-    return { documents: docs, grouped };
+    return { documents: docs.map((doc) => this.toPublicDocument(doc)), grouped };
   }
 
   async getDocumentById(carrierId: string, documentId: string) {

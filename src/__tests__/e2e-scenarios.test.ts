@@ -194,7 +194,7 @@ describe('Senaryo: Teklif Geri Çekme', () => {
     const res = await request(testApp)
       .put(`${BASE}/offers/${withdrawn.id}/withdraw`)
       .set('Authorization', `Bearer ${carrierToken}`);
-    expect([400, 409]).toContain(res.status);
+    expect([400, 403, 409]).toContain(res.status);
   });
 });
 
@@ -245,7 +245,7 @@ describe('Senaryo: İlan İptal ve Durum Kontrolü', () => {
       .post(`${BASE}/offers`)
       .set('Authorization', `Bearer ${carrierToken}`)
       .send({ shipmentId: createdShipmentId, price: 1500, estimatedDuration: 3 });
-    expect([400, 409]).toContain(res.status);
+    expect([400, 403, 409]).toContain(res.status);
   });
 
   test('İptal edilmiş ilan tekrar iptal edilememeli', async () => {

@@ -43,7 +43,7 @@ export class Customer {
   @Column({ type: 'boolean', default: false })
   isVerified: boolean;
 
-  @Column({ type: 'varchar', length: 10, nullable: true, select: false })
+  @Column({ type: 'varchar', length: 64, nullable: true, select: false })
   resetToken?: string | null;
 
   @Column({ type: 'datetime', nullable: true, select: false })

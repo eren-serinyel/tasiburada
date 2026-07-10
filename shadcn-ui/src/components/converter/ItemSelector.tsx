@@ -10,6 +10,24 @@ interface ItemSelectorProps {
   onQuantityChange: (itemCode: string, quantity: number) => void;
 }
 
+const QUANTITY_LIMIT_BY_ITEM_CODE: Record<string, number> = {
+  dining_chair: 30,
+  office_chair: 30,
+  nightstand: 20,
+};
+const QUANTITY_LIMIT_BY_CATEGORY: Record<string, number> = {
+  box: 200,
+  appliance: 6,
+  special: 5,
+};
+const DEFAULT_CATALOG_ITEM_QUANTITY_LIMIT = 12;
+
+const getCatalogItemQuantityLimit = (item: ConverterCatalogItem) => {
+  return QUANTITY_LIMIT_BY_ITEM_CODE[item.itemCode]
+    ?? QUANTITY_LIMIT_BY_CATEGORY[item.category]
+    ?? DEFAULT_CATALOG_ITEM_QUANTITY_LIMIT;
+};
+
 export default function ItemSelector({ items, selectedItems, onQuantityChange }: ItemSelectorProps) {
   const itemsByCategory = useMemo(() => {
     return items.reduce((acc, item) => {
@@ -48,6 +66,7 @@ export default function ItemSelector({ items, selectedItems, onQuantityChange }:
               <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
                 {categoryItems.map((item) => {
                   const quantity = selectedItems[item.itemCode] || 0;
+                  const quantityLimit = getCatalogItemQuantityLimit(item);
                   return (
                     <label
                       key={item.itemCode}
@@ -59,12 +78,20 @@ export default function ItemSelector({ items, selectedItems, onQuantityChange }:
                       <Input
                         type="number"
                         min={0}
-                        max={999}
+                        max={quantityLimit}
                         value={quantity === 0 ? '' : quantity}
                         placeholder="0"
                         onChange={(e) => {
-                          const next = Number(e.target.value);
-                          onQuantityChange(item.itemCode, Number.isFinite(next) ? Math.max(0, next) : 0);
+                          const rawValue = e.target.value;
+                          if (rawValue === '') {
+                            onQuantityChange(item.itemCode, 0);
+                            return;
+                          }
+                          const next = Number(rawValue);
+                          const bounded = Number.isFinite(next)
+                            ? Math.min(quantityLimit, Math.max(0, Math.floor(next)))
+                            : 0;
+                          onQuantityChange(item.itemCode, bounded);
                         }}
                         className="h-8 w-20"
                       />

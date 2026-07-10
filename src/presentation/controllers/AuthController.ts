@@ -34,7 +34,11 @@ export class AuthController {
       const result = await this.authService.requestPasswordReset(email, userType);
       res.status(200).json(result);
     } catch (error: any) {
-      res.status(400).json({ success: false, message: error.message });
+      console.error('[AuthController] password reset request failed:', error?.message || 'unknown error');
+      res.status(200).json({
+        success: true,
+        message: 'Bu e-posta kayitliysa bir sifre sifirlama baglantisi gonderildi.',
+      });
     }
   };
 

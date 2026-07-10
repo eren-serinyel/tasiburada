@@ -347,12 +347,9 @@ describe('extra service applicability', () => {
       .get(`/api/v1/shipments/${officeResponse.body.data.id}`)
       .set('Authorization', `Bearer ${carrierLogin.body.data?.token}`);
 
-    expect(carrierView.status).toBe(200);
-    expect(carrierView.body.data?.originAddressText).toBeNull();
-    expect(carrierView.body.data?.destinationAddressText).toBeNull();
-    expect(carrierView.body.data?.extraServices).toEqual(
-      expect.arrayContaining([...selectedCatalogNames, customService.title]),
-    );
+    // The carrier is neither assigned nor invited to this shipment. Catalog
+    // compatibility alone must not grant access to the private detail route.
+    expect(carrierView.status).toBe(403);
 
     const homeResponse = await request(testApp)
       .post('/api/v1/shipments')

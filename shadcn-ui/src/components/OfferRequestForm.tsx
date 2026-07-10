@@ -991,6 +991,7 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
     if (requestedScope) params.set('scope', requestedScope);
     if (form.dateFlexibility && form.dateFlexibility !== 'EXACT') params.set('dateFlexibility', form.dateFlexibility);
     if (form.timeWindow && form.timeWindow !== 'farketmez') params.set('timePreference', form.timeWindow);
+    if (Number(form.weightKg) > 0) params.set('capacityCheckKg', String(Number(form.weightKg)));
 
     const token = localStorage.getItem('authToken');
     fetch(`/api/v1/carriers/search?${params.toString()}`, {
@@ -3723,8 +3724,11 @@ function CarrierCard({
   onReview: () => void;
 }) {
   const weight = Number(form.weightKg || 0);
-  const capacityEvaluable = weight > 0 && carrier.vehicle.capacity > 0;
-  const capacityOk = !capacityEvaluable || carrier.vehicle.capacity >= weight;
+  const hasBackendCapacityDecision = typeof carrier.capacityAdequate === 'boolean';
+  const capacityEvaluable = weight > 0 && (hasBackendCapacityDecision || carrier.vehicle.capacity > 0);
+  const capacityOk = hasBackendCapacityDecision
+    ? carrier.capacityAdequate === true
+    : (!capacityEvaluable || carrier.vehicle.capacity >= weight);
   const selectedExtraServices = Array.isArray(form.extraServices) ? form.extraServices : [];
   const insuranceNeeded = form.extras.sigorta
     || selectedExtraServices.includes('Ek sigorta')
@@ -3777,7 +3781,7 @@ function CarrierCard({
     { ok: originMatch, label: routeLabel },
     { ok: scopeOk, label: 'Kapsam uygun' },
     ...(capacityEvaluable
-      ? [{ ok: capacityOk, label: capacityOk ? 'Kapasite yeterli' : `Kapasite yetersiz (${carrier.vehicle.capacity.toLocaleString('tr-TR')} kg)` }]
+      ? [{ ok: capacityOk, label: capacityOk ? 'Kapasite yeterli' : (carrier.vehicle.capacity > 0 ? `Kapasite yetersiz (${carrier.vehicle.capacity.toLocaleString('tr-TR')} kg)` : 'Kapasite yetersiz') }]
       : []),
     { ok: insuranceOk, label: 'Sigorta uygun' },
     { ok: extrasOk, label: 'Ekler uyumlu' },
@@ -4027,6 +4031,7 @@ function mapSearchResultToCarrier(item: {
   catalogExtraServiceIds: string[];
   scopes: Array<'sehirici' | 'sehirlerarasi'>;
   pictureUrl: string | null;
+  capacityAdequate?: boolean;
 }): Carrier {
   const { type: vehicleType, capacity } = parseVehicleSummary(item.vehicleSummary);
   const nameParts = item.companyName.trim().split(/\s+/);
@@ -4051,5 +4056,6 @@ function mapSearchResultToCarrier(item: {
     catalogExtraServiceIds: item.catalogExtraServiceIds ?? [],
     scopes: item.scopes ?? [],
     pictureUrl: item.pictureUrl,
+    capacityAdequate: item.capacityAdequate,
   };
 }

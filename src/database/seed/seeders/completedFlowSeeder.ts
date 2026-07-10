@@ -4,7 +4,7 @@ import { Payment, PaymentMethod, PaymentStatus } from '../../../domain/entities/
 import { CarrierEarningsLog } from '../../../domain/entities/CarrierEarningsLog';
 import { CustomerCarrierRelation } from '../../../domain/entities/CustomerCarrierRelation';
 import { Shipment, ShipmentStatus } from '../../../domain/entities/Shipment';
-import { Offer } from '../../../domain/entities/Offer';
+import { Offer, OfferStatus } from '../../../domain/entities/Offer';
 import { Carrier } from '../../../domain/entities/Carrier';
 import { CarrierStats } from '../../../domain/entities/CarrierStats';
 import { Customer } from '../../../domain/entities/Customer';
@@ -40,7 +40,7 @@ const REVIEW_RATING_WEIGHTS = [
 
 export async function seedCompletedFlow(
   shipments: Shipment[],
-  _offers: Offer[],
+  offers: Offer[],
   carriers: Carrier[],
   _customers: Customer[],
 ) {
@@ -57,6 +57,12 @@ export async function seedCompletedFlow(
   const carrierRatings: Record<string, number[]> = {};
   const completedShipmentCounts: Record<string, number> = {};
   const earnedAmounts: Record<string, number> = {};
+  const acceptedOfferCounts = offers.reduce<Record<string, number>>((acc, offer) => {
+    if (offer.status === OfferStatus.ACCEPTED) {
+      acc[offer.carrierId] = (acc[offer.carrierId] ?? 0) + 1;
+    }
+    return acc;
+  }, {});
   let reviewCount = 0;
   let paymentCount = 0;
   let relationCount = 0;
@@ -165,12 +171,15 @@ export async function seedCompletedFlow(
 
   for (const carrier of carriers) {
     const completedJobs = completedShipmentCounts[carrier.id] ?? 0;
+    const acceptedOffers = acceptedOfferCounts[carrier.id] ?? 0;
     const ratings = carrierRatings[carrier.id] ?? [];
-    const averageRating = ratings.length > 0 ? calcAvgRating(ratings) : carrier.rating;
+    const averageRating = ratings.length > 0 ? calcAvgRating(ratings) : 0;
 
     await carrierRepo.update(carrier.id, {
       rating: averageRating,
       completedShipments: completedJobs,
+      acceptedOffers,
+      successRate: acceptedOffers > 0 ? Number(((completedJobs / acceptedOffers) * 100).toFixed(2)) : 0,
       balance: Number(carrier.balance ?? 0) + Number((earnedAmounts[carrier.id] ?? 0).toFixed(2)),
     });
 

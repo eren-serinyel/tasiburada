@@ -10,21 +10,14 @@ const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
 class EmailService {
   private transporter: nodemailer.Transporter | null = null;
 
+  isConfigured(): boolean {
+    return Boolean(SMTP_HOST && SMTP_USER && SMTP_PASS);
+  }
+
   private getTransporter(): nodemailer.Transporter {
     if (!this.transporter) {
-      if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) {
-        console.warn('⚠️ SMTP yapılandırması eksik (SMTP_HOST, SMTP_USER, SMTP_PASS). E-postalar konsola yazdırılacak.');
-        // Return a mock transporter for development
-        return {
-          sendMail: async (mailOptions: any) => {
-            console.log('📧 [MOCK EMAIL SENT]');
-            console.log(`PO: ${mailOptions.from}`);
-            console.log(`TO: ${mailOptions.to}`);
-            console.log(`SUBJECT: ${mailOptions.subject}`);
-            console.log(`BODY: ${mailOptions.html?.substring(0, 100)}...`);
-            return { messageId: 'mock-id' };
-          }
-        } as any;
+      if (!this.isConfigured()) {
+        throw new Error('SMTP configuration is missing.');
       }
       this.transporter = nodemailer.createTransport({
         host: SMTP_HOST,

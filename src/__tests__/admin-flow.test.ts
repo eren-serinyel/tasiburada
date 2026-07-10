@@ -84,6 +84,20 @@ describe('Admin Akışı — Uçtan Uca', () => {
   });
 
   // ── 7. Müşteriler listesi ─────────────────────────────────────────────────
+  test('6b. Admin nakliyeci kimlik risklerini sorgulayabilmeli', async () => {
+    if (skipDB() || !adminToken) return;
+    const res = await request(testApp)
+      .get('/api/v1/admin/carriers/identity-risks')
+      .set('Authorization', `Bearer ${adminToken}`);
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.identityFields.carrierTable).toContain('taxNumber');
+    expect(res.body.data.identityFields.carrierTable).toContain('phone');
+    expect(res.body.data.uniqueFields).toContain('taxNumber');
+    expect(Array.isArray(res.body.data.risks.taxNumber)).toBe(true);
+    expect(Array.isArray(res.body.data.risks.phone)).toBe(true);
+  });
+
   test('7. Admin müşterileri listeleyebilmeli', async () => {
     if (skipDB() || !adminToken) return;
     const res = await request(testApp)

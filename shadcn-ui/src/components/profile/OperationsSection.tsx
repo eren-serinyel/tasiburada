@@ -29,24 +29,66 @@ const parseStringArray = (value: unknown): string[] => {
   return [];
 };
 
+const WORK_SCOPE_OPTIONS = ['Şehir İçi', 'Şehirler Arası'];
+const SCOPE_LABEL_BY_VALUE: Record<string, string> = {
+  sehirici: 'Şehir İçi',
+  'şehir içi': 'Şehir İçi',
+  'şehiriçi': 'Şehir İçi',
+  sehirlerarasi: 'Şehirler Arası',
+  'şehirler arası': 'Şehirler Arası',
+  'şehirlerarası': 'Şehirler Arası',
+};
+
+const normalizeScopeNames = (values: string[]): string[] => Array.from(new Set(
+  values
+    .map(value => SCOPE_LABEL_BY_VALUE[value.trim().toLocaleLowerCase('tr-TR')] || value.trim())
+    .filter(value => WORK_SCOPE_OPTIONS.includes(value)),
+));
+
+const sanitizeServiceAreas = (values: string[]): string[] => Array.from(new Set(
+  values.map(value => value.trim()).filter(value => CITIES_TR.includes(value)),
+));
+
 const resolveActivityServiceAreas = (activity: any): string[] => {
   const explicit = parseStringArray(activity?.serviceAreas);
-  if (explicit.length) return explicit;
+  if (explicit.length) return sanitizeServiceAreas(explicit);
 
   const fromJson = parseStringArray(activity?.serviceAreasJson);
-  if (fromJson.length) return fromJson;
+  if (fromJson.length) return sanitizeServiceAreas(fromJson);
 
-  return resolveSuggestedServiceAreas(activity?.city);
+  return activity ? [] : resolveSuggestedServiceAreas(activity?.city);
+};
+
+const resolveScopeNames = (data: any): string[] => {
+  const topLevel = Array.isArray(data?.scopeOfWorks)
+    ? data.scopeOfWorks.map((item: any) => item?.scope?.name || item?.name).filter(Boolean)
+    : [];
+  const carrierLinks = Array.isArray(data?.carrier?.scopeLinks)
+    ? data.carrier.scopeLinks.map((item: any) => item?.scope?.name || item?.name).filter(Boolean)
+    : [];
+  return normalizeScopeNames(topLevel.length ? topLevel : carrierLinks);
 };
 
 export default function OperationsSection({ user, refreshProfileStatus }: SectionProps) {
-  const [ops, setOps] = useState({ address1: '', address2: '', district: '', city: '', serviceAreas: [] as string[], mapLat: '', mapLng: '' });
+  const [ops, setOps] = useState({ address1: '', address2: '', district: '', city: '', scopes: [] as string[], serviceAreas: [] as string[], mapLat: '', mapLng: '' });
 
   useEffect(() => {
     // Restore from localStorage
     try {
       const o = localStorage.getItem(`carrier_ops_${user.id}`);
-      if (o) setOps(JSON.parse(o));
+      if (o) {
+        const parsed = JSON.parse(o);
+        const rawServiceAreas = parseStringArray(parsed?.serviceAreas);
+        setOps(prev => ({
+          ...prev,
+          ...parsed,
+          scopes: normalizeScopeNames([
+            ...parseStringArray(parsed?.scopes),
+            ...rawServiceAreas,
+          ]),
+          serviceAreas: sanitizeServiceAreas(rawServiceAreas),
+        }));
+      }
     } catch {}
 
     // Prefill from backend
@@ -56,15 +98,15 @@ export default function OperationsSection({ user, refreshProfileStatus }: Sectio
         const json = await res.json();
         if (!res.ok || !json?.success) return;
         const activity = json.data?.activity;
-        if (!activity) return;
         setOps(prev => {
           const serviceAreas = resolveActivityServiceAreas(activity);
           const next = {
             ...prev,
-            address1: activity.address || prev.address1,
-            district: activity.district || prev.district,
-            city: activity.city || prev.city,
-            serviceAreas: serviceAreas.length ? serviceAreas : prev.serviceAreas,
+            address1: activity?.address || prev.address1,
+            district: activity?.district || prev.district,
+            city: activity?.city || prev.city,
+            scopes: resolveScopeNames(json.data),
+            serviceAreas,
           };
           try { localStorage.setItem(`carrier_ops_${user.id}`, JSON.stringify(next)); } catch {}
           return next;
@@ -83,8 +125,21 @@ export default function OperationsSection({ user, refreshProfileStatus }: Sectio
       toast.error('Hizmet verdiğiniz bölgelerden en az bir şehir seçmelisiniz.');
       return;
     }
+    if (ops.scopes.length === 0) {
+      toast.error('En az bir iş kapsamı seçmelisiniz.');
+      return;
+    }
 
     try {
+      const scopeResponse = await apiClient(`${API_BASE}/carriers/me/company-info`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scopeOfWorkNames: ops.scopes }),
+      });
+      const scopeJson = await scopeResponse.json().catch(() => null);
+      if (!scopeResponse.ok || !scopeJson?.success) {
+        throw new Error(scopeJson?.message || 'İş kapsamı kaydedilemedi.');
+      }
+
       const res = await apiClient(`${API_BASE}/carriers/me/activity`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ city: ops.city || undefined, district: ops.district || undefined, address: ops.address1 || undefined, serviceAreas: ops.serviceAreas || undefined }),
@@ -127,6 +182,13 @@ export default function OperationsSection({ user, refreshProfileStatus }: Sectio
         </div>
         <div><Label>İlçe</Label><Input className="mt-1" value={ops.district} onChange={(e) => setOps({ ...ops, district: e.target.value })} /></div>
         <div className="md:col-span-2"><Label>Adres</Label><Input className="mt-1" value={ops.address1} onChange={(e) => setOps({ ...ops, address1: e.target.value })} placeholder="Mahalle, Cadde/Sokak No" /></div>
+        <div className="md:col-span-2">
+          <Label>İş Kapsamı <span className="text-red-500">*</span></Label>
+          <MultiSelect label=" " placeholder="İş kapsamı seçin" options={WORK_SCOPE_OPTIONS} selectedValues={ops.scopes} onSelectionChange={(values) => setOps({ ...ops, scopes: normalizeScopeNames(values) })} />
+          {ops.scopes.length === 0 && (
+            <p className="mt-1 text-xs text-red-500">En az bir iş kapsamı seçmelisiniz.</p>
+          )}
+        </div>
         <div className="md:col-span-2">
           <Label>Hizmet Verdiğiniz Bölgeler <span className="text-red-500">*</span></Label>
           <MultiSelect label=" " placeholder="İl/ilçe seçin" options={CITIES_TR} selectedValues={ops.serviceAreas} onSelectionChange={(vals) => setOps({ ...ops, serviceAreas: vals })} />

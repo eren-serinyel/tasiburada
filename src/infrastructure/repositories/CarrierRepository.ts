@@ -1,6 +1,6 @@
 import { BaseRepository } from './BaseRepository';
 import { Carrier, CarrierApprovalState } from '../../domain/entities/Carrier';
-import { Brackets, SelectQueryBuilder } from 'typeorm';
+import { Brackets, EntityManager, SelectQueryBuilder } from 'typeorm';
 
 export type CarrierSearchSort = 'rating' | 'experience' | 'recent';
 
@@ -14,6 +14,7 @@ export interface CarrierSearchFilters {
   minExperienceYears?: number;
   minProfileCompletion?: number;
   minCapacityKg?: number;
+  capacityCheckKg?: number;
   maxCapacityKg?: number;
   searchText?: string;
   availableDate?: string;
@@ -260,13 +261,15 @@ export class CarrierRepository extends BaseRepository<Carrier> {
       .getMany();
   }
 
-  async updateRating(carrierId: string): Promise<void> {
-    await this.repository
+  async updateRating(carrierId: string, manager?: EntityManager): Promise<void> {
+    const repository = manager ? manager.getRepository(Carrier) : this.repository;
+
+    await repository
       .createQueryBuilder()
       .update(Carrier)
       .set({
         rating: () =>
-          '(SELECT COALESCE(AVG(r.rating), 0) FROM reviews r WHERE r.carrierId = id)',
+          '(SELECT ROUND(COALESCE(AVG(r.rating), 0), 4) FROM reviews r WHERE r.carrierId = carriers.id)',
       })
       .where('id = :carrierId', { carrierId })
       .execute();

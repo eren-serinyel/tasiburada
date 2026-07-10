@@ -3,6 +3,7 @@ import path from 'node:path';
 import { CarrierVehicleRepository } from '../../../infrastructure/repositories/CarrierVehicleRepository';
 import { CarrierVehicleInputDto } from '../../dto/CarrierDto';
 import { CarrierProfileStatusService } from './CarrierProfileStatusService';
+import { CarrierVehicleTypeService } from './CarrierVehicleTypeService';
 
 type CarrierVehicleMutableInput = Partial<CarrierVehicleInputDto> & {
   id?: string;
@@ -20,6 +21,7 @@ type CarrierVehicleMutableInput = Partial<CarrierVehicleInputDto> & {
 export class CarrierVehicleService {
   private vehicleRepository = new CarrierVehicleRepository();
   private profileStatusService = new CarrierProfileStatusService();
+  private vehicleTypeService = new CarrierVehicleTypeService();
 
   async listVehicles(carrierId: string) {
     return this.vehicleRepository.findByCarrierId(carrierId);
@@ -28,6 +30,7 @@ export class CarrierVehicleService {
   async createVehicle(carrierId: string, vehicle: CarrierVehicleMutableInput) {
     const payload = this.buildPayload(carrierId, vehicle);
     const created = await this.vehicleRepository.create(payload as any);
+    await this.syncVehicleTypeProjection(carrierId);
     await this.profileStatusService.updateAuxSectionCompleted(carrierId, 'vehicles', true);
     return this.vehicleRepository.findOwnedById(created.id, carrierId);
   }
@@ -40,6 +43,7 @@ export class CarrierVehicleService {
 
     const payload = this.buildPayload(carrierId, { ...existing, ...vehicle, photos: vehicle.photos ?? existing.photos });
     await this.vehicleRepository.update(vehicleId, payload as any);
+    await this.syncVehicleTypeProjection(carrierId);
     return this.vehicleRepository.findOwnedById(vehicleId, carrierId);
   }
 
@@ -55,6 +59,7 @@ export class CarrierVehicleService {
 
     await this.vehicleRepository.delete(vehicleId);
     const saved = await this.vehicleRepository.findByCarrierId(carrierId);
+    await this.syncVehicleTypeProjection(carrierId, saved);
     await this.profileStatusService.updateAuxSectionCompleted(carrierId, 'vehicles', saved.length > 0);
     return { success: true };
   }
@@ -113,6 +118,10 @@ export class CarrierVehicleService {
   }
 
   private buildPayload(carrierId: string, vehicle: any) {
+    if (!vehicle.vehicleTypeId) {
+      throw new Error('Araç tipi seçmelisiniz.');
+    }
+
     return {
       carrierId,
       vehicleTypeId: vehicle.vehicleTypeId,
@@ -120,11 +129,42 @@ export class CarrierVehicleService {
       brand: vehicle.brand ?? null,
       model: vehicle.model ?? null,
       year: vehicle.year ?? null,
-      capacityKg: Number(vehicle.capacityKg ?? 0),
-      capacityM3: vehicle.capacityM3 ?? null,
+      capacityKg: this.normalizeOptionalNumber(vehicle.capacityKg, 'Ağırlık kapasitesi'),
+      capacityM3: this.normalizeOptionalNumber(vehicle.capacityM3, 'Hacim kapasitesi'),
       photos: Array.isArray(vehicle.photos) ? vehicle.photos : [],
       isActive: true,
     };
+  }
+
+  private async syncVehicleTypeProjection(carrierId: string, vehicles?: any[]) {
+    const currentVehicles = vehicles ?? await this.vehicleRepository.findByCarrierId(carrierId);
+    const capacityByType = new Map<string, number | null>();
+
+    for (const vehicle of currentVehicles) {
+      if (!vehicle.vehicleTypeId) continue;
+      const capacity = this.normalizeOptionalNumber(vehicle.capacityKg, 'Ağırlık kapasitesi');
+      const existing = capacityByType.get(vehicle.vehicleTypeId);
+      if (existing === undefined || (capacity !== null && (existing === null || capacity > existing))) {
+        capacityByType.set(vehicle.vehicleTypeId, capacity);
+      }
+    }
+
+    await this.vehicleTypeService.replaceSelectedTypes(
+      carrierId,
+      Array.from(capacityByType.entries()).map(([vehicleTypeId, capacityKg]) => ({
+        vehicleTypeId,
+        capacityKg,
+      })),
+    );
+  }
+
+  private normalizeOptionalNumber(value: unknown, fieldLabel: string): number | null {
+    if (value === null || value === undefined || value === '') return null;
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      throw new Error(`${fieldLabel} geçerli bir pozitif sayı olmalıdır.`);
+    }
+    return parsed;
   }
 
   private removePhotoFile(photoUrl: string) {

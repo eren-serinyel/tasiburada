@@ -7,6 +7,7 @@ import { AppDataSource } from '../../infrastructure/database/data-source';
 import { Offer } from '../../domain/entities/Offer';
 import { CarrierCustomExtraService } from '../../domain/entities/CarrierCustomExtraService';
 import { ShipmentCustomExtraService } from '../../domain/entities/ShipmentCustomExtraService';
+import { CarrierApprovalState } from '../../domain/entities/Carrier';
 import { In } from 'typeorm';
 
 export interface InviteRequestedServices {
@@ -81,6 +82,9 @@ export class ShipmentInviteService {
 
     const carrier = await this.carrierRepo.findById(carrierId);
     if (!carrier) throw new NotFoundError('Nakliyeci bulunamadı');
+    if (!carrier.isActive || !carrier.verifiedByAdmin || carrier.approvalState !== CarrierApprovalState.APPROVED) {
+      throw new ConflictError('Sadece belgeleri onaylanmis ve dogrulanmis nakliyecilere davet gonderilebilir.');
+    }
 
     const existing = await this.inviteRepo.findByShipmentAndCarrier(shipmentId, carrierId);
     if (existing) throw new ConflictError('Bu nakliyeciye zaten davet gönderilmiş');

@@ -1,4 +1,5 @@
 import { AppDataSource } from '../../../infrastructure/database/data-source';
+import { Repository } from 'typeorm';
 import { Offer, OfferStatus } from '../../../domain/entities/Offer';
 import { Shipment, ShipmentCategory, ShipmentStatus } from '../../../domain/entities/Shipment';
 import { Carrier } from '../../../domain/entities/Carrier';
@@ -23,6 +24,7 @@ export async function seedOffers(
   carriers: Carrier[],
 ): Promise<Offer[]> {
   const offerRepo = AppDataSource.getRepository(Offer);
+  const shipmentRepo = AppDataSource.getRepository(Shipment);
   const carrierRepo = AppDataSource.getRepository(Carrier);
   const vehicleRepo = AppDataSource.getRepository(CarrierVehicle);
   const activityRepo = AppDataSource.getRepository(CarrierActivity);
@@ -99,6 +101,8 @@ export async function seedOffers(
       continue;
     }
 
+    await ensureAssignedCarrierIsCapable(shipment, capabilityFilteredCarriers, shipmentRepo);
+
     const offerCount = determineOfferCount(shipment.status, capabilityFilteredCarriers.length);
     if (offerCount === 0) {
       continue;
@@ -113,7 +117,7 @@ export async function seedOffers(
       const status = determineOfferStatus(shipment.status, isAcceptedCarrier);
       const price = isAcceptedCarrier && shipment.price
         ? Number(shipment.price)
-        : Math.round((basePrice * randomFloat(0.8, 1.2)) / 10) * 10;
+        : buildOfferPrice(basePrice, shipment, carrier, index);
 
       offerCounts[carrier.id] = (offerCounts[carrier.id] ?? 0) + 1;
 
@@ -122,7 +126,7 @@ export async function seedOffers(
         carrierId: carrier.id,
         price,
         message: randomFrom(OFFER_MESSAGE_TEMPLATES),
-        estimatedDuration: estimateDuration(shipment),
+        estimatedDuration: estimateDuration(shipment, carrier),
         status,
         hasSuspiciousContent: false,
       });
@@ -142,6 +146,31 @@ export async function seedOffers(
 
   console.log(`  ✓ ${created.length} teklif oluşturuldu`);
   return created;
+}
+
+async function ensureAssignedCarrierIsCapable(
+  shipment: Shipment,
+  capableCarriers: Carrier[],
+  shipmentRepo: Repository<Shipment>,
+): Promise<void> {
+  if (
+    !shipment.carrierId ||
+    ![
+      ShipmentStatus.MATCHED,
+      ShipmentStatus.IN_TRANSIT,
+      ShipmentStatus.COMPLETED,
+    ].includes(shipment.status)
+  ) {
+    return;
+  }
+
+  if (capableCarriers.some((carrier) => carrier.id === shipment.carrierId)) {
+    return;
+  }
+
+  const replacement = randomFrom(capableCarriers);
+  shipment.carrierId = replacement.id;
+  await shipmentRepo.update(shipment.id, { carrierId: replacement.id });
 }
 
 function determineOfferCount(status: ShipmentStatus, carrierCount: number): number {
@@ -229,16 +258,50 @@ function deriveBasePrice(shipment: Shipment): number {
   });
 }
 
-function estimateDuration(shipment: Shipment): number {
+function buildOfferPrice(
+  basePrice: number,
+  shipment: Shipment,
+  carrier: Carrier,
+  offerIndex: number,
+): number {
+  const distanceMultiplier = shipment.originCity === shipment.destinationCity
+    ? randomFloat(0.9, 1.12)
+    : randomFloat(0.96, 1.28);
+  const weight = Number(shipment.weight ?? shipment.estimatedWeight ?? 500);
+  const weightMultiplier = weight > 5000
+    ? randomFloat(1.08, 1.24)
+    : weight > 2500
+      ? randomFloat(1.02, 1.16)
+      : randomFloat(0.92, 1.1);
+  const carrierExperienceMultiplier = Number(carrier.completedShipments ?? 0) > 40
+    ? randomFloat(1.02, 1.12)
+    : randomFloat(0.94, 1.06);
+  const competitiveOffset = 1 + (offerIndex * randomFloat(0.015, 0.045));
+
+  return Math.max(
+    750,
+    Math.round((basePrice * distanceMultiplier * weightMultiplier * carrierExperienceMultiplier * competitiveOffset) / 10) * 10,
+  );
+}
+
+function estimateDuration(shipment: Shipment, carrier: Carrier): number {
   if (shipment.originCity === shipment.destinationCity) {
-    return randomInt(1, 4);
+    return shipment.shipmentCategory === ShipmentCategory.PARTIAL_ITEM
+      ? randomInt(1, 2)
+      : randomInt(1, 3);
   }
 
-  if (shipment.shipmentCategory === ShipmentCategory.OFFICE_MOVE) {
-    return randomInt(2, 6);
-  }
+  const base = shipment.shipmentCategory === ShipmentCategory.PARTIAL_ITEM
+    ? randomInt(2, 4)
+    : shipment.shipmentCategory === ShipmentCategory.OFFICE_MOVE
+      ? randomInt(3, 6)
+      : randomInt(3, 7);
+  const routeComplexity = Math.abs(
+    String(shipment.originCity ?? '').length - String(shipment.destinationCity ?? '').length,
+  ) % 3;
+  const experiencedCarrierAdjustment = Number(carrier.completedShipments ?? 0) > 40 ? -1 : 0;
 
-  return randomInt(2, 8);
+  return Math.max(2, base + routeComplexity + experiencedCarrierAdjustment);
 }
 
 function filterCarriersByCapabilities(

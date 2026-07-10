@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -6,12 +6,8 @@ import { toast } from '@/components/ui/sonner';
 import { apiClient } from '@/lib/apiClient';
 import { Save } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import MultiSelect from '@/components/ui/multi-select';
-import type { SectionProps, VehicleType } from './types';
+import type { SectionProps } from './types';
 import { API_BASE } from './helpers';
-
-const ALLOWED_SCOPE_NAMES = ['Şehir İçi', 'Şehirler Arası'];
-const normalizeScopeNames = (values: string[] = []) => values.filter(name => ALLOWED_SCOPE_NAMES.includes(name));
 
 interface CompanySectionProps extends SectionProps {
   onCompanyNameChange?: (name: string) => void;
@@ -20,35 +16,23 @@ interface CompanySectionProps extends SectionProps {
 export default function CompanySection({ user, refreshProfileStatus, onCompanyNameChange }: CompanySectionProps) {
   const [company, setCompany] = useState({
     email: user.email || '', name: '', type: '', taxNumber: '', year: '',
-    services: [] as string[], scopes: [] as string[],
-    vehicleType: '', vehicleTypes: [] as string[],
-    vehicleCapacities: {} as Record<string, string>,
   });
-  const [vehicleTypesList, setVehicleTypesList] = useState<VehicleType[]>([]);
-  const [scopeOptions, setScopeOptions] = useState<{ id: string; name: string }[]>([]);
-  const nameToId = useMemo(() => Object.fromEntries(vehicleTypesList.map(v => [v.name, v.id])), [vehicleTypesList]);
-  const workingScopeOptions = useMemo(() => {
-    const source = scopeOptions.length ? scopeOptions.map(x => x.name) : ALLOWED_SCOPE_NAMES;
-    return source.filter(name => ALLOWED_SCOPE_NAMES.includes(name));
-  }, [scopeOptions]);
 
-  // Load master data + drafts + backend prefill
+  // Load drafts + backend prefill
   useEffect(() => {
-    apiClient(`${API_BASE}/scope-of-works`).then(r => r.json()).then(d => { if (d.success) setScopeOptions(d.data); }).catch(() => {});
-    apiClient(`${API_BASE}/vehicle-types`).then(r => r.json()).then(d => { if (d.success && Array.isArray(d.data)) setVehicleTypesList(d.data); }).catch(() => {});
-
     // Restore localStorage draft
     try {
       const c = localStorage.getItem(`carrier_company_${user.id}`);
       if (c) {
         const parsed = JSON.parse(c);
-        if (parsed && !parsed.vehicleTypes) parsed.vehicleTypes = parsed.vehicleType ? [parsed.vehicleType] : [];
-        if (parsed && Array.isArray(parsed.scopes)) parsed.scopes = normalizeScopeNames(parsed.scopes);
-        if (parsed && parsed.vehicleCapacity && (!parsed.vehicleCapacities || Object.keys(parsed.vehicleCapacities || {}).length === 0)) {
-          const first = (parsed.vehicleTypes && parsed.vehicleTypes[0]) || parsed.vehicleType;
-          if (first) parsed.vehicleCapacities = { [first]: String(parsed.vehicleCapacity) };
-        }
-        setCompany(parsed);
+        setCompany(prev => ({
+          ...prev,
+          email: parsed.email || prev.email,
+          name: parsed.name || prev.name,
+          type: parsed.type || prev.type,
+          taxNumber: parsed.taxNumber || prev.taxNumber,
+          year: parsed.year || prev.year,
+        }));
         onCompanyNameChange?.(parsed.name || '');
       }
     } catch {}
@@ -61,57 +45,13 @@ export default function CompanySection({ user, refreshProfileStatus, onCompanyNa
         if (!res.ok || !json?.success || !json?.data) return;
         const carrierData = json.data?.carrier;
         if (!carrierData) return;
-        const activity = json.data?.activity;
-
-        const resolveServiceNames = (): string[] => {
-          const fromTopLevel = Array.isArray(json.data?.serviceTypes) ? json.data.serviceTypes.map((item: any) => item?.serviceType?.name || item?.name).filter(Boolean) : null;
-          if (fromTopLevel?.length) return fromTopLevel;
-          const fromCarrier = Array.isArray(carrierData?.serviceTypeLinks) ? carrierData.serviceTypeLinks.map((link: any) => link?.serviceType?.name || link?.name).filter(Boolean) : null;
-          if (fromCarrier?.length) return fromCarrier;
-          return [];
-        };
-
-        const resolveScopeNames = (): string[] => {
-          const fromTopLevel = Array.isArray(json.data?.scopeOfWorks) ? json.data.scopeOfWorks.map((item: any) => item?.scope?.name || item?.name).filter(Boolean) : null;
-          if (fromTopLevel?.length) return fromTopLevel;
-          const fromCarrier = Array.isArray(carrierData?.scopeLinks) ? carrierData.scopeLinks.map((link: any) => link?.scope?.name || link?.name).filter(Boolean) : null;
-          if (fromCarrier?.length) return fromCarrier;
-          return [];
-        };
-
-        const vehicleSource = (() => {
-          if (Array.isArray(json.data?.vehicleTypes) && json.data.vehicleTypes.length) return json.data.vehicleTypes;
-          if (Array.isArray(carrierData?.vehicleTypeLinks) && carrierData.vehicleTypeLinks.length) return carrierData.vehicleTypeLinks;
-          return null;
-        })();
-
-        const vehicleEntries = (vehicleSource || []).map((entry: any) => {
-          const name = entry?.vehicleType?.name || entry?.name || entry?.vehicleTypeName;
-          if (!name) return null;
-          return { name, capacityValue: entry?.capacityKg ?? entry?.capacity ?? null };
-        }).filter(Boolean) as Array<{ name: string; capacityValue: number | string | null }>;
-
-        const vehicleNames = vehicleEntries.map(i => i.name);
-        const backendCaps = vehicleEntries.reduce((acc, item) => {
-          const num = item.capacityValue == null ? undefined : Number(item.capacityValue);
-          if (num !== undefined && Number.isFinite(num)) acc[item.name] = String(num);
-          return acc;
-        }, {} as Record<string, string>);
-
         setCompany(prev => {
-          const resolvedScopeNames = normalizeScopeNames(resolveScopeNames());
-          const currentScopeNames = normalizeScopeNames(prev.scopes);
           const next = {
             ...prev,
             email: carrierData.email || prev.email,
             name: carrierData.companyName || prev.name,
             taxNumber: carrierData.taxNumber || prev.taxNumber,
             year: carrierData.foundedYear ? String(carrierData.foundedYear) : prev.year,
-            services: resolveServiceNames().length ? resolveServiceNames() : prev.services,
-            scopes: resolvedScopeNames.length ? resolvedScopeNames : currentScopeNames,
-            vehicleType: vehicleNames.length ? vehicleNames[0] : prev.vehicleType,
-            vehicleTypes: vehicleNames.length ? vehicleNames : prev.vehicleTypes,
-            vehicleCapacities: vehicleNames.length ? { ...(prev.vehicleCapacities || {}), ...backendCaps } : prev.vehicleCapacities,
           };
           onCompanyNameChange?.(next.name);
           try { localStorage.setItem(`carrier_company_${user.id}`, JSON.stringify(next)); } catch {}
@@ -120,31 +60,8 @@ export default function CompanySection({ user, refreshProfileStatus, onCompanyNa
       } catch {}
     })();
 
-    // Prefill vehicle capacities from dedicated endpoint
-    (async () => {
-      try {
-        const res = await apiClient(`${API_BASE}/carriers/me/vehicles`);
-        const json = await res.json();
-        if (!res.ok || !json?.success || !Array.isArray(json.data)) return;
-        const caps: Record<string, string> = {};
-        for (const v of json.data) { if (v.vehicleTypeName) caps[v.vehicleTypeName] = String(v.capacityKg ?? ''); }
-        if (Object.keys(caps).length > 0) {
-          setCompany(prev => {
-            const next = { ...prev, vehicleCapacities: { ...(prev.vehicleCapacities || {}), ...caps } };
-            try { localStorage.setItem(`carrier_company_${user.id}`, JSON.stringify(next)); } catch {}
-            return next;
-          });
-        }
-      } catch {}
-    })();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user.id]);
-
-  const parseCapacity = (v: string | number | undefined) => {
-    if (v == null || v === '') return undefined;
-    const n = typeof v === 'number' ? v : Number(String(v).replace(/,/g, '.'));
-    return Number.isFinite(n) && n > 0 ? n : undefined;
-  };
 
   const persistDrafts = () => {
     try { localStorage.setItem(`carrier_company_${user.id}`, JSON.stringify(company)); } catch {}
@@ -152,44 +69,25 @@ export default function CompanySection({ user, refreshProfileStatus, onCompanyNa
   };
 
   const save = async () => {
-    const normalizedScopes = normalizeScopeNames(company.scopes || []);
-    if (!normalizedScopes.length) {
-      toast.error('Çalışma kapsamı seçmelisiniz.');
-      return;
-    }
-
-    const capacityOverrides = (company.vehicleTypes || []).reduce((acc, name) => {
-      const parsed = parseCapacity((company.vehicleCapacities || {})[name]);
-      if (parsed !== undefined) acc[name] = parsed;
-      return acc;
-    }, {} as Record<string, number>);
-
-    const selectedVehicles = (company.vehicleTypes || []).map(name => ({
-      vehicleTypeId: nameToId[name], customCapacity: parseCapacity((company.vehicleCapacities || {})[name]),
-    })).filter(v => !!v.vehicleTypeId);
-
     try {
-      await apiClient(`${API_BASE}/carriers/me/company-info`, {
+      const response = await apiClient(`${API_BASE}/carriers/me/company-info`, {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           companyName: company.name || undefined, taxNumber: company.taxNumber || undefined,
           email: company.email || undefined, foundedYear: company.year ? Number(company.year) : undefined,
-          vehicleTypeNames: company.vehicleTypes || [], vehicleTypeCapacities: Object.keys(capacityOverrides).length ? capacityOverrides : undefined,
-          scopeOfWorkNames: normalizedScopes,
         }),
       });
-      if (selectedVehicles.length > 0) {
-        await apiClient(`${API_BASE}/carriers/me/vehicles`, {
-          method: 'PUT', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ selectedVehicles }),
-        });
+      const json = await response.json().catch(() => ({}));
+      if (!response.ok || !json?.success) {
+        throw new Error(json?.message || 'Firma bilgileri kaydedilemedi.');
       }
-    } catch {}
-
-    persistDrafts();
-    onCompanyNameChange?.(company.name);
-    toast.success('Firma bilgileri ve araç kapasiteleri kaydedildi.');
-    await refreshProfileStatus?.();
+      persistDrafts();
+      onCompanyNameChange?.(company.name);
+      toast.success('Firma bilgileri kaydedildi.');
+      await refreshProfileStatus?.();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Firma bilgileri kaydedilemedi.');
+    }
   };
 
   return (
@@ -214,32 +112,6 @@ export default function CompanySection({ user, refreshProfileStatus, onCompanyNa
             <SelectTrigger className="mt-1"><SelectValue placeholder="Yıl seçiniz" /></SelectTrigger>
             <SelectContent>{Array.from({ length: new Date().getFullYear() - 1990 + 1 }, (_, i) => 1990 + i).reverse().map(y => (<SelectItem key={y} value={String(y)}>{y}</SelectItem>))}</SelectContent>
           </Select>
-        </div>
-        <div className="md:col-span-2">
-          <Label>Çalışma Kapsamı</Label>
-          <MultiSelect label=" " placeholder="Seçiniz" options={workingScopeOptions} selectedValues={normalizeScopeNames(company.scopes || [])} onSelectionChange={(vals) => setCompany({ ...company, scopes: normalizeScopeNames(vals) })} />
-        </div>
-        <div className="md:col-span-2">
-          <Label>Araç Türü</Label>
-          <MultiSelect label=" " placeholder="Seçiniz" options={vehicleTypesList.map(v => v.name)} selectedValues={company.vehicleTypes?.length ? company.vehicleTypes : (company.vehicleType ? [company.vehicleType] : [])} onSelectionChange={(vals) => {
-            const keep = new Set(vals);
-            const nextCaps: Record<string, string> = {};
-            Object.entries(company.vehicleCapacities || {}).forEach(([k, v]) => { if (keep.has(k)) nextCaps[k] = v; });
-            setCompany({ ...company, vehicleTypes: vals, vehicleType: vals[0] || '', vehicleCapacities: nextCaps });
-          }} />
-          {company.vehicleTypes?.length > 0 && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
-              {company.vehicleTypes.map(t => (
-                <div key={t}>
-                  <Label>{t} Kapasite (kg)</Label>
-                  <Input className="mt-1" inputMode="numeric" value={(company.vehicleCapacities || {})[t] || ''} onChange={(e) => {
-                    const v = e.target.value.replace(/\D/g, '');
-                    setCompany(prev => ({ ...prev, vehicleCapacities: { ...(prev.vehicleCapacities || {}), [t]: v } }));
-                  }} placeholder="Örn. 3500" />
-                </div>
-              ))}
-            </div>
-          )}
         </div>
       </div>
       <div className="mt-6 flex justify-end">

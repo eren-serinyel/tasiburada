@@ -113,24 +113,30 @@ export class ReviewService {
     if (!shipment.carrierId) {
       throw new NotFoundError('Bu tasima icin atanan nakliyeci bulunamadi.');
     }
+    const shipmentCarrierId = shipment.carrierId;
 
     const alreadyReviewed = await this.reviewRepository.existsByShipmentAndCustomer(payload.shipmentId, customerId);
     if (alreadyReviewed) {
       throw new ConflictError('Ayni tasimaya iki kez yorum yapamazsiniz.');
     }
 
-    const review = await this.reviewRepository.create({
-      shipmentId: payload.shipmentId,
-      carrierId: shipment.carrierId,
+    const comment = await this.sanitizeReviewComment(payload.comment, {
       customerId,
-      rating,
-      comment: await this.sanitizeReviewComment(payload.comment, {
-        customerId,
-        shipmentId: payload.shipmentId,
-      })
+      shipmentId: payload.shipmentId,
     });
 
-    await this.carrierRepository.updateRating(shipment.carrierId);
+    const review = await AppDataSource.manager.transaction(async (manager) => {
+      const created = manager.create(Review, {
+        shipmentId: payload.shipmentId,
+        carrierId: shipmentCarrierId,
+        customerId,
+        rating,
+        comment: comment ?? undefined,
+      });
+      const savedReview = await manager.save(Review, created);
+      await this.carrierRepository.updateRating(shipmentCarrierId, manager);
+      return savedReview;
+    });
 
     try {
       const customer = await AppDataSource.getRepository(Customer).findOne({ where: { id: customerId } });
@@ -203,18 +209,23 @@ export class ReviewService {
       throw new ConflictError('Bu nakliyeciye zaten yorum yaptınız.');
     }
 
-    const review = await this.reviewRepository.create({
-      shipmentId: shipment.id,
-      carrierId,
+    const sanitizedComment = await this.sanitizeReviewComment(comment, {
       customerId,
-      rating,
-      comment: await this.sanitizeReviewComment(comment, {
-        customerId,
-        shipmentId: shipment.id,
-      })
+      shipmentId: shipment.id,
     });
 
-    await this.carrierRepository.updateRating(carrierId);
+    const review = await AppDataSource.manager.transaction(async (manager) => {
+      const created = manager.create(Review, {
+        shipmentId: shipment.id,
+        carrierId,
+        customerId,
+        rating,
+        comment: sanitizedComment ?? undefined,
+      });
+      const savedReview = await manager.save(Review, created);
+      await this.carrierRepository.updateRating(carrierId, manager);
+      return savedReview;
+    });
 
     const saved = await this.reviewRepository.findById(review.id);
     if (!saved) throw new NotFoundError('Yorum kaydedildi ancak getirilemedi.');
@@ -254,7 +265,14 @@ export class ReviewService {
       });
     }
 
-    const updated = await this.reviewRepository.update(reviewId, updateData as any);
+    const updated = await AppDataSource.manager.transaction(async (manager) => {
+      const result = await manager.update(Review, { id: reviewId }, updateData);
+      if (!result.affected) return null;
+      if (data.rating !== undefined) {
+        await this.carrierRepository.updateRating(review.carrierId, manager);
+      }
+      return manager.findOne(Review, { where: { id: reviewId } });
+    });
     if (!updated) throw new NotFoundError('Yorum güncellenemedi.');
     return updated;
   }
@@ -265,8 +283,9 @@ export class ReviewService {
     if (review.customerId !== customerId) throw new ForbiddenError('Bu yorumu silme yetkiniz yok.');
 
     const carrierId = review.carrierId;
-    await this.reviewRepository.delete(reviewId);
-
-    await this.carrierRepository.updateRating(carrierId);
+    await AppDataSource.manager.transaction(async (manager) => {
+      await manager.delete(Review, { id: reviewId });
+      await this.carrierRepository.updateRating(carrierId, manager);
+    });
   }
 }

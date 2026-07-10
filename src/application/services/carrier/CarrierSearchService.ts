@@ -23,6 +23,7 @@ export interface CarrierSearchQuery {
 	minExperienceYears?: number;
 	minProfileCompletion?: number;
 	minCapacityKg?: number;
+	capacityCheckKg?: number;
 	searchText?: string;
 	serviceCity?: string;
 	serviceDistrict?: string;
@@ -50,6 +51,7 @@ export interface CarrierSearchResultDto {
 	isVerified: boolean;
 	catalogExtraServiceIds: string[];
 	scopes: Array<'sehirici' | 'sehirlerarasi'>;
+	capacityAdequate?: boolean;
 }
 
 export interface CarrierSearchResponseDto {
@@ -78,7 +80,11 @@ export class CarrierSearchService {
 			total,
 			limit: filters.limit,
 			offset: filters.offset,
-			items: items.map(item => this.mapToDto(item, catalogExtraServicesByCarrier.get(item.carrier.id) ?? []))
+			items: items.map(item => this.mapToDto(
+				item,
+				catalogExtraServicesByCarrier.get(item.carrier.id) ?? [],
+				filters.capacityCheckKg,
+			))
 		};
 	}
 
@@ -211,6 +217,7 @@ export class CarrierSearchService {
 			minExperienceYears: toInt((query as any).minExperienceYears),
 			minProfileCompletion: toInt((query as any).minProfileCompletion),
 			minCapacityKg: toInt((query as any).minCapacityKg),
+			capacityCheckKg: toInt((query as any).capacityCheckKg ?? (query as any).estimatedWeightKg),
 			maxCapacityKg: toInt((query as any).maxCapacityKg),
 			searchText: toText((query as any).searchText),
 			availableDate,
@@ -350,7 +357,11 @@ export class CarrierSearchService {
 		return new Map(Array.from(grouped.entries()).map(([carrierId, serviceIds]) => [carrierId, Array.from(serviceIds)]));
 	}
 
-	private mapToDto(item: CarrierSearchRepositoryItem, catalogExtraServiceIds: string[]): CarrierSearchResultDto {
+	private mapToDto(
+		item: CarrierSearchRepositoryItem,
+		catalogExtraServiceIds: string[],
+		capacityCheckKg?: number,
+	): CarrierSearchResultDto {
 		const carrier = item.carrier;
 		const city = carrier.activity?.city ?? null;
 		const serviceAreas = Array.isArray(carrier.activity?.serviceAreasJson)
@@ -358,6 +369,7 @@ export class CarrierSearchService {
 			: [];
 		const experienceYears = this.computeExperience(carrier);
 		const profileCompletion = carrier.profileStatus?.overallPercentage ?? null;	
+		const maxVehicleCapacityKg = this.getMaxVehicleCapacityKg(carrier);
 		const vehicleSummary = this.buildVehicleSummary(carrier);
 		return {
 			id: carrier.id,
@@ -373,7 +385,10 @@ export class CarrierSearchService {
 			pictureUrl: carrier.pictureUrl ?? null,
 			isVerified: carrier.verifiedByAdmin === true,
 			catalogExtraServiceIds,
-			scopes: this.mapScopeLinksToSlugs(carrier)
+			scopes: this.mapScopeLinksToSlugs(carrier),
+			...(capacityCheckKg !== undefined
+				? { capacityAdequate: maxVehicleCapacityKg > 0 && maxVehicleCapacityKg >= capacityCheckKg }
+				: {})
 		};
 	}
 
@@ -397,12 +412,33 @@ export class CarrierSearchService {
 	}
 
 	private buildVehicleSummary(carrier: Carrier): string | null {
-		const vehicles = carrier.vehicleTypeLinks || [];
-		if (!vehicles.length) return null;
-		const primary = vehicles[0];
+		const primary = this.getPrimaryVehicleTypeLink(carrier);
+		if (!primary) return null;
 		const name = primary.vehicleType?.name || '';
-		const capacity = Number(primary.capacityKg ?? primary.vehicleType?.defaultCapacityKg ?? 0);
+		const capacity = this.getVehicleTypeLinkCapacityKg(primary);
 		const capacityText = capacity > 0 ? ` (${capacity}kg)` : '';
 		return name ? `${name.toUpperCase()}${capacityText}` : null;
+	}
+
+	private getPrimaryVehicleTypeLink(carrier: Carrier) {
+		const vehicles = carrier.vehicleTypeLinks || [];
+		if (!vehicles.length) return null;
+
+		return vehicles.reduce((best, current) => {
+			return this.getVehicleTypeLinkCapacityKg(current) > this.getVehicleTypeLinkCapacityKg(best)
+				? current
+				: best;
+		}, vehicles[0]);
+	}
+
+	private getVehicleTypeLinkCapacityKg(link: Carrier['vehicleTypeLinks'][number]): number {
+		return Number(link.capacityKg ?? link.vehicleType?.defaultCapacityKg ?? link.vehicleType?.capacityKg ?? 0);
+	}
+
+	private getMaxVehicleCapacityKg(carrier: Carrier): number {
+		return (carrier.vehicleTypeLinks || []).reduce(
+			(max, link) => Math.max(max, this.getVehicleTypeLinkCapacityKg(link)),
+			0,
+		);
 	}
 }

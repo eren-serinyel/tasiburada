@@ -250,6 +250,56 @@ const getOfferErrorMessage = (json: Record<string, unknown> | null, fallback = '
   return message || fallback;
 };
 
+function SecureShipmentPhoto({ url, index }: { url: string; index: number }) {
+  const [objectUrl, setObjectUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    let localObjectUrl: string | null = null;
+
+    const load = async () => {
+      if (!url.startsWith('/api/')) {
+        setObjectUrl(url);
+        return;
+      }
+
+      try {
+        const response = await apiClient(url, { suppressErrorToast: true });
+        if (!response.ok) return;
+        const blob = await response.blob();
+        if (cancelled) return;
+        localObjectUrl = window.URL.createObjectURL(blob);
+        setObjectUrl(localObjectUrl);
+      } catch {
+        if (!cancelled) setObjectUrl(null);
+      }
+    };
+
+    load();
+
+    return () => {
+      cancelled = true;
+      if (localObjectUrl) {
+        window.URL.revokeObjectURL(localObjectUrl);
+      }
+    };
+  }, [url]);
+
+  if (!objectUrl) {
+    return (
+      <div className="flex h-24 w-full items-center justify-center rounded-[var(--tb-radius-sm)] border text-xs" style={{ borderColor: 'var(--tb-border)', color: 'var(--tb-ink-400)' }}>
+        YÃ¼kleniyor
+      </div>
+    );
+  }
+
+  return (
+    <a href={objectUrl} target="_blank" rel="noopener noreferrer" className="block overflow-hidden rounded-[var(--tb-radius-sm)] border" style={{ borderColor: 'var(--tb-border)' }}>
+      <img src={objectUrl} alt={`YÃ¼k fotoÄŸrafÄ± ${index + 1}`} className="h-24 w-full object-cover" loading="lazy" />
+    </a>
+  );
+}
+
 export default function CarrierRespond() {
   const { requestId } = useParams();
   const navigate = useNavigate();
@@ -298,11 +348,13 @@ export default function CarrierRespond() {
         const carrierJson = await carrierRes.json().catch(() => ({}));
         const carrier = carrierJson?.data?.carrier ?? carrierJson?.data;
         const profilePercent = Number(statusJson?.data?.overallPercentage ?? 0);
-        const adminApproved = Boolean(carrier?.verifiedByAdmin || carrier?.verificationStatus === 'verified');
+        const approvalState = String(carrier?.approvalState ?? '').toUpperCase();
+        const adminApproved = Boolean(carrier?.verifiedByAdmin || carrier?.verificationStatus === 'verified')
+          && (!approvalState || approvalState === 'APPROVED');
         if (profilePercent < 75) {
           setOfferBlocked('Teklif verebilmek için profilinizin en az %75 tamamlanması gerekiyor.');
         } else if (!adminApproved) {
-          setOfferBlocked('Teklif verebilmek için hesabınızın admin tarafından onaylanması gerekiyor.');
+          setOfferBlocked('Teklif verebilmek icin belgelerinizi yukleyip admin onayini bekleyin.');
         } else {
           setOfferBlocked(null);
         }
@@ -491,9 +543,7 @@ export default function CarrierRespond() {
               <PageEyebrow>Fotoğraflar</PageEyebrow>
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
                 {shipment.photoUrls.map((url, i) => (
-                  <a key={i} href={url} target="_blank" rel="noopener noreferrer" className="block overflow-hidden rounded-[var(--tb-radius-sm)] border" style={{ borderColor: 'var(--tb-border)' }}>
-                    <img src={url} alt={`Yük fotoğrafı ${i + 1}`} className="h-24 w-full object-cover" loading="lazy" />
-                  </a>
+                  <SecureShipmentPhoto key={`${url}-${i}`} url={url} index={i} />
                 ))}
               </div>
             </div>
@@ -508,7 +558,16 @@ export default function CarrierRespond() {
       {/* Blocked warning */}
       {offerBlocked && (
         <InlineNotice tone="danger" icon={<AlertTriangle className="h-4 w-4" />}>
-          {offerBlocked}
+          <span>{offerBlocked}</span>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="ml-3 h-8"
+            onClick={() => navigate('/profilim?tab=documents')}
+          >
+            Belgeleri Yükle
+          </Button>
         </InlineNotice>
       )}
 

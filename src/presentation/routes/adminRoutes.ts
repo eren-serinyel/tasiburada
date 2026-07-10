@@ -24,6 +24,7 @@ router.get('/stats/trends', adminController.getStatsTrends);
 // Carriers
 router.get('/carriers', adminController.getCarriers);
 router.get('/carriers/approval-queue', adminController.getCarrierApprovalQueue);
+router.get('/carriers/identity-risks', adminController.getCarrierIdentityRisks);
 router.get('/carriers/:carrierId', adminController.getCarrierById);
 router.put('/carriers/:carrierId', adminController.updateCarrier);
 router.put('/carriers/:carrierId/verify', adminController.verifyCarrier);

@@ -19,7 +19,7 @@ import {
   Loader2
 } from "lucide-react";
 import { useNavigate, Link } from "react-router-dom";
-import { setSessionUser } from '@/lib/storage';
+import { useAuth } from '@/context/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { apiClient } from '@/lib/apiClient';
 
@@ -41,9 +41,17 @@ const validatePassword = (password: string): string => {
   return '';
 };
 
+const validateTaxNumber = (taxNumber: string): string => {
+  if (!/^\d{10,11}$/.test(taxNumber)) {
+    return 'Vergi numarası 10, TCKN 11 haneli olmalıdır';
+  }
+  return '';
+};
+
 export default function RegisterCarrier() {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { login: authLogin } = useAuth();
 
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -69,7 +77,7 @@ export default function RegisterCarrier() {
           error = value.trim().length < 2 ? 'Şirket adı en az 2 karakter olmalı' : '';
           break;
         case 'taxOrRegistry':
-          error = !/^\d{10,16}$/.test(value) ? '10-16 hane arası rakam girmelisiniz' : '';
+          error = validateTaxNumber(value);
           break;
         case 'authorizedFullName':
           error = value.trim().length < 2 ? 'Ad Soyad en az 2 karakter olmalı' : '';
@@ -87,7 +95,7 @@ export default function RegisterCarrier() {
           error = value !== formData.password ? 'Şifreler eşleşmiyor' : '';
           break;
       }
-      setErrors((prev) => ({ ...prev, [field]: error }));
+      setErrors((prev) => ({ ...prev, [field]: error, submit: '' }));
     }
   };
 
@@ -96,13 +104,14 @@ export default function RegisterCarrier() {
 
     const newErrors: Record<string, string> = {
       companyName: formData.companyName.trim().length < 2 ? 'Şirket adı en az 2 karakter olmalı' : '',
-      taxOrRegistry: !/^\d{10,16}$/.test(formData.taxOrRegistry) ? 'Geçerli bir Vergi/TCKN giriniz' : '',
+      taxOrRegistry: validateTaxNumber(formData.taxOrRegistry),
       authorizedFullName: formData.authorizedFullName.trim().length < 2 ? 'Yetkili adı en az 2 karakter olmalı' : '',
       phone: !/^(?:\+90|0)?(5\d{9})$/.test(formData.phone.replace(/\s|-/g, '')) ? 'Geçerli bir telefon giriniz' : '',
       email: validateEmail(formData.email),
       password: validatePassword(formData.password),
       confirmPassword: formData.password !== formData.confirmPassword ? 'Şifreler eşleşmiyor' : '',
       acceptTerms: !formData.acceptTerms ? 'Kullanım koşullarını kabul etmelisiniz' : '',
+      submit: '',
     };
 
     setErrors(newErrors);
@@ -116,12 +125,13 @@ export default function RegisterCarrier() {
       const registerRes = await apiClient(`${API_BASE_URL}/carriers/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        suppressErrorToast: true,
         body: JSON.stringify({
-          companyName: formData.companyName,
-          taxNumber: formData.taxOrRegistry,
-          email: formData.email,
+          companyName: formData.companyName.trim(),
+          taxNumber: formData.taxOrRegistry.trim(),
+          email: formData.email.trim().toLowerCase(),
           phone: normalizePhone(formData.phone),
-          contactName: formData.authorizedFullName,
+          contactName: formData.authorizedFullName.trim(),
           password: formData.password,
           foundedYear: startYearNum
         }),
@@ -129,14 +139,25 @@ export default function RegisterCarrier() {
 
       const regJson = await registerRes.json().catch(() => ({}));
       if (!registerRes.ok || !regJson?.success) {
-        throw new Error(regJson?.message || `Kayıt başarısız. (HTTP ${registerRes.status})`);
+        const isTaxNumberConflict = registerRes.status === 409
+          && /vergi numara/i.test(String(regJson?.message || ''));
+        const message = isTaxNumberConflict
+          ? 'Bu vergi numarası zaten kayıtlı.'
+          : regJson?.message || `Kayıt başarısız. (HTTP ${registerRes.status})`;
+
+        setErrors((prev) => ({
+          ...prev,
+          submit: message,
+          ...(isTaxNumberConflict ? { taxOrRegistry: message } : {}),
+        }));
+        toast({ title: 'Kayıt başarısız', description: message, variant: 'destructive' });
+        return;
       }
 
       const c = regJson?.data?.carrier;
       const token = regJson?.data?.token;
-
-      if (token) {
-        localStorage.setItem('authToken', token);
+      if (!c?.id || !token) {
+        throw new Error('Kayıt yanıtı eksik. Lütfen tekrar deneyin.');
       }
 
       const sessionCarrier = {
@@ -147,9 +168,9 @@ export default function RegisterCarrier() {
         phone: c.phone || '',
         city: c.activityCity || '',
         type: 'carrier' as const,
-        createdAt: c.createdAt || new Date().toISOString(),
-      } as any;
-      setSessionUser(sessionCarrier, 5 * 24 * 60 * 60 * 1000);
+        createdAt: c.createdAt ? new Date(c.createdAt) : new Date(),
+      };
+      authLogin(token, sessionCarrier);
 
       // Profil taslaklarını doldur (prefill)
       try {
@@ -162,11 +183,11 @@ export default function RegisterCarrier() {
         }));
       } catch { }
 
-      window.dispatchEvent(new Event('userLogin'));
       toast({ title: 'Kayıt başarılı!', description: 'Hesabınız oluşturuldu, onboarding sayfasına yönlendiriliyorsunuz.' });
       navigate('/nakliyeci-onboarding');
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Kayıt sırasında bir hata oluştu.';
+      setErrors((prev) => ({ ...prev, submit: message }));
       toast({ title: 'Hata', description: message, variant: 'destructive' });
     } finally {
       setIsLoading(false);
@@ -267,7 +288,7 @@ export default function RegisterCarrier() {
                   onChange={(e) => handleChange('taxOrRegistry', e.target.value.replace(/\D/g, ''))}
                   placeholder="10-11 haneli numara"
                   className={`h-12 mt-1 ${errors.taxOrRegistry ? 'border-red-500' : ''}`}
-                  maxLength={16}
+                  maxLength={11}
                 />
                 {errors.taxOrRegistry && <p className="text-red-500 text-sm mt-1">{errors.taxOrRegistry}</p>}
               </div>
@@ -368,6 +389,12 @@ export default function RegisterCarrier() {
                 </label>
               </div>
               {errors.acceptTerms && <p className="text-red-500 text-sm">{errors.acceptTerms}</p>}
+
+              {errors.submit && (
+                <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                  {errors.submit}
+                </p>
+              )}
 
               <div className="pt-2">
                                 <Button 

@@ -2,7 +2,6 @@ import { CarrierActivityRepository } from '../../../infrastructure/repositories/
 import { CarrierActivityDto } from '../../dto/CarrierDto';
 import { CarrierProfileStatusService } from './CarrierProfileStatusService';
 import { CarrierActivity } from '../../../domain/entities/CarrierActivity';
-import { resolveSuggestedServiceAreas } from '../../../shared/serviceAreaSuggestions';
 import {
   CarrierAvailableDate,
   isValidCarrierAvailableDateTimeRange,
@@ -40,6 +39,17 @@ export class CarrierActivityService {
       : [];
     if (requestedServiceAreas.length === 0) {
       throw new Error('Hizmet verdiğiniz bölgelerden en az bir şehir seçmelisiniz.');
+    }
+    const scopeTokens = new Set([
+      'sehirici',
+      'sehirlerarasi',
+      'şehir içi',
+      'şehirler arası',
+      'şehiriçi',
+      'şehirlerarası',
+    ]);
+    if (requestedServiceAreas.some(area => scopeTokens.has(area.toLocaleLowerCase('tr-TR')))) {
+      throw new Error('İş kapsamı değerleri hizmet verilen iller alanına kaydedilemez.');
     }
 
     if (!isValidCarrierAvailableDateTimeRange({
@@ -100,7 +110,7 @@ export class CarrierActivityService {
       city: activity.city,
       district: activity.district,
       address: activity.address,
-      serviceAreas: serviceAreas.length ? serviceAreas : resolveSuggestedServiceAreas(activity.city),
+      serviceAreas,
       availableDates,
       availableDateOverrides,
       defaultAvailabilityStart: activity.defaultAvailabilityStart ?? null,

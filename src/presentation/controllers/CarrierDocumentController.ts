@@ -3,6 +3,8 @@ import path from 'node:path';
 import { Request, Response } from 'express';
 import { CarrierDocumentService } from '../../application/services/carrier/CarrierDocumentService';
 import { CarrierApprovalService } from '../../application/services/carrier/CarrierApprovalService';
+import { AppDataSource } from '../../infrastructure/database/data-source';
+import { CarrierDocument } from '../../domain/entities/CarrierDocument';
 
 export class CarrierDocumentController {
   private documentService = new CarrierDocumentService();
@@ -49,11 +51,14 @@ export class CarrierDocumentController {
 
         const fileUrl = `/uploads/documents/${req.file.filename}`;
         const result = await this.documentService.saveDocumentsDraft(carrierId, [{ type: rawType, fileUrl }]);
+        const savedDocument = result.documents?.[0];
         const readiness = await this.approvalService.markDraftChanged(carrierId);
         res.status(200).json({
           success: true,
           allRequiredHaveDoc: result.allRequiredHaveDoc,
-          fileUrl,
+          fileUrl: savedDocument?.fileUrl,
+          downloadUrl: savedDocument?.downloadUrl,
+          document: savedDocument,
           approvalReadiness: readiness,
         });
         return;
@@ -90,6 +95,47 @@ export class CarrierDocumentController {
     }
   };
 
+  downloadDocumentById = async (req: Request, res: Response) => {
+    try {
+      const user = req.user;
+      if (!user) {
+        res.status(401).json({ success: false, message: 'Kimlik dogrulamasi gerekli.' });
+        return;
+      }
+
+      const doc = await AppDataSource.getRepository(CarrierDocument).findOne({
+        where: { id: req.params.documentId },
+      });
+
+      if (!doc) {
+        res.status(404).json({ success: false, message: 'Belge bulunamadi.' });
+        return;
+      }
+
+      const isOwnerCarrier = user.type === 'carrier' && user.carrierId === doc.carrierId;
+      const isAdmin = user.type === 'admin';
+      if (!isOwnerCarrier && !isAdmin) {
+        res.status(403).json({ success: false, message: 'Bu belgeye erisim yetkiniz yok.' });
+        return;
+      }
+
+      const filePath = this.resolveDocumentPath(doc.fileUrl);
+      if (!filePath || !fs.existsSync(filePath)) {
+        res.status(404).json({ success: false, message: 'Belge dosyasi bulunamadi.' });
+        return;
+      }
+
+      if (String(req.query.download || '') === '1') {
+        res.download(filePath, path.basename(filePath));
+        return;
+      }
+
+      res.sendFile(filePath);
+    } catch (error: any) {
+      res.status(500).json({ success: false, message: error.message || 'Belge alinamadi.' });
+    }
+  };
+
   deleteDocument = async (req: Request, res: Response) => {
     const carrierId = this.ensureCarrier(req, res);
     if (!carrierId) return;
@@ -114,11 +160,11 @@ export class CarrierDocumentController {
 
   private resolveDocumentPath(fileUrl?: string): string | null {
     const normalizedUrl = `/${String(fileUrl || '').trim().replace(/^\/+/, '').replace(/\\/g, '/')}`;
-    if (!normalizedUrl.startsWith('/uploads/')) {
+    if (!normalizedUrl.startsWith('/uploads/documents/')) {
       return null;
     }
 
-    const uploadsRoot = path.resolve(process.cwd(), 'uploads');
+    const uploadsRoot = path.resolve(process.cwd(), 'uploads', 'documents');
     const resolved = path.resolve(process.cwd(), normalizedUrl.replace(/^\//, ''));
     if (!resolved.startsWith(uploadsRoot + path.sep) && resolved !== uploadsRoot) {
       return null;

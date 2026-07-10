@@ -513,9 +513,15 @@ export class OfferService {
       await transactionalEntityManager
         .createQueryBuilder()
         .update(Carrier)
+        .set({ acceptedOffers: () => 'acceptedOffers + 1' })
+        .where('id = :carrierId', { carrierId: offer.carrierId })
+        .execute();
+
+      await transactionalEntityManager
+        .createQueryBuilder()
+        .update(Carrier)
         .set({
-          acceptedOffers: () => 'acceptedOffers + 1',
-          successRate: () => 'CASE WHEN (acceptedOffers + 1) > 0 THEN ROUND((completedShipments / (acceptedOffers + 1)) * 100, 2) ELSE 0 END',
+          successRate: () => 'CASE WHEN acceptedOffers > 0 THEN ROUND((completedShipments / acceptedOffers) * 100, 2) ELSE 0 END',
         })
         .where('id = :carrierId', { carrierId: offer.carrierId })
         .execute();
@@ -551,6 +557,13 @@ export class OfferService {
       });
 
       return { finalOffer, autoRejectedOffers };
+    }).catch((error: any) => {
+      // MySQL safely rolls back one concurrent accept as the deadlock victim.
+      // Return a domain conflict instead of leaking the raw database error.
+      if (error?.code === 'ER_LOCK_DEADLOCK' || error?.errno === 1213) {
+        throw new ConflictError('Bu taşıma için başka bir teklif zaten kabul edildi.');
+      }
+      throw error;
     });
 
     if (!result?.finalOffer) {

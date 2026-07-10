@@ -47,7 +47,7 @@ export class ShipmentController {
         data: shipments
       });
     } catch (error: any) {
-      res.status(500).json({
+      res.status(error.statusCode || 500).json({
         success: false,
         message: error.message || 'Taşıma talepleri alınırken hata oluştu.'
       });
@@ -76,6 +76,27 @@ export class ShipmentController {
       res.status(statusCode).json({
         success: false,
         message: error.message || 'Taşıma talebi alınırken hata oluştu.'
+      });
+    }
+  };
+
+  getPhoto = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const { id, photoId } = req.params;
+      const userId = req.user?.customerId || req.user?.carrierId || req.user?.adminId;
+      const userType = req.user?.type;
+
+      if (!userId || !userType) {
+        res.status(401).json({ success: false, message: 'Yetkisiz eriÅŸim.' });
+        return;
+      }
+
+      const filePath = await this.shipmentService.getShipmentPhotoFilePath(id, photoId, userId, userType);
+      res.sendFile(filePath);
+    } catch (error: any) {
+      res.status(error.statusCode || 500).json({
+        success: false,
+        message: error.message || 'FotoÄŸraf alÄ±nÄ±rken hata oluÅŸtu.'
       });
     }
   };

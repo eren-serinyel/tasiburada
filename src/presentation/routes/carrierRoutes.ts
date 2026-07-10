@@ -3,7 +3,7 @@ import { CarrierAuthController } from '../controllers/CarrierAuthController';
 import { CarrierProfileController } from '../controllers/CarrierProfileController';
 import { CarrierCapabilityController } from '../controllers/CarrierCapabilityController';
 import { CarrierDocumentController } from '../controllers/CarrierDocumentController';
-import { authenticateCarrier } from '../middleware/auth';
+import { authenticateCarrier, authenticateToken, requireVerifiedCarrier } from '../middleware/auth';
 import { CarrierSearchController } from '../controllers/CarrierSearchController';
 import { CarrierDetailController } from '../controllers/CarrierDetailController';
 import { CarrierDashboardController } from '../controllers/CarrierDashboardController';
@@ -64,13 +64,14 @@ router.get('/me/documents', authenticateCarrier, documentController.getDocuments
 router.get('/me/documents/:documentId/download', authenticateCarrier, documentController.downloadDocument);
 router.delete('/me/documents/:documentId', authenticateCarrier, documentController.deleteDocument);
 router.put('/me/documents', authenticateCarrier, documentUpload.single('file'), documentController.updateDocuments);
+router.get('/documents/:documentId', authenticateToken, documentController.downloadDocumentById);
 router.put('/me/earnings', authenticateCarrier, profileController.updateEarnings);
 router.put('/me/profile-picture', authenticateCarrier, pictureUpload.single('picture'), profileController.updateProfilePicture);
 router.put('/me/security', authenticateCarrier, profileController.updateSecurity);
 router.get('/me/notifications', authenticateCarrier, profileController.getNotifications);
 router.put('/me/notifications/toggle', authenticateCarrier, profileController.toggleNotification);
 router.get('/me/reviews', authenticateCarrier, reviewController.getMyReviews);
-router.get('/me/offers', authenticateCarrier, offerController.getMyCarrierOffers);
+router.get('/me/offers', authenticateCarrier, requireVerifiedCarrier, offerController.getMyCarrierOffers);
 
 // ID-based aliases (frontend currently uses /carriers/:carrierId/*)
 router.put('/profile/:carrierId', authenticateCarrier, profileController.updateCompanyInfo);
@@ -85,7 +86,7 @@ router.delete('/:carrierId/documents/:documentId', authenticateCarrier, document
 router.put('/:carrierId/documents', authenticateCarrier, documentUpload.single('file'), documentController.updateDocuments);
 router.put('/:carrierId/profile-picture', authenticateCarrier, pictureUpload.single('picture'), profileController.updateProfilePicture);
 router.put('/:carrierId/security', authenticateCarrier, profileController.updateSecurity);
-router.get('/me/invites', authenticateCarrier, inviteController.getCarrierInvites);
+router.get('/me/invites', authenticateCarrier, requireVerifiedCarrier, inviteController.getCarrierInvites);
 router.get('/:carrierId', profileController.getCarrierProfile);
 
 export default router;

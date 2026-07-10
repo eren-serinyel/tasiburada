@@ -22,6 +22,7 @@ import { ScopeOfWork } from '../../../domain/entities/ScopeOfWork';
 import { ExtraService } from '../../../domain/entities/ExtraService';
 import { ExtraServiceLoadType } from '../../../domain/entities/ExtraServiceApplicability';
 import { CarrierLoadTypeCapability } from '../../../domain/entities/CarrierLoadTypeCapability';
+import { CarrierAvailableDate } from '../../../domain/entities/CarrierAvailableDate';
 import {
   CarrierExtraServiceCapability,
   CarrierExtraServicePriceMode,
@@ -67,6 +68,8 @@ const EMAIL_SLUG_OVERRIDES: Record<string, string> = {
   'Ankara Ekspres Taşımacılık': 'ankaraekspres',
 };
 
+const AVAILABILITY_SEED_DAYS = 120;
+
 function resolveDefaultAvailabilityWindow(index: number): { start: string; end: string } {
   const variant = index % 5;
   if (variant === 0) return { start: '17:00', end: '00:00' };
@@ -86,6 +89,7 @@ export async function seedCarriers(
   const csowRepo = AppDataSource.getRepository(CarrierScopeOfWork);
   const profileStatusRepo = AppDataSource.getRepository(CarrierProfileStatus);
   const activityRepo = AppDataSource.getRepository(CarrierActivity);
+  const availableDateRepo = AppDataSource.getRepository(CarrierAvailableDate);
   const documentRepo = AppDataSource.getRepository(CarrierDocument);
   const statsRepo = AppDataSource.getRepository(CarrierStats);
   const earningsRepo = AppDataSource.getRepository(CarrierEarnings);
@@ -250,6 +254,17 @@ export async function seedCarriers(
       availableDates: JSON.stringify(availableDates),
     }));
 
+    if (availableDates.length > 0) {
+      await availableDateRepo.save(availableDates.map((date) =>
+        availableDateRepo.create({
+          carrierId: savedCarrier.id,
+          date,
+          startTime: null,
+          endTime: null,
+        }),
+      ));
+    }
+
     let approvedDocumentCount = 0;
     let totalDocumentCount = 0;
     const documentPlan = getDocumentPlan(tierProfile.documentMode);
@@ -383,30 +398,23 @@ function getDocumentPlan(mode: CarrierTierProfile['documentMode']): Array<{
 }
 
 function generateAvailabilityDatesForTier(tierProfile: CarrierTierProfile): string[] {
-  const rangeByTier: Record<CarrierTierProfile['tier'], [number, number]> = {
-    elite: [30, 45],
-    established: [25, 40],
-    growing: [15, 30],
-    new: [10, 20],
-    onboarding: [0, 0],
-  };
-
-  const [minDays, maxDays] = rangeByTier[tierProfile.tier];
-  if (maxDays === 0) {
+  if (tierProfile.tier === 'onboarding') {
     return [];
   }
 
-  const desiredCount = randomInt(minDays, maxDays);
-  const selectedDates = new Set<string>();
+  const dates: string[] = [];
+  const start = new Date();
+  start.setHours(12, 0, 0, 0);
 
-  while (selectedDates.size < desiredCount) {
-    const date = new Date();
-    date.setHours(12, 0, 0, 0);
-    date.setDate(date.getDate() + randomInt(0, 89));
-    selectedDates.add(formatDateOnly(date));
+  for (let offset = 0; offset <= AVAILABILITY_SEED_DAYS; offset += 1) {
+    const date = new Date(start);
+    date.setDate(start.getDate() + offset);
+    if (shouldCarrierWorkOnDate(tierProfile.tier, date, offset)) {
+      dates.push(formatDateOnly(date));
+    }
   }
 
-  return [...selectedDates].sort();
+  return dates;
 }
 
 function generateWideAvailabilityDates(): string[] {
@@ -414,13 +422,48 @@ function generateWideAvailabilityDates(): string[] {
   const start = new Date();
   start.setHours(12, 0, 0, 0);
 
-  for (let offset = 0; offset <= 120; offset += 1) {
+  for (let offset = 0; offset <= AVAILABILITY_SEED_DAYS; offset += 1) {
     const date = new Date(start);
     date.setDate(start.getDate() + offset);
     dates.push(formatDateOnly(date));
   }
 
   return dates;
+}
+
+function shouldCarrierWorkOnDate(
+  tier: CarrierTierProfile['tier'],
+  date: Date,
+  offset: number,
+): boolean {
+  const dayOfWeek = date.getDay();
+  const isSaturday = dayOfWeek === 6;
+  const isSunday = dayOfWeek === 0;
+
+  if (tier === 'elite') {
+    if (isSunday) return offset % 3 !== 1;
+    return true;
+  }
+
+  if (tier === 'established') {
+    if (isSunday) return false;
+    if (isSaturday) return offset % 2 === 0;
+    return true;
+  }
+
+  if (tier === 'growing') {
+    if (isSunday) return false;
+    if (isSaturday) return offset % 4 === 0;
+    return offset % 11 !== 0;
+  }
+
+  if (tier === 'new') {
+    if (isSunday) return false;
+    if (isSaturday) return offset % 6 === 0;
+    return offset % 3 !== 0;
+  }
+
+  return false;
 }
 
 function formatDateOnly(date: Date): string {

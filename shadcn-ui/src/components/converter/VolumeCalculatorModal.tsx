@@ -103,6 +103,8 @@ const MOVE_TYPE_LABELS: Record<ConverterMoveType, string> = {
   partial_load: 'Parça Yük',
 };
 
+const CUSTOM_ITEM_QUANTITY_LIMIT = 5;
+
 const PROPERTY_TYPE_LABELS: Record<ConverterPropertyType, string> = {
   studio: 'Stüdyo',
   '1+1': '1+1',
@@ -228,7 +230,7 @@ export default function VolumeCalculatorModal({
 
   const addCustomItem = () => {
     const name = customName.trim();
-    if (!name || name.length < 2 || name.length > 50 || !customSizeClass || customQty < 1 || customItems.length >= 5) {
+    if (!name || name.length < 2 || name.length > 50 || !customSizeClass || customQty < 1 || customQty > CUSTOM_ITEM_QUANTITY_LIMIT || customItems.length >= 5) {
       return;
     }
 
@@ -394,7 +396,7 @@ export default function VolumeCalculatorModal({
                     id="custom-qty"
                     type="number"
                     min={1}
-                    max={50}
+                    max={CUSTOM_ITEM_QUANTITY_LIMIT}
                     value={customQty === 0 ? '' : customQty}
                     placeholder="1"
                     onChange={(e) => {
@@ -404,7 +406,7 @@ export default function VolumeCalculatorModal({
                         return;
                       }
                       const next = Number(rawValue);
-                      setCustomQty(Number.isFinite(next) ? Math.min(50, Math.max(1, next)) : 0);
+                      setCustomQty(Number.isFinite(next) ? Math.min(CUSTOM_ITEM_QUANTITY_LIMIT, Math.max(1, Math.floor(next))) : 0);
                     }}
                     className="w-24"
                   />

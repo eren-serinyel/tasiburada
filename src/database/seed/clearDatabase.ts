@@ -31,6 +31,7 @@ export async function clearDatabase(): Promise<void> {
       'carrier_service_types',
       'carrier_profile_status',
       'carrier_activity',
+      'carrier_available_dates',
       'carrier_documents',
       'carrier_earnings',
       'carrier_security_settings',

@@ -114,7 +114,12 @@ describe('Cooldown enforcement v1', () => {
   test('pending listing active cooldown shipment\'ı göstermez', async () => {
     const service = new ShipmentService() as any;
     service.matchingService = {
-      getCarrierForMatching: jest.fn().mockResolvedValue({ id: 'carrier-1' }),
+      getCarrierForMatching: jest.fn().mockResolvedValue({
+        id: 'carrier-1',
+        isActive: true,
+        verifiedByAdmin: true,
+        approvalState: CarrierApprovalState.APPROVED,
+      }),
       isShipmentMatchingCarrier: jest.fn().mockReturnValue(true),
     };
     service.shipmentRepository = {
@@ -139,7 +144,12 @@ describe('Cooldown enforcement v1', () => {
   test('pending listing expired cooldown shipment\'ı gösterir', async () => {
     const service = new ShipmentService() as any;
     service.matchingService = {
-      getCarrierForMatching: jest.fn().mockResolvedValue({ id: 'carrier-1' }),
+      getCarrierForMatching: jest.fn().mockResolvedValue({
+        id: 'carrier-1',
+        isActive: true,
+        verifiedByAdmin: true,
+        approvalState: CarrierApprovalState.APPROVED,
+      }),
       isShipmentMatchingCarrier: jest.fn().mockReturnValue(true),
     };
     service.shipmentRepository = {

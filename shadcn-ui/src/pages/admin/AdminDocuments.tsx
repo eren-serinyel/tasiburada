@@ -76,6 +76,7 @@ interface CarrierDoc {
   type: string;
   status: string;
   fileUrl: string;
+  downloadUrl?: string;
   uploadedAt: string;
   verifiedAt?: string;
   carrier?: { id: string; companyName: string; email?: string; phone?: string };
@@ -101,6 +102,8 @@ export default function AdminDocuments() {
   const [rejectReason, setRejectReason] = useState('');
   const [verifyLoading, setVerifyLoading] = useState(false);
   const [previewError, setPreviewError] = useState(false);
+  const [previewObjectUrl, setPreviewObjectUrl] = useState<string | null>(null);
+  const [previewMimeType, setPreviewMimeType] = useState('');
 
   const debounceRef = useRef<ReturnType<typeof setTimeout>>(undefined);
   const limit = 15;
@@ -177,7 +180,60 @@ export default function AdminDocuments() {
     }
   };
 
+  const toDocumentApiPath = (url: string) => String(url || '').replace(/^\/api\/v1/, '');
   const isPdf = (url: string) => url?.toLowerCase().endsWith('.pdf');
+  const isPreviewPdf = previewMimeType.includes('pdf') || isPdf(selectedDocument?.downloadUrl || selectedDocument?.fileUrl || '');
+
+  const downloadDocument = async (document: CarrierDoc) => {
+    try {
+      const res = await adminApiClient(toDocumentApiPath(document.downloadUrl || document.fileUrl));
+      if (!res.ok) throw new Error('Belge indirilemedi.');
+      const blob = await res.blob();
+      const objectUrl = window.URL.createObjectURL(blob);
+      const link = window.document.createElement('a');
+      link.href = objectUrl;
+      link.download = `${document.type.toLowerCase()}.${blob.type.includes('pdf') ? 'pdf' : 'file'}`;
+      window.document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => window.URL.revokeObjectURL(objectUrl), 1000);
+    } catch (error: any) {
+      toast.error(error?.message || 'Belge indirilemedi.');
+    }
+  };
+
+  useEffect(() => {
+    if (!selectedDocument) {
+      setPreviewObjectUrl(null);
+      setPreviewMimeType('');
+      return;
+    }
+
+    let active = true;
+    let objectUrl: string | null = null;
+    setPreviewObjectUrl(null);
+    setPreviewMimeType('');
+    setPreviewError(false);
+
+    adminApiClient(toDocumentApiPath(selectedDocument.fileUrl))
+      .then(async (res) => {
+        if (!res.ok) throw new Error('Belge onizlenemiyor.');
+        const blob = await res.blob();
+        if (!active) return;
+        objectUrl = window.URL.createObjectURL(blob);
+        setPreviewMimeType(blob.type || '');
+        setPreviewObjectUrl(objectUrl);
+      })
+      .catch(() => {
+        if (active) setPreviewError(true);
+      });
+
+    return () => {
+      active = false;
+      if (objectUrl) window.URL.revokeObjectURL(objectUrl);
+    };
+  }, [selectedDocument?.id]);
+
   const totalPages = Math.ceil(total / limit);
 
   return (
@@ -355,15 +411,15 @@ export default function AdminDocuments() {
                 {previewError ? (
                   <div className="flex flex-col items-center justify-center h-96 gap-3">
                     <p className="text-sm text-slate-500">Belge önizlenemiyor</p>
-                    <a href={selectedDocument.fileUrl} target="_blank" rel="noopener noreferrer">
-                      <Button variant="outline" size="sm">
-                        <Download className="h-3.5 w-3.5 mr-1.5" /> İndir
-                      </Button>
-                    </a>
+                    <Button variant="outline" size="sm" onClick={() => downloadDocument(selectedDocument)}>
+                      <Download className="h-3.5 w-3.5 mr-1.5" /> İndir
+                    </Button>
                   </div>
-                ) : isPdf(selectedDocument.fileUrl) ? (
+                ) : !previewObjectUrl ? (
+                  <div className="flex items-center justify-center h-96 text-sm text-slate-500">Belge yukleniyor...</div>
+                ) : isPreviewPdf ? (
                   <iframe
-                    src={selectedDocument.fileUrl}
+                    src={previewObjectUrl}
                     width="100%"
                     height="400"
                     className="border-0"
@@ -372,7 +428,7 @@ export default function AdminDocuments() {
                   />
                 ) : (
                   <img
-                    src={selectedDocument.fileUrl}
+                    src={previewObjectUrl}
                     alt="Belge"
                     className="max-h-96 object-contain w-full"
                     onError={() => setPreviewError(true)}

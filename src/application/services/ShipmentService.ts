@@ -1,12 +1,14 @@
 import { ShipmentRepository } from '../../infrastructure/repositories/ShipmentRepository';
 import { OfferRepository } from '../../infrastructure/repositories/OfferRepository';
+import fs from 'node:fs';
+import path from 'node:path';
 import { Shipment, ShipmentStatus, ShipmentCategory, PlaceType, InsuranceType, LoadProfile, AccessDistance, DateFlexibility } from '../../domain/entities/Shipment';
 import { Offer, OfferStatus } from '../../domain/entities/Offer';
 import { ExtraService } from '../../domain/entities/ExtraService';
 import { ExtraServiceLoadType } from '../../domain/entities/ExtraServiceApplicability';
 import { CarrierRepository } from '../../infrastructure/repositories/CarrierRepository';
 import { CarrierStatsRepository } from '../../infrastructure/repositories/CarrierStatsRepository';
-import { Carrier } from '../../domain/entities/Carrier';
+import { Carrier, CarrierApprovalState } from '../../domain/entities/Carrier';
 import { CarrierStats } from '../../domain/entities/CarrierStats';
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from '../../domain/errors/AppError';
 import { NotificationService } from './NotificationService';
@@ -20,7 +22,6 @@ import { CustomerAddress } from '../../domain/entities/CustomerAddress';
 import { CarrierCustomExtraService } from '../../domain/entities/CarrierCustomExtraService';
 import { CarrierExtraServiceCapability } from '../../domain/entities/CarrierExtraServiceCapability';
 import { ShipmentCustomExtraService } from '../../domain/entities/ShipmentCustomExtraService';
-import { ShipmentInvite } from '../../domain/entities/ShipmentInvite';
 import { PlatformPolicyService } from './PlatformPolicyService';
 import { ContactFilterSurface } from '../../domain/entities';
 import { MatchingService } from './MatchingService';
@@ -65,6 +66,7 @@ interface CreateShipmentPayload {
   note?: string;
   vehicleTypePreferenceId?: string;
   contactPhone?: string;
+  photoUrls?: string[];
   extraServices?: string[];
   customExtraServices?: string[];
   customExtraServiceIds?: string[];
@@ -116,6 +118,7 @@ interface UpdateShipmentPayload {
   price?: number;
   note?: string;
   vehicleTypePreferenceId?: string;
+  photoUrls?: string[];
   extraServices?: string[];
   customExtraServices?: string[];
   customExtraServiceIds?: string[];
@@ -413,6 +416,10 @@ export class ShipmentService {
     if (!carrier) return;
     delete carrier.phone;
     delete carrier.email;
+    delete carrier.passwordHash;
+    delete carrier.resetToken;
+    delete carrier.resetTokenExpiry;
+    delete carrier.verificationToken;
   }
 
   private maskOfferCarriers(shipment: any): void {
@@ -458,6 +465,108 @@ export class ShipmentService {
     delete (target as any).converterSpecialItemsJson;
 
     return target;
+  }
+
+  private extractPhotoFilename(value?: string | null): string | null {
+    if (!value) return null;
+
+    const withoutQuery = String(value).split('?')[0].split('#')[0];
+    let pathname = withoutQuery;
+
+    try {
+      pathname = new URL(withoutQuery, 'http://tasiburada.local').pathname;
+    } catch {
+      pathname = withoutQuery;
+    }
+
+    let decoded = pathname;
+    try {
+      decoded = decodeURIComponent(pathname);
+    } catch {
+      decoded = pathname;
+    }
+
+    const filename = decoded.replace(/\\/g, '/').split('/').pop() || '';
+    if (!filename || filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+      return null;
+    }
+
+    return filename;
+  }
+
+  private normalizeShipmentPhotoUrls(photoUrls?: string[] | null): string[] | undefined {
+    if (!Array.isArray(photoUrls)) return undefined;
+
+    const normalized = photoUrls
+      .map((url) => String(url || '').trim())
+      .filter(Boolean)
+      .filter((url) => Boolean(this.extractPhotoFilename(url)));
+
+    return normalized.length ? Array.from(new Set(normalized)) : [];
+  }
+
+  private buildSecureShipmentPhotoUrls(shipment: Shipment): string[] {
+    if (!Array.isArray(shipment.photoUrls)) return [];
+
+    return shipment.photoUrls
+      .map((url) => this.extractPhotoFilename(url))
+      .filter((filename): filename is string => Boolean(filename))
+      .map((filename) => `/api/v1/shipments/${shipment.id}/photos/${encodeURIComponent(filename)}`);
+  }
+
+  private exposeShipmentPhotos<T extends Shipment>(shipment: T, canViewPhotos: boolean): T {
+    shipment.photoUrls = canViewPhotos ? this.buildSecureShipmentPhotoUrls(shipment) : [];
+    return shipment;
+  }
+
+  private canAccessShipmentPhotos(
+    shipment: Shipment,
+    requestingUserId: string,
+    requestingUserType: 'customer' | 'carrier' | 'admin',
+  ): boolean {
+    if (requestingUserType === 'admin') return true;
+    if (requestingUserType === 'customer') return shipment.customerId === requestingUserId;
+    if (requestingUserType === 'carrier') return shipment.carrierId === requestingUserId;
+    return false;
+  }
+
+  async getShipmentPhotoFilePath(
+    shipmentId: string,
+    photoId: string,
+    requestingUserId: string,
+    requestingUserType: 'customer' | 'carrier' | 'admin',
+  ): Promise<string> {
+    const shipment = await this.shipmentRepository.findById(shipmentId);
+    if (!shipment) {
+      throw new NotFoundError('Taşıma talebi bulunamadı.');
+    }
+
+    if (!this.canAccessShipmentPhotos(shipment, requestingUserId, requestingUserType)) {
+      throw new ForbiddenError('Bu fotoğrafa erişim yetkiniz yok.');
+    }
+
+    const requestedFilename = this.extractPhotoFilename(photoId);
+    if (!requestedFilename) {
+      throw new NotFoundError('Fotoğraf bulunamadı.');
+    }
+
+    const allowedFilenames = new Set(
+      (Array.isArray(shipment.photoUrls) ? shipment.photoUrls : [])
+        .map((url) => this.extractPhotoFilename(url))
+        .filter((filename): filename is string => Boolean(filename)),
+    );
+
+    if (!allowedFilenames.has(requestedFilename)) {
+      throw new NotFoundError('Fotoğraf bulunamadı.');
+    }
+
+    const picturesRoot = path.resolve(process.cwd(), 'uploads', 'pictures');
+    const filePath = path.resolve(picturesRoot, requestedFilename);
+    if (!filePath.startsWith(picturesRoot + path.sep) || !fs.existsSync(filePath)) {
+      throw new NotFoundError('Fotoğraf bulunamadı.');
+    }
+
+    return filePath;
   }
 
   private async setShipmentExtraServices(shipmentId: string, extraServices?: string[]): Promise<void> {
@@ -759,6 +868,10 @@ export class ShipmentService {
     await this.expireStale();
 
     const carrier = await this.matchingService.getCarrierForMatching(carrierId);
+    if (!carrier || !carrier.isActive || !carrier.verifiedByAdmin || carrier.approvalState !== CarrierApprovalState.APPROVED) {
+      throw new ForbiddenError('Tasima taleplerini gorebilmek icin belgelerinizin yuklenmis ve admin tarafindan onaylanmis olmasi gerekir.');
+    }
+
     const shipments = await this.shipmentRepository.findPendingShipmentsForCarrier(carrierId);
     const matchingShipments = shipments.filter(shipment =>
       this.matchingService.isShipmentMatchingCarrier(shipment, carrier)
@@ -931,6 +1044,7 @@ export class ShipmentService {
       note: payload.note,
       vehicleTypePreferenceId: payload.vehicleTypePreferenceId ?? null,
       contactPhone: payload.contactPhone ?? null,
+      photoUrls: this.normalizeShipmentPhotoUrls(payload.photoUrls) ?? [],
       status: ShipmentStatus.PENDING
     });
 
@@ -952,7 +1066,7 @@ export class ShipmentService {
       console.error('[ShipmentService] notifyEligibleCarriers error:', err)
     );
 
-    return this.flattenExtraServices(shipment);
+    return this.exposeShipmentPhotos(this.flattenExtraServices(shipment), true);
   }
 
     private async notifyEligibleCarriers(shipment: Shipment): Promise<void> {
@@ -1058,7 +1172,7 @@ export class ShipmentService {
     const shipments = await this.shipmentRepository.findByCustomerIdWithOfferCount(customerId);
     return shipments.map(shipment => {
       const normalized = this.flattenExtraServices(shipment as Shipment & { offerCount: number });
-      return this.attachShipmentConverterSummary(normalized as Shipment & { offerCount: number });
+      return this.attachShipmentConverterSummary(this.exposeShipmentPhotos(normalized as Shipment & { offerCount: number }, true));
     });
   }
 
@@ -1077,7 +1191,7 @@ export class ShipmentService {
 
     // Admin her gÃ¶nderiyi gÃ¶rebilir
     if (requestingUserType === 'admin') {
-      return this.attachShipmentConverterSummary(this.flattenExtraServices(shipment));
+      return this.attachShipmentConverterSummary(this.exposeShipmentPhotos(this.flattenExtraServices(shipment), true));
     }
 
     // MÃ¼ÅŸteri: sadece kendi gÃ¶nderisini gÃ¶rebilir
@@ -1096,18 +1210,15 @@ export class ShipmentService {
       if (!canViewCarrierContact) {
         shipment.contactPhone = null as any;
       }
-      return this.attachShipmentConverterSummary(this.flattenExtraServices(shipment));
+      return this.attachShipmentConverterSummary(this.exposeShipmentPhotos(this.flattenExtraServices(shipment), true));
     }
 
     // A) ShipmentService.getById() â€” requester tipine gÃ¶re maskeleme:
     if (requestingUserType === 'carrier') {
       const isAssigned = shipment.carrierId === requestingUserId;
-      const hasInvite = await AppDataSource.getRepository(ShipmentInvite).exist({
-        where: {
-          shipmentId: shipment.id,
-          carrierId: requestingUserId,
-        },
-      });
+      if (!isAssigned) {
+        throw new ForbiddenError('Bu gönderiye erişim yetkiniz yok.');
+      }
       const canViewDetails = isAssigned && this.platformPolicy.shouldRevealDirectContact(shipment, 'carrier', requestingUserId);
       const canViewOpenAddress = isAssigned && shipment.status === ShipmentStatus.IN_TRANSIT;
 
@@ -1137,7 +1248,9 @@ export class ShipmentService {
         this.maskCarrierDirectContact(shipment.carrier);
       }
 
-      return this.attachShipmentConverterSummary(this.flattenExtraServices(shipment, requestingUserId));
+      return this.attachShipmentConverterSummary(
+        this.exposeShipmentPhotos(this.flattenExtraServices(shipment, requestingUserId), isAssigned),
+      );
     }
 
     throw new ForbiddenError('Bu gÃ¶nderiye eriÅŸim yetkiniz yok.');
@@ -1206,6 +1319,7 @@ export class ShipmentService {
       shipmentDate: payload.shipmentDate ? new Date(payload.shipmentDate) : undefined,
       price: payload.price,
       vehicleTypePreferenceId: payload.vehicleTypePreferenceId,
+      photoUrls: payload.photoUrls !== undefined ? this.normalizeShipmentPhotoUrls(payload.photoUrls) : undefined,
     });
 
     if (payload.extraServices !== undefined) {
@@ -1230,7 +1344,7 @@ export class ShipmentService {
       throw new ValidationError('TaÅŸÄ±ma talebi gÃ¼ncellenemedi.');
     }
 
-    return updatedShipment;
+    return this.exposeShipmentPhotos(updatedShipment, true);
   }
 
   async cancel(customerId: string, shipmentId: string, reason?: string, note?: string): Promise<Shipment> {

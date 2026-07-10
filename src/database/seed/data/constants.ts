@@ -465,6 +465,13 @@ const OFFER_MESSAGE_TEMPLATES_SOURCE = [
   'Kurumsal taşıma süreçlerinde düzenli bilgilendirme sağlıyoruz.',
 ];
 
+OFFER_MESSAGE_TEMPLATES_SOURCE.push(
+  'Ekip ve arac planini rotaniza gore onceden netlestirerek ilerleriz.',
+  'Tasima oncesi kesif notlarinizi dikkate alarak kontrollu bir plan yapabiliriz.',
+  'Yukleme ve teslimat tarafinda bina kurallarina uygun ekip organizasyonu saglariz.',
+  'Belirttiginiz esya hacmine uygun aracla, sureci adim adim bilgilendirerek yonetiriz.',
+);
+
 const weightedCities = Object.entries(CITY_DENSITY)
   .sort(([leftCity], [rightCity]) => leftCity.localeCompare(rightCity, 'tr'))
   .flatMap(([city, meta]) => Array.from({ length: meta.weight }, () => city));

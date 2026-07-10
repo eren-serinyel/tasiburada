@@ -35,10 +35,27 @@ const CUSTOM_ITEM_SIZE_CLASS_VOLUMES: Record<string, { min: number; max: number 
   large: { min: 0.8, max: 1.5 },
   very_large: { min: 1.5, max: 3.0 },
 };
+const QUANTITY_LIMIT_BY_ITEM_CODE: Record<string, number> = {
+  dining_chair: 30,
+  office_chair: 30,
+  nightstand: 20,
+};
+const QUANTITY_LIMIT_BY_CATEGORY: Record<string, number> = {
+  box: 200,
+  appliance: 6,
+  special: 5,
+};
+const DEFAULT_CATALOG_ITEM_QUANTITY_LIMIT = 12;
 const EDITABLE_SHIPMENT_STATUSES = new Set<ShipmentStatus>([
   ShipmentStatus.PENDING,
   ShipmentStatus.OFFER_RECEIVED,
 ]);
+
+const getCatalogItemQuantityLimit = (item: Pick<ConverterItemCatalog, 'itemCode' | 'category'>): number => {
+  return QUANTITY_LIMIT_BY_ITEM_CODE[item.itemCode]
+    ?? QUANTITY_LIMIT_BY_CATEGORY[item.category]
+    ?? DEFAULT_CATALOG_ITEM_QUANTITY_LIMIT;
+};
 
 export class ConverterService {
   private sessionRepo = AppDataSource.getRepository(ConverterSession);
@@ -171,6 +188,12 @@ export class ConverterService {
     let catalogTotalMax = 0;
     for (const item of payload.items) {
       const catalogItem = catalogMap.get(item.itemCode)!;
+      const quantityLimit = getCatalogItemQuantityLimit(catalogItem);
+      if (item.quantity > quantityLimit) {
+        const error = new Error(`${catalogItem.label} iÃ§in adet ${quantityLimit} deÄŸerini aÅŸamaz.`);
+        (error as any).statusCode = 400;
+        throw error;
+      }
       catalogTotalMin += catalogItem.unitVolumeMin * item.quantity;
       catalogTotalMax += catalogItem.unitVolumeMax * item.quantity;
     }

@@ -22,7 +22,8 @@ export class CarrierAuthController {
         data: { carrier: this.toResponse(carrier), token, profileStatus }
       });
     } catch (error: any) {
-      res.status(400).json({ success: false, message: error.message || 'Kayıt sırasında hata oluştu.' });
+      const statusCode = typeof error?.statusCode === 'number' ? error.statusCode : 400;
+      res.status(statusCode).json({ success: false, message: error.message || 'Kayıt sırasında hata oluştu.' });
     }
   };
 

@@ -5,9 +5,12 @@ import { AppDataSource } from '../infrastructure/database/data-source';
 import { Carrier, CarrierApprovalState } from '../domain/entities/Carrier';
 import { CarrierActivity } from '../domain/entities/CarrierActivity';
 import { CarrierAvailableDate } from '../domain/entities/CarrierAvailableDate';
+import { CarrierVehicleType } from '../domain/entities/CarrierVehicleType';
+import { VehicleType } from '../domain/entities/VehicleType';
 
 describe('Carrier availability origin filter', () => {
   const createdCarrierIds: string[] = [];
+  const createdVehicleTypeIds: string[] = [];
 
   afterEach(async () => {
     if (process.env.SKIP_DB_TESTS === 'true' || !AppDataSource.isInitialized || createdCarrierIds.length === 0) {
@@ -16,10 +19,32 @@ describe('Carrier availability origin filter', () => {
     }
 
     await AppDataSource.getRepository(CarrierAvailableDate).delete({ carrierId: In(createdCarrierIds) } as any);
+    await AppDataSource.getRepository(CarrierVehicleType).delete({ carrierId: In(createdCarrierIds) } as any);
     await AppDataSource.getRepository(CarrierActivity).delete({ carrierId: In(createdCarrierIds) } as any);
     await AppDataSource.getRepository(Carrier).delete({ id: In(createdCarrierIds) } as any);
+    if (createdVehicleTypeIds.length) {
+      await AppDataSource.getRepository(VehicleType).delete({ id: In(createdVehicleTypeIds) } as any);
+    }
     createdCarrierIds.length = 0;
+    createdVehicleTypeIds.length = 0;
   });
+
+  const getVehicleType = async (): Promise<VehicleType> => {
+    const repo = AppDataSource.getRepository(VehicleType);
+    const existing = await repo.findOne({ where: { name: 'Kamyon' } });
+    if (existing) return existing;
+
+    const created = await repo.save({
+      name: `Kamyon Test ${Date.now()}`,
+      defaultCapacityKg: 15000,
+      defaultCapacityM3: 45,
+      capacityKg: 15000,
+      status: 'ACTIVE',
+      sortOrder: 999,
+    });
+    createdVehicleTypeIds.push(created.id);
+    return created;
+  };
 
   const createApprovedCarrier = async (
     label: string,
@@ -27,6 +52,7 @@ describe('Carrier availability origin filter', () => {
     serviceAreas: string[],
     availableDates: string[],
     availability: { start: string; end: string } = { start: '08:00', end: '17:00' },
+    capacityKg?: number,
   ): Promise<Carrier> => {
     const unique = `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
     const carrier = await AppDataSource.getRepository(Carrier).save({
@@ -64,6 +90,15 @@ describe('Carrier availability origin filter', () => {
         endTime: null,
       })),
     );
+
+    if (capacityKg !== undefined) {
+      const vehicleType = await getVehicleType();
+      await AppDataSource.getRepository(CarrierVehicleType).save({
+        carrierId: carrier.id,
+        vehicleTypeId: vehicleType.id,
+        capacityKg,
+      });
+    }
 
     createdCarrierIds.push(carrier.id);
     return carrier;
@@ -131,5 +166,52 @@ describe('Carrier availability origin filter', () => {
     await expect(searchIds('sabah')).resolves.toContain(morningCarrier.id);
     await expect(searchIds('sabah')).resolves.not.toContain(eveningCarrier.id);
     await expect(searchIds('farketmez')).resolves.toEqual(expect.arrayContaining([morningCarrier.id, eveningCarrier.id]));
+  });
+
+  test('capacityCheckKg returns a soft capacityAdequate badge without filtering carriers', async () => {
+    if (process.env.SKIP_DB_TESTS === 'true') return;
+
+    const date = '2035-02-20';
+    const city = `CapacityCity-${Date.now()}`;
+    const lowCapacityCarrier = await createApprovedCarrier('Capacity Low', city, [city], [date], { start: '08:00', end: '17:00' }, 5000);
+    const highCapacityCarrier = await createApprovedCarrier('Capacity High', city, [city], [date], { start: '08:00', end: '17:00' }, 30000);
+
+    const softRes = await request(testApp)
+      .get('/api/v1/carriers/search')
+      .query({ availableDate: date, serviceCity: city, capacityCheckKg: 23750, limit: 50 });
+    expect(softRes.status).toBe(200);
+
+    const softItems = softRes.body.data.items || [];
+    const lowSoft = softItems.find((item: any) => item.id === lowCapacityCarrier.id);
+    const highSoft = softItems.find((item: any) => item.id === highCapacityCarrier.id);
+    expect(lowSoft).toBeTruthy();
+    expect(highSoft).toBeTruthy();
+    expect(lowSoft.capacityAdequate).toBe(false);
+    expect(highSoft.capacityAdequate).toBe(true);
+
+    const strictRes = await request(testApp)
+      .get('/api/v1/carriers/search')
+      .query({ availableDate: date, serviceCity: city, minCapacityKg: 23750, limit: 50 });
+    expect(strictRes.status).toBe(200);
+
+    const strictIds = (strictRes.body.data.items || []).map((item: any) => item.id);
+    expect(strictIds).not.toContain(lowCapacityCarrier.id);
+    expect(strictIds).toContain(highCapacityCarrier.id);
+
+    console.log('[capacity-soft-badge]', {
+      capacityCheckKg: 23750,
+      soft: {
+        total: softRes.body.data.total,
+        lowCarrierListed: Boolean(lowSoft),
+        lowCapacityAdequate: lowSoft.capacityAdequate,
+        highCarrierListed: Boolean(highSoft),
+        highCapacityAdequate: highSoft.capacityAdequate,
+      },
+      strict: {
+        total: strictRes.body.data.total,
+        lowCarrierListed: strictIds.includes(lowCapacityCarrier.id),
+        highCarrierListed: strictIds.includes(highCapacityCarrier.id),
+      },
+    });
   });
 });

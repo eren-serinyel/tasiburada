@@ -239,7 +239,7 @@ export class CarrierProfileController {
         brand: vehicle.brand,
         model: vehicle.model,
         year: vehicle.year,
-        capacityKg: vehicle.capacityKg ?? vehicle.customCapacity ?? vehicle.capacity ?? 0,
+        capacityKg: vehicle.capacityKg ?? vehicle.customCapacity ?? vehicle.capacity ?? null,
         capacityM3: vehicle.capacityM3,
         photos: vehicle.photos,
       }));

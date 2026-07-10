@@ -1,7 +1,6 @@
 import { CarrierRepository } from '../../../infrastructure/repositories/CarrierRepository';
 import { CarrierApprovalState } from '../../../domain/entities/Carrier';
 import { CarrierProfileStatusService } from './CarrierProfileStatusService';
-import { resolveSuggestedServiceAreas } from '../../../shared/serviceAreaSuggestions';
 
 export interface CarrierOverviewOptions {
   enforcePublicTrustGate?: boolean;
@@ -45,7 +44,7 @@ export class CarrierProfileQueryService {
     const serviceAreas = this.parseStringArray(activity.serviceAreasJson);
     return {
       ...activity,
-      serviceAreas: serviceAreas.length ? serviceAreas : resolveSuggestedServiceAreas(activity.city),
+      serviceAreas,
     };
   }
 

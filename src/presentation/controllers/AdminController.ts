@@ -43,6 +43,15 @@ export class AdminController {
     }
   };
 
+  getCarrierIdentityRisks = async (_req: Request, res: Response): Promise<void> => {
+    try {
+      const result = await this.adminService.getCarrierIdentityRisks();
+      res.status(200).json({ success: true, data: result });
+    } catch (error: any) {
+      res.status(500).json({ success: false, message: error.message || 'Kimlik riskleri alinamadi.' });
+    }
+  };
+
   getCarrierById = async (req: Request, res: Response): Promise<void> => {
     try {
       const { carrierId } = req.params;

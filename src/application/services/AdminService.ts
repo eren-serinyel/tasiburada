@@ -75,6 +75,23 @@ interface ContactFilterLogStatsDto {
   window: { dateFrom: string; dateTo: string };
 }
 
+interface CarrierIdentityRiskItem {
+  field: 'taxNumber' | 'phone';
+  value: string;
+  normalizedValue: string;
+  count: number;
+  carriers: Array<{
+    id: string;
+    companyName: string;
+    email: string;
+    contactName: string | null;
+    taxNumber: string;
+    phone: string;
+    approvalState: CarrierApprovalState;
+    createdAt: Date;
+  }>;
+}
+
 export class AdminService {
   private auditLogRepository: AuditLogRepository;
   private notificationService: NotificationService;
@@ -179,6 +196,65 @@ export class AdminService {
       reviewStatus: row.reviewStatus,
       matchedRules: Array.isArray(row.matchedRules) ? row.matchedRules : [],
       textHashPreview: row.textHash ? `${row.textHash.slice(0, 12)}…` : '',
+    };
+  }
+
+  private normalizeIdentityPhone(phone?: string | null): string {
+    return String(phone || '').replace(/\D/g, '');
+  }
+
+  private toCarrierIdentityRiskCarrier(carrier: Carrier): CarrierIdentityRiskItem['carriers'][number] {
+    return {
+      id: carrier.id,
+      companyName: carrier.companyName,
+      email: carrier.email,
+      contactName: carrier.contactName ?? null,
+      taxNumber: carrier.taxNumber,
+      phone: carrier.phone,
+      approvalState: carrier.approvalState,
+      createdAt: carrier.createdAt,
+    };
+  }
+
+  private buildCarrierIdentityRiskItems(
+    carriers: Carrier[],
+    field: 'taxNumber' | 'phone',
+  ): CarrierIdentityRiskItem[] {
+    const groups = new Map<string, Carrier[]>();
+
+    for (const carrier of carriers) {
+      const rawValue = field === 'phone' ? carrier.phone : carrier.taxNumber;
+      const normalizedValue = field === 'phone'
+        ? this.normalizeIdentityPhone(rawValue)
+        : String(rawValue || '').trim();
+      if (!normalizedValue) continue;
+
+      const existing = groups.get(normalizedValue) || [];
+      existing.push(carrier);
+      groups.set(normalizedValue, existing);
+    }
+
+    return Array.from(groups.entries())
+      .filter(([, grouped]) => grouped.length > 1)
+      .map(([normalizedValue, grouped]) => ({
+        field,
+        value: grouped[0]?.[field] || normalizedValue,
+        normalizedValue,
+        count: grouped.length,
+        carriers: grouped
+          .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
+      .map((carrier) => this.toCarrierIdentityRiskCarrier(carrier)),
+      }))
+      .sort((a, b) => b.count - a.count || a.normalizedValue.localeCompare(b.normalizedValue));
+  }
+
+  private toPublicCarrierDocument(document: CarrierDocument): CarrierDocument & { storageUrl: string; downloadUrl: string } {
+    const publicUrl = `/api/v1/carriers/documents/${document.id}`;
+    return {
+      ...(document as any),
+      storageUrl: document.fileUrl,
+      fileUrl: publicUrl,
+      downloadUrl: `${publicUrl}?download=1`,
     };
   }
 
@@ -291,6 +367,44 @@ export class AdminService {
     };
   }
 
+  async getCarrierIdentityRisks() {
+    const carrierRepo = AppDataSource.getRepository(Carrier);
+    const carriers = await carrierRepo.find({
+      select: [
+        'id',
+        'companyName',
+        'email',
+        'contactName',
+        'taxNumber',
+        'phone',
+        'approvalState',
+        'createdAt',
+      ],
+      order: { createdAt: 'ASC' },
+    });
+
+    const taxNumberDuplicates = this.buildCarrierIdentityRiskItems(carriers, 'taxNumber');
+    const phoneDuplicates = this.buildCarrierIdentityRiskItems(carriers, 'phone');
+
+    return {
+      identityFields: {
+        carrierTable: ['taxNumber', 'contactName', 'phone', 'email'],
+        carrierEarningsTable: ['iban', 'accountHolder'],
+        missing: ['authorizedPersonNationalId'],
+      },
+      uniqueFields: ['taxNumber', 'email'],
+      note: 'authorizedPersonNationalId alani yok; eklenmesi ayri bir urun/KVKK kararidir.',
+      risks: {
+        taxNumber: taxNumberDuplicates,
+        phone: phoneDuplicates,
+      },
+      summary: {
+        taxNumberDuplicateGroups: taxNumberDuplicates.length,
+        phoneDuplicateGroups: phoneDuplicates.length,
+      },
+    };
+  }
+
   async getCarrierById(carrierId: string) {
     const carrierRepo = AppDataSource.getRepository(Carrier);
     await this.carrierApprovalService.selfHealExpiredLocks(carrierId);
@@ -300,6 +414,7 @@ export class AdminService {
     });
     if (!carrier) throw new Error('Nakliyeci bulunamadı.');
     const { passwordHash, resetToken, verificationToken, ...safeCarrier } = carrier as any;
+    safeCarrier.documents = (carrier.documents ?? []).map((document) => this.toPublicCarrierDocument(document));
     return safeCarrier;
   }
 
@@ -313,6 +428,20 @@ export class AdminService {
     await this.carrierApprovalService.selfHealExpiredLocks(carrierId);
     const carrier = await carrierRepo.findOne({ where: { id: carrierId } });
     if (!carrier) throw new Error('Nakliyeci bulunamadı.');
+
+    if (approved) {
+      const approvedDocumentCount = await AppDataSource.getRepository(CarrierDocument).count({
+        where: {
+          carrierId,
+          status: CarrierDocumentStatus.APPROVED,
+          isApproved: true,
+        },
+      });
+
+      if (approvedDocumentCount < 1) {
+        throw new ValidationError('Nakliyeci dogrulanmadan once en az bir belge yuklenmis ve onaylanmis olmalidir.');
+      }
+    }
 
     if (carrier.approvalState === CarrierApprovalState.SUBMITTED) {
       await this.carrierApprovalService.claimForReview(adminId, carrierId);
@@ -370,7 +499,7 @@ export class AdminService {
       relations: ['documents'],
     });
     if (!carrier) throw new Error('Nakliyeci bulunamadı.');
-    return carrier.documents ?? [];
+    return (carrier.documents ?? []).map((document) => this.toPublicCarrierDocument(document));
   }
 
   // ─── Customers ─────────────────────────────────────────────────────────────
@@ -929,7 +1058,7 @@ export class AdminService {
         const { passwordHash, ...rest } = d.carrier as any;
         d.carrier = rest;
       }
-      return d;
+      return this.toPublicCarrierDocument(d);
     });
 
     return {

@@ -16,6 +16,7 @@ export interface User {
   profileCompletion?: number;
   pendingApproval?: boolean;
   verifiedByAdmin?: boolean;
+  approvalState?: string | null;
 }
 
 export interface Vehicle {
@@ -53,6 +54,7 @@ export interface Carrier extends User {
   badges?: string[];
   catalogExtraServiceIds?: string[];
   iban?: string;
+  capacityAdequate?: boolean;
 }
 
 export interface CarrierSearchItem {
@@ -70,6 +72,7 @@ export interface CarrierSearchItem {
   isVerified?: boolean;
   catalogExtraServiceIds?: string[];
   scopes?: Array<'sehirici' | 'sehirlerarasi'>;
+  capacityAdequate?: boolean;
 }
 
 export interface CarrierDetailProfile {

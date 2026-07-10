@@ -12,7 +12,6 @@ import { config } from 'dotenv';
 import { initializeDatabase, closeDatabase } from './infrastructure/database/data-source';
 import routes from './presentation/routes';
 import { AppError } from './domain/errors/AppError';
-import { authenticateToken } from './presentation/middleware/auth';
 
 // .env dosyasını yükle
 config();
@@ -101,9 +100,15 @@ const resolveUploadFile = (folder: string, filename: string): string | null => {
   return filePath;
 };
 
+const isShipmentPictureFilename = (filename: string): boolean => filename.startsWith('shipment-');
+
 // Herkese açık: profil fotoğrafları — <img> tagları header gönderemez
 app.get('/uploads/pictures/:filename', (req: Request, res: Response): void => {
   const { filename } = req.params;
+  if (isShipmentPictureFilename(filename)) {
+    res.status(404).json({ success: false, message: 'Dosya bulunamadÄ±.' });
+    return;
+  }
   const filePath = resolveUploadFile('pictures', filename);
   if (!filePath) {
     res.status(400).json({ success: false, message: 'Geçersiz dosya adı.' });
@@ -114,59 +119,6 @@ app.get('/uploads/pictures/:filename', (req: Request, res: Response): void => {
     return;
   }
   res.sendFile(filePath);
-});
-
-import { AppDataSource } from './infrastructure/database/data-source';
-import { CarrierDocument } from './domain/entities/CarrierDocument';
-
-// Korumalı: belgeler — Bearer token zorunlu + Ownership kontrolü
-app.get('/uploads/documents/:filename', authenticateToken, async (req: Request, res: Response): Promise<void> => {
-  try {
-    const { filename } = req.params;
-    const user = req.user;
-
-    if (!user) {
-      res.status(401).json({ success: false, message: 'Yetkisiz erişim.' });
-      return;
-    }
-
-    // Admin her belgeyi görebilir
-    if (user.type !== 'admin') {
-      // Nakliyeci: Sadece kendi belgesini görebilir
-      if (user.type === 'carrier') {
-        const docRepo = AppDataSource.getRepository(CarrierDocument);
-        const doc = await docRepo.createQueryBuilder('doc')
-          .where('doc.carrierId = :carrierId', { carrierId: user.carrierId })
-          .andWhere('doc.fileUrl LIKE :filename', { filename: `%${filename}` })
-          .getOne();
-
-        if (!doc) {
-          res.status(403).json({ success: false, message: 'Bu belgeye erişim yetkiniz yok.' });
-          return;
-        }
-      } else {
-        // Müşteriler veya diğer tipler belgeleri göremez
-        res.status(403).json({ success: false, message: 'Bu alana erişim yetkiniz yok.' });
-        return;
-      }
-    }
-
-    const filePath = resolveUploadFile('documents', filename);
-    if (!filePath) {
-      res.status(400).json({ success: false, message: 'Geçersiz dosya adı.' });
-      return;
-    }
-
-    if (!fs.existsSync(filePath)) {
-      res.status(404).json({ success: false, message: 'Dosya bulunamadı.' });
-      return;
-    }
-
-    res.sendFile(filePath);
-  } catch (error) {
-    console.error('Document serve error:', error);
-    res.status(500).json({ success: false, message: 'Dosya alınırken hata oluştu.' });
-  }
 });
 
 const apiLimiter = rateLimit({
@@ -193,7 +145,7 @@ const loginLimiter = rateLimit({
 
 const registerLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
-  limit: 5,
+  limit: process.env.NODE_ENV === 'production' ? 5 : 10000,
   standardHeaders: true,
   legacyHeaders: false,
   message: {

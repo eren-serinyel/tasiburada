@@ -7,6 +7,7 @@ describe('volume calculator UX frontend contract', () => {
   const formPath = path.resolve(root, 'shadcn-ui/src/components/OfferRequestForm.tsx');
   const landingPath = path.resolve(root, 'shadcn-ui/src/pages/VolumeCalculatorLanding.tsx');
   const converterApiPath = path.resolve(root, 'shadcn-ui/src/lib/converterApi.ts');
+  const itemSelectorPath = path.resolve(root, 'shadcn-ui/src/components/converter/ItemSelector.tsx');
 
   test('confidence and apply copy are Turkish and actionable', () => {
     const source = fs.readFileSync(modalPath, 'utf8');
@@ -58,5 +59,14 @@ describe('volume calculator UX frontend contract', () => {
     expect(source).toContain("apiClient(`/converter/sessions/${sessionId}/estimate`");
     expect(source).toContain("apiClient('/converter/items', { skipAuth: true })");
     expect((source.match(/skipAuth: true/g) || []).length).toBeGreaterThanOrEqual(3);
+  });
+
+  test('item quantities are bounded by item type instead of a blanket 999 cap', () => {
+    const source = fs.readFileSync(itemSelectorPath, 'utf8');
+
+    expect(source).toContain('getCatalogItemQuantityLimit');
+    expect(source).toContain('box: 200');
+    expect(source).toContain('special: 5');
+    expect(source).not.toContain('max={999}');
   });
 });

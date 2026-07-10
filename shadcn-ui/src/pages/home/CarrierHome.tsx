@@ -76,6 +76,8 @@ export default function CarrierHome() {
   const [pendingLoading, setPendingLoading] = useState(true);
   const navigate = useNavigate();
   const API_BASE_URL = '/api/v1';
+  const approvalState = String(user?.approvalState ?? '').toUpperCase();
+  const isMarketplaceVerified = Boolean(user?.verifiedByAdmin) && (!approvalState || approvalState === 'APPROVED');
 
   useEffect(() => {
     const u = getSessionUser() || (localStorage.getItem('currentUser') ? JSON.parse(localStorage.getItem('currentUser') as string) : null);
@@ -127,6 +129,7 @@ export default function CarrierHome() {
               ...user,
               profileCompletion: nextSummary.percentage,
               verifiedByAdmin: Boolean(carrier?.verifiedByAdmin),
+              approvalState: carrier?.approvalState ?? user.approvalState ?? null,
               pendingApproval: Boolean(carrier?.pendingApproval),
             };
             setUser(updatedUser);
@@ -176,6 +179,10 @@ export default function CarrierHome() {
 
   useEffect(() => {
     if (!user || user.type !== 'carrier') return;
+    if (!isMarketplaceVerified) {
+      setActiveOffers([]);
+      return;
+    }
 
     const fetchOffers = async () => {
       try {
@@ -197,10 +204,15 @@ export default function CarrierHome() {
     };
 
     fetchOffers();
-  }, [user]);
+  }, [user, isMarketplaceVerified]);
 
   useEffect(() => {
     if (!user || user.type !== 'carrier') return;
+    if (!isMarketplaceVerified) {
+      setPendingJobs([]);
+      setPendingLoading(false);
+      return;
+    }
 
     const fetchPending = async () => {
       setPendingLoading(true);
@@ -247,20 +259,38 @@ export default function CarrierHome() {
     };
 
     fetchPending();
-  }, [user]);
+  }, [user, isMarketplaceVerified]);
 
   const completedJobsCount = stats.completedJobs;
   const totalEarnings = stats.totalEarnings;
   const rating = stats.rating;
 
   const percent = profileSummary.percentage;
-  const canOffer = profileSummary.isComplete;
+  const canOffer = profileSummary.isComplete && isMarketplaceVerified;
   const nextProfileRoute = getNextIncompleteStepRoute(profileSummary.nextIncompleteStep);
   const prerequisitesComplete = profileSummary.steps
     .filter((step) => step.key !== 'admin_approval')
     .every((step) => step.completed);
   const waitingAdminApproval = prerequisitesComplete && !profileSummary.isComplete;
   const submitForApprovalRoute = '/profilim?tab=company';
+  const marketplaceGateCard = (
+    <Card className="border-amber-200 bg-amber-50 shadow-sm">
+      <CardContent className="p-6 flex items-start gap-4">
+        <div className="p-3 bg-amber-100 rounded-full text-amber-600 shrink-0">
+          <AlertCircle className="h-6 w-6" />
+        </div>
+        <div>
+          <h3 className="font-semibold text-amber-950 text-lg">Marketplace erişimi doğrulama sonrası açılır</h3>
+          <p className="text-amber-800 mt-1">
+            Gelen talepler, uygun işler ve teklif verme alanları için belgelerinizi yükleyip admin onayını bekleyin.
+          </p>
+          <Button variant="outline" className="mt-4 border-amber-200 text-amber-800 hover:bg-amber-100" asChild>
+            <Link to="/profilim?tab=documents">Belgeleri Yükle</Link>
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
 
   return (
     <div className="min-h-screen bg-gray-50/50 pb-10">
@@ -280,12 +310,21 @@ export default function CarrierHome() {
                 Takvim
               </Link>
             </Button>
-            <Button variant="default" size="sm" className="bg-blue-600 hover:bg-blue-700" asChild>
-              <Link to="/ilanlar">
-                <Search className="mr-2 h-4 w-4" />
-                Yük Ara
-              </Link>
-            </Button>
+            {isMarketplaceVerified ? (
+              <Button variant="default" size="sm" className="bg-blue-600 hover:bg-blue-700" asChild>
+                <Link to="/ilanlar">
+                  <Search className="mr-2 h-4 w-4" />
+                  Yük Ara
+                </Link>
+              </Button>
+            ) : (
+              <Button variant="default" size="sm" className="bg-amber-600 hover:bg-amber-700" asChild>
+                <Link to="/profilim?tab=documents">
+                  <AlertCircle className="mr-2 h-4 w-4" />
+                  Belgeleri Yükle
+                </Link>
+              </Button>
+            )}
           </div>
         </div>
       </header>
@@ -353,6 +392,7 @@ export default function CarrierHome() {
               </Card>
             )}
 
+            {isMarketplaceVerified ? (
             <Tabs defaultValue="available" className="w-full">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 gap-4">
                 <TabsList className="grid w-full sm:w-[400px] grid-cols-2">
@@ -467,6 +507,7 @@ export default function CarrierHome() {
                 )}
               </TabsContent>
             </Tabs>
+            ) : marketplaceGateCard}
           </div>
 
           {/* Right Sidebar */}
@@ -632,4 +673,3 @@ function CheckItem({ label, checked }: { label: string, checked: boolean }) {
         </div>
     )
 }
-

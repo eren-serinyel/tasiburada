@@ -67,6 +67,7 @@ import RegisterCarrierPage from '@/pages/RegisterCarrier';
 import ProfileComplete from '@/pages/ProfileComplete';
 import CarrierOnboarding from '@/pages/CarrierOnboarding';
 import ForgotPassword from '@/pages/ForgotPassword';
+import ResetPassword from '@/pages/ResetPassword';
 import VerifyEmail from '@/pages/VerifyEmail';
 import FavoriteCarriers from './pages/FavoriteCarriers';
 
@@ -124,6 +125,7 @@ const App = () => (
             {/* Auth */}
             <Route path="/giris" element={<Login />} />
             <Route path="/sifremi-unuttum" element={<ForgotPassword />} />
+            <Route path="/sifre-sifirla" element={<ResetPassword />} />
             <Route path="/eposta-dogrula" element={<VerifyEmail />} />
             <Route path="/musteri-kayit" element={<RegisterUser />} />
             <Route path="/nakliyeci-kayit" element={<RegisterCarrier />} />

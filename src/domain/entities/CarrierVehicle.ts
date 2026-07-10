@@ -33,8 +33,8 @@ export class CarrierVehicle {
   @Column({ name: 'plate', type: 'varchar', length: 20, nullable: true })
   plate: string | null;
 
-  @Column({ name: 'capacity_kg', type: 'int', nullable: false })
-  capacityKg: number;
+  @Column({ name: 'capacity_kg', type: 'int', nullable: true })
+  capacityKg: number | null;
 
   @Column({ name: 'capacity_m3', type: 'decimal', precision: 5, scale: 1, nullable: true })
   capacityM3: number | null;

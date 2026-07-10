@@ -152,7 +152,7 @@ export class Carrier {
   @Column({ type: 'datetime', nullable: true })
   lastLogin?: Date;
 
-  @Column({ type: 'varchar', length: 10, nullable: true })
+  @Column({ type: 'varchar', length: 64, nullable: true })
   resetToken?: string | null;
 
   @Column({ type: 'datetime', nullable: true })

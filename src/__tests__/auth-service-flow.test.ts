@@ -5,6 +5,9 @@
  */
 import request from 'supertest';
 import { testApp } from './helpers/testApp';
+import { AppDataSource } from '../infrastructure/database/data-source';
+import { Customer } from '../domain/entities/Customer';
+import { emailService } from '../application/services/EmailService';
 
 const skipDB = () => process.env.SKIP_DB_TESTS === 'true';
 
@@ -19,8 +22,9 @@ describe('AuthService Akışı', () => {
     const res = await request(testApp)
       .post('/api/v1/auth/forgot-password')
       .send({ email: 'olmayan@example.com', userType: 'customer' });
-    expect([400, 404]).toContain(res.status);
-    expect(res.body.success).toBe(false);
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(JSON.stringify(res.body)).not.toContain('resetToken');
   });
 
   test('2. email eksik şifre sıfırlama isteği 400 dönmeli', async () => {
@@ -42,7 +46,9 @@ describe('AuthService Akışı', () => {
     const res = await request(testApp)
       .post('/api/v1/auth/forgot-password')
       .send({ email: CUSTOMER.email, userType: 'customer' });
-    expect([200, 400]).toContain(res.status);
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(JSON.stringify(res.body)).not.toContain('resetToken');
   });
 
   test('5. Geçerli nakliyeci e-postası ile şifre sıfırlama isteği 200 veya 400 dönmeli', async () => {
@@ -50,7 +56,9 @@ describe('AuthService Akışı', () => {
     const res = await request(testApp)
       .post('/api/v1/auth/forgot-password')
       .send({ email: CARRIER.email, userType: 'carrier' });
-    expect([200, 400]).toContain(res.status);
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(JSON.stringify(res.body)).not.toContain('resetToken');
   });
 
   // ── resetPassword ─────────────────────────────────────────────────────────
@@ -81,6 +89,58 @@ describe('AuthService Akışı', () => {
       .post('/api/v1/auth/reset-password')
       .send({ token: 'abc', newPassword: 'YeniSifre123!' });
     expect(res.status).toBe(400);
+  });
+
+
+  test('10. Reset token hash olarak saklanmali ve tek kullanimlik olmali', async () => {
+    if (skipDB()) return;
+
+    const originalIsConfigured = emailService.isConfigured;
+    const originalSendPasswordReset = emailService.sendPasswordReset;
+    let capturedToken = '';
+    (emailService as any).isConfigured = () => true;
+    (emailService as any).sendPasswordReset = async (_to: string, token: string) => {
+      capturedToken = token;
+    };
+
+    try {
+      const forgot = await request(testApp)
+        .post('/api/v1/auth/forgot-password')
+        .send({ email: CUSTOMER.email, userType: 'customer' });
+      expect(forgot.status).toBe(200);
+      expect(capturedToken).toMatch(/^[a-f0-9]{64}$/);
+
+      const customer = await AppDataSource.getRepository(Customer)
+        .createQueryBuilder('customer')
+        .addSelect('customer.resetToken')
+        .addSelect('customer.resetTokenExpiry')
+        .where('customer.email = :email', { email: CUSTOMER.email })
+        .getOne();
+      expect(customer?.resetToken).toMatch(/^[a-f0-9]{64}$/);
+      expect(customer?.resetToken).not.toBe(capturedToken);
+      expect(customer?.resetTokenExpiry?.getTime()).toBeGreaterThan(Date.now());
+
+      const reset = await request(testApp)
+        .post('/api/v1/auth/reset-password')
+        .send({ token: capturedToken, newPassword: 'YeniSifre123!', userType: 'customer' });
+      expect(reset.status).toBe(200);
+      expect(reset.body.success).toBe(true);
+
+      const reuse = await request(testApp)
+        .post('/api/v1/auth/reset-password')
+        .send({ token: capturedToken, newPassword: 'BaskaSifre123!', userType: 'customer' });
+      expect(reuse.status).toBe(400);
+
+      await request(testApp)
+        .post('/api/v1/auth/forgot-password')
+        .send({ email: CUSTOMER.email, userType: 'customer' });
+      await request(testApp)
+        .post('/api/v1/auth/reset-password')
+        .send({ token: capturedToken, newPassword: CUSTOMER.password, userType: 'customer' });
+    } finally {
+      (emailService as any).isConfigured = originalIsConfigured;
+      (emailService as any).sendPasswordReset = originalSendPasswordReset;
+    }
   });
 
   // ── verifyEmail ───────────────────────────────────────────────────────────

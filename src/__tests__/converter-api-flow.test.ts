@@ -187,6 +187,60 @@ describe('Converter API Flow', () => {
     expect(res.body.success).toBe(false);
   });
 
+  test('4.1 Mobilya adetleri gercek disi yuksek hacim uretmemeli', async () => {
+    if (skipDB()) return;
+
+    const sessionRes = await request(testApp)
+      .post(`${BASE}/sessions`)
+      .set('Authorization', `Bearer ${customerToken}`)
+      .send({ flowType: 'household' });
+
+    const sessionId = sessionRes.body.data?.sessionId || '';
+    expect(sessionId).toBeTruthy();
+
+    const res = await request(testApp)
+      .post(`${BASE}/sessions/${sessionId}/estimate`)
+      .set('Authorization', `Bearer ${customerToken}`)
+      .send({
+        moveType: 'household',
+        propertyType: '3+1',
+        items: [{ itemCode: 'wardrobe_3door', quantity: 50 }],
+        specialItems: [],
+        customItems: [],
+      });
+
+    expect(res.status).toBe(400);
+    expect(res.body.success).toBe(false);
+    expect(res.body.message).toContain('Gardrop');
+  });
+
+  test('4.2 Koli gibi tekrar eden kalemlerde yuksek ama makul adet kabul edilmeli', async () => {
+    if (skipDB()) return;
+
+    const sessionRes = await request(testApp)
+      .post(`${BASE}/sessions`)
+      .set('Authorization', `Bearer ${customerToken}`)
+      .send({ flowType: 'household' });
+
+    const sessionId = sessionRes.body.data?.sessionId || '';
+    expect(sessionId).toBeTruthy();
+
+    const res = await request(testApp)
+      .post(`${BASE}/sessions/${sessionId}/estimate`)
+      .set('Authorization', `Bearer ${customerToken}`)
+      .send({
+        moveType: 'household',
+        propertyType: '3+1',
+        items: [{ itemCode: 'medium_box', quantity: 50 }],
+        specialItems: [],
+        customItems: [],
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.estimatedWeightKg).toBe(1000);
+  });
+
   test('5. Estimate başarılı olmalı ve sonuç persist edilmeli', async () => {
     if (skipDB()) return;
 

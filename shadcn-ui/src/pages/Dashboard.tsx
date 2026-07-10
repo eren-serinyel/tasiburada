@@ -1,4 +1,4 @@
-import { getSessionUser } from '@/lib/storage';
+import { getSessionUser, setSessionUser } from '@/lib/storage';
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -76,6 +76,7 @@ export default function Dashboard() {
     completedJobs: 0,
     rating: 0
   });
+  const [carrierMarketplaceVerified, setCarrierMarketplaceVerified] = useState(false);
   const [recentNotifications, setRecentNotifications] = useState<ApiNotification[]>([]);
   const [myReviews, setMyReviews] = useState<Array<{ id: string; rating: number; comment: string; createdAt: string; customer?: { firstName: string; lastName: string } }>>([]);
   const [reportForId, setReportForId] = useState<string | null>(null);
@@ -164,16 +165,43 @@ export default function Dashboard() {
             setShipments([]);
           }
         } else {
-          // Nakliyeci: aktif teklifler + uygun ilanlar + stats + yorumlar + bildirimler
-          const [activeOffersResult, pendingResult, statsResult, reviewsResult, notifsResult] = await Promise.allSettled([
-            apiClient(`${API_BASE_URL}/carriers/me/offers`),
-            apiClient(`${API_BASE_URL}/shipments/pending`),
+          const overviewResult = await apiClient(`${API_BASE_URL}/carriers/me`);
+          const overviewJson = await overviewResult.json().catch(() => ({}));
+          const carrierOverview = overviewJson?.data?.carrier ?? overviewJson?.data ?? {};
+          const approvalState = String(carrierOverview?.approvalState ?? u.approvalState ?? '').toUpperCase();
+          const isMarketplaceVerified = Boolean(carrierOverview?.verifiedByAdmin ?? u.verifiedByAdmin)
+            && (!approvalState || approvalState === 'APPROVED');
+          setCarrierMarketplaceVerified(isMarketplaceVerified);
+          if (
+            u.verifiedByAdmin !== Boolean(carrierOverview?.verifiedByAdmin)
+            || u.approvalState !== carrierOverview?.approvalState
+          ) {
+            const updatedUser = {
+              ...u,
+              verifiedByAdmin: Boolean(carrierOverview?.verifiedByAdmin),
+              approvalState: carrierOverview?.approvalState ?? u.approvalState ?? null,
+              pendingApproval: Boolean(carrierOverview?.pendingApproval ?? u.pendingApproval),
+            };
+            setUser(updatedUser);
+            setSessionUser(updatedUser);
+          }
+
+          const commonResults = await Promise.allSettled([
             apiClient(`${API_BASE_URL}/carriers/me/stats`),
             apiClient(`${API_BASE_URL}/carriers/me/reviews`),
             apiClient(`${API_BASE_URL}/notifications`)
           ]);
+          const [statsResult, reviewsResult, notifsResult] = commonResults;
 
-          if (activeOffersResult.status === 'fulfilled') {
+          const marketplaceResults = isMarketplaceVerified
+            ? await Promise.allSettled([
+              apiClient(`${API_BASE_URL}/carriers/me/offers`),
+              apiClient(`${API_BASE_URL}/shipments/pending`),
+            ])
+            : [];
+          const [activeOffersResult, pendingResult] = marketplaceResults;
+
+          if (activeOffersResult?.status === 'fulfilled') {
             const activeOffersRes = activeOffersResult.value;
             const activeOffersJson = await activeOffersRes.json();
             const offerList = Array.isArray(activeOffersJson?.data)
@@ -188,12 +216,14 @@ export default function Dashboard() {
             setActiveOffers([]);
           }
 
-          if (pendingResult.status === 'fulfilled') {
+          if (pendingResult?.status === 'fulfilled') {
             const pendingRes = pendingResult.value;
             const pendingJson = await pendingRes.json();
             if (pendingRes.ok && pendingJson?.success && Array.isArray(pendingJson.data)) {
               setPendingShipments(pendingJson.data as BackendShipment[]);
             }
+          } else {
+            setPendingShipments([]);
           }
 
           if (statsResult.status === 'fulfilled') {
@@ -294,6 +324,25 @@ export default function Dashboard() {
     const { tasks, percent, isComplete } = getCarrierProfileTasks(carrier);
     const today = new Date().toLocaleDateString('tr-TR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
     const displayName = (carrier as any).companyName || carrier.name || 'Profil';
+    const approvalState = String(carrier.approvalState ?? '').toUpperCase();
+    const isMarketplaceVerified = carrierMarketplaceVerified
+      || (Boolean(carrier.verifiedByAdmin) && (!approvalState || approvalState === 'APPROVED'));
+    const verificationGateCard = (
+      <Card className="rounded-xl shadow-sm border-amber-200 bg-amber-50">
+        <CardContent className="py-10 text-center">
+          <AlertTriangle className="h-10 w-10 text-amber-600 mx-auto mb-3" />
+          <p className="text-amber-950 font-semibold">Marketplace erişimi için doğrulama gerekli</p>
+          <p className="text-amber-800 text-sm mt-1">
+            Belgelerinizi yükleyip admin onayını bekleyin. Onaydan sonra gelen talepleri görebilir ve teklif verebilirsiniz.
+          </p>
+          <Link to="/profilim?tab=documents">
+            <Button size="sm" className="mt-4 bg-amber-600 hover:bg-amber-700 text-white">
+              Belgeleri Yükle
+            </Button>
+          </Link>
+        </CardContent>
+      </Card>
+    );
 
     return (
       <div className="min-h-screen bg-[#f8fafc]">
@@ -307,11 +356,19 @@ export default function Dashboard() {
               </h1>
               <p className="text-gray-500 text-sm mt-1">{today}</p>
             </div>
-            <Link to="/ilanlar">
-              <Button className="bg-blue-600 hover:bg-blue-700 text-white gap-2">
-                <Truck className="h-4 w-4" /> Tüm İlanları Gör
-              </Button>
-            </Link>
+            {isMarketplaceVerified ? (
+              <Link to="/ilanlar">
+                <Button className="bg-blue-600 hover:bg-blue-700 text-white gap-2">
+                  <Truck className="h-4 w-4" /> Tüm İlanları Gör
+                </Button>
+              </Link>
+            ) : (
+              <Link to="/profilim?tab=documents">
+                <Button className="bg-amber-600 hover:bg-amber-700 text-white gap-2">
+                  <AlertTriangle className="h-4 w-4" /> Belgeleri Yükle
+                </Button>
+              </Link>
+            )}
           </div>
 
           {/* ── KPI Kartları ── */}
@@ -345,6 +402,7 @@ export default function Dashboard() {
           </div>
 
           {/* ── Ana İçerik: Tabs ── */}
+          {isMarketplaceVerified ? (
           <Tabs defaultValue="active">
             <TabsList className="bg-white border rounded-xl shadow-sm px-1 py-1 gap-1">
               <TabsTrigger value="active" className="rounded-lg px-5 py-2 text-sm data-[state=active]:bg-blue-600 data-[state=active]:text-white">
@@ -447,6 +505,7 @@ export default function Dashboard() {
               )}
             </TabsContent>
           </Tabs>
+          ) : verificationGateCard}
 
           {/* ── Alt İki Kutu: Profil & Bildirimler ── */}
           <div className="grid md:grid-cols-2 gap-4">

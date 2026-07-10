@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Truck, MapPin, FileText, ChevronRight, ChevronLeft, Check, SkipForward, CheckCircle2, Loader2 } from 'lucide-react';
+import { Truck, MapPin, FileText, ChevronRight, ChevronLeft, Check, SkipForward, CheckCircle2, Loader2, Plus, Trash2 } from 'lucide-react';
 import MultiSelect from '@/components/ui/multi-select';
 import { TURKISH_CITIES } from '@/lib/constants';
 import { getDistrictsForCity } from '@/lib/locations';
@@ -13,10 +13,31 @@ import { getSessionUser } from '@/lib/storage';
 import { useToast } from '@/hooks/use-toast';
 import { apiClient } from '@/lib/apiClient';
 
-const SERVICE_AREA_OPTIONS: Record<string, string> = {
-  sehirici: 'Şehiriçi Taşıma',
-  sehirlerarasi: 'Şehirlerarası Taşıma',
+const WORK_SCOPE_OPTIONS = ['Şehir İçi', 'Şehirler Arası'];
+
+type VehicleTypeOption = { id: string; name: string };
+type OnboardingVehicle = {
+  clientId: string;
+  id?: string;
+  vehicleTypeId: string;
+  plate: string;
+  brand: string;
+  model: string;
+  year: string;
+  capacityM3: string;
+  capacityKg: string;
 };
+
+const createEmptyVehicle = (): OnboardingVehicle => ({
+  clientId: crypto.randomUUID(),
+  vehicleTypeId: '',
+  plate: '',
+  brand: '',
+  model: '',
+  year: '',
+  capacityM3: '',
+  capacityKg: '',
+});
 
 const REQUIRED_DOC_KEYS = ['k_belgesi', 'src', 'ruhsat', 'vergi_levhasi'] as const;
 
@@ -40,10 +61,9 @@ export default function CarrierOnboarding() {
   const [saving, setSaving] = useState(false);
 
   // Step 1 — Vehicle
-  const [vehicleBrand, setVehicleBrand] = useState('');
-  const [vehicleModel, setVehicleModel] = useState('');
-  const [vehicleYear, setVehicleYear] = useState('');
-  const [vehicleCapacityM3, setVehicleCapacityM3] = useState('');
+  const [vehicles, setVehicles] = useState<OnboardingVehicle[]>([createEmptyVehicle()]);
+  const [vehicleTypes, setVehicleTypes] = useState<VehicleTypeOption[]>([]);
+  const [workScopes, setWorkScopes] = useState<string[]>([]);
 
   // Step 2 — Activity
   const [city, setCity] = useState('');
@@ -59,6 +79,17 @@ export default function CarrierOnboarding() {
   useEffect(() => {
     if (!user) navigate('/giris');
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    apiClient('/api/v1/vehicle-types')
+      .then(response => response.json())
+      .then(json => {
+        if (json?.success && Array.isArray(json.data)) {
+          setVehicleTypes(json.data);
+        }
+      })
+      .catch(() => setVehicleTypes([]));
+  }, []);
 
   useEffect(() => {
     setDistrict('');
@@ -86,23 +117,69 @@ export default function CarrierOnboarding() {
   };
 
   const handleStep1Next = async () => {
+    if (workScopes.length === 0) {
+      toast({ title: 'Eksik Alan', description: 'En az bir iş kapsamı seçmelisiniz.', variant: 'destructive' });
+      return;
+    }
+
+    const vehiclesToSave = vehicles.filter(vehicle => (
+      vehicle.vehicleTypeId || vehicle.plate.trim() || vehicle.brand.trim() || vehicle.model.trim()
+      || vehicle.year || vehicle.capacityM3 || vehicle.capacityKg
+    ));
+    if (vehiclesToSave.some(vehicle => !vehicle.vehicleTypeId)) {
+      toast({ title: 'Eksik Alan', description: 'Bilgi girdiğiniz her araç için araç tipi seçmelisiniz.', variant: 'destructive' });
+      return;
+    }
+
     setSaving(true);
     try {
-      const body: Record<string, unknown> = {};
-      if (vehicleBrand.trim()) body.vehicleBrand = vehicleBrand.trim();
-      if (vehicleModel.trim()) body.vehicleModel = vehicleModel.trim();
-      if (vehicleYear) body.vehicleYear = Number(vehicleYear);
-      if (vehicleCapacityM3) body.vehicleCapacityM3 = Number(vehicleCapacityM3);
-
-      const res = await apiClient(`/api/v1/carriers/profile/${carrierId}`, {
+      const scopeResponse = await apiClient('/api/v1/carriers/me/company-info', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ scopeOfWorkNames: workScopes }),
       });
-      if (!res.ok) {
-        const json = await res.json().catch(() => ({}));
-        toast({ title: 'Hata', description: (json as any).message ?? 'Araç bilgileri kaydedilemedi.', variant: 'destructive' });
+      const scopeJson = await scopeResponse.json().catch(() => ({}));
+      if (!scopeResponse.ok || !(scopeJson as any)?.success) {
+        toast({ title: 'Hata', description: (scopeJson as any).message ?? 'İş kapsamı kaydedilemedi.', variant: 'destructive' });
         return;
+      }
+
+      if (vehiclesToSave.length > 0) {
+        const vehicleResponse = await apiClient('/api/v1/carriers/me/vehicles', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            vehicles: vehiclesToSave.map(vehicle => ({
+              id: vehicle.id,
+              vehicleTypeId: vehicle.vehicleTypeId,
+              plate: vehicle.plate.trim() || null,
+              brand: vehicle.brand.trim() || null,
+              model: vehicle.model.trim() || null,
+              year: vehicle.year ? Number(vehicle.year) : null,
+              capacityM3: vehicle.capacityM3 ? Number(vehicle.capacityM3) : null,
+              capacityKg: vehicle.capacityKg ? Number(vehicle.capacityKg) : null,
+            })),
+          }),
+        });
+        const vehicleJson = await vehicleResponse.json().catch(() => ({}));
+        if (!vehicleResponse.ok || !(vehicleJson as any)?.success) {
+          toast({ title: 'Hata', description: (vehicleJson as any).message ?? 'Araç bilgileri kaydedilemedi.', variant: 'destructive' });
+          return;
+        }
+
+        if (Array.isArray((vehicleJson as any).data)) {
+          setVehicles((vehicleJson as any).data.map((vehicle: any) => ({
+            clientId: vehicle.id || crypto.randomUUID(),
+            id: vehicle.id,
+            vehicleTypeId: vehicle.vehicleTypeId || '',
+            plate: vehicle.plate || vehicle.licensePlate || '',
+            brand: vehicle.brand || '',
+            model: vehicle.model || '',
+            year: vehicle.year ? String(vehicle.year) : '',
+            capacityM3: vehicle.capacityM3 != null ? String(vehicle.capacityM3) : '',
+            capacityKg: vehicle.capacityKg != null ? String(vehicle.capacityKg) : '',
+          })));
+        }
       }
       setStep(2);
     } catch {
@@ -112,9 +189,36 @@ export default function CarrierOnboarding() {
     }
   };
 
+  const removeVehicle = async (vehicle: OnboardingVehicle) => {
+    if (vehicles.length <= 1) return;
+    if (!vehicle.id) {
+      setVehicles(current => current.filter(item => item.clientId !== vehicle.clientId));
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const response = await apiClient(`/api/v1/carriers/me/vehicles/${vehicle.id}`, { method: 'DELETE' });
+      const json = await response.json().catch(() => ({}));
+      if (!response.ok || !(json as any)?.success) {
+        toast({ title: 'Hata', description: (json as any).message ?? 'Araç silinemedi.', variant: 'destructive' });
+        return;
+      }
+      setVehicles(current => current.filter(item => item.clientId !== vehicle.clientId));
+    } catch {
+      toast({ title: 'Bağlantı Hatası', description: 'Araç silinemedi.', variant: 'destructive' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleStep2Next = async () => {
     if (!city) {
       toast({ title: 'Eksik Alan', description: 'Faaliyet şehri zorunludur.', variant: 'destructive' });
+      return;
+    }
+    if (serviceAreas.length === 0) {
+      toast({ title: 'Eksik Alan', description: 'En az bir hizmet verdiğiniz il seçmelisiniz.', variant: 'destructive' });
       return;
     }
     setSaving(true);
@@ -211,39 +315,123 @@ export default function CarrierOnboarding() {
                 <CardDescription>Taşımacılıkta kullandığınız araç hakkında temel bilgileri girin.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label className="mb-1 block text-sm">Araç Markası</Label>
-                    <Input placeholder="ör: Ford" value={vehicleBrand} onChange={e => setVehicleBrand(e.target.value)} />
+                {vehicles.map((vehicle, index) => (
+                  <div key={vehicle.clientId} className="rounded-xl border border-slate-200 p-4 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm font-semibold text-slate-700">Araç {index + 1}</p>
+                      {vehicles.length > 1 && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          disabled={saving}
+                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                          onClick={() => void removeVehicle(vehicle)}
+                        >
+                          <Trash2 className="h-4 w-4 mr-1" /> Sil
+                        </Button>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <Label className="mb-1 block text-sm">Araç Tipi</Label>
+                        <Select
+                          value={vehicle.vehicleTypeId}
+                          onValueChange={value => setVehicles(current => current.map(item => (
+                            item.clientId === vehicle.clientId ? { ...item, vehicleTypeId: value } : item
+                          )))}
+                        >
+                          <SelectTrigger><SelectValue placeholder="Araç tipi seçin..." /></SelectTrigger>
+                          <SelectContent>
+                            {vehicleTypes.map(type => <SelectItem key={type.id} value={type.id}>{type.name}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label className="mb-1 block text-sm">Plaka</Label>
+                        <Input
+                          placeholder="ör: 34 ABC 123"
+                          value={vehicle.plate}
+                          onChange={event => setVehicles(current => current.map(item => (
+                            item.clientId === vehicle.clientId ? { ...item, plate: event.target.value.toUpperCase() } : item
+                          )))}
+                        />
+                      </div>
+                      <div>
+                        <Label className="mb-1 block text-sm">Araç Markası</Label>
+                        <Input
+                          placeholder="ör: Ford"
+                          value={vehicle.brand}
+                          onChange={event => setVehicles(current => current.map(item => (
+                            item.clientId === vehicle.clientId ? { ...item, brand: event.target.value } : item
+                          )))}
+                        />
+                      </div>
+                      <div>
+                        <Label className="mb-1 block text-sm">Araç Modeli</Label>
+                        <Input
+                          placeholder="ör: Transit"
+                          value={vehicle.model}
+                          onChange={event => setVehicles(current => current.map(item => (
+                            item.clientId === vehicle.clientId ? { ...item, model: event.target.value } : item
+                          )))}
+                        />
+                      </div>
+                      <div>
+                        <Label className="mb-1 block text-sm">Model Yılı</Label>
+                        <Input
+                          type="number"
+                          placeholder="ör: 2020"
+                          min={1990}
+                          max={new Date().getFullYear()}
+                          value={vehicle.year}
+                          onChange={event => setVehicles(current => current.map(item => (
+                            item.clientId === vehicle.clientId ? { ...item, year: event.target.value } : item
+                          )))}
+                        />
+                      </div>
+                      <div>
+                        <Label className="mb-1 block text-sm">Kapasite (m³)</Label>
+                        <Input
+                          type="number"
+                          placeholder="ör: 15"
+                          min={0}
+                          value={vehicle.capacityM3}
+                          onChange={event => setVehicles(current => current.map(item => (
+                            item.clientId === vehicle.clientId ? { ...item, capacityM3: event.target.value } : item
+                          )))}
+                        />
+                      </div>
+                      <div className="sm:col-span-2">
+                        <Label className="mb-1 block text-sm">Tahmini Ağırlık Kapasitesi (kg)</Label>
+                        <Input
+                          type="number"
+                          placeholder="ör: 3500"
+                          min={0}
+                          value={vehicle.capacityKg}
+                          onChange={event => setVehicles(current => current.map(item => (
+                            item.clientId === vehicle.clientId ? { ...item, capacityKg: event.target.value } : item
+                          )))}
+                        />
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <Label className="mb-1 block text-sm">Araç Modeli</Label>
-                    <Input placeholder="ör: Transit" value={vehicleModel} onChange={e => setVehicleModel(e.target.value)} />
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label className="mb-1 block text-sm">Model Yılı</Label>
-                    <Input
-                      type="number"
-                      placeholder="ör: 2020"
-                      min={1990}
-                      max={2026}
-                      value={vehicleYear}
-                      onChange={e => setVehicleYear(e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <Label className="mb-1 block text-sm">Kapasite (m³)</Label>
-                    <Input
-                      type="number"
-                      placeholder="ör: 15"
-                      min={0}
-                      value={vehicleCapacityM3}
-                      onChange={e => setVehicleCapacityM3(e.target.value)}
-                    />
-                  </div>
-                </div>
+                ))}
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full border-dashed"
+                  onClick={() => setVehicles(current => [...current, createEmptyVehicle()])}
+                >
+                  <Plus className="h-4 w-4 mr-2" /> Başka Araç Ekle
+                </Button>
+                <MultiSelect
+                  label="İş Kapsamı"
+                  options={WORK_SCOPE_OPTIONS}
+                  selectedValues={workScopes}
+                  onSelectionChange={setWorkScopes}
+                  placeholder="İş kapsamı seçin..."
+                />
               </CardContent>
             </>
           )}
@@ -291,11 +479,11 @@ export default function CarrierOnboarding() {
                   </Select>
                 </div>
                 <MultiSelect
-                  label="Hizmet Alanları"
-                  options={SERVICE_AREA_OPTIONS}
+                  label="Hizmet Verdiği İller"
+                  options={TURKISH_CITIES}
                   selectedValues={serviceAreas}
                   onSelectionChange={setServiceAreas}
-                  placeholder="Hizmet alanı seçin..."
+                  placeholder="İl seçin..."
                 />
               </CardContent>
             </>
@@ -388,7 +576,7 @@ export default function CarrierOnboarding() {
                 </Button>
               )}
               {step === 2 && (
-                <Button onClick={handleStep2Next} disabled={saving || !city} className="gap-1 bg-blue-600 hover:bg-blue-700">
+                <Button onClick={handleStep2Next} disabled={saving || !city || serviceAreas.length === 0} className="gap-1 bg-blue-600 hover:bg-blue-700">
                   {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <>İleri <ChevronRight className="h-4 w-4" /></>}
                 </Button>
               )}

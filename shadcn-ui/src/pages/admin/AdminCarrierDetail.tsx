@@ -39,6 +39,7 @@ interface DocumentItem {
   id: string;
   type: string;
   fileUrl: string;
+  downloadUrl?: string;
   status: string;
   isApproved: boolean;
   uploadedAt: string;
@@ -203,6 +204,21 @@ export default function AdminCarrierDetail() {
       toast.error('Islem basarisiz.');
     } finally {
       setActionLoading(false);
+    }
+  };
+
+  const toDocumentApiPath = (url: string) => String(url || '').replace(/^\/api\/v1/, '');
+
+  const openDocument = async (document: DocumentItem) => {
+    try {
+      const response = await adminApiClient(toDocumentApiPath(document.fileUrl));
+      if (!response.ok) throw new Error('Belge acilamadi.');
+      const blob = await response.blob();
+      const objectUrl = window.URL.createObjectURL(blob);
+      window.open(objectUrl, '_blank', 'noopener,noreferrer');
+      setTimeout(() => window.URL.revokeObjectURL(objectUrl), 1000);
+    } catch (error: any) {
+      toast.error(error?.message || 'Belge acilamadi.');
     }
   };
 
@@ -446,10 +462,10 @@ export default function AdminCarrierDetail() {
 
                     <div className="flex items-center gap-2">
                       <StatusBadge status={String(document.status || 'PENDING').toUpperCase()} statusMap={DOCUMENT_STATUS} />
-                      <a href={document.fileUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline">
+                      <button type="button" onClick={() => openDocument(document)} className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline">
                         Goruntule
                         <ExternalLink className="h-3 w-3" />
-                      </a>
+                      </button>
                     </div>
                   </CardContent>
                 </Card>

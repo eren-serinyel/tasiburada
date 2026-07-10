@@ -1,4 +1,4 @@
-import { IsString, IsEmail, IsOptional, Length, IsArray, IsNumber, IsBoolean, IsUUID, IsIn, ValidateNested, IsInt, IsObject, Min, Max } from 'class-validator';
+import { IsString, IsEmail, IsOptional, Length, IsArray, IsNumber, IsBoolean, IsUUID, IsIn, ValidateNested, IsInt, IsObject, Min, Max, Matches } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class CarrierRegisterDto {
@@ -14,7 +14,7 @@ export class CarrierRegisterDto {
   email!: string;
 
   @IsString()
-  @Length(11, 11)
+  @Matches(/^\d{10,11}$/, { message: 'Vergi numarası 10, TCKN 11 haneli olmalıdır.' })
   taxNumber!: string;
 
   @IsString()
@@ -144,7 +144,7 @@ export class CarrierVehicleTypeSelectionItemDto {
 
   @IsOptional()
   @IsNumber()
-  capacityKg?: number;
+  capacityKg?: number | null;
 }
 
 export class CarrierVehicleTypeSelectionDto {
@@ -196,7 +196,7 @@ export class CarrierVehicleInputDto {
 
   @IsOptional()
   @IsNumber()
-  capacityM3?: number;
+  capacityM3?: number | null;
 
   @IsOptional()
   @IsBoolean()

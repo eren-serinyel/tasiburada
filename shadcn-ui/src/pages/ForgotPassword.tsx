@@ -1,89 +1,43 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { ArrowLeft, Mail } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { toast } from '@/components/ui/sonner';
-import { ArrowLeft, Mail, KeyRound } from 'lucide-react';
-
-const validatePassword = (password: string): string => {
-  if (!password) return 'Şifre gerekli';
-  if (password.length < 8) return 'Şifre en az 8 karakter olmalı';
-  if (password.length > 50) return 'Şifre en fazla 50 karakter olabilir';
-  if (!/(?=.*[A-Z])/.test(password)) return 'Şifre en az bir büyük harf içermeli';
-  if (!/(?=.*[0-9])/.test(password)) return 'Şifre en az bir rakam içermeli';
-  return '';
-};
 
 export default function ForgotPassword() {
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [userType, setUserType] = useState<'customer' | 'carrier'>('customer');
-  const [step, setStep] = useState<1 | 2>(1);
-  const [resetToken, setResetToken] = useState('');
   const [loading, setLoading] = useState(false);
+  const [sent, setSent] = useState(false);
 
-  // Step 2
-  const [tokenInput, setTokenInput] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-
-  const handleRequestReset = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!email) {
-      toast('E-posta adresi gerekli.', { description: 'Lütfen e-posta adresinizi girin.' });
+  const handleRequestReset = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!email.trim()) {
+      toast.error('E-posta adresinizi girin.');
       return;
     }
+
     setLoading(true);
     try {
-      const res = await fetch('/api/v1/auth/forgot-password', {
+      const response = await fetch('/api/v1/auth/forgot-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, userType }),
+        body: JSON.stringify({ email: email.trim(), userType }),
       });
-      const json = await res.json();
-      if (res.ok && json.success) {
-        setResetToken(json.resetToken);
-        setStep(2);
-        toast('Kod gönderildi', { description: 'E-posta adresinizi kontrol edin.' });
-      } else {
-        toast.error(json.message || 'Bir hata oluştu.');
-      }
-    } catch {
-      toast.error('Sunucuya bağlanılamadı.');
-    } finally {
-      setLoading(false);
-    }
-  };
+      const json = await response.json().catch(() => ({}));
 
-  const handleResetPassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const pwdError = validatePassword(newPassword);
-    if (pwdError) {
-      toast.error(pwdError);
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      toast.error('Şifreler eşleşmiyor.');
-      return;
-    }
-    setLoading(true);
-    try {
-      const res = await fetch('/api/v1/auth/reset-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: tokenInput, newPassword, userType }),
-      });
-      const json = await res.json();
-      if (res.ok && json.success) {
-        toast('Şifre sıfırlandı', { description: 'Yeni şifrenizle giriş yapabilirsiniz.' });
-        navigate('/giris');
+      if (response.ok && json.success) {
+        setSent(true);
+        toast.success('Talep alindi');
       } else {
-        toast.error(json.message || 'Bir hata oluştu.');
+        toast.error(json.message || 'Sifre sifirlama talebi alinamadi.');
       }
     } catch {
-      toast.error('Sunucuya bağlanılamadı.');
+      toast.error('Sunucuya baglanilamadi.');
     } finally {
       setLoading(false);
     }
@@ -91,25 +45,31 @@ export default function ForgotPassword() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 via-white to-indigo-50 px-4">
-      <Card className="w-full max-w-md shadow-xl">
+      <Card className="w-full max-w-md border-blue-100 shadow-xl">
         <CardHeader className="text-center space-y-2">
-          <div className="mx-auto w-14 h-14 rounded-full bg-blue-100 flex items-center justify-center mb-2">
-            {step === 1 ? <Mail className="h-7 w-7 text-blue-600" /> : <KeyRound className="h-7 w-7 text-blue-600" />}
+          <div className="mx-auto mb-2 flex h-14 w-14 items-center justify-center rounded-full bg-blue-100">
+            <Mail className="h-7 w-7 text-blue-700" />
           </div>
-          <CardTitle className="text-2xl font-bold">Şifremi Unuttum</CardTitle>
+          <CardTitle className="text-2xl font-bold text-slate-900">Sifremi Unuttum</CardTitle>
           <CardDescription>
-            {step === 1
-              ? 'E-posta adresinize sıfırlama kodu göndereceğiz.'
-              : 'Sıfırlama kodunuzu ve yeni şifrenizi girin.'}
+            Hesabiniz kayitliyse sifre sifirlama baglantisini e-posta adresinize gonderecegiz.
           </CardDescription>
         </CardHeader>
 
         <CardContent>
-          {step === 1 ? (
+          {sent ? (
+            <div className="space-y-5">
+              <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
+                Bu e-posta kayitliysa bir sifre sifirlama baglantisi gonderildi. Gelen kutunuzu ve spam klasorunuzu kontrol edin.
+              </div>
+              <Button type="button" className="w-full" onClick={() => navigate('/giris')}>
+                Giris Sayfasina Don
+              </Button>
+            </div>
+          ) : (
             <form onSubmit={handleRequestReset} className="space-y-5">
-              {/* User type selection */}
               <div className="space-y-2">
-                <Label>Hesap Türü</Label>
+                <Label>Hesap Turu</Label>
                 <div className="grid grid-cols-2 gap-3">
                   <Button
                     type="button"
@@ -117,7 +77,7 @@ export default function ForgotPassword() {
                     className="w-full"
                     onClick={() => setUserType('customer')}
                   >
-                    Müşteri
+                    Musteri
                   </Button>
                   <Button
                     type="button"
@@ -135,80 +95,24 @@ export default function ForgotPassword() {
                 <Input
                   id="email"
                   type="email"
-                  placeholder="E-posta adresiniz"
+                  placeholder="ornek@email.com"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(event) => setEmail(event.target.value)}
+                  autoComplete="email"
                   required
                 />
               </div>
 
               <Button type="submit" className="w-full" disabled={loading}>
-                {loading ? 'Gönderiliyor...' : 'Kod Gönder'}
+                {loading ? 'Gonderiliyor...' : 'Sifirlama Baglantisi Gonder'}
               </Button>
 
               <button
                 type="button"
                 onClick={() => navigate('/giris')}
-                className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800 hover:underline mx-auto"
+                className="mx-auto flex items-center gap-1 text-sm font-medium text-blue-700 transition-colors hover:text-blue-900 hover:underline"
               >
-                <ArrowLeft className="h-4 w-4" /> Geri Dön
-              </button>
-            </form>
-          ) : (
-            <form onSubmit={handleResetPassword} className="space-y-5">
-              {/* Show the token for dev purposes */}
-              {resetToken && (
-                <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-sm text-amber-800">
-                  <span className="font-semibold">DEV:</span> Sıfırlama kodunuz: <code className="font-mono font-bold">{resetToken}</code>
-                </div>
-              )}
-
-              <div className="space-y-2">
-                <Label htmlFor="token">Sıfırlama Kodu</Label>
-                <Input
-                  id="token"
-                  placeholder="Sıfırlama kodu (6 hane)"
-                  value={tokenInput}
-                  onChange={(e) => setTokenInput(e.target.value.toUpperCase())}
-                  maxLength={6}
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="newPassword">Yeni Şifre</Label>
-                <Input
-                  id="newPassword"
-                  type="password"
-                  placeholder="Yeni şifreniz"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="confirmPassword">Şifre Tekrar</Label>
-                <Input
-                  id="confirmPassword"
-                  type="password"
-                  placeholder="Yeni şifrenizi tekrar girin"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  required
-                />
-              </div>
-
-              <Button type="submit" className="w-full" disabled={loading}>
-                {loading ? 'Sıfırlanıyor...' : 'Şifremi Sıfırla'}
-              </Button>
-
-              <button
-                type="button"
-                onClick={() => navigate('/giris')}
-                className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800 hover:underline mx-auto"
-              >
-                <ArrowLeft className="h-4 w-4" /> Geri Dön
+                <ArrowLeft className="h-4 w-4" /> Geri Don
               </button>
             </form>
           )}
