@@ -9,6 +9,10 @@ import {
 } from '../../../infrastructure/repositories/CarrierRepository';
 import { AppDataSource } from '../../../infrastructure/database/data-source';
 import { PRODUCT_SCOPE_OF_WORK_NAMES } from '../../../infrastructure/repositories/ScopeOfWorkRepository';
+import {
+	PublicCarrierDto,
+	toPublicCarrierDto,
+} from '../../dto/carrier/CarrierResponseProjection';
 
 export interface CarrierSearchQuery {
 	city?: string;
@@ -36,23 +40,7 @@ export interface CarrierSearchQuery {
 	offset?: number;
 }
 
-export interface CarrierSearchResultDto {
-	id: string;
-	companyName: string;
-	city: string | null;
-	rating: number;
-	reviewCount: number;
-	vehicleSummary: string | null;
-	serviceAreas: string[];
-	startingPrice: number | null;
-	experienceYears: number | null;
-	profileCompletion: number | null;
-	pictureUrl: string | null;
-	isVerified: boolean;
-	catalogExtraServiceIds: string[];
-	scopes: Array<'sehirici' | 'sehirlerarasi'>;
-	capacityAdequate?: boolean;
-}
+export type CarrierSearchResultDto = PublicCarrierDto;
 
 export interface CarrierSearchResponseDto {
 	total: number;
@@ -363,33 +351,20 @@ export class CarrierSearchService {
 		capacityCheckKg?: number,
 	): CarrierSearchResultDto {
 		const carrier = item.carrier;
-		const city = carrier.activity?.city ?? null;
-		const serviceAreas = Array.isArray(carrier.activity?.serviceAreasJson)
-			? carrier.activity?.serviceAreasJson ?? []
-			: [];
-		const experienceYears = this.computeExperience(carrier);
-		const profileCompletion = carrier.profileStatus?.overallPercentage ?? null;	
 		const maxVehicleCapacityKg = this.getMaxVehicleCapacityKg(carrier);
 		const vehicleSummary = this.buildVehicleSummary(carrier);
-		return {
-			id: carrier.id,
-			companyName: carrier.companyName,
-			city,
-			rating: carrier.rating ?? 0,
+
+		return toPublicCarrierDto({
+			carrier,
 			reviewCount: item.reviewCount ?? 0,
 			vehicleSummary,
-			serviceAreas,
 			startingPrice: item.minPrice ?? null,
-			experienceYears,
-			profileCompletion,
-			pictureUrl: carrier.pictureUrl ?? null,
-			isVerified: carrier.verifiedByAdmin === true,
 			catalogExtraServiceIds,
 			scopes: this.mapScopeLinksToSlugs(carrier),
 			...(capacityCheckKg !== undefined
 				? { capacityAdequate: maxVehicleCapacityKg > 0 && maxVehicleCapacityKg >= capacityCheckKg }
-				: {})
-		};
+				: {}),
+		});
 	}
 
 	private mapScopeLinksToSlugs(carrier: Carrier): Array<'sehirici' | 'sehirlerarasi'> {
@@ -403,12 +378,6 @@ export class CarrierSearchService {
 			.filter(Boolean) as Array<'sehirici' | 'sehirlerarasi'>;
 
 		return Array.from(new Set(slugs));
-	}
-
-	private computeExperience(carrier: Carrier): number | null {
-		if (!carrier.foundedYear) return null;
-		const currentYear = new Date().getFullYear();
-		return Math.max(0, currentYear - carrier.foundedYear);
 	}
 
 	private buildVehicleSummary(carrier: Carrier): string | null {

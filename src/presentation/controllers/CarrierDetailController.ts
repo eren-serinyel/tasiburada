@@ -18,7 +18,14 @@ export class CarrierDetailController {
         return res.status(400).json({ success: false, message: 'loadType geçersiz.' });
       }
 
-      const detail = await this.detailService.getCarrierDetail(carrierId, loadType);
+      const viewerCustomerId = req.user?.type === 'customer'
+        ? req.user.customerId
+        : undefined;
+      const detail = await this.detailService.getCarrierDetail(
+        carrierId,
+        loadType,
+        viewerCustomerId,
+      );
       if (!detail) {
         return res.status(404).json({ success: false, message: 'Nakliyeci bulunamadı.' });
       }

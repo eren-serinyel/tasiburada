@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { DataSource } from 'typeorm';
 import { config } from 'dotenv';
+import { assertSafeTestDatabase } from './databaseSafety';
 
 // Not: Artık entity'leri tek tek import etmek yerine glob pattern ile yüklüyoruz.
 // TypeORM 0.3.x DataSource entities alanı pattern dizilerini destekler.
@@ -8,6 +9,10 @@ import { config } from 'dotenv';
 
 // .env dosyasını yükle
 config(); // .env değişkenlerini yükle
+
+if (process.env.NODE_ENV === 'test') {
+  assertSafeTestDatabase(process.env);
+}
 
 // Ortak ortam değişkenlerini oku (nullish coalescing ile varsayılanları ver)
 const {

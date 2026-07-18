@@ -4,6 +4,7 @@ import { CarrierActivity } from '../domain/entities/CarrierActivity';
 import { CarrierDocument, CarrierDocumentStatus, CarrierDocumentType } from '../domain/entities/CarrierDocument';
 import { CarrierServiceType } from '../domain/entities/CarrierServiceType';
 import { CarrierVehicleType } from '../domain/entities/CarrierVehicleType';
+import { CarrierEarnings } from '../domain/entities/CarrierEarnings';
 import { VehicleType } from '../domain/entities/VehicleType';
 import { ServiceType } from '../domain/entities/ServiceType';
 import { Admin } from '../domain/entities/Admin';
@@ -25,6 +26,7 @@ describe('CarrierApprovalService', () => {
   const documentRepo = () => AppDataSource.getRepository(CarrierDocument);
   const vehicleLinkRepo = () => AppDataSource.getRepository(CarrierVehicleType);
   const serviceLinkRepo = () => AppDataSource.getRepository(CarrierServiceType);
+  const earningsRepo = () => AppDataSource.getRepository(CarrierEarnings);
   const vehicleTypeRepo = () => AppDataSource.getRepository(VehicleType);
   const serviceTypeRepo = () => AppDataSource.getRepository(ServiceType);
   const adminRepo = () => AppDataSource.getRepository(Admin);
@@ -105,6 +107,7 @@ describe('CarrierApprovalService', () => {
     await serviceLinkRepo().delete({ carrierId });
     await vehicleLinkRepo().delete({ carrierId });
     await activityRepo().delete({ carrierId });
+    await earningsRepo().delete({ carrierId });
 
     await activityRepo().save(
       activityRepo().create({
@@ -131,6 +134,13 @@ describe('CarrierApprovalService', () => {
         serviceTypeId,
       }),
     );
+
+    await earningsRepo().save(earningsRepo().create({
+      carrierId,
+      bankName: 'Test Bankası',
+      iban: 'TR330006100519786457841326',
+      accountHolder: 'Approval Test Carrier',
+    }));
 
     await documentRepo().save(
       REQUIRED_DOCUMENT_TYPES.map((type) =>

@@ -1,7 +1,9 @@
 import { AppDataSource } from '../../infrastructure/database/data-source';
+import { assertSafeSeedDatabase } from '../../infrastructure/database/seedSafety';
 import { cleanupSeededDocumentFiles } from './helpers/pdfHelper';
 
 export async function clearDatabase(): Promise<void> {
+  assertSafeSeedDatabase(process.env, 'reset');
   const queryRunner = AppDataSource.createQueryRunner();
   await queryRunner.connect();
 

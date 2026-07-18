@@ -15,8 +15,10 @@ import { seedAuditLogs } from './seeders/auditLogSeeder';
 import { seedConverterCatalog, seedConverterVehicleRules } from './seeders/converterSeeder';
 import { MatchingService } from '../../application/services/MatchingService';
 import { ShipmentRepository } from '../../infrastructure/repositories/ShipmentRepository';
+import { assertSafeSeedDatabase } from '../../infrastructure/database/seedSafety';
 
 async function main() {
+  assertSafeSeedDatabase(process.env, 'reset');
   console.log('🚀 TaşıBurada Seed Başlıyor...\n');
 
   try {

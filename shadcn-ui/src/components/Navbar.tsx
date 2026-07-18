@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import logoImg from '@/images/logo.png';
 import { Button } from '@/components/ui/button';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Truck, User, LogOut, Menu, X, ChevronDown, Home, Users, HelpCircle, Package, History, CreditCard, Calendar, TrendingUp, Heart } from 'lucide-react';
+import { BadgeCheck, Truck, User, LogOut, Menu, X, ChevronDown, Home, Users, HelpCircle, Package, History, CreditCard, Calendar, TrendingUp, Heart } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { apiClient } from '@/lib/apiClient';
 import NotificationBell from './NotificationBell';
 import {
   DropdownMenu,
@@ -14,7 +15,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 
 export default function Navbar() {
-  const { user, userType: userRole, logout } = useAuth();
+  const { user, userType: userRole, logout, updateUser } = useAuth();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
@@ -32,6 +33,31 @@ export default function Navbar() {
     return user.firstName ?? user.name ?? user.email?.split('@')[0] ?? 'Kullanıcı';
   })();
   const userDisplayEmail = user?.email || (user?.type === 'customer' ? 'Müşteri' : 'Nakliyeci');
+  const isVerifiedCarrier = user?.type === 'carrier'
+    && Boolean(user.verifiedByAdmin)
+    && String(user.approvalState ?? '').toUpperCase() === 'APPROVED';
+
+  useEffect(() => {
+    if (!user || user.type !== 'carrier') return;
+    void (async () => {
+      try {
+        const response = await apiClient('/api/v1/carriers/me', { suppressErrorToast: true });
+        const json = await response.json().catch(() => ({}));
+        const carrier = json?.data?.carrier;
+        if (!response.ok || !json?.success || !carrier) return;
+        updateUser({
+          companyName: carrier.companyName ?? user.companyName,
+          pictureUrl: carrier.pictureUrl ?? null,
+          verifiedByAdmin: Boolean(carrier.verifiedByAdmin),
+          approvalState: carrier.approvalState ?? null,
+          pendingApproval: Boolean(carrier.pendingApproval),
+        });
+      } catch {
+        // Rozet güncellemesi yardımcı bir sorgudur; sayfa akışını engellemez.
+      }
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, user?.type]);
 
   const renderAvatar = (variant: 'desktop' | 'mobile' = 'desktop') => {
     if (!user) return null;
@@ -138,6 +164,7 @@ export default function Navbar() {
                     <div className="flex items-center gap-2 px-2 py-1.5 rounded-full cursor-pointer hover:bg-[#F1F5F9] transition-colors">
                       {renderAvatar()}
                       <span className="text-sm font-medium text-[#0F172A] max-w-40 truncate">{userDisplayName}</span>
+                      {isVerifiedCarrier && <BadgeCheck className="h-4 w-4 flex-shrink-0 fill-blue-600 text-white" aria-label="Onaylı nakliyeci" />}
                       <ChevronDown className="h-3 w-3 text-[#94A3B8]" />
                     </div>
                   </DropdownMenuTrigger>
@@ -154,7 +181,10 @@ export default function Navbar() {
                         )}
                       </div>
                       <div className="min-w-0">
-                        <p className="font-semibold text-sm text-gray-900 truncate">{userDisplayName}</p>
+                        <p className="font-semibold text-sm text-gray-900 truncate flex items-center gap-1">
+                          {userDisplayName}
+                          {isVerifiedCarrier && <BadgeCheck className="h-4 w-4 flex-shrink-0 fill-blue-600 text-white" aria-label="Onaylı nakliyeci" />}
+                        </p>
                         <p className="text-xs text-gray-500 truncate">{userDisplayEmail}</p>
                       </div>
                     </div>
@@ -311,7 +341,10 @@ export default function Navbar() {
                       {renderAvatar('mobile')}
                     </div>
                     <div>
-                      <div className="font-medium text-gray-900">{userDisplayName}</div>
+                      <div className="font-medium text-gray-900 flex items-center gap-1">
+                        {userDisplayName}
+                        {isVerifiedCarrier && <BadgeCheck className="h-4 w-4 flex-shrink-0 fill-blue-600 text-white" aria-label="Onaylı nakliyeci" />}
+                      </div>
                       <div className="text-sm text-gray-500">{userDisplayEmail}</div>
                     </div>
                   </div>

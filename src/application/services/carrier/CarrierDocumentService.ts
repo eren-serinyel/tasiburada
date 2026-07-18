@@ -6,6 +6,14 @@ import { CarrierProfileStatusService } from './CarrierProfileStatusService';
 
 type DocumentInput = { type: string; fileUrl: string };
 
+const DOCUMENT_TYPE_ALIASES: Record<string, CarrierDocumentType> = {
+  K_BELGESI: CarrierDocumentType.AUTHORIZATION_CERT,
+  SRC: CarrierDocumentType.SRC_CERT,
+  RUHSAT: CarrierDocumentType.VEHICLE_LICENSE,
+  VERGI_LEVHASI: CarrierDocumentType.TAX_PLATE,
+  SIGORTA: CarrierDocumentType.INSURANCE_POLICY,
+};
+
 export class CarrierDocumentService {
   private carrierDocumentRepo = new CarrierDocumentRepository();
   private profileStatusService = new CarrierProfileStatusService();
@@ -20,6 +28,9 @@ export class CarrierDocumentService {
   private normalizeType(type: string): CarrierDocumentType | null {
     if (!type) return null;
     const normalized = type.trim().toUpperCase();
+    if (DOCUMENT_TYPE_ALIASES[normalized]) {
+      return DOCUMENT_TYPE_ALIASES[normalized];
+    }
     return (Object.values(CarrierDocumentType) as string[]).includes(normalized)
       ? (normalized as CarrierDocumentType)
       : null;
@@ -52,12 +63,20 @@ export class CarrierDocumentService {
 
   async saveDocumentsDraft(carrierId: string, docs: DocumentInput[]) {
     const entries = Array.isArray(docs) ? docs : [];
+    if (entries.length === 0) {
+      throw new Error('En az bir belge yüklemelisiniz.');
+    }
     const savedDocuments: CarrierDocument[] = [];
 
     for (const doc of entries) {
       const type = this.normalizeType(doc.type);
       const fileUrl = doc.fileUrl?.trim();
-      if (!type || !fileUrl) continue;
+      if (!type) {
+        throw new Error(`Desteklenmeyen belge tipi: ${doc.type || '(boş)'}.`);
+      }
+      if (!fileUrl) {
+        throw new Error('Belge dosyası zorunludur.');
+      }
 
       const storedUpload = this.resolveStoredUpload(fileUrl);
       if (!storedUpload || !fs.existsSync(storedUpload.filePath)) {

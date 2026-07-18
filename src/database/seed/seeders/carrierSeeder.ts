@@ -1,7 +1,7 @@
 import { AppDataSource } from '../../../infrastructure/database/data-source';
 import fs from 'node:fs';
 import { Repository } from 'typeorm';
-import { Carrier } from '../../../domain/entities/Carrier';
+import { Carrier, CarrierApprovalState } from '../../../domain/entities/Carrier';
 import { CarrierVehicle } from '../../../domain/entities/CarrierVehicle';
 import { CarrierVehicleType } from '../../../domain/entities/CarrierVehicleType';
 import { CarrierServiceType } from '../../../domain/entities/CarrierServiceType';
@@ -147,6 +147,16 @@ export async function seedCarriers(
     const scopeSelection = index === 0 ? scopeNames : pickRandom(scopeNames, scopeCount);
     const hasActivitySection = true;
     const hasEarningsSection = tierProfile.verifiedByAdmin;
+    const documentPlan = getDocumentPlan(tierProfile.documentMode);
+    const hasRequiredDocuments = DOCUMENT_REQUIREMENTS.every((requiredType) =>
+      documentPlan.some((document) =>
+        document.type === requiredType && document.status !== CarrierDocumentStatus.REJECTED));
+    const isApprovalReady =
+      hasActivitySection &&
+      hasEarningsSection &&
+      selectedVehicleTypeNames.length > 0 &&
+      serviceNames.length > 0 &&
+      hasRequiredDocuments;
     const availableDates = index === 0
       ? generateWideAvailabilityDates()
       : generateAvailabilityDatesForTier(tierProfile);
@@ -178,9 +188,12 @@ export async function seedCarriers(
       successRate: completedShipments > 0 ? randomFloat(72, 99) : 0,
       hasUploadedDocuments: tierProfile.documentMode !== 'pending' || chance(0.5),
       documentCount: 0,
-      verifiedByAdmin: tierProfile.verifiedByAdmin,
+      verifiedByAdmin: isApprovalReady,
+      approvalState: isApprovalReady ? CarrierApprovalState.APPROVED : CarrierApprovalState.DRAFT,
+      approvalReadinessCached: isApprovalReady,
+      approvalReadinessComputedAt: new Date(),
       isActive: true,
-      balance: tierProfile.verifiedByAdmin ? randomFloat(0, 18000) : 0,
+      balance: isApprovalReady ? randomFloat(0, 18000) : 0,
     });
 
     const savedCarrier = await carrierRepo.save(carrier);
@@ -265,10 +278,7 @@ export async function seedCarriers(
       ));
     }
 
-    let approvedDocumentCount = 0;
     let totalDocumentCount = 0;
-    const documentPlan = getDocumentPlan(tierProfile.documentMode);
-
     for (const type of documentPlan) {
       const isApproved = type.status === CarrierDocumentStatus.APPROVED;
       const fileUrl = `/uploads/documents/${savedCarrier.id}-${type.type.toLowerCase()}.pdf`;
@@ -287,13 +297,10 @@ export async function seedCarriers(
         generateMinimalPdf(`TASIBURADA DEMO BELGE - ${type.type} - ${company.companyName}`),
       );
       totalDocumentCount += 1;
-      if (isApproved) {
-        approvedDocumentCount += 1;
-      }
     }
 
-        // Carrier Earnings Guarantee (Adım 6 - All Verified)
-    if (tierProfile.verifiedByAdmin) {
+    // Carrier Earnings Guarantee (Adım 6 - approval profili için ödeme bilgisi)
+    if (hasEarningsSection) {
       await earningsRepo.save(earningsRepo.create({
         carrierId: savedCarrier.id,
         bankName: randomFrom(['Ziraat Bankası', 'İş Bankası', 'Garanti BBVA', 'Yapı Kredi']),
@@ -304,25 +311,22 @@ export async function seedCarriers(
 
     const coreCompletionCount = Number(true)
       + Number(hasActivitySection)
-      + Number(approvedDocumentCount >= DOCUMENT_REQUIREMENTS.length)
+      + Number(serviceNames.length > 0)
+      + Number(hasRequiredDocuments)
+      + Number(selectedVehicleTypeNames.length > 0)
       + Number(hasEarningsSection);
 
     await profileStatusRepo.save(profileStatusRepo.create({
       carrierId: savedCarrier.id,
       companyInfoCompleted: true,
       activityInfoCompleted: hasActivitySection,
-      vehiclesCompleted: selectedVehicleTypeNames.length > 0 && serviceNames.length > 0,
-      documentsCompleted: approvedDocumentCount >= DOCUMENT_REQUIREMENTS.length,
+      servicesCompleted: serviceNames.length > 0,
+      vehiclesCompleted: selectedVehicleTypeNames.length > 0,
+      documentsCompleted: hasRequiredDocuments,
       earningsCompleted: hasEarningsSection,
       securityCompleted: true,
-      notificationsCompleted: tierProfile.verifiedByAdmin,
-      overallPercentage: Math.max(
-        coreCompletionCount * 25,
-        randomInt(
-          tierProfile.profileCompletionRange[0],
-          tierProfile.profileCompletionRange[1],
-        ),
-      ),
+      notificationsCompleted: isApprovalReady,
+      overallPercentage: Math.round((coreCompletionCount / 6) * 100),
     }));
 
     await carrierRepo.update(savedCarrier.id, {
@@ -334,7 +338,7 @@ export async function seedCarriers(
       carrierId: savedCarrier.id,
       totalEarnings: completedShipments > 0 ? randomFloat(8000, 280000) : 0,
       totalJobs: completedShipments,
-      activeJobs: tierProfile.verifiedByAdmin ? randomInt(0, 6) : 0,
+      activeJobs: isApprovalReady ? randomInt(0, 6) : 0,
       averageRating: rating,
       totalReviews: completedShipments > 0 ? randomInt(0, Math.max(1, completedShipments)) : 0,
     }));

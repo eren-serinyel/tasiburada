@@ -9,6 +9,10 @@ import { CarrierCustomExtraService } from '../../domain/entities/CarrierCustomEx
 import { ShipmentCustomExtraService } from '../../domain/entities/ShipmentCustomExtraService';
 import { CarrierApprovalState } from '../../domain/entities/Carrier';
 import { In } from 'typeorm';
+import {
+  CarrierShipmentInviteDto,
+  toCarrierShipmentInviteDto,
+} from '../dto/shipment/CarrierShipmentInviteResponse';
 
 export interface InviteRequestedServices {
   catalogServiceIds?: string[];
@@ -146,8 +150,9 @@ export class ShipmentInviteService {
     });
   }
 
-  async getCarrierInvites(carrierId: string) {
-    return this.inviteRepo.findByCarrierId(carrierId, 'pending');
+  async getCarrierInvites(carrierId: string): Promise<CarrierShipmentInviteDto[]> {
+    const invites = await this.inviteRepo.findByCarrierId(carrierId, 'pending');
+    return invites.map(toCarrierShipmentInviteDto);
   }
 
   async getShipmentInvites(shipmentId: string) {

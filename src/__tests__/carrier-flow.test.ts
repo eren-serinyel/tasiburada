@@ -5,13 +5,109 @@
  */
 import request from 'supertest';
 import { testApp } from './helpers/testApp';
+import { restoreSilenCarrierBaseline } from './setup/seedContract';
+import {
+  toCarrierShipmentInviteDto,
+} from '../application/dto/shipment/CarrierShipmentInviteResponse';
 
 const skipDB = () => process.env.SKIP_DB_TESTS === 'true';
+const CARRIER_INVITE_KEYS = [
+  'createdAt',
+  'id',
+  'requestedServices',
+  'shipment',
+  'status',
+].sort();
+const CARRIER_INVITE_SHIPMENT_KEYS = [
+  'converterEstimatedVolumeMax',
+  'converterEstimatedVolumeMin',
+  'converterRecommendedVehicleCode',
+  'dateFlexibility',
+  'destinationAccessDistance',
+  'destinationCity',
+  'destinationDistrict',
+  'destinationFloor',
+  'destinationHasElevator',
+  'destinationPlaceType',
+  'estimatedWeight',
+  'id',
+  'insuranceType',
+  'loadProfile',
+  'originAccessDistance',
+  'originCity',
+  'originDistrict',
+  'originFloor',
+  'originHasElevator',
+  'originPlaceType',
+  'shipmentCategory',
+  'shipmentDate',
+  'status',
+  'timePreference',
+  'vehicleTypePreferenceId',
+  'weight',
+].sort();
+const CARRIER_INVITE_DENYLIST = new Set([
+  'customer',
+  'customerid',
+  'customer_id',
+  'firstname',
+  'lastname',
+  'phone',
+  'contactphone',
+  'email',
+  'password',
+  'passwordhash',
+  'token',
+  'originaddress',
+  'destinationaddress',
+  'originaddresstext',
+  'destinationaddresstext',
+  'addressline',
+  'street',
+  'buildingnumber',
+  'apartmentname',
+  'doornumber',
+  'latitude',
+  'longitude',
+  'payment',
+  'offers',
+  'adminnotes',
+]);
+
+const collectObjectKeys = (value: unknown, keys = new Set<string>()): Set<string> => {
+  if (!value || typeof value !== 'object') return keys;
+  if (Array.isArray(value)) {
+    value.forEach(item => collectObjectKeys(item, keys));
+    return keys;
+  }
+
+  Object.entries(value as Record<string, unknown>).forEach(([key, nested]) => {
+    keys.add(key.toLowerCase());
+    collectObjectKeys(nested, keys);
+  });
+  return keys;
+};
+
+const expectSafeCarrierInviteResponse = (value: unknown) => {
+  const invites = Array.isArray(value) ? value : [];
+  expect(Array.isArray(value)).toBe(true);
+  invites.forEach(invite => {
+    expect(Object.keys(invite).sort()).toEqual(CARRIER_INVITE_KEYS);
+    expect(Object.keys(invite.shipment).sort()).toEqual(CARRIER_INVITE_SHIPMENT_KEYS);
+  });
+
+  const keys = collectObjectKeys(value);
+  CARRIER_INVITE_DENYLIST.forEach(key => expect(keys).not.toContain(key));
+};
 
 const CARRIER = { email: 'info@silenakliyat.com', password: 'Maviface2141' };
 
 describe('Nakliyeci Akışı — Uçtan Uca', () => {
   let carrierToken: string;
+
+  beforeAll(async () => {
+    if (!skipDB()) await restoreSilenCarrierBaseline();
+  });
 
   // ── 1. Nakliyeci girişi ───────────────────────────────────────────────────
   test('1. Seed nakliyeci giriş yapabilmeli', async () => {
@@ -105,6 +201,53 @@ describe('Nakliyeci Akışı — Uçtan Uca', () => {
       .set('Authorization', `Bearer ${carrierToken}`);
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
+    expectSafeCarrierInviteResponse(res.body.data);
+  });
+
+  test('9a. Nakliyeci davet mapperı ham shipment ve müşteri ilişkilerini dışarı çıkarmaz', () => {
+    const unsafeSource = {
+      id: 'invite-1',
+      status: 'pending' as const,
+      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+      requestedServices: {
+        catalogServiceIds: ['catalog-1'],
+        customServiceIds: ['custom-1'],
+      },
+      shipment: {
+        id: 'shipment-1',
+        status: 'pending',
+        shipmentCategory: 'HOME_MOVE',
+        originCity: 'İstanbul',
+        originDistrict: 'Kadıköy',
+        destinationCity: 'Ankara',
+        destinationDistrict: 'Çankaya',
+        shipmentDate: new Date('2026-02-01T00:00:00.000Z'),
+        customerId: 'customer-secret',
+        customer: {
+          id: 'customer-secret',
+          firstName: 'Gizli',
+          lastName: 'Müşteri',
+          phone: '05550000000',
+          email: 'gizli@example.com',
+        },
+        originAddress: {
+          addressLine: 'Gizli açık adres',
+          latitude: 41.0,
+          longitude: 29.0,
+        },
+        extraServices: [{
+          id: 'extra-1',
+          customer: { phone: '05550000000' },
+        }],
+        customExtraServices: [{
+          id: 'custom-1',
+          shipment: { customerId: 'customer-secret' },
+        }],
+      },
+    };
+
+    const dto = toCarrierShipmentInviteDto(unsafeSource);
+    expectSafeCarrierInviteResponse([dto]);
   });
 
   // ── 10. Değerlendirmeler ──────────────────────────────────────────────────

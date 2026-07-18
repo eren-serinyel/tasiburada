@@ -4,15 +4,15 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Separator } from '@/components/ui/separator';
-import { Star, Truck, MapPin, Package, MessageCircle, Phone, Mail, Calendar, Award, Pencil, Trash2 } from 'lucide-react';
+import { Star, Truck, MapPin, Package, MessageCircle, Pencil, Trash2 } from 'lucide-react';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel,
   AlertDialogContent, AlertDialogDescription, AlertDialogFooter,
   AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Carrier } from '@/lib/types';
-import { getCarrierExperienceYears, maskName } from '@/lib/utils';
+import { PublicCarrier } from '@/lib/types';
+import { maskName } from '@/lib/utils';
 import { apiClient } from '@/lib/apiClient';
 import { getSessionUser } from '@/lib/storage';
 import { Label } from '@/components/ui/label';
@@ -62,7 +62,7 @@ const CAPABILITY_LOAD_TYPES: Array<{ value: CapabilityLoadType; label: string }>
 export default function CarrierProfile() {
   const { carrierId } = useParams<{ carrierId: string }>();
   const navigate = useNavigate();
-  const [carrier, setCarrier] = useState<Carrier | null>(null);
+  const [carrier, setCarrier] = useState<PublicCarrier | null>(null);
   const [reviews, setReviews] = useState<ApiReview[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -99,32 +99,7 @@ export default function CarrierProfile() {
         const res = await apiClient(`/api/v1/carriers/${carrierId}`);
         const json = await res.json();
         if (res.ok && json?.success && json?.data?.carrier) {
-          const c = json.data.carrier;
-          const mapped: Carrier = {
-            id: c.id,
-            name: c.companyName || c.contactName || 'Nakliyeci',
-            surname: '',
-            email: c.email || '',
-            phone: c.phone || '',
-            city: c.city || '',
-            type: 'carrier',
-            createdAt: c.createdAt ? new Date(c.createdAt) : new Date(),
-            vehicle: {
-              id: '',
-              type: 'kamyonet',
-              capacity: 0,
-              licensePlate: ''
-            },
-            serviceAreas: [],
-            loadTypes: [],
-            baseFee: 0,
-            rating: Number(c.rating || 0),
-            reviewCount: 0,
-            isApproved: Boolean(c.isActive),
-            verificationStatus: 'pending',
-            documents: { license: '', src: '', kBelgesi: '' },
-          } as unknown as Carrier;
-          setCarrier(mapped);
+          setCarrier(json.data.carrier as PublicCarrier);
         } else {
           navigate('/nakliyeciler');
           return;
@@ -375,18 +350,18 @@ export default function CarrierProfile() {
         </Button>
         <div className="flex items-start space-x-6">
           <Avatar className="h-24 w-24">
-            <AvatarImage src={carrier.profilePhoto} />
+            <AvatarImage src={carrier.pictureUrl ?? undefined} />
             <AvatarFallback className="bg-blue-100 text-blue-600 text-2xl">
-              {carrier.name.charAt(0)}
+              {carrier.companyName.charAt(0)}
             </AvatarFallback>
           </Avatar>
           
           <div className="flex-1">
             <div className="flex items-center space-x-4 mb-2">
               <h1 className="text-3xl font-bold text-gray-900">
-                {carrier.name} {carrier.surname}
+                {carrier.companyName}
               </h1>
-              {carrier.isApproved && (
+              {carrier.isVerified && (
                 <Badge className="bg-green-100 text-green-800">Onaylanmış</Badge>
               )}
             </div>
@@ -398,33 +373,22 @@ export default function CarrierProfile() {
                 <span className="text-gray-500">({overallStats.count} değerlendirme)</span>
               </div>
               <Separator orientation="vertical" className="h-4" />
-              <span className="text-gray-600">{getCarrierExperienceYears(carrier)} yıl deneyim</span>
+              <span className="text-gray-600">
+                {carrier.experienceYears !== null
+                  ? `${carrier.experienceYears} yıl deneyim`
+                  : 'Deneyim bilgisi belirtilmemiş'}
+              </span>
               <Separator orientation="vertical" className="h-4" />
-              <span className="text-gray-600">{carrier.city}</span>
+              <span className="text-gray-600">
+                {[carrier.city, carrier.district].filter(Boolean).join(' / ') || 'Konum belirtilmemiş'}
+              </span>
             </div>
-            
-            {carrier.badges && carrier.badges.length > 0 && (
-              <div className="flex flex-wrap gap-2 mb-4">
-                {carrier.badges.map((badge, index) => (
-                  <Badge key={index} variant="outline" className="bg-blue-50 text-blue-700">
-                    <Award className="h-3 w-3 mr-1" />
-                    {badge}
-                  </Badge>
-                ))}
-              </div>
-            )}
-            
-            <p className="text-gray-700">{carrier.description}</p>
           </div>
           
           <div className="flex flex-col space-y-2">
             <Button>
               <MessageCircle className="h-4 w-4 mr-2" />
               Mesaj Gönder
-            </Button>
-            <Button variant="outline">
-              <Phone className="h-4 w-4 mr-2" />
-              Ara
             </Button>
           </div>
         </div>
@@ -442,48 +406,20 @@ export default function CarrierProfile() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid md:grid-cols-2 gap-6">
-                <div>
-                  {carrier.vehicle.photo && (
-                    <img 
-                      src={carrier.vehicle.photo} 
-                      alt="Araç" 
-                      className="w-full h-48 object-cover rounded-lg mb-4"
-                    />
-                  )}
-                  <div className="space-y-2">
-                    <div>
-                      <span className="font-medium">Araç Türü:</span>
-                      <p className="text-gray-700">{carrier.vehicle.type.toUpperCase()}</p>
+              {carrier.vehicles.length === 0 ? (
+                <p className="text-sm text-gray-500">Araç özeti henüz paylaşılmamış.</p>
+              ) : (
+                <div className="grid md:grid-cols-2 gap-4">
+                  {carrier.vehicles.map(vehicle => (
+                    <div key={vehicle.id} className="rounded-lg border p-4">
+                      <p className="font-medium text-gray-900">{vehicle.typeName}</p>
+                      <p className="text-sm text-gray-600">
+                        {vehicle.capacityKg ? `${vehicle.capacityKg} kg kapasite` : 'Kapasite belirtilmemiş'}
+                      </p>
                     </div>
-                    <div>
-                      <span className="font-medium">Plaka:</span>
-                      <p className="text-gray-700">{carrier.vehicle.licensePlate}</p>
-                    </div>
-                  </div>
+                  ))}
                 </div>
-                
-                <div className="space-y-4">
-                  <div>
-                    <span className="font-medium">Taşıma Kapasitesi:</span>
-                    <p className="text-2xl font-bold text-blue-600">{carrier.vehicle.capacity}kg</p>
-                  </div>
-                  
-                  {carrier.vehicle.brand && carrier.vehicle.model && (
-                    <div>
-                      <span className="font-medium">Marka/Model:</span>
-                      <p className="text-gray-700">{carrier.vehicle.brand} {carrier.vehicle.model}</p>
-                    </div>
-                  )}
-                  
-                  {carrier.vehicle.year && (
-                    <div>
-                      <span className="font-medium">Model Yılı:</span>
-                      <p className="text-gray-700">{carrier.vehicle.year}</p>
-                    </div>
-                  )}
-                </div>
-              </div>
+              )}
             </CardContent>
           </Card>
 
@@ -507,12 +443,12 @@ export default function CarrierProfile() {
                 </div>
                 
                 <div>
-                  <span className="font-medium mb-3 block">Taşıdığı Yük Türleri:</span>
+                  <span className="font-medium mb-3 block">Hizmet Türleri:</span>
                   <div className="flex flex-wrap gap-2">
-                    {carrier.loadTypes.map((type, index) => (
-                      <Badge key={index} variant="outline" className="bg-green-50 text-green-700">
+                    {carrier.serviceTypes.map(serviceType => (
+                      <Badge key={serviceType} variant="outline" className="bg-green-50 text-green-700">
                         <Package className="h-3 w-3 mr-1" />
-                        {type}
+                        {serviceType}
                       </Badge>
                     ))}
                   </div>
@@ -768,28 +704,16 @@ export default function CarrierProfile() {
             </CardContent>
           </Card>
 
-          {/* Contact Info */}
+          {/* Public location */}
           <Card>
             <CardHeader>
-              <CardTitle>İletişim Bilgileri</CardTitle>
+              <CardTitle>Faaliyet Bölgesi</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex items-center space-x-3">
-                <Mail className="h-4 w-4 text-gray-400" />
-                <span className="text-sm">{carrier.email}</span>
-              </div>
-              <div className="flex items-center space-x-3">
-                <Phone className="h-4 w-4 text-gray-400" />
-                <span className="text-sm">{carrier.phone}</span>
-              </div>
-              <div className="flex items-center space-x-3">
                 <MapPin className="h-4 w-4 text-gray-400" />
-                <span className="text-sm">{carrier.city}</span>
-              </div>
-              <div className="flex items-center space-x-3">
-                <Calendar className="h-4 w-4 text-gray-400" />
                 <span className="text-sm">
-                  {new Date(carrier.createdAt).toLocaleDateString('tr-TR')} tarihinden beri üye
+                  {[carrier.city, carrier.district].filter(Boolean).join(' / ') || 'Belirtilmedi'}
                 </span>
               </div>
             </CardContent>
@@ -802,20 +726,24 @@ export default function CarrierProfile() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex justify-between">
-                <span className="text-sm text-gray-600">Temel Ücret</span>
-                <span className="font-medium">{carrier.baseFee}₺</span>
+                <span className="text-sm text-gray-600">Başlangıç Fiyatı</span>
+                <span className="font-medium">
+                  {carrier.startingPrice !== null ? `${carrier.startingPrice}₺` : 'Görüşülür'}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-sm text-gray-600">Deneyim</span>
-                <span className="font-medium">{getCarrierExperienceYears(carrier)} yıl</span>
+                <span className="font-medium">
+                  {carrier.experienceYears !== null ? `${carrier.experienceYears} yıl` : 'Belirtilmedi'}
+                </span>
               </div>
               <div className="flex justify-between">
                 <span className="text-sm text-gray-600">Hizmet Bölgesi</span>
                 <span className="font-medium">{carrier.serviceAreas.length} şehir</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-sm text-gray-600">Yük Türü</span>
-                <span className="font-medium">{carrier.loadTypes.length} kategori</span>
+                <span className="text-sm text-gray-600">Hizmet Türü</span>
+                <span className="font-medium">{carrier.serviceTypes.length} kategori</span>
               </div>
             </CardContent>
           </Card>

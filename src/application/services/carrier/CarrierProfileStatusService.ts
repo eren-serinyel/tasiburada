@@ -4,23 +4,19 @@ import {
   CoreCarrierProfileSection
 } from '../../../domain/entities/CarrierProfileStatus';
 import { CarrierProfileStatusRepository } from '../../../infrastructure/repositories/CarrierProfileStatusRepository';
-import { CarrierRepository } from '../../../infrastructure/repositories/CarrierRepository';
-import { CarrierVehicleTypeRepository } from '../../../infrastructure/repositories/CarrierVehicleTypeRepository';
-import { CarrierServiceTypeRepository } from '../../../infrastructure/repositories/CarrierServiceTypeRepository';
-import { CarrierActivityRepository } from '../../../infrastructure/repositories/CarrierActivityRepository';
-import { CarrierEarningsRepository } from '../../../infrastructure/repositories/CarrierEarningsRepository';
-import { CarrierDocumentRepository } from '../../../infrastructure/repositories/CarrierDocumentRepository';
-import { CarrierDocumentType } from '../../../domain/entities/CarrierDocument';
+import { CarrierApprovalService } from './CarrierApprovalService';
+import { calculateApprovalProfilePercentage } from './CarrierApprovalCriteria';
 
 const CORE_SECTION_COLUMN_MAP: Record<CoreCarrierProfileSection, keyof CarrierProfileStatus> = {
   company: 'companyInfoCompleted',
   activity: 'activityInfoCompleted',
+  services: 'servicesCompleted',
   documents: 'documentsCompleted',
+  vehicles: 'vehiclesCompleted',
   earnings: 'earningsCompleted'
 };
 
 const AUX_SECTION_COLUMN_MAP: Record<AuxiliaryCarrierProfileSection, keyof CarrierProfileStatus> = {
-  vehicles: 'vehiclesCompleted',
   security: 'securityCompleted',
   notifications: 'notificationsCompleted'
 };
@@ -29,19 +25,7 @@ const CORE_SECTIONS = Object.keys(CORE_SECTION_COLUMN_MAP) as CoreCarrierProfile
 
 export class CarrierProfileStatusService {
   private repository = new CarrierProfileStatusRepository();
-  private carrierRepository = new CarrierRepository();
-  private vehicleTypeRepository = new CarrierVehicleTypeRepository();
-  private serviceTypeRepository = new CarrierServiceTypeRepository();
-  private activityRepository = new CarrierActivityRepository();
-  private earningsRepository = new CarrierEarningsRepository();
-  private documentRepository = new CarrierDocumentRepository();
-
-  private readonly REQUIRED_DOCUMENT_TYPES: CarrierDocumentType[] = [
-    CarrierDocumentType.AUTHORIZATION_CERT,
-    CarrierDocumentType.SRC_CERT,
-    CarrierDocumentType.VEHICLE_LICENSE,
-    CarrierDocumentType.TAX_PLATE
-  ];
+  private approvalService = new CarrierApprovalService();
 
   async getOrCreate(carrierId: string): Promise<CarrierProfileStatus> {
     const existing = await this.repository.findByCarrierId(carrierId);
@@ -60,6 +44,7 @@ export class CarrierProfileStatusService {
     s.carrierId = carrierId;
     s.companyInfoCompleted = false;
     s.activityInfoCompleted = false;
+    s.servicesCompleted = false;
     s.documentsCompleted = false;
     s.earningsCompleted = false;
     s.vehiclesCompleted = false;
@@ -74,6 +59,7 @@ export class CarrierProfileStatusService {
       carrierId,
       companyInfoCompleted: false,
       activityInfoCompleted: false,
+      servicesCompleted: false,
       documentsCompleted: false,
       earningsCompleted: false,
       vehiclesCompleted: false,
@@ -85,75 +71,19 @@ export class CarrierProfileStatusService {
   }
 
   /**
-   * Profil tamamlanma yüzdesini (4 çekirdek bölüm x %25) kriterlere göre hesaplar,
-   * carrier_profile_status ve carriers.profileCompletion alanlarını günceller.
+   * Profil tamamlanma yüzdesini approval ile aynı altı bölüm üzerinden hesaplar,
+   * carrier_profile_status projeksiyonuna yazar.
    */
   async updateProfileCompletion(carrierId: string): Promise<CarrierProfileStatus> {
     const status = await this.getOrCreate(carrierId);
 
     try {
-      console.log('Getting profile data for carrierId:', carrierId);
-      
-      const [carrier, activity, earnings, requiredDocStatus] = await Promise.all([
-        this.carrierRepository.findFullById(carrierId).catch(err => {
-          console.error('Carrier repository error:', err);
-          throw new Error(`Nakliyeci bilgileri alınamadı: ${err.message}`);
-        }),
-        this.activityRepository.findByCarrierId(carrierId).catch(err => {
-          console.error('Activity repository error:', err);
-          return null; // Activity yoksa null dön
-        }),
-        this.earningsRepository.findByCarrierId(carrierId).catch(err => {
-          console.error('Earnings repository error:', err);
-          return null; // Earnings yoksa null dön
-        }),
-        this.documentRepository.findRequiredDocumentTypesStatus(carrierId, this.REQUIRED_DOCUMENT_TYPES).catch(err => {
-          console.error('Documents repository error:', err);
-          return {}; // Belgeler yoksa boş obje dön
-        })
-      ]);
+      const readiness = await this.approvalService.getReadiness(carrierId);
+      Object.assign(status, readiness.sections);
+      status.overallPercentage = calculateApprovalProfilePercentage(readiness.sections);
 
-      if (!carrier) {
-        throw new Error('Nakliyeci bulunamadı.');
-      }
-
-      console.log('Profile data loaded successfully');
-
-      // 1) Firma Bilgileri tamam → companyName, taxNumber, foundedYear doluysa
-      const companyInfoCompleted =
-        this.hasText(carrier.companyName) &&
-        this.hasText(carrier.taxNumber) &&
-        Number.isFinite(Number(carrier.foundedYear)) &&
-        Number(carrier.foundedYear) > 0;
-
-      // 2) Faaliyet Bilgileri tamam → activityCity, activityDistrict, serviceAreas doluysa
-      const serviceAreas = this.parseStringArray((activity as any)?.serviceAreasJson);
-      const activityInfoCompleted =
-        this.hasText(activity?.city) &&
-        this.hasText(activity?.district) &&
-        serviceAreas.length > 0;
-
-      // 3) Belgeler tamam → zorunlu belgeler (K1/K2, SRC, Ruhsat, Vergi Levhası) yüklenmişse
-      const documentsCompleted = this.REQUIRED_DOCUMENT_TYPES.every(type => requiredDocStatus[type] === true);
-
-    // 4) Kazanç Bilgileri tamam → bankName, iban doluysa
-    const earningsCompleted = this.hasText((earnings as any)?.bankName) && this.hasText((earnings as any)?.iban);
-
-    status.companyInfoCompleted = companyInfoCompleted;
-    status.activityInfoCompleted = activityInfoCompleted;
-    status.documentsCompleted = documentsCompleted;
-    status.earningsCompleted = earningsCompleted;
-
-    status.overallPercentage = this.calculatePercentage(status);
-
-    try {
       await this.repository.save(status);
-    } catch (saveErr: any) {
-      // FK constraint or save error — return in-memory status without persisting
-      console.error('Profile status save failed (FK constraint?):', saveErr.message);
-    }
-
-    return status;
+      return status;
     } catch (error: any) {
       console.error('Profile completion update failed:', error);
       throw new Error(`Profil tamamlanma durumu güncellenemedi: ${error.message}`);
@@ -197,24 +127,21 @@ export class CarrierProfileStatusService {
       sections: {
         companyInfoCompleted: status.companyInfoCompleted,
         activityInfoCompleted: status.activityInfoCompleted,
+        servicesCompleted: status.servicesCompleted,
         documentsCompleted: status.documentsCompleted,
+        vehiclesCompleted: status.vehiclesCompleted,
         earningsCompleted: status.earningsCompleted
       }
     };
   }
 
   async syncVehiclesCompletion(carrierId: string): Promise<CarrierProfileStatus> {
-    const [vehicleTypeCount, serviceTypeCount] = await Promise.all([
-      this.vehicleTypeRepository.countByCarrierId(carrierId),
-      this.serviceTypeRepository.countByCarrierId(carrierId)
-    ]);
-    const completed = vehicleTypeCount > 0 && serviceTypeCount > 0;
-    return this.updateAuxSectionCompleted(carrierId, 'vehicles', completed);
+    return this.updateProfileCompletion(carrierId);
   }
 
   private calculatePercentage(status: CarrierProfileStatus): number {
     const completedCount = this.getCompletedCoreSectionsCount(status);
-    const percentage = completedCount * 25;
+    const percentage = Math.round((completedCount / CORE_SECTIONS.length) * 100);
     return Math.min(100, Math.max(0, percentage));
   }
 
@@ -225,21 +152,4 @@ export class CarrierProfileStatusService {
     }, 0);
   }
 
-  private hasText(value: unknown): boolean {
-    return typeof value === 'string' ? value.trim().length > 0 : value !== null && value !== undefined;
-  }
-
-  private parseStringArray(raw: unknown): string[] {
-    if (!raw) return [];
-    if (Array.isArray(raw)) return raw.map(v => String(v).trim()).filter(Boolean);
-    if (typeof raw === 'string') {
-      try {
-        const parsed = JSON.parse(raw);
-        return Array.isArray(parsed) ? parsed.map(v => String(v).trim()).filter(Boolean) : [];
-      } catch {
-        return [];
-      }
-    }
-    return [];
-  }
 }

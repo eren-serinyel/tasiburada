@@ -16,6 +16,7 @@ describe('CarrierProfileController', () => {
 
   beforeAll(async () => {
     if (skipDB()) return;
+    await restoreSilenCarrierBaseline();
     const res = await request(testApp).post('/api/v1/carriers/login').send(CARRIER);
     if (res.status === 200) {
       carrierToken = res.body.data?.token;

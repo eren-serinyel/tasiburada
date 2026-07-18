@@ -1,8 +1,8 @@
 import { Entity, PrimaryGeneratedColumn, Column, Unique, OneToOne, CreateDateColumn, UpdateDateColumn, JoinColumn } from 'typeorm';
 import { Carrier } from './Carrier';
 
-export type CoreCarrierProfileSection = 'company' | 'activity' | 'documents' | 'earnings';
-export type AuxiliaryCarrierProfileSection = 'vehicles' | 'security' | 'notifications';
+export type CoreCarrierProfileSection = 'company' | 'activity' | 'services' | 'documents' | 'vehicles' | 'earnings';
+export type AuxiliaryCarrierProfileSection = 'security' | 'notifications';
 export type CarrierProfileSection = CoreCarrierProfileSection | AuxiliaryCarrierProfileSection;
 
 @Entity('carrier_profile_status')
@@ -19,6 +19,9 @@ export class CarrierProfileStatus {
 
   @Column({ type: 'boolean', default: false })
   activityInfoCompleted: boolean;
+
+  @Column({ type: 'boolean', default: false })
+  servicesCompleted: boolean;
 
   @Column({ type: 'boolean', default: false })
   vehiclesCompleted: boolean;

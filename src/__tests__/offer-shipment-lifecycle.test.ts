@@ -6,6 +6,7 @@
  */
 import request from 'supertest';
 import { testApp } from './helpers/testApp';
+import { restoreSilenCarrierBaseline } from './setup/seedContract';
 
 const skipDB = () => process.env.SKIP_DB_TESTS === 'true';
 
@@ -26,6 +27,7 @@ describe('Offer/Shipment Lifecycle & Review Update/Delete', () => {
 
   beforeAll(async () => {
     if (skipDB()) return;
+    await restoreSilenCarrierBaseline();
 
     const cRes = await request(testApp).post('/api/v1/customers/login').send(CUSTOMER);
     if (cRes.status === 200) customerToken = cRes.body.data?.token;

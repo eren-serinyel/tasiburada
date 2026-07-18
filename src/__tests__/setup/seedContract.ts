@@ -11,6 +11,10 @@ import { CarrierDocument } from '../../domain/entities/CarrierDocument';
 import { CarrierEarnings } from '../../domain/entities/CarrierEarnings';
 import { ExtraService } from '../../domain/entities/ExtraService';
 import { ExtraServiceLoadType } from '../../domain/entities/ExtraServiceLoadType';
+import { CarrierVehicleType } from '../../domain/entities/CarrierVehicleType';
+import { CarrierServiceType } from '../../domain/entities/CarrierServiceType';
+import { VehicleType } from '../../domain/entities/VehicleType';
+import { ServiceType } from '../../domain/entities/ServiceType';
 import { In } from 'typeorm';
 
 export const SILEN_BASELINE = {
@@ -125,6 +129,10 @@ export async function restoreSilenCarrierBaseline(): Promise<void> {
   const loadTypeRepo = AppDataSource.getRepository(CarrierLoadTypeCapability);
   const extraServiceRepo = AppDataSource.getRepository(ExtraService);
   const extraServiceCapRepo = AppDataSource.getRepository(CarrierExtraServiceCapability);
+  const vehicleLinkRepo = AppDataSource.getRepository(CarrierVehicleType);
+  const serviceLinkRepo = AppDataSource.getRepository(CarrierServiceType);
+  const vehicleTypeRepo = AppDataSource.getRepository(VehicleType);
+  const serviceTypeRepo = AppDataSource.getRepository(ServiceType);
 
   const carrier = await getSilenCarrier();
   if (!carrier) {
@@ -142,6 +150,27 @@ export async function restoreSilenCarrierBaseline(): Promise<void> {
   carrier.resubmissionCount = 0;
   carrier.lastRejectedAt = null;
   await carrierRepo.save(carrier);
+
+  // Approval/profile kriterinin zorunlu araç ve hizmet seçimlerini restore et.
+  if (await vehicleLinkRepo.count({ where: { carrierId: carrier.id } }) === 0) {
+    const vehicleType = await vehicleTypeRepo.findOne({ where: { status: 'ACTIVE' } });
+    if (vehicleType) {
+      await vehicleLinkRepo.save(vehicleLinkRepo.create({
+        carrierId: carrier.id,
+        vehicleTypeId: vehicleType.id,
+        capacityKg: vehicleType.defaultCapacityKg,
+      }));
+    }
+  }
+  if (await serviceLinkRepo.count({ where: { carrierId: carrier.id } }) === 0) {
+    const serviceType = await serviceTypeRepo.findOne({ where: {} });
+    if (serviceType) {
+      await serviceLinkRepo.save(serviceLinkRepo.create({
+        carrierId: carrier.id,
+        serviceTypeId: serviceType.id,
+      }));
+    }
+  }
 
   // 2. HOME loadType capability restore
   const existingHomeCap = await loadTypeRepo.findOne({

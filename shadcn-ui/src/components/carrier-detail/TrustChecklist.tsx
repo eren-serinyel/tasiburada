@@ -16,25 +16,23 @@ export default function TrustChecklist({ data }: TrustChecklistProps) {
       description: 'Firma adı kayıtlı',
     },
     {
-      label: 'Vergi numarası',
-      verified: Boolean(data.taxNumber),
-      description: 'Vergi numarası girilmiş',
+      label: 'Faaliyet bölgesi',
+      verified: Boolean(data.city),
+      description: 'Faaliyet ili paylaşılmış',
     },
     {
-      label: 'Adres bilgileri',
-      verified: Boolean(data.city && data.district),
-      description: 'Adres bilgileri tam',
+      label: 'Hizmet bölgeleri',
+      verified: data.serviceAreas.length > 0,
+      description: 'Hizmet bölgeleri paylaşılmış',
     },
     {
-      label: 'Yetki belgesi',
-      verified: data.documents.some(
-        d => d.type === 'AUTHORIZATION_CERT' && d.isApproved
-      ),
-      description: 'Yetki belgesi onaylı',
+      label: 'Araç özeti',
+      verified: data.vehicles.length > 0,
+      description: 'Araç özeti paylaşılmış',
     },
     {
       label: 'Yönetim onayı',
-      verified: data.documentsApproved,
+      verified: data.isVerified,
       description: 'Yönetim incelemesi tamamlandı',
     },
   ], [data]);

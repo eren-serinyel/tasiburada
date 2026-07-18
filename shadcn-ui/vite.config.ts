@@ -17,11 +17,11 @@ export default defineConfig(({ mode }) => ({
     },
   },
   server: {
-    hmr: {
-      protocol: 'ws',
-      host: 'localhost',
-      clientPort: 5173,
-    },
+    // Keep the dev server and its HMR websocket on the same origin. If another
+    // instance is already using 5173, fail clearly instead of opening a second
+    // server on 5174 whose clients can receive the first server's reload events.
+    port: 5173,
+    strictPort: true,
     proxy: {
       '/api': {
         target: 'http://localhost:3001',

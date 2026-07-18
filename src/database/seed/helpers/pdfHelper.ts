@@ -1,7 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-const DOCUMENTS_DIR = path.resolve(process.cwd(), 'uploads', 'documents');
+const DOCUMENTS_DIR = process.env.SEED_DOCUMENTS_DIR
+  ? path.resolve(process.env.SEED_DOCUMENTS_DIR)
+  : path.resolve(process.cwd(), 'uploads', 'documents');
 const SEEDED_DOCUMENT_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}-/i;
 
 const TURKISH_TO_ASCII_MAP: Record<string, string> = {

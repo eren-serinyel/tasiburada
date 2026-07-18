@@ -1,37 +1,23 @@
 import { EntityManager } from 'typeorm';
 import { AppDataSource } from '../../../infrastructure/database/data-source';
 import { Carrier, CarrierApprovalState } from '../../../domain/entities';
-import { CarrierDocument, CarrierDocumentStatus, CarrierDocumentType } from '../../../domain/entities/CarrierDocument';
 import { AuditLogRepository } from '../../../infrastructure/repositories/AuditLogRepository';
 import { CarrierRepository } from '../../../infrastructure/repositories/CarrierRepository';
 import { ValidationError, ConflictError, NotFoundError, ForbiddenError } from '../../../domain/errors/AppError';
+import {
+  CarrierApprovalReadiness,
+  computeCarrierApprovalReadiness,
+} from './CarrierApprovalCriteria';
 
-const REQUIRED_DOCUMENT_TYPES: CarrierDocumentType[] = [
-  CarrierDocumentType.AUTHORIZATION_CERT,
-  CarrierDocumentType.SRC_CERT,
-  CarrierDocumentType.VEHICLE_LICENSE,
-  CarrierDocumentType.TAX_PLATE,
-];
+export type { CarrierApprovalReadiness } from './CarrierApprovalCriteria';
 
 const REVIEW_LOCK_MINUTES = 15;
 const SUBMIT_COOLDOWN_MS = 60 * 1000;
 
-export interface CarrierApprovalReadiness {
-  isReadyForSubmission: boolean;
-  profileFieldsComplete: boolean;
-  requiredDocumentsPresent: boolean;
-  requiredDocumentsValid: boolean;
-  requiredDocumentsApproved: boolean;
-  hasBlockingRejectionOnCurrentDraft: boolean;
-  missingFields: string[];
-  missingDocuments: string[];
-  rejectedDocuments: string[];
-  requiredDocuments: {
-    total: number;
-    approved: number;
-    pending: number;
-    rejected: number;
-  };
+export class CarrierApprovalReadinessError extends ValidationError {
+  constructor(public readonly readiness: CarrierApprovalReadiness) {
+    super('Profil incelemeye gönderilecek durumda değil.');
+  }
 }
 
 type QueueFilters = {
@@ -124,7 +110,7 @@ export class CarrierApprovalService {
       }
 
       if (!readiness.isReadyForSubmission) {
-        throw new ValidationError('Profil incelemeye gönderilecek durumda değil.');
+        throw new CarrierApprovalReadinessError(readiness);
       }
 
       if (Date.now() - new Date(refreshed.lastSubmittedAt ?? 0).getTime() < SUBMIT_COOLDOWN_MS) {
@@ -429,83 +415,7 @@ export class CarrierApprovalService {
   }
 
   private computeReadiness(carrier: Carrier): CarrierApprovalReadiness {
-    const missingFields: string[] = [];
-    if (!carrier.companyName?.trim()) missingFields.push('companyName');
-    if (!carrier.taxNumber?.trim()) missingFields.push('taxNumber');
-    if (!carrier.phone?.trim()) missingFields.push('phone');
-    if (!carrier.email?.trim()) missingFields.push('email');
-    if (!Number.isFinite(Number(carrier.foundedYear)) || Number(carrier.foundedYear) <= 0) missingFields.push('foundedYear');
-    if (!carrier.activity?.city?.trim()) missingFields.push('activity.city');
-    if (!carrier.activity?.district?.trim()) missingFields.push('activity.district');
-    if (this.parseStringArray(carrier.activity?.serviceAreasJson).length === 0) missingFields.push('activity.serviceAreas');
-    if ((carrier.vehicleTypeLinks ?? []).length === 0) missingFields.push('vehicleTypes');
-    if ((carrier.serviceTypeLinks ?? []).length === 0) missingFields.push('serviceTypes');
-
-    const documentsByType = new Map<string, CarrierDocument[]>();
-    for (const document of carrier.documents ?? []) {
-      const list = documentsByType.get(document.type) ?? [];
-      list.push(document);
-      documentsByType.set(document.type, list);
-    }
-
-    const missingDocuments: string[] = [];
-    const rejectedDocuments: string[] = [];
-    let approvedCount = 0;
-    let pendingCount = 0;
-    let rejectedCount = 0;
-
-    for (const requiredType of REQUIRED_DOCUMENT_TYPES) {
-      const docs = (documentsByType.get(requiredType) ?? []).filter((document) => document.fileUrl?.trim());
-      if (!docs.length) {
-        missingDocuments.push(requiredType);
-        continue;
-      }
-
-      const hasRejected = docs.some((document) => document.status === CarrierDocumentStatus.REJECTED);
-      const hasApproved = docs.some((document) => document.status === CarrierDocumentStatus.APPROVED && document.isApproved);
-      const hasPending = docs.some((document) => document.status === CarrierDocumentStatus.PENDING);
-
-      if (hasRejected) {
-        rejectedDocuments.push(requiredType);
-        rejectedCount += 1;
-      } else if (hasApproved) {
-        approvedCount += 1;
-      } else if (hasPending) {
-        pendingCount += 1;
-      } else {
-        pendingCount += 1;
-      }
-    }
-
-    const profileFieldsComplete = missingFields.length === 0;
-    const requiredDocumentsPresent = missingDocuments.length === 0;
-    const requiredDocumentsValid = rejectedDocuments.length === 0 && requiredDocumentsPresent;
-    const requiredDocumentsApproved = approvedCount === REQUIRED_DOCUMENT_TYPES.length;
-    const hasBlockingRejectionOnCurrentDraft =
-      carrier.approvalState === CarrierApprovalState.REJECTED &&
-      carrier.draftRevision <= carrier.lastReviewedDraftRevision;
-
-    return {
-      isReadyForSubmission:
-        profileFieldsComplete &&
-        requiredDocumentsPresent &&
-        requiredDocumentsValid &&
-        !hasBlockingRejectionOnCurrentDraft,
-      profileFieldsComplete,
-      requiredDocumentsPresent,
-      requiredDocumentsValid,
-      requiredDocumentsApproved,
-      hasBlockingRejectionOnCurrentDraft,
-      missingFields,
-      missingDocuments,
-      rejectedDocuments,
-      requiredDocuments: {
-        total: REQUIRED_DOCUMENT_TYPES.length,
-        approved: approvedCount,
-        pending: pendingCount,
-        rejected: rejectedCount,
-      },
-    };
+    return computeCarrierApprovalReadiness(carrier);
   }
 
   private deriveStateAfterProjection(
@@ -555,7 +465,7 @@ export class CarrierApprovalService {
     const repo = this.getCarrierRepo(manager);
     const carrier = await repo.findOne({
       where: { id: carrierId },
-      relations: ['activity', 'documents', 'vehicleTypeLinks', 'serviceTypeLinks'],
+      relations: ['activity', 'documents', 'vehicleTypeLinks', 'serviceTypeLinks', 'earnings'],
     });
     if (!carrier) {
       throw new NotFoundError('Nakliyeci bulunamadı.');
@@ -565,17 +475,6 @@ export class CarrierApprovalService {
 
   private getCarrierRepo(manager?: EntityManager) {
     return (manager ?? AppDataSource.manager).getRepository(Carrier);
-  }
-
-  private parseStringArray(value?: string[] | string | null): string[] {
-    if (!value) return [];
-    if (Array.isArray(value)) return value.map((item) => String(item).trim()).filter(Boolean);
-    try {
-      const parsed = JSON.parse(value);
-      return Array.isArray(parsed) ? parsed.map((item) => String(item).trim()).filter(Boolean) : [];
-    } catch {
-      return [];
-    }
   }
 
   private generateSessionId(): string {
