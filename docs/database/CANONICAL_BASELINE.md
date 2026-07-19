@@ -52,12 +52,30 @@ makinece karşılaştırılabilir canonical kaynak olarak sabitler.
 
 ## M0B kullanımı
 
-M0B baseline migration'ı ileride yalnız güvenli, localhost üzerindeki
-disposable `_test` veritabanına uygulanacaktır. Ortaya çıkan fiziksel şema
-geçici olarak yeniden introspect edilecek; canonical fingerprint ve
-tablo/kolon/constraint seviyesindeki manifest doğrulaması bu manifestle
-karşılaştırılacaktır. Migration geçmişi fiziksel schema fingerprint'inden ayrı
-değerlendirilecek ve fark yalnız provenance warning'i üretecektir.
+M0B-1 baseline migration'ı
+`CanonicalBaselineV11784500000000` (`1784500000000`) adıyla
+`src/infrastructure/database/canonical-migrations/` klasöründe oluşturulmuştur.
+Migration yalnız 46 canonical V1 uygulama tablosunu oluşturur; TypeORM
+`migrations` tablosunu kendisi yönetir. Hedef schema fingerprint'i
+`aa1812462c5127d612194c223eda2c52bd07f309a15df91ac7b1849f4561bab1`
+değeridir.
+
+Baseline, mutation öncesinde yalnız boş schema veya TypeORM tarafından
+oluşturulmuş tek `migrations` tablosunu kabul eder. Başka bir tablo varsa
+`CANONICAL_BASELINE_REQUIRES_EMPTY_SCHEMA` hatası verir. `down()` tablo
+silmez; `CANONICAL_BASELINE_IS_IRREVERSIBLE_USE_DISPOSABLE_DATABASE_RESET`
+hatasıyla disposable database reset stratejisini zorunlu kılar. Bu nedenle
+baseline için bir FK/table drop sırası uygulanmaz; rollback bütün disposable
+veritabanının guard kontrollü resetidir.
+
+From-zero smoke testi `tasiburada_m0b_0719a_test` üzerinde geçmiştir: toplam
+47 tablo, 482 kolon, 127 index, 45 foreign key, 34 unique constraint ve 2
+CHECK constraint üretilmiş; UTC session, tek canonical migration kaydı ve
+hedef fingerprint doğrulanmıştır. İkinci migration koşusunda pending migration
+kalmamıştır. Tarihsel applied migration farkı yalnız provenance warning'i
+üretmiştir. Ayrı non-empty smoke testi
+`tasiburada_m0b_preflight_0719a_test` üzerinde mutation öncesinde beklenen
+hatayı vermiştir. Her iki disposable veritabanı test sonunda silinmiştir.
 
 Manifest yalnız şema metadata'sı ve applied migration metadata'sı içerir.
 Tablo satır verisi, kişisel veri, credential, secret, connection string veya
@@ -68,3 +86,7 @@ entity synchronization veya başka bir veritabanı mutation'ı
 çalıştırılmamıştır. Runtime migration yolu, legacy migration dosyaları,
 `synchronize: false` ayarı ve mevcut DataSource timezone davranışı
 değiştirilmemiştir.
+
+M0B-1 runtime cutover değildir. Mevcut runtime DataSource hâlâ legacy migration
+yolunu kullanır. M0B-2 onayı olmadan `tasiburada_dev` reset, migration veya
+cutover işlemi yapılmayacaktır.
