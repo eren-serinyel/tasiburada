@@ -1,4 +1,4 @@
-import { AppDataSource } from '../../../infrastructure/database/data-source';
+import { SeedDataSource as AppDataSource } from '../seedDataSource';
 import { Repository } from 'typeorm';
 import { Offer, OfferStatus } from '../../../domain/entities/Offer';
 import { Shipment, ShipmentCategory, ShipmentStatus } from '../../../domain/entities/Shipment';

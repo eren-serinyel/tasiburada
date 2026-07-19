@@ -11,6 +11,10 @@ export const CANONICAL_MIGRATION_DIRECTORY =
 export const CANONICAL_MIGRATION_NAME =
   'CanonicalBaselineV11784500000000';
 
+export interface CanonicalDataSourceConfiguration {
+  readonly loadEntities?: boolean;
+}
+
 const portFromEnvironment = (
   env: DisposableDatabaseEnvironment,
 ): number => {
@@ -31,6 +35,7 @@ export const canonicalDatabaseNameFromEnvironment = (
 
 export const canonicalDataSourceOptions = (
   env: DisposableDatabaseEnvironment,
+  configuration: CanonicalDataSourceConfiguration = {},
 ): DataSourceOptions => {
   const database = canonicalDatabaseNameFromEnvironment(env);
 
@@ -46,7 +51,9 @@ export const canonicalDataSourceOptions = (
     synchronize: false,
     migrationsRun: false,
     logging: false,
-    entities: [],
+    entities: configuration.loadEntities
+      ? ['src/domain/entities/**/*.ts']
+      : [],
     migrations: [CanonicalBaselineV11784500000000],
     migrationsTableName: 'migrations',
     migrationsTransactionMode: 'none',
@@ -59,12 +66,15 @@ export const canonicalDataSourceOptions = (
 
 export const createCanonicalDataSource = (
   env: DisposableDatabaseEnvironment = process.env,
-): DataSource => new DataSource(canonicalDataSourceOptions(env));
+  configuration: CanonicalDataSourceConfiguration = {},
+): DataSource =>
+  new DataSource(canonicalDataSourceOptions(env, configuration));
 
 export const initializeCanonicalDataSource = async (
   env: DisposableDatabaseEnvironment = process.env,
+  configuration: CanonicalDataSourceConfiguration = {},
 ): Promise<DataSource> => {
-  const dataSource = createCanonicalDataSource(env);
+  const dataSource = createCanonicalDataSource(env, configuration);
   await dataSource.initialize();
   await dataSource.query(`SET SESSION time_zone = '+00:00'`);
   return dataSource;

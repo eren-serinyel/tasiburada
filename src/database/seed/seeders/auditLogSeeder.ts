@@ -1,4 +1,4 @@
-import { AppDataSource } from '../../../infrastructure/database/data-source';
+import { SeedDataSource as AppDataSource } from '../seedDataSource';
 import { AuditLog } from '../../../domain/entities/AuditLog';
 import { Admin } from '../../../domain/entities/Admin';
 import { Carrier } from '../../../domain/entities/Carrier';

@@ -1,4 +1,4 @@
-import { AppDataSource } from '../../../infrastructure/database/data-source';
+import { SeedDataSource as AppDataSource } from '../seedDataSource';
 import fs from 'node:fs';
 import { Repository } from 'typeorm';
 import { Carrier, CarrierApprovalState } from '../../../domain/entities/Carrier';
@@ -353,7 +353,7 @@ export async function seedCarriers(
   console.log(
     `  ✓ ${created.length} nakliyeci (${created.filter((carrier) => carrier.verifiedByAdmin).length} onaylı)`,
   );
-  console.log('  🔑 Şifre: Maviface2141 (hepsi)');
+  console.log('  🔑 Şifre: [seed şifresi] (hepsi)');
   return created;
 }
 

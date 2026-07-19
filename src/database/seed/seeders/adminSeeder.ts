@@ -1,4 +1,4 @@
-import { AppDataSource } from '../../../infrastructure/database/data-source';
+import { SeedDataSource as AppDataSource } from '../seedDataSource';
 import { Admin } from '../../../domain/entities/Admin';
 import { hashPassword } from '../helpers/seedHelpers';
 
@@ -39,7 +39,7 @@ export async function seedAdmins(): Promise<Admin[]> {
   }
 
   console.log(`  ✓ ${created.length} admin`);
-  console.log('  📧 superadmin@tasiburadan.com / Maviface2141');
-  console.log('  📧 admin@tasiburadan.com / Maviface2141');
+  console.log('  📧 superadmin@tasiburadan.com / [seed şifresi]');
+  console.log('  📧 admin@tasiburadan.com / [seed şifresi]');
   return created;
 }

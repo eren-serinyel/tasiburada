@@ -1,82 +1,93 @@
-import { AppDataSource } from '../../infrastructure/database/data-source';
+import type { SeedSafetyEnvironment } from '../../infrastructure/database/seedSafety';
 import { assertSafeSeedDatabase } from '../../infrastructure/database/seedSafety';
 import { cleanupSeededDocumentFiles } from './helpers/pdfHelper';
+import { SeedDataSource } from './seedDataSource';
 
-export async function clearDatabase(): Promise<void> {
-  assertSafeSeedDatabase(process.env, 'reset');
-  const queryRunner = AppDataSource.createQueryRunner();
+// Reverse topological order of the 46 application tables in the canonical
+// manifest. This is the single inventory used by clear and seed-smoke checks.
+export const CANONICAL_CLEAR_TABLES = [
+  'shipment_custom_extra_services',
+  'converter_results',
+  'converter_answers',
+  'carrier_extra_service_capabilities',
+  'shipment_invites',
+  'shipment_extra_services',
+  'reviews',
+  'payments',
+  'offers',
+  'favorite_carriers',
+  'extra_service_applicability',
+  'customer_carrier_relations',
+  'customer_addresses',
+  'converter_sessions',
+  'carrier_vehicles',
+  'carrier_vehicle_types',
+  'carrier_stats',
+  'carrier_service_types',
+  'carrier_security_settings',
+  'carrier_scope_of_work',
+  'carrier_profile_status',
+  'carrier_notification_preferences',
+  'carrier_load_type_capabilities',
+  'carrier_earnings_log',
+  'carrier_earnings',
+  'carrier_documents',
+  'carrier_custom_extra_services',
+  'carrier_available_dates',
+  'carrier_activity',
+  'vehicle_types',
+  'shipments',
+  'service_types',
+  'scope_of_work',
+  'platform_settings',
+  'notifications',
+  'messages',
+  'match_cooldowns',
+  'extra_services',
+  'customers',
+  'converter_vehicle_rules',
+  'converter_item_catalog',
+  'contact_filter_logs',
+  'carriers',
+  'carrier_extra_services',
+  'audit_logs',
+  'admins',
+] as const;
+
+export async function clearDatabase(
+  env: SeedSafetyEnvironment = process.env,
+): Promise<void> {
+  assertSafeSeedDatabase(env, 'reset');
+  const queryRunner = SeedDataSource.createQueryRunner();
   await queryRunner.connect();
+  let foreignKeyChecksDisabled = false;
 
   try {
     const removedSeedFiles = cleanupSeededDocumentFiles();
     console.log(`  ✓ ${removedSeedFiles} seeded document file(s) removed`);
 
     await queryRunner.query('SET FOREIGN_KEY_CHECKS = 0');
+    foreignKeyChecksDisabled = true;
 
-    // Tüm tabloları sırayla temizle (migrations tablosuna dokunma)
-    const tables = [
-      'audit_logs',
-      'notifications',
-      'reviews',
-      'payments',
-      'converter_results',
-      'converter_answers',
-      'converter_sessions',
-      'carrier_earnings_log',
-      'offers',
-      'shipment_invites',
-      'customer_carrier_relations',
-      'favorite_carriers',
-      'customer_addresses',
-      'carrier_vehicle_types',
-      'carrier_scope_of_work',
-      'carrier_service_types',
-      'carrier_profile_status',
-      'carrier_activity',
-      'carrier_available_dates',
-      'carrier_documents',
-      'carrier_earnings',
-      'carrier_security_settings',
-      'carrier_notification_preferences',
-      'carrier_stats',
-      'vehicles',
-      'carrier_extra_service_capabilities',
-      'carrier_load_type_capabilities',
-      'shipment_extra_services',
-      'extra_service_applicability',
-      'extra_services',
-      'contact_filter_logs',
-      'match_cooldowns',
-      'shipments',
-      'admins',
-      'customers',
-      'carriers',
-      'converter_vehicle_rules',
-      'converter_item_catalog',
-      'platform_settings',
-      // Lookup tablolar en sonda (başka tablolar bunlara FK referans veriyor)
-      'vehicle_types',
-      'service_types',
-      'scope_of_work',
-    ];
-
-    for (const table of tables) {
+    for (const table of CANONICAL_CLEAR_TABLES) {
       try {
         await queryRunner.query(`TRUNCATE TABLE \`${table}\``);
         console.log(`  ✓ ${table}`);
-      } catch (err: any) {
-        // Tablo yoksa atla
-        if (err.message?.includes('ER_NO_SUCH_TABLE') || err.errno === 1146) {
-          console.warn(`  ⚠ ${table} atlandı (tablo yok)`);
-        } else {
-          throw new Error(`clearDatabase: ${table} temizlenemedi — ${err.message}`);
-        }
+      } catch (error: unknown) {
+        const message =
+          error instanceof Error ? error.message : 'unknown database error';
+        throw new Error(`clearDatabase: ${table} temizlenemedi — ${message}`);
       }
     }
 
-    await queryRunner.query('SET FOREIGN_KEY_CHECKS = 1');
     console.log('✅ Veritabanı temizlendi\n');
   } finally {
-    await queryRunner.release();
+    try {
+      if (foreignKeyChecksDisabled) {
+        await queryRunner.query('SET FOREIGN_KEY_CHECKS = 1');
+      }
+    } finally {
+      await queryRunner.release();
+    }
   }
 }

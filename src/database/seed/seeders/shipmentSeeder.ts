@@ -1,6 +1,6 @@
 import { randomUUID } from 'crypto';
 import { In } from 'typeorm';
-import { AppDataSource } from '../../../infrastructure/database/data-source';
+import { SeedDataSource as AppDataSource } from '../seedDataSource';
 import {
   InsuranceType,
   PlaceType,

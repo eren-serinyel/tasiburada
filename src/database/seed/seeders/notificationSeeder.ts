@@ -1,4 +1,4 @@
-import { AppDataSource } from '../../../infrastructure/database/data-source';
+import { SeedDataSource as AppDataSource } from '../seedDataSource';
 import { Notification } from '../../../domain/entities/Notification';
 import { Customer } from '../../../domain/entities/Customer';
 import { Carrier } from '../../../domain/entities/Carrier';

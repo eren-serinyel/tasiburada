@@ -97,7 +97,10 @@ export function assertSafeSeedDatabase(
   }
 
   const allowedHosts = parseHostAllowlist(env.SEED_DB_HOST_ALLOWLIST);
-  if (!LOCAL_DATABASE_HOSTS.has(databaseHost) && !allowedHosts.has(databaseHost)) {
+  if (
+    !LOCAL_DATABASE_HOSTS.has(databaseHost) &&
+    (mode === 'reset' || !allowedHosts.has(databaseHost))
+  ) {
     fail('DB_HOST must be local or explicitly allowlisted');
   }
 

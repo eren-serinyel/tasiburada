@@ -1,4 +1,4 @@
-import { AppDataSource } from '../../../infrastructure/database/data-source';
+import { SeedDataSource as AppDataSource } from '../seedDataSource';
 import { PlatformSetting } from '../../../domain/entities/PlatformSetting';
 
 export async function seedPlatformSettings() {

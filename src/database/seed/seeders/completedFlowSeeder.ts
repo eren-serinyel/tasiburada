@@ -1,4 +1,4 @@
-import { AppDataSource } from '../../../infrastructure/database/data-source';
+import { SeedDataSource as AppDataSource } from '../seedDataSource';
 import { Review } from '../../../domain/entities/Review';
 import { Payment, PaymentMethod, PaymentStatus } from '../../../domain/entities/Payment';
 import { CarrierEarningsLog } from '../../../domain/entities/CarrierEarningsLog';

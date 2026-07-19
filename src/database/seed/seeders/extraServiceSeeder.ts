@@ -1,4 +1,4 @@
-import { AppDataSource } from '../../../infrastructure/database/data-source';
+import { SeedDataSource as AppDataSource } from '../seedDataSource';
 import { ExtraService } from '../../../domain/entities/ExtraService';
 import { ExtraServiceApplicability } from '../../../domain/entities/ExtraServiceApplicability';
 import {
