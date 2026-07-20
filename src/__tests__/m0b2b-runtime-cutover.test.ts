@@ -50,13 +50,13 @@ afterAll(() => {
 });
 
 describe('M0B-2B runtime canonical cutover', () => {
-  it('uses the single explicit canonical registry in runtime DataSource', () => {
+  it('keeps the baseline first in the explicit canonical registry', () => {
     const runtimeSource = source(
       'src/infrastructure/database/data-source.ts',
     );
-    expect(CANONICAL_MIGRATIONS).toEqual([
+    expect(CANONICAL_MIGRATIONS[0]).toBe(
       CanonicalBaselineV11784500000000,
-    ]);
+    );
     expect(CANONICAL_MIGRATION_NAME).toBe(
       'CanonicalBaselineV11784500000000',
     );

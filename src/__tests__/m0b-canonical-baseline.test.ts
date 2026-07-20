@@ -10,6 +10,7 @@ import {
   CANONICAL_MIGRATION_NAME,
   canonicalDataSourceOptions,
 } from '../infrastructure/database/canonical/canonicalDataSource';
+import { CANONICAL_MIGRATIONS } from '../infrastructure/database/canonical/canonicalMigrationRegistry';
 import type { CanonicalSchemaManifest } from '../infrastructure/database/disposable/schemaManifest';
 
 const migrationPath = resolve(
@@ -48,8 +49,11 @@ describe('M0B canonical baseline', () => {
       '+00:00',
     );
     expect(options.migrations).toEqual([
-      CanonicalBaselineV11784500000000,
+      ...CANONICAL_MIGRATIONS,
     ]);
+    expect(CANONICAL_MIGRATIONS[0]).toBe(
+      CanonicalBaselineV11784500000000,
+    );
     expect(options.migrationsTableName).toBe('migrations');
   });
 

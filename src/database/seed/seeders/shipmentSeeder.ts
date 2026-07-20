@@ -15,6 +15,7 @@ import { ExtraService } from '../../../domain/entities/ExtraService';
 import { ExtraServiceLoadType } from '../../../domain/entities/ExtraServiceApplicability';
 import { LOAD_TYPES } from '../data/constants';
 import { inferExtraServiceLoadTypeFromShipmentCategory } from '../../../application/services/extra-services/extraServiceApplicability';
+import { deriveShipmentV2IdentityFromV1 } from '../../../domain/shipments/ShipmentV2Codes';
 import {
   calculateShipmentBasePrice,
   chance,
@@ -300,8 +301,88 @@ export async function seedShipments(
     created.push(savedShipment);
   }
 
+  await persistSeedShipmentV2Identity(created);
   console.log(`  ✓ ${created.length} taşıma talebi oluşturuldu`);
   return created;
+}
+
+async function persistSeedShipmentV2Identity(
+  shipments: Shipment[],
+): Promise<void> {
+  const queryRunner = AppDataSource.createQueryRunner();
+  await queryRunner.connect();
+
+  try {
+    const [hasServiceCategoryCode, hasRouteScopeCode] =
+      await Promise.all([
+        queryRunner.hasColumn('shipments', 'service_category_code'),
+        queryRunner.hasColumn('shipments', 'route_scope_code'),
+      ]);
+
+    if (!hasServiceCategoryCode && !hasRouteScopeCode) {
+      return;
+    }
+    if (!hasServiceCategoryCode || !hasRouteScopeCode) {
+      throw new Error(
+        'Shipment V2 seed identity columns are partially applied.',
+      );
+    }
+
+    const batchSize = 200;
+    for (let start = 0; start < shipments.length; start += batchSize) {
+      const batch = shipments.slice(start, start + batchSize);
+      const serviceCases: string[] = [];
+      const routeCases: string[] = [];
+      const serviceParameters: unknown[] = [];
+      const routeParameters: unknown[] = [];
+      const ids: string[] = [];
+
+      for (const shipment of batch) {
+        const identity = deriveShipmentV2IdentityFromV1({
+          shipmentCategory: shipment.shipmentCategory,
+          originCity: shipment.originCity,
+          destinationCity: shipment.destinationCity,
+        });
+        shipment.serviceCategoryCode =
+          identity.serviceCategoryCode;
+        shipment.routeScopeCode = identity.routeScopeCode;
+        serviceCases.push('WHEN ? THEN ?');
+        routeCases.push('WHEN ? THEN ?');
+        serviceParameters.push(
+          shipment.id,
+          identity.serviceCategoryCode,
+        );
+        routeParameters.push(
+          shipment.id,
+          identity.routeScopeCode,
+        );
+        ids.push(shipment.id);
+      }
+
+      const idPlaceholders = ids.map(() => '?').join(', ');
+      await queryRunner.query(
+        `UPDATE \`shipments\`
+            SET \`service_category_code\` =
+                  CASE \`id\`
+                    ${serviceCases.join('\n                    ')}
+                    ELSE \`service_category_code\`
+                  END,
+                \`route_scope_code\` =
+                  CASE \`id\`
+                    ${routeCases.join('\n                    ')}
+                    ELSE \`route_scope_code\`
+                  END
+          WHERE \`id\` IN (${idPlaceholders})`,
+        [
+          ...serviceParameters,
+          ...routeParameters,
+          ...ids,
+        ],
+      );
+    }
+  } finally {
+    await queryRunner.release();
+  }
 }
 
 function shuffle<T>(items: T[]): T[] {
