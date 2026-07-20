@@ -2,6 +2,7 @@ import { createHash } from 'crypto';
 import { config } from 'dotenv';
 import { DataSource } from 'typeorm';
 import { CanonicalBaselineV11784500000000 } from '../canonical-migrations/1784500000000-CanonicalBaselineV1';
+import { AddShipmentV2IdentityCodes1784580000000 } from '../canonical-migrations/1784580000000-AddShipmentV2IdentityCodes';
 import {
   createDisposableDatabase,
   dropDisposableDatabase,
@@ -15,7 +16,6 @@ import {
 import { countCanonicalSchema } from './canonicalVerification';
 import {
   canonicalDataSourceOptions,
-  initializeCanonicalDataSource,
 } from './canonicalDataSource';
 import { CANONICAL_MIGRATIONS } from './canonicalMigrationRegistry';
 import {
@@ -32,6 +32,10 @@ const BASELINE_NAME =
   'CanonicalBaselineV11784500000000';
 const M1A_NAME =
   'AddShipmentV2IdentityCodes1784580000000';
+const M1A_MIGRATIONS = [
+  CanonicalBaselineV11784500000000,
+  AddShipmentV2IdentityCodes1784580000000,
+] as const;
 
 const fail = (reason: string): never => {
   throw new Error(`M1A smoke failed: ${reason}`);
@@ -110,6 +114,18 @@ interface M1APhysicalResult {
   readonly fingerprint: string;
   readonly counts: ReturnType<typeof countCanonicalSchema>;
 }
+
+const initializeM1ADataSource = async (): Promise<DataSource> => {
+  const dataSource = new DataSource({
+    ...canonicalDataSourceOptions(process.env, {
+      loadEntities: true,
+    }),
+    migrations: [...M1A_MIGRATIONS],
+  });
+  await dataSource.initialize();
+  await dataSource.query(`SET SESSION time_zone = '+00:00'`);
+  return dataSource;
+};
 
 const assertM1APhysicalSchema = async (
   dataSource: DataSource,
@@ -273,10 +289,7 @@ const assertFinalMigrationState = async (
 };
 
 const runFromZero = async (): Promise<void> => {
-  const dataSource = await initializeCanonicalDataSource(
-    process.env,
-    { loadEntities: true },
-  );
+  const dataSource = await initializeM1ADataSource();
   try {
     const applied = await dataSource.runMigrations({
       transaction: 'none',
@@ -358,10 +371,7 @@ const runSeededUpgrade = async (): Promise<void> => {
     await baselineDataSource.destroy();
   }
 
-  const dataSource = await initializeCanonicalDataSource(
-    process.env,
-    { loadEntities: true },
-  );
+  const dataSource = await initializeM1ADataSource();
   try {
     const applied = await dataSource.runMigrations({
       transaction: 'none',
@@ -464,8 +474,11 @@ const main = async (): Promise<void> => {
     ) {
       fail('new disposable database metadata mismatch');
     }
-    if (CANONICAL_MIGRATIONS.length !== 2) {
-      fail('canonical registry length mismatch');
+    if (
+      CANONICAL_MIGRATIONS[0] !== M1A_MIGRATIONS[0] ||
+      CANONICAL_MIGRATIONS[1] !== M1A_MIGRATIONS[1]
+    ) {
+      fail('canonical registry M1A prefix mismatch');
     }
     if (mode === 'from-zero') {
       await runFromZero();

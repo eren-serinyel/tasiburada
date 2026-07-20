@@ -188,7 +188,7 @@ describe('M1A Shipment V2 identity spine', () => {
   });
 
   it('registers baseline then M1A without a legacy glob', () => {
-    expect(CANONICAL_MIGRATIONS).toEqual([
+    expect(CANONICAL_MIGRATIONS.slice(0, 2)).toEqual([
       CanonicalBaselineV11784500000000,
       AddShipmentV2IdentityCodes1784580000000,
     ]);

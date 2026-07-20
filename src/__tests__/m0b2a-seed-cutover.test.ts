@@ -36,14 +36,23 @@ const safeResetEnvironment = {
 };
 
 describe('M0B-2A seed/reset and cutover preparation', () => {
-  it('uses exactly the 46 canonical application tables in child-first order', () => {
+  it('preserves the 46-table V1 inventory inside the additive child-first inventory', () => {
     const expected = manifest.tables
       .map(table => table.name)
       .filter(tableName => tableName !== 'migrations')
       .sort();
+    const v1ClearTables = CANONICAL_CLEAR_TABLES
+      .filter(
+        tableName =>
+          tableName !== 'shipment_location_conditions',
+      )
+      .sort();
 
-    expect([...CANONICAL_CLEAR_TABLES].sort()).toEqual(expected);
-    expect(CANONICAL_CLEAR_TABLES).toHaveLength(46);
+    expect(v1ClearTables).toEqual(expected);
+    expect(CANONICAL_CLEAR_TABLES).toHaveLength(47);
+    expect(CANONICAL_CLEAR_TABLES).toContain(
+      'shipment_location_conditions',
+    );
     expect(CANONICAL_CLEAR_TABLES).not.toContain('migrations');
     expect(CANONICAL_CLEAR_TABLES).not.toContain('vehicles');
     expect(CANONICAL_CLEAR_TABLES).toEqual(

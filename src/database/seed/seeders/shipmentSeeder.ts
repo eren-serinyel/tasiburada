@@ -17,6 +17,13 @@ import { LOAD_TYPES } from '../data/constants';
 import { inferExtraServiceLoadTypeFromShipmentCategory } from '../../../application/services/extra-services/extraServiceApplicability';
 import { deriveShipmentV2IdentityFromV1 } from '../../../domain/shipments/ShipmentV2Codes';
 import {
+  DATE_FLEXIBILITY_CODES,
+  deriveDateWindow,
+  type ElevatorTypeCode,
+  type LocationSideCode,
+  type VehicleAccessDistanceCode,
+} from '../../../domain/shipments/ShipmentOperationalCodes';
+import {
   calculateShipmentBasePrice,
   chance,
   generatePhone,
@@ -302,6 +309,7 @@ export async function seedShipments(
   }
 
   await persistSeedShipmentV2Identity(created);
+  await persistSeedShipmentOperationalDetails(created);
   console.log(`  ✓ ${created.length} taşıma talebi oluşturuldu`);
   return created;
 }
@@ -384,6 +392,252 @@ async function persistSeedShipmentV2Identity(
     await queryRunner.release();
   }
 }
+
+interface SeedLocationCondition {
+  readonly id: string;
+  readonly shipmentId: string;
+  readonly sideCode: LocationSideCode;
+  readonly floorNumber: number | null;
+  readonly elevatorTypeCode: ElevatorTypeCode | null;
+  readonly vehicleAccessDistanceCode:
+    VehicleAccessDistanceCode | null;
+  readonly hasNarrowStreet: boolean | null;
+  readonly hasSiteEntryRestriction: boolean | null;
+  readonly hasTimeRestriction: boolean | null;
+  readonly restrictionNote: string | null;
+}
+
+async function persistSeedShipmentOperationalDetails(
+  shipments: Shipment[],
+): Promise<void> {
+  const queryRunner = AppDataSource.createQueryRunner();
+  await queryRunner.connect();
+
+  try {
+    const [
+      hasDateFlexibilityCode,
+      hasDateWindowStart,
+      hasDateWindowEnd,
+      hasLocationConditions,
+    ] = await Promise.all([
+      queryRunner.hasColumn(
+        'shipments',
+        'date_flexibility_code',
+      ),
+      queryRunner.hasColumn('shipments', 'date_window_start'),
+      queryRunner.hasColumn('shipments', 'date_window_end'),
+      queryRunner.hasTable('shipment_location_conditions'),
+    ]);
+    const operationalObjects = [
+      hasDateFlexibilityCode,
+      hasDateWindowStart,
+      hasDateWindowEnd,
+      hasLocationConditions,
+    ];
+    if (operationalObjects.every(value => !value)) return;
+    if (operationalObjects.some(value => !value)) {
+      throw new Error(
+        'Shipment operational seed schema is partially applied.',
+      );
+    }
+
+    const batchSize = 200;
+    for (
+      let start = 0;
+      start < shipments.length;
+      start += batchSize
+    ) {
+      const batch = shipments.slice(start, start + batchSize);
+      const codeCases: string[] = [];
+      const startCases: string[] = [];
+      const endCases: string[] = [];
+      const codeParameters: unknown[] = [];
+      const startParameters: unknown[] = [];
+      const endParameters: unknown[] = [];
+      const ids: string[] = [];
+      const conditions: SeedLocationCondition[] = [];
+
+      batch.forEach((shipment, batchIndex) => {
+        const absoluteIndex = start + batchIndex;
+        const flexibilityCode =
+          DATE_FLEXIBILITY_CODES[
+            absoluteIndex % DATE_FLEXIBILITY_CODES.length
+          ];
+        const window = deriveDateWindow(
+          shipment.shipmentDate,
+          flexibilityCode,
+        );
+        codeCases.push('WHEN ? THEN ?');
+        startCases.push('WHEN ? THEN ?');
+        endCases.push('WHEN ? THEN ?');
+        codeParameters.push(shipment.id, flexibilityCode);
+        startParameters.push(shipment.id, window.start);
+        endParameters.push(shipment.id, window.end);
+        ids.push(shipment.id);
+
+        conditions.push(
+          buildSeedLocationCondition(
+            shipment,
+            'ORIGIN',
+            absoluteIndex,
+          ),
+          buildSeedLocationCondition(
+            shipment,
+            'DESTINATION',
+            absoluteIndex + 1,
+          ),
+        );
+      });
+
+      const idPlaceholders = ids.map(() => '?').join(', ');
+      await queryRunner.query(
+        `UPDATE \`shipments\`
+            SET \`date_flexibility_code\` =
+                  CASE \`id\`
+                    ${codeCases.join('\n                    ')}
+                    ELSE \`date_flexibility_code\`
+                  END,
+                \`date_window_start\` =
+                  CASE \`id\`
+                    ${startCases.join('\n                    ')}
+                    ELSE \`date_window_start\`
+                  END,
+                \`date_window_end\` =
+                  CASE \`id\`
+                    ${endCases.join('\n                    ')}
+                    ELSE \`date_window_end\`
+                  END
+          WHERE \`id\` IN (${idPlaceholders})`,
+        [
+          ...codeParameters,
+          ...startParameters,
+          ...endParameters,
+          ...ids,
+        ],
+      );
+
+      const conditionPlaceholders = conditions
+        .map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+        .join(', ');
+      await queryRunner.query(
+        `INSERT INTO \`shipment_location_conditions\` (
+           \`id\`,
+           \`shipment_id\`,
+           \`side_code\`,
+           \`floor_number\`,
+           \`elevator_type_code\`,
+           \`vehicle_access_distance_code\`,
+           \`has_narrow_street\`,
+           \`has_site_entry_restriction\`,
+           \`has_time_restriction\`,
+           \`restriction_note\`
+         ) VALUES ${conditionPlaceholders}
+         ON DUPLICATE KEY UPDATE
+           \`floor_number\` = VALUES(\`floor_number\`),
+           \`elevator_type_code\` =
+             VALUES(\`elevator_type_code\`),
+           \`vehicle_access_distance_code\` =
+             VALUES(\`vehicle_access_distance_code\`),
+           \`has_narrow_street\` =
+             VALUES(\`has_narrow_street\`),
+           \`has_site_entry_restriction\` =
+             VALUES(\`has_site_entry_restriction\`),
+           \`has_time_restriction\` =
+             VALUES(\`has_time_restriction\`),
+           \`restriction_note\` = VALUES(\`restriction_note\`)`,
+        conditions.flatMap(condition => [
+          condition.id,
+          condition.shipmentId,
+          condition.sideCode,
+          condition.floorNumber,
+          condition.elevatorTypeCode,
+          condition.vehicleAccessDistanceCode,
+          condition.hasNarrowStreet,
+          condition.hasSiteEntryRestriction,
+          condition.hasTimeRestriction,
+          condition.restrictionNote,
+        ]),
+      );
+    }
+  } finally {
+    await queryRunner.release();
+  }
+}
+
+const buildSeedLocationCondition = (
+  shipment: Shipment,
+  sideCode: LocationSideCode,
+  index: number,
+): SeedLocationCondition => {
+  const isOrigin = sideCode === 'ORIGIN';
+  const floorNumber = isOrigin
+    ? shipment.originFloor
+    : shipment.destinationFloor;
+  const hasBuildingElevator = isOrigin
+    ? shipment.originHasElevator
+    : shipment.destinationHasElevator;
+  const elevatorTypeCode =
+    seedElevatorTypeCode(
+      floorNumber,
+      hasBuildingElevator,
+      index,
+    );
+  const vehicleAccessDistanceCode =
+    seedVehicleAccessDistanceCode(index);
+  const hasNarrowStreet =
+    seedTriStateBoolean(index);
+  const hasSiteEntryRestriction =
+    seedTriStateBoolean(index + 1);
+  const hasTimeRestriction =
+    seedTriStateBoolean(index + 2);
+  const restrictionNote =
+    hasSiteEntryRestriction === true ||
+    hasTimeRestriction === true
+      ? 'Operasyon saati önceden teyit edilmeli.'
+      : null;
+
+  return {
+    id: randomUUID(),
+    shipmentId: shipment.id,
+    sideCode,
+    floorNumber,
+    elevatorTypeCode,
+    vehicleAccessDistanceCode,
+    hasNarrowStreet,
+    hasSiteEntryRestriction,
+    hasTimeRestriction,
+    restrictionNote,
+  };
+};
+
+const seedElevatorTypeCode = (
+  floorNumber: number | null,
+  hasBuildingElevator: boolean | null,
+  index: number,
+): ElevatorTypeCode | null => {
+  if (hasBuildingElevator === null) return 'UNKNOWN';
+  if (!hasBuildingElevator) return 'NONE';
+  if (index % 11 === 0) return 'NOT_SUITABLE';
+  if ((floorNumber ?? 0) >= 6 && index % 4 === 0) {
+    return 'FREIGHT';
+  }
+  return 'STANDARD';
+};
+
+const seedVehicleAccessDistanceCode = (
+  index: number,
+): VehicleAccessDistanceCode =>
+  [
+    'AT_ENTRANCE',
+    'BETWEEN_20_AND_50_METERS',
+    'OVER_50_METERS',
+    'UNKNOWN',
+  ][index % 4] as VehicleAccessDistanceCode;
+
+const seedTriStateBoolean = (
+  index: number,
+): boolean | null =>
+  [null, false, true][index % 3] as boolean | null;
 
 function shuffle<T>(items: T[]): T[] {
   const cloned = [...items];

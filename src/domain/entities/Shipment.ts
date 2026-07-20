@@ -6,6 +6,8 @@ import { ExtraService } from "./ExtraService";
 import { CustomerAddress } from "./CustomerAddress";
 import { ShipmentCustomExtraService } from "./ShipmentCustomExtraService";
 import type { RouteScopeCode, ServiceCategoryCode } from "../shipments/ShipmentV2Codes";
+import type { DateFlexibilityCode } from "../shipments/ShipmentOperationalCodes";
+import { ShipmentLocationCondition } from "./ShipmentLocationCondition";
 
 const decimalToNumberTransformer = {
     to: (value: number | null | undefined) => value,
@@ -206,6 +208,39 @@ export class Shipment {
     @Column({ name: 'date_flexibility', type: 'enum', enum: DateFlexibility, nullable: true, default: DateFlexibility.EXACT })
     dateFlexibility: DateFlexibility | null;
 
+    @Column({
+        name: 'date_flexibility_code',
+        type: 'varchar',
+        length: 32,
+        charset: 'ascii',
+        collation: 'ascii_bin',
+        nullable: true,
+        select: false,
+        insert: false,
+        update: false,
+    })
+    dateFlexibilityCode: DateFlexibilityCode | null;
+
+    @Column({
+        name: 'date_window_start',
+        type: 'date',
+        nullable: true,
+        select: false,
+        insert: false,
+        update: false,
+    })
+    dateWindowStart: Date | null;
+
+    @Column({
+        name: 'date_window_end',
+        type: 'date',
+        nullable: true,
+        select: false,
+        insert: false,
+        update: false,
+    })
+    dateWindowEnd: Date | null;
+
     @Column({ type: "decimal", precision: 10, scale: 2, nullable: true })
     weight: number | null;
 
@@ -268,6 +303,12 @@ export class Shipment {
 
     @OneToMany(() => ShipmentCustomExtraService, (customExtraService) => customExtraService.shipment, { cascade: true })
     customExtraServices: ShipmentCustomExtraService[];
+
+    @OneToMany(
+        () => ShipmentLocationCondition,
+        (condition) => condition.shipment,
+    )
+    locationConditions: ShipmentLocationCondition[];
 
     @CreateDateColumn({ name: 'created_at' })
     createdAt: Date;

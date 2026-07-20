@@ -3,9 +3,11 @@ import { assertSafeSeedDatabase } from '../../infrastructure/database/seedSafety
 import { cleanupSeededDocumentFiles } from './helpers/pdfHelper';
 import { SeedDataSource } from './seedDataSource';
 
-// Reverse topological order of the 46 application tables in the canonical
-// manifest. This is the single inventory used by clear and seed-smoke checks.
+// Reverse topological order of the current canonical application tables.
+// M0B's 46-table V1 inventory remains intact; additive M1 tables are inserted
+// before their parents. This is shared by clear and seed-smoke checks.
 export const CANONICAL_CLEAR_TABLES = [
+  'shipment_location_conditions',
   'shipment_custom_extra_services',
   'converter_results',
   'converter_answers',
