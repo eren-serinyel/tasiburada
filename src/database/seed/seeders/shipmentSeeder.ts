@@ -24,6 +24,22 @@ import {
   type VehicleAccessDistanceCode,
 } from '../../../domain/shipments/ShipmentOperationalCodes';
 import {
+  ARCHIVE_DENSITY_CODES,
+  ARCHIVE_UNIT_COUNT_BAND_CODES,
+  BOX_COUNT_BAND_CODES,
+  HOME_SPECIAL_ITEM_TYPE_CODES,
+  HOUSEHOLD_DENSITY_CODES,
+  OFFICE_SIZE_BAND_CODES,
+  PARTIAL_ITEM_TYPE_CODES,
+  PARTIAL_SIZE_CLASS_CODES,
+  ROOM_LAYOUT_CODES,
+  WORKSTATION_COUNT_BAND_CODES,
+  type HomeSpecialItemTypeCode,
+  type PartialItemTypeCode,
+  type PartialSizeClassCode,
+  type ResidenceTypeCode,
+} from '../../../domain/shipments/ShipmentCategoryDetailCodes';
+import {
   calculateShipmentBasePrice,
   chance,
   generatePhone,
@@ -310,6 +326,7 @@ export async function seedShipments(
 
   await persistSeedShipmentV2Identity(created);
   await persistSeedShipmentOperationalDetails(created);
+  await persistSeedShipmentCategoryDetails(created);
   console.log(`  ✓ ${created.length} taşıma talebi oluşturuldu`);
   return created;
 }
@@ -559,6 +576,265 @@ async function persistSeedShipmentOperationalDetails(
         ]),
       );
     }
+  } finally {
+    await queryRunner.release();
+  }
+}
+
+const CATEGORY_DETAIL_TABLES = [
+  'shipment_home_move_details',
+  'shipment_home_move_items',
+  'shipment_office_move_details',
+  'shipment_partial_item_details',
+  'shipment_partial_items',
+] as const;
+
+const seedResidenceType = (
+  placeType: PlaceType | null,
+): ResidenceTypeCode | null => {
+  switch (placeType) {
+    case PlaceType.DAIRE:
+    case PlaceType.APARTMAN_DAIRESI:
+    case PlaceType.SITE_ICI_DAIRE:
+      return 'APARTMENT';
+    case PlaceType.MUSTAKIL:
+      return 'DETACHED_HOUSE';
+    case PlaceType.VILLA:
+      return 'VILLA';
+    default:
+      return null;
+  }
+};
+
+const insertSeedRows = async (
+  queryRunner: ReturnType<
+    typeof AppDataSource.createQueryRunner
+  >,
+  tableName: string,
+  columns: readonly string[],
+  rows: readonly (readonly unknown[])[],
+): Promise<void> => {
+  const batchSize = 200;
+  for (let start = 0; start < rows.length; start += batchSize) {
+    const batch = rows.slice(start, start + batchSize);
+    if (batch.length === 0) continue;
+    const placeholders = batch
+      .map(() => `(${columns.map(() => '?').join(', ')})`)
+      .join(', ');
+    await queryRunner.query(
+      `INSERT INTO \`${tableName}\` (
+         ${columns.map(column => `\`${column}\``).join(', ')}
+       ) VALUES ${placeholders}`,
+      batch.flatMap(row => [...row]),
+    );
+  }
+};
+
+async function persistSeedShipmentCategoryDetails(
+  shipments: Shipment[],
+): Promise<void> {
+  const queryRunner = AppDataSource.createQueryRunner();
+  await queryRunner.connect();
+
+  try {
+    const tablePresence = await Promise.all(
+      CATEGORY_DETAIL_TABLES.map(table =>
+        queryRunner.hasTable(table),
+      ),
+    );
+    if (tablePresence.every(value => !value)) return;
+    if (tablePresence.some(value => !value)) {
+      throw new Error(
+        'Shipment category detail seed schema is partially applied.',
+      );
+    }
+
+    const homeDetails: unknown[][] = [];
+    const homeItems: unknown[][] = [];
+    const officeDetails: unknown[][] = [];
+    const partialDetails: unknown[][] = [];
+    const partialItems: unknown[][] = [];
+
+    shipments.forEach((shipment, index) => {
+      switch (shipment.serviceCategoryCode) {
+        case 'HOME_MOVE': {
+          homeDetails.push([
+            shipment.id,
+            'HOME_MOVE',
+            seedResidenceType(shipment.originPlaceType),
+            ROOM_LAYOUT_CODES[index % 6],
+            HOUSEHOLD_DENSITY_CODES[index % 4],
+            BOX_COUNT_BAND_CODES[index % 5],
+          ]);
+          if (index % 4 === 0) {
+            const itemType =
+              HOME_SPECIAL_ITEM_TYPE_CODES[
+                index %
+                  HOME_SPECIAL_ITEM_TYPE_CODES.length
+              ] as HomeSpecialItemTypeCode;
+            homeItems.push([
+              randomUUID(),
+              shipment.id,
+              itemType,
+              (index % 3) + 1,
+              itemType === 'OTHER'
+                ? 'Özel sanat eseri'
+                : null,
+            ]);
+          }
+          break;
+        }
+        case 'OFFICE_MOVE': {
+          const hasFixedDeadline =
+            [null, false, true][index % 3] as
+              boolean | null;
+          officeDetails.push([
+            shipment.id,
+            'OFFICE_MOVE',
+            OFFICE_SIZE_BAND_CODES[index % 5],
+            WORKSTATION_COUNT_BAND_CODES[index % 5],
+            ARCHIVE_UNIT_COUNT_BAND_CODES[index % 5],
+            ARCHIVE_DENSITY_CODES[index % 5],
+            seedTriStateBoolean(index),
+            seedTriStateBoolean(index + 1),
+            seedTriStateBoolean(index + 2),
+            seedTriStateBoolean(index + 3),
+            hasFixedDeadline,
+            hasFixedDeadline === true
+              ? shipment.shipmentDate
+              : null,
+            seedTriStateBoolean(index + 4),
+          ]);
+          break;
+        }
+        case 'PARTIAL_ITEM': {
+          partialDetails.push([
+            shipment.id,
+            'PARTIAL_ITEM',
+          ]);
+          const itemCount = (index % 2) + 1;
+          for (
+            let itemIndex = 0;
+            itemIndex < itemCount;
+            itemIndex += 1
+          ) {
+            const catalogIndex = index + itemIndex;
+            const itemType =
+              PARTIAL_ITEM_TYPE_CODES[
+                catalogIndex %
+                  PARTIAL_ITEM_TYPE_CODES.length
+              ] as PartialItemTypeCode;
+            const sizeClass =
+              PARTIAL_SIZE_CLASS_CODES[
+                catalogIndex %
+                  PARTIAL_SIZE_CLASS_CODES.length
+              ] as PartialSizeClassCode;
+            const hasMeasurements =
+              sizeClass === 'MEASUREMENTS_PROVIDED';
+            partialItems.push([
+              randomUUID(),
+              shipment.id,
+              itemType,
+              itemType === 'OTHER'
+                ? 'Özel dekoratif eşya'
+                : null,
+              (catalogIndex % 4) + 1,
+              sizeClass,
+              seedTriStateBoolean(catalogIndex),
+              seedTriStateBoolean(catalogIndex + 1),
+              seedTriStateBoolean(catalogIndex + 2),
+              seedTriStateBoolean(catalogIndex + 3),
+              hasMeasurements
+                ? 40 + (catalogIndex % 120)
+                : null,
+              hasMeasurements
+                ? 60 + (catalogIndex % 160)
+                : null,
+              hasMeasurements
+                ? 30 + (catalogIndex % 100)
+                : null,
+              5 + (catalogIndex % 500),
+            ]);
+          }
+          break;
+        }
+        default:
+          break;
+      }
+    });
+
+    await insertSeedRows(
+      queryRunner,
+      'shipment_home_move_details',
+      [
+        'shipment_id',
+        'service_category_code',
+        'residence_type_code',
+        'room_layout_code',
+        'household_density_code',
+        'box_count_band_code',
+      ],
+      homeDetails,
+    );
+    await insertSeedRows(
+      queryRunner,
+      'shipment_office_move_details',
+      [
+        'shipment_id',
+        'service_category_code',
+        'office_size_band_code',
+        'workstation_count_band_code',
+        'archive_unit_count_band_code',
+        'archive_density_code',
+        'has_server_room',
+        'has_sensitive_electronics',
+        'has_heavy_equipment',
+        'requires_after_hours_move',
+        'has_fixed_completion_deadline',
+        'completion_deadline_at',
+        'must_remain_operational',
+      ],
+      officeDetails,
+    );
+    await insertSeedRows(
+      queryRunner,
+      'shipment_partial_item_details',
+      ['shipment_id', 'service_category_code'],
+      partialDetails,
+    );
+    await insertSeedRows(
+      queryRunner,
+      'shipment_home_move_items',
+      [
+        'id',
+        'shipment_id',
+        'item_type_code',
+        'quantity',
+        'custom_label',
+      ],
+      homeItems,
+    );
+    await insertSeedRows(
+      queryRunner,
+      'shipment_partial_items',
+      [
+        'id',
+        'shipment_id',
+        'item_type_code',
+        'custom_label',
+        'quantity',
+        'size_class_code',
+        'is_fragile',
+        'requires_disassembly',
+        'requires_installation',
+        'requires_packaging',
+        'width_cm',
+        'length_cm',
+        'height_cm',
+        'approximate_weight_kg',
+      ],
+      partialItems,
+    );
   } finally {
     await queryRunner.release();
   }

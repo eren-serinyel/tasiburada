@@ -7,6 +7,11 @@ import { SeedDataSource } from './seedDataSource';
 // M0B's 46-table V1 inventory remains intact; additive M1 tables are inserted
 // before their parents. This is shared by clear and seed-smoke checks.
 export const CANONICAL_CLEAR_TABLES = [
+  'shipment_home_move_items',
+  'shipment_partial_items',
+  'shipment_home_move_details',
+  'shipment_office_move_details',
+  'shipment_partial_item_details',
   'shipment_location_conditions',
   'shipment_custom_extra_services',
   'converter_results',

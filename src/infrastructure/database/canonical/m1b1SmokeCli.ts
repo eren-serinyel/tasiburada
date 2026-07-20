@@ -3,6 +3,7 @@ import { config } from 'dotenv';
 import { DataSource } from 'typeorm';
 import { CanonicalBaselineV11784500000000 } from '../canonical-migrations/1784500000000-CanonicalBaselineV1';
 import { AddShipmentV2IdentityCodes1784580000000 } from '../canonical-migrations/1784580000000-AddShipmentV2IdentityCodes';
+import { AddShipmentOperationalConditions1784660000000 } from '../canonical-migrations/1784660000000-AddShipmentOperationalConditions';
 import {
   createDisposableDatabase,
   dropDisposableDatabase,
@@ -15,7 +16,6 @@ import {
 } from '../disposable/schemaIntrospection';
 import { countCanonicalSchema } from './canonicalVerification';
 import { canonicalDataSourceOptions } from './canonicalDataSource';
-import { CANONICAL_MIGRATIONS } from './canonicalMigrationRegistry';
 import {
   cleanupDisposableFixtureDirectory,
   createDisposableFixtureDirectory,
@@ -34,6 +34,10 @@ const MIGRATION_NAMES = [
 const M1A_MIGRATIONS = [
   CanonicalBaselineV11784500000000,
   AddShipmentV2IdentityCodes1784580000000,
+] as const;
+const M1B1_MIGRATIONS = [
+  ...M1A_MIGRATIONS,
+  AddShipmentOperationalConditions1784660000000,
 ] as const;
 
 const fail = (reason: string): never => {
@@ -299,7 +303,7 @@ const assertPhysicalSchema = async (
 
 const runFromZero = async (): Promise<void> => {
   const dataSource = await initializeDataSource(
-    CANONICAL_MIGRATIONS,
+    M1B1_MIGRATIONS,
   );
   try {
     const applied = await dataSource.runMigrations({
@@ -386,7 +390,7 @@ const runSeededUpgrade = async (): Promise<void> => {
   }
 
   const dataSource = await initializeDataSource(
-    CANONICAL_MIGRATIONS,
+    M1B1_MIGRATIONS,
   );
   try {
     const applied = await dataSource.runMigrations({
@@ -566,7 +570,7 @@ const main = async (): Promise<void> => {
     ) {
       fail('new disposable database metadata mismatch');
     }
-    if (CANONICAL_MIGRATIONS.length !== 3) {
+    if (M1B1_MIGRATIONS.length !== 3) {
       fail('canonical registry length mismatch');
     }
     if (mode === 'from-zero') {

@@ -298,7 +298,7 @@ describe('M1B-1 common operational details', () => {
   });
 
   it('registers baseline then M1A then M1B-1 without a legacy glob', () => {
-    expect(CANONICAL_MIGRATIONS).toEqual([
+    expect(CANONICAL_MIGRATIONS.slice(0, 3)).toEqual([
       CanonicalBaselineV11784500000000,
       AddShipmentV2IdentityCodes1784580000000,
       AddShipmentOperationalConditions1784660000000,

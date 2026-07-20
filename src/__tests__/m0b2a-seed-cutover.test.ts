@@ -41,15 +41,20 @@ describe('M0B-2A seed/reset and cutover preparation', () => {
       .map(table => table.name)
       .filter(tableName => tableName !== 'migrations')
       .sort();
+    const additiveTables = new Set([
+      'shipment_location_conditions',
+      'shipment_home_move_details',
+      'shipment_home_move_items',
+      'shipment_office_move_details',
+      'shipment_partial_item_details',
+      'shipment_partial_items',
+    ]);
     const v1ClearTables = CANONICAL_CLEAR_TABLES
-      .filter(
-        tableName =>
-          tableName !== 'shipment_location_conditions',
-      )
+      .filter(tableName => !additiveTables.has(tableName))
       .sort();
 
     expect(v1ClearTables).toEqual(expected);
-    expect(CANONICAL_CLEAR_TABLES).toHaveLength(47);
+    expect(CANONICAL_CLEAR_TABLES).toHaveLength(52);
     expect(CANONICAL_CLEAR_TABLES).toContain(
       'shipment_location_conditions',
     );
