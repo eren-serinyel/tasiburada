@@ -2,9 +2,10 @@
 
 ## 1. Kapsam
 
-Bu runbook, M0B-2B'de yapılabilecek development runtime cutover için kontrol
-listesidir. M0B-2A yalnız disposable prova, read-only preflight ve hazırlık
-üretir; gerçek cutover yapmaz.
+Bu runbook, development runtime canonical cutover kontrol listesidir. M0B-2A
+hazırlığı sonrasında M0B-2B, 20 Temmuz 2026 tarihinde bu akış izlenerek
+tamamlanmıştır. Gerçekleşen doğrulama değerleri
+[`M0B_CUTOVER_RESULT.md`](M0B_CUTOVER_RESULT.md) belgesinde kayıtlıdır.
 
 ## 2. M0A/M0B-1 referans commitleri
 
@@ -77,14 +78,17 @@ schema'lara dokunmamalıdır.
 
 ## 13. Runtime migration yolu
 
-Runtime migration kaynağının legacy zincirden canonical dizine geçirilmesi
-M0B-2B'de ayrı diff ve review ile yapılır. M0B-2A runtime DataSource'u
-değiştirmez.
+Runtime migration kaynağı M0B-2B diff'iyle legacy zincirden ortak canonical
+registry'ye geçirilmiştir. Registry yalnız
+`CanonicalBaselineV11784500000000` migration'ını yükler; legacy dosyalar
+yerinde korunur.
 
 ## 14. Runtime timezone
 
-Runtime timezone'un `+00:00` yapılması M0B-2B değişikliğidir ve uygulama tarih
-semantiğiyle birlikte review edilir. M0B-2A mevcut `+03:00` değerini korur.
+Runtime timezone M0B-2B ile `+00:00` yapılmıştır. DataSource config değerine ek
+olarak her yeni MySQL bağlantısında session timezone `+00:00` olarak kurulur
+ve initialize sırasında sorguyla doğrulanır. Global MySQL timezone
+değiştirilmez.
 
 ## 15. Canonical baseline
 
@@ -139,6 +143,11 @@ Veritabanı backup'ı hiçbir zaman Git'e eklenmez.
 
 ## 24. M0B-2B durumu
 
-M0B-2B henüz uygulanmamıştır. Bu repoda çalışan destructive cutover execute
-komutu yoktur; runtime DataSource, timezone ve legacy migration yolu mevcut
-durumunu korur.
+M0B-2B 20 Temmuz 2026 tarihinde tamamlanmıştır. Doğrulanmış repo dışı dump
+alınmış ve disposable DB'ye restore edilmiştir; runtime DataSource canonical
+registry'ye ve UTC session standardına geçirilmiş, `tasiburada_dev` güvenlik
+guard'ı ile yeniden oluşturulmuş, baseline ve seed uygulanmıştır. Final şema,
+migration history, seed invariant'ları, runtime DataSource ve health endpoint
+kontrolleri geçmiştir. Dump korunmaktadır; bu görevde commit veya push
+yapılmamıştır. Ayrıntılar
+[`M0B_CUTOVER_RESULT.md`](M0B_CUTOVER_RESULT.md) belgesindedir.

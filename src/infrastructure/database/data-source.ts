@@ -1,20 +1,15 @@
 import 'reflect-metadata';
-import { DataSource } from 'typeorm';
+import { DataSource, type DataSourceOptions } from 'typeorm';
 import { config } from 'dotenv';
 import { assertSafeTestDatabase } from './databaseSafety';
+import { CANONICAL_MIGRATIONS } from './canonical/canonicalMigrationRegistry';
 
-// Not: Artık entity'leri tek tek import etmek yerine glob pattern ile yüklüyoruz.
-// TypeORM 0.3.x DataSource entities alanı pattern dizilerini destekler.
-// Development (ts-node) -> .ts, Production (derlenmiş) -> .js dosyaları.
-
-// .env dosyasını yükle
-config(); // .env değişkenlerini yükle
+config();
 
 if (process.env.NODE_ENV === 'test') {
   assertSafeTestDatabase(process.env);
 }
 
-// Ortak ortam değişkenlerini oku (nullish coalescing ile varsayılanları ver)
 const {
   DB_HOST,
   DB_PORT,
@@ -24,75 +19,133 @@ const {
   DB_POOL,
   NODE_ENV,
   TS_NODE,
-  TS_NODE_DEV
+  TS_NODE_DEV,
 } = process.env;
 
-// Sayısal değerleri parse et, başarısız olursa fallback kullan
 const port = Number(DB_PORT ?? 3306) || 3306;
 const poolSize = Number(DB_POOL ?? 10) || 10;
 const isDev = (NODE_ENV ?? 'development') === 'development';
-
-// Derlenmiş JS mi yoksa ts-node altında mı çalışıyoruz? (NODE_ENV'ten bağımsız gerçek çalışma şekli)
-// production build'i development ortamda test ederken de doğru pattern seçimi için runtime tespiti.
 const usingTsRuntime = Boolean(
   TS_NODE_DEV ||
   TS_NODE === 'true' ||
-  process.argv.some(a => a.includes('ts-node')) ||
-  /\.ts$/.test(__filename) // derlenmemiş dosya uzantısı
+  process.argv.some(argument => argument.includes('ts-node')) ||
+  /\.ts$/.test(__filename)
 );
-
-// Entity & migration pattern'leri (ts runtime -> kaynak .ts, aksi halde dist .js)
 const entityPatterns = usingTsRuntime
   ? ['src/domain/entities/**/*.ts']
   : ['dist/domain/entities/**/*.js'];
-const migrationPatterns = usingTsRuntime
-  ? ['src/infrastructure/database/migrations/*.ts']
-  : ['dist/infrastructure/database/migrations/*.js'];
 
-export const AppDataSource = new DataSource({
+export const RUNTIME_SESSION_TIMEZONE_SQL =
+  `SET SESSION time_zone = '+00:00'`;
+
+interface RuntimeMysqlConnection {
+  query(
+    statement: string,
+    callback: (error?: Error | null) => void,
+  ): void;
+}
+
+interface RuntimeMysqlPool {
+  on(
+    event: 'connection',
+    listener: (connection: RuntimeMysqlConnection) => void,
+  ): void;
+}
+
+class RuntimeDataSource extends DataSource {
+  private utcConnectionListenerInstalled = false;
+
+  private installUtcConnectionListener(): void {
+    if (this.utcConnectionListenerInstalled) return;
+    const driver = this.driver as unknown as {
+      pool?: RuntimeMysqlPool;
+    };
+    if (!driver.pool) {
+      throw new Error('Runtime database UTC setup failed: pool unavailable');
+    }
+
+    driver.pool.on('connection', connection => {
+      connection.query(RUNTIME_SESSION_TIMEZONE_SQL, error => {
+        if (error) {
+          console.error('Runtime database UTC session setup failed');
+        }
+      });
+    });
+    this.utcConnectionListenerInstalled = true;
+  }
+
+  override async initialize(): Promise<this> {
+    await super.initialize();
+    this.installUtcConnectionListener();
+    await this.query(RUNTIME_SESSION_TIMEZONE_SQL);
+    const rows = (await this.query(
+      'SELECT @@session.time_zone AS sessionTimezone',
+    )) as Array<{ readonly sessionTimezone: string }>;
+    if (String(rows[0]?.sessionTimezone) !== '+00:00') {
+      await super.destroy();
+      this.utcConnectionListenerInstalled = false;
+      throw new Error('Runtime database UTC session verification failed');
+    }
+    return this;
+  }
+
+  override async destroy(): Promise<void> {
+    await super.destroy();
+    this.utcConnectionListenerInstalled = false;
+  }
+}
+
+const runtimeDataSourceOptions: DataSourceOptions = {
   type: 'mysql',
   host: DB_HOST ?? 'localhost',
   port,
   username: DB_USERNAME ?? 'root',
   password: DB_PASSWORD ?? '',
   database: DB_NAME ?? 'tasiburada_dev',
-  synchronize: false, // üretimde migrations kullanılacak
-  logging: isDev,     // sadece development'ta query logları
+  synchronize: false,
+  migrationsRun: false,
+  logging: isDev,
   entities: entityPatterns,
-  migrations: migrationPatterns,
+  migrations: [...CANONICAL_MIGRATIONS],
   migrationsTableName: 'migrations',
+  migrationsTransactionMode: 'none',
   charset: 'utf8mb4',
-  timezone: '+03:00', // Türkiye saat dilimi
+  timezone: '+00:00',
   extra: {
     connectionLimit: poolSize,
     charset: 'utf8mb4_unicode_ci',
-  }
-});
+  },
+};
 
-// Database bağlantısını başlat
+export const AppDataSource = new RuntimeDataSource(
+  runtimeDataSourceOptions,
+);
+
 export const initializeDatabase = async (): Promise<void> => {
   try {
     await AppDataSource.initialize();
-    const opts = AppDataSource.options as any;
-    console.log(`✅ DB connected → ${opts.type}://${opts.host}:${opts.port}/${opts.database}`);
-  } catch (err: any) {
+    console.log('✅ Database connection initialized');
+  } catch (error: unknown) {
     console.error('❌ DB connection failed');
-    console.error(err?.message);
-    if (isDev && err?.stack) console.error(err.stack);
-    throw err;
+    if (error instanceof Error) {
+      console.error(error.message);
+      if (isDev && error.stack) console.error(error.stack);
+    }
+    throw error;
   }
 };
 
-// Graceful shutdown için database bağlantısını kapat
 export const closeDatabase = async (): Promise<void> => {
   try {
     if (AppDataSource.isInitialized) {
       await AppDataSource.destroy();
     }
-  } catch (err: any) {
+  } catch (error: unknown) {
     console.error('❌ DB close failed');
-    console.error(err?.message);
-    if (isDev && err?.stack) console.error(err.stack);
-    throw err;
+    if (error instanceof Error) {
+      console.error(error.message);
+      if (isDev && error.stack) console.error(error.stack);
+    }
+    throw error;
   }
 };

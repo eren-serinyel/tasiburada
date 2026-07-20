@@ -1,15 +1,17 @@
 import 'reflect-metadata';
 import { DataSource, type DataSourceOptions } from 'typeorm';
-import { CanonicalBaselineV11784500000000 } from '../canonical-migrations/1784500000000-CanonicalBaselineV1';
 import {
   assertSafeDisposableDatabaseTarget,
   type DisposableDatabaseEnvironment,
 } from '../disposable/disposableDatabaseSafety';
+import {
+  CANONICAL_MIGRATIONS,
+  CANONICAL_MIGRATION_NAME,
+} from './canonicalMigrationRegistry';
 
 export const CANONICAL_MIGRATION_DIRECTORY =
   'src/infrastructure/database/canonical-migrations';
-export const CANONICAL_MIGRATION_NAME =
-  'CanonicalBaselineV11784500000000';
+export { CANONICAL_MIGRATION_NAME };
 
 export interface CanonicalDataSourceConfiguration {
   readonly loadEntities?: boolean;
@@ -54,7 +56,7 @@ export const canonicalDataSourceOptions = (
     entities: configuration.loadEntities
       ? ['src/domain/entities/**/*.ts']
       : [],
-    migrations: [CanonicalBaselineV11784500000000],
+    migrations: [...CANONICAL_MIGRATIONS],
     migrationsTableName: 'migrations',
     migrationsTransactionMode: 'none',
     extra: {

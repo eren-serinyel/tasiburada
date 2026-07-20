@@ -192,12 +192,7 @@ describe('M0B-2A seed/reset and cutover preparation', () => {
     expect(preflightSource).toMatch(/\bSELECT\b/);
   });
 
-  it('adds no destructive execute script, V2 schema name, or baseline drift', () => {
-    const packageJson = JSON.parse(source('package.json')) as {
-      scripts: Record<string, string>;
-    };
-    expect(packageJson.scripts['db:m0b:cutover:execute']).toBeUndefined();
-
+  it('adds no V2 schema name or baseline drift', () => {
     const changedImplementation = [
       'src/database/seed/clearDatabase.ts',
       'src/database/seed/seedDataSource.ts',
