@@ -509,7 +509,7 @@ describe('M1B-2 current mutable category details', () => {
   });
 
   it('registers baseline through M1B-2 without a legacy glob', () => {
-    expect(CANONICAL_MIGRATIONS).toEqual([
+    expect(CANONICAL_MIGRATIONS.slice(0, 4)).toEqual([
       CanonicalBaselineV11784500000000,
       AddShipmentV2IdentityCodes1784580000000,
       AddShipmentOperationalConditions1784660000000,

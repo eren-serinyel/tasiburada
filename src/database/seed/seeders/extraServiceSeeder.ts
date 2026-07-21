@@ -3,35 +3,45 @@ import { ExtraService } from '../../../domain/entities/ExtraService';
 import { ExtraServiceApplicability } from '../../../domain/entities/ExtraServiceApplicability';
 import {
   EXTRA_SERVICE_APPLICABILITY_SEED,
-  EXTRA_SERVICE_CATALOG,
+  EXTRA_SERVICE_CATALOG_MANIFEST,
 } from '../../../application/services/extra-services/extraServiceApplicability';
 
 export async function seedExtraServices(): Promise<Map<string, string>> {
   const extraRepo = AppDataSource.getRepository(ExtraService);
   const applicabilityRepo = AppDataSource.getRepository(ExtraServiceApplicability);
   const extraServiceMap = new Map<string, string>();
+  const extraServiceIdByCode = new Map<string, string>();
 
-  for (const [index, name] of EXTRA_SERVICE_CATALOG.entries()) {
-    let existing = await extraRepo.findOne({ where: { name } });
+  for (const entry of EXTRA_SERVICE_CATALOG_MANIFEST) {
+    let existing = await extraRepo.findOne({ where: { code: entry.code } });
     if (!existing) {
       existing = await extraRepo.save(extraRepo.create({
-        name,
-        description: null,
-        status: 'ACTIVE',
-        sortOrder: index + 1,
+        code: entry.code,
+        name: entry.name,
+        description: entry.description,
+        status: entry.status,
+        sortOrder: entry.sortOrder,
       }));
-    } else if (existing.status !== 'ACTIVE' || existing.sortOrder !== index + 1) {
-      existing.status = 'ACTIVE';
-      existing.sortOrder = index + 1;
+    } else if (
+      existing.name !== entry.name ||
+      existing.status !== entry.status ||
+      existing.sortOrder !== entry.sortOrder
+    ) {
+      existing.name = entry.name;
+      existing.status = entry.status;
+      existing.sortOrder = entry.sortOrder;
       existing = await extraRepo.save(existing);
     }
 
-    extraServiceMap.set(name, existing.id);
+    extraServiceMap.set(entry.name, existing.id);
+    extraServiceIdByCode.set(entry.code, existing.id);
   }
 
   for (const rule of EXTRA_SERVICE_APPLICABILITY_SEED) {
-    const extraServiceId = extraServiceMap.get(rule.name);
-    if (!extraServiceId) continue;
+    const extraServiceId = extraServiceIdByCode.get(rule.code);
+    if (!extraServiceId) {
+      throw new Error(`Extra service seed invariant failed: missing code ${rule.code}`);
+    }
 
     let existingRule = await applicabilityRepo.findOne({
       where: { extraServiceId, loadType: rule.loadType },

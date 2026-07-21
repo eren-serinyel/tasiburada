@@ -10,6 +10,9 @@ import { CarrierCustomExtraService, CarrierCustomExtraServicePriceMode } from '.
 import { CarrierExtraServiceCapability } from '../domain/entities/CarrierExtraServiceCapability';
 import { ConverterService } from '../application/services/ConverterService';
 import { Carrier } from '../domain/entities/Carrier';
+import {
+  EXTRA_SERVICE_APPLICABILITY_SEED,
+} from '../application/services/extra-services/extraServiceApplicability';
 
 const { reconcileSelectedExtraServiceIds } = require('../../shadcn-ui/src/lib/extraServices');
 
@@ -19,6 +22,53 @@ describe('extra service applicability', () => {
   beforeAll(async () => {
     if (skipDB()) return;
     await withSeedDataSource(AppDataSource, () => seedExtraServices());
+  });
+
+  test('7.1-C canonical HOME/OFFICE/PARTIAL matrisi exact, duplicate-free ve internal code public response disinda', async () => {
+    if (skipDB()) return;
+
+    const expected = EXTRA_SERVICE_APPLICABILITY_SEED
+      .slice()
+      .sort((left, right) =>
+        left.code < right.code
+          ? -1
+          : left.code > right.code
+            ? 1
+            : left.loadType < right.loadType
+              ? -1
+              : left.loadType > right.loadType
+                ? 1
+                : 0,
+      )
+      .map((rule) => `${rule.code}|${rule.loadType}`);
+    const rows = await AppDataSource.query(
+      `SELECT es.code, esa.load_type AS loadType
+         FROM extra_service_applicability esa
+         JOIN extra_services es ON es.id = esa.extra_service_id
+        WHERE esa.load_type IN ('HOME', 'OFFICE', 'PARTIAL')
+        ORDER BY es.code, esa.load_type`,
+    );
+    expect(rows.map((row: any) => `${row.code}|${row.loadType}`)).toEqual(expected);
+
+    const duplicateRows = await AppDataSource.query(
+      `SELECT extra_service_id, load_type
+         FROM extra_service_applicability
+        GROUP BY extra_service_id, load_type
+       HAVING COUNT(*) > 1`,
+    );
+    const orphanRows = await AppDataSource.query(
+      `SELECT esa.id
+         FROM extra_service_applicability esa
+         LEFT JOIN extra_services es ON es.id = esa.extra_service_id
+        WHERE es.id IS NULL`,
+    );
+    expect(duplicateRows).toEqual([]);
+    expect(orphanRows).toEqual([]);
+
+    const response = await request(testApp).get('/api/v1/extra-services?loadType=HOME');
+    expect(response.status).toBe(200);
+    expect(response.body.data.length).toBeGreaterThan(0);
+    expect(response.body.data.every((item: any) => !Object.prototype.hasOwnProperty.call(item, 'code'))).toBe(true);
   });
 
   test('HOME loadType servisleri dogru geliyor', async () => {
@@ -43,8 +93,8 @@ describe('extra service applicability', () => {
     expect(res.body.success).toBe(true);
     const names = res.body.data.map((item: any) => item.name);
     expect(names).toContain('Server/IT özel taşıma');
-    expect(names).toContain('Kurumsal sigorta');
-    expect(names).not.toContain('Beyaz Eşya Kurulumu');
+    expect(names).not.toContain('Kurumsal sigorta');
+    expect(names).not.toContain('Askılı Koli Hizmeti');
   });
 
   test('carrier detail services loadType parametresine gore filtrelenir', async () => {
@@ -241,7 +291,7 @@ describe('extra service applicability', () => {
       where: { email: 'info@silenakliyat.com' },
     });
     const homeOnlyService = await AppDataSource.getRepository(ExtraService).findOne({
-      where: { name: 'Beyaz Eşya Kurulumu' },
+      where: { name: 'Askılı Koli Hizmeti' },
     });
     expect(carrier).toBeTruthy();
     expect(homeOnlyService).toBeTruthy();

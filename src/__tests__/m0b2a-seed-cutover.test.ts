@@ -15,6 +15,7 @@ import {
   classifyRuntimeCutoverFingerprint,
 } from '../infrastructure/database/canonical/runtimeCutoverPreflight';
 import type { CanonicalSchemaManifest } from '../infrastructure/database/disposable/schemaManifest';
+import { EXTRA_SERVICE_CATALOG } from '../application/services/extra-services/extraServiceApplicability';
 
 jest.mock('../database/seed/helpers/pdfHelper', () => ({
   cleanupSeededDocumentFiles: () => 0,
@@ -36,6 +37,11 @@ const safeResetEnvironment = {
 };
 
 describe('M0B-2A seed/reset and cutover preparation', () => {
+  it('uses the 34-row canonical extra-service seed contract', () => {
+    expect(EXTRA_SERVICE_CATALOG).toHaveLength(34);
+    expect(new Set(EXTRA_SERVICE_CATALOG).size).toBe(34);
+  });
+
   it('preserves the 46-table V1 inventory inside the additive child-first inventory', () => {
     const expected = manifest.tables
       .map(table => table.name)

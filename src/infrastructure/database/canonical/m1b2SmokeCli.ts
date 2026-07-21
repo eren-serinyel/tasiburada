@@ -4,6 +4,7 @@ import { DataSource } from 'typeorm';
 import { CanonicalBaselineV11784500000000 } from '../canonical-migrations/1784500000000-CanonicalBaselineV1';
 import { AddShipmentV2IdentityCodes1784580000000 } from '../canonical-migrations/1784580000000-AddShipmentV2IdentityCodes';
 import { AddShipmentOperationalConditions1784660000000 } from '../canonical-migrations/1784660000000-AddShipmentOperationalConditions';
+import { AddShipmentCategoryDetails1784740000000 } from '../canonical-migrations/1784740000000-AddShipmentCategoryDetails';
 import {
   createDisposableDatabase,
   dropDisposableDatabase,
@@ -33,6 +34,18 @@ const MIGRATION_NAMES = [
   'AddShipmentOperationalConditions1784660000000',
   'AddShipmentCategoryDetails1784740000000',
 ] as const;
+
+const EXPECTED_M1B2_MIGRATIONS = [
+  CanonicalBaselineV11784500000000,
+  AddShipmentV2IdentityCodes1784580000000,
+  AddShipmentOperationalConditions1784660000000,
+  AddShipmentCategoryDetails1784740000000,
+] as const;
+
+const M1B2_CANONICAL_MIGRATIONS = CANONICAL_MIGRATIONS.slice(
+  0,
+  MIGRATION_NAMES.length,
+);
 
 const PREVIOUS_MIGRATIONS = [
   CanonicalBaselineV11784500000000,
@@ -409,7 +422,7 @@ const assertCategoryInvariants = async (
 
 const runFromZero = async (): Promise<void> => {
   const dataSource = await initializeDataSource(
-    CANONICAL_MIGRATIONS,
+    M1B2_CANONICAL_MIGRATIONS,
   );
   try {
     const applied = await dataSource.runMigrations({
@@ -509,7 +522,7 @@ const runSeededUpgrade = async (): Promise<void> => {
   }
 
   const dataSource = await initializeDataSource(
-    CANONICAL_MIGRATIONS,
+    M1B2_CANONICAL_MIGRATIONS,
   );
   try {
     const applied = await dataSource.runMigrations({
@@ -639,8 +652,15 @@ const main = async (): Promise<void> => {
     ) {
       fail('new disposable database metadata mismatch');
     }
-    if (CANONICAL_MIGRATIONS.length !== 4) {
-      fail('canonical registry length mismatch');
+    if (
+      CANONICAL_MIGRATIONS.length < MIGRATION_NAMES.length ||
+      M1B2_CANONICAL_MIGRATIONS.some(
+        (migration, index) =>
+          migration !== EXPECTED_M1B2_MIGRATIONS[index] ||
+          migration.name !== MIGRATION_NAMES[index],
+      )
+    ) {
+      fail('canonical registry M1B-2 prefix mismatch');
     }
     if (mode === 'from-zero') {
       await runFromZero();

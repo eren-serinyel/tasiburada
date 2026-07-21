@@ -9,7 +9,15 @@ export class ExtraServiceService {
   async listActiveExtraServices(loadType?: ExtraServiceLoadType | null) {
     const qb = this.extraServiceRepo
       .createQueryBuilder('extraService')
-      .innerJoinAndSelect('extraService.applicabilityRules', 'applicability')
+      .innerJoin('extraService.applicabilityRules', 'applicability')
+      .select('extraService.id', 'id')
+      .addSelect('extraService.name', 'name')
+      .addSelect('extraService.description', 'description')
+      .addSelect('extraService.status', 'status')
+      .addSelect('applicability.loadType', 'loadType')
+      .addSelect('applicability.isDefaultVisible', 'isDefaultVisible')
+      .addSelect('applicability.isRecommendedByConverter', 'isRecommendedByConverter')
+      .addSelect('applicability.sortOrder', 'sortOrder')
       .where('extraService.status = :status', { status: 'ACTIVE' });
 
     if (loadType) {
@@ -20,22 +28,27 @@ export class ExtraServiceService {
       .addOrderBy('extraService.sortOrder', 'ASC')
       .addOrderBy('extraService.name', 'ASC');
 
-    const services = await qb.getMany();
+    const rows = await qb.getRawMany<{
+      id: string;
+      name: string;
+      description: string | null;
+      status: 'ACTIVE' | 'INACTIVE';
+      loadType: ExtraServiceLoadType;
+      isDefaultVisible: boolean | number | string;
+      isRecommendedByConverter: boolean | number | string;
+      sortOrder: number | string;
+    }>();
 
-    return services.flatMap((service) =>
-      service.applicabilityRules
-        .filter((rule) => !loadType || rule.loadType === loadType)
-        .map((rule) => ({
-          id: service.id,
-          name: service.name,
-          description: service.description,
-          status: service.status,
-          loadType: rule.loadType,
-          isDefaultVisible: rule.isDefaultVisible,
-          isRecommendedByConverter: rule.isRecommendedByConverter,
-          sortOrder: rule.sortOrder,
-        })),
-    );
+    return rows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      description: row.description,
+      status: row.status,
+      loadType: row.loadType,
+      isDefaultVisible: Boolean(Number(row.isDefaultVisible)),
+      isRecommendedByConverter: Boolean(Number(row.isRecommendedByConverter)),
+      sortOrder: Number(row.sortOrder),
+    }));
   }
 
   async upsertApplicability(extraServiceId: string, payload: Omit<ExtraServiceApplicability, 'id' | 'createdAt' | 'updatedAt' | 'extraService' | 'extraServiceId'> & { loadType: ExtraServiceLoadType }) {

@@ -67,8 +67,10 @@ describe('current shipment extra service update', () => {
     expect(secondHomeService).toBeTruthy();
 
     const extraRepo = AppDataSource.getRepository(ExtraService);
+    const inactiveHomeUnique = Date.now();
     inactiveHomeService = await extraRepo.save(extraRepo.create({
-      name: `inactive-update-service-${Date.now()}`,
+      code: `INACTIVE_UPDATE_${inactiveHomeUnique}`,
+      name: `inactive-update-service-${inactiveHomeUnique}`,
       description: 'Inactive update test service',
       status: 'INACTIVE',
       sortOrder: 999,
@@ -86,8 +88,11 @@ describe('current shipment extra service update', () => {
       status: 'ACTIVE' | 'INACTIVE',
       loadTypes: ExtraServiceLoadType[],
     ) => {
+      sequence += 1;
+      const unique = `${Date.now()}_${sequence}`;
       const service = await extraRepo.save(extraRepo.create({
-        name: `${namePrefix}-${Date.now()}`,
+        code: `STORAGE_UPDATE_${status}_${unique}`,
+        name: `${namePrefix}-${unique}`,
         description: 'Storage update test service',
         status,
         sortOrder: 999,

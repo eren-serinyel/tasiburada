@@ -7,6 +7,15 @@ export class ExtraService {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
+  @Column({
+    type: 'varchar',
+    length: 64,
+    unique: true,
+    charset: 'ascii',
+    collation: 'ascii_bin',
+  })
+  code: string;
+
   @Column({ type: 'varchar', length: 100, unique: true })
   name: string;
 

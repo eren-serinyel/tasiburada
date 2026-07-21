@@ -164,8 +164,10 @@ describe('current shipment extra service selection', () => {
 
     const serviceRepo = AppDataSource.getRepository(ExtraService);
     const applicabilityRepo = AppDataSource.getRepository(ExtraServiceApplicability);
+    const unique = Date.now();
     const inactiveService = await serviceRepo.save(serviceRepo.create({
-      name: `inactive-current-shipment-service-${Date.now()}`,
+      code: `INACTIVE_CURRENT_SHIPMENT_${unique}`,
+      name: `inactive-current-shipment-service-${unique}`,
       description: 'Inactive test service',
       status: 'INACTIVE',
       sortOrder: 999,
