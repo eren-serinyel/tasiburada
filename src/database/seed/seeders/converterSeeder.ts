@@ -1,4 +1,4 @@
-import { AppDataSource } from '../../../infrastructure/database/data-source';
+import { SeedDataSource as AppDataSource } from '../seedDataSource';
 import { ConverterItemCatalog } from '../../../domain/entities/ConverterItemCatalog';
 import { ConverterVehicleRule } from '../../../domain/entities/ConverterVehicleRule';
 import { CONVERTER_ITEM_CATALOG_V1, CONVERTER_VEHICLE_RULES_V1 } from '../data/converterData';

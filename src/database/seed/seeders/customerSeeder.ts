@@ -1,4 +1,4 @@
-import { AppDataSource } from '../../../infrastructure/database/data-source';
+import { SeedDataSource as AppDataSource } from '../seedDataSource';
 import { Customer } from '../../../domain/entities/Customer';
 import { CustomerAddress } from '../../../domain/entities/CustomerAddress';
 import { CUSTOMER_NAMES } from '../data/constants';
@@ -96,6 +96,6 @@ export async function seedCustomers(): Promise<Customer[]> {
   }
 
   console.log(`  ✓ ${created.length} müşteri`);
-  console.log('  🔑 Şifre: Maviface2141 (hepsi)');
+  console.log('  🔑 Şifre: [seed şifresi] (hepsi)');
   return created;
 }

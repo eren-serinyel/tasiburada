@@ -10,11 +10,10 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
 import AuthModal from '@/components/AuthModal';
-import TrustChecklist from '@/components/carrier-detail/TrustChecklist';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
-  ChevronLeft, MapPin, ShieldCheck, CheckCircle2, Clock, XCircle, Star, Truck,
-  MessageSquareText, ClipboardList, Phone, Mail, Calendar, Award,
+  ChevronLeft, MapPin, CheckCircle2, Star, Truck,
+  MessageSquareText, ClipboardList, Phone, Mail, Calendar,
   TrendingUp, Package, BadgeCheck, Lock, Pencil, Trash2, Loader2, Heart
 } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
@@ -30,7 +29,6 @@ import { useFavorites } from '@/hooks/useFavorites';
 import { cn, formatPrice, formatDate } from '@/lib/utils';
 import type {
   CarrierDetail,
-  CarrierDetailDocument,
   CarrierDetailReview,
   CarrierDetailServiceGroup,
   CarrierDetailServiceItem,
@@ -177,19 +175,6 @@ const CarrierDetailPage = () => {
     return dist;
   }, [activeReviews]);
 
-  /* ─── Trust badges from documents ─── */
-  const trustBadges = useMemo(() => {
-    if (!data) return [];
-    const badges: { label: string; verified: boolean }[] = [];
-    const authDoc = data.documents.find(d => d.type === 'AUTHORIZATION_CERT');
-    badges.push({ label: 'Yetki Belgeli', verified: authDoc?.isApproved ?? false });
-    const vehicleDoc = data.documents.find(d => d.type === 'VEHICLE_LICENSE');
-    badges.push({ label: 'Araç Belgeli', verified: vehicleDoc?.isApproved ?? false });
-    const insuranceDoc = data.documents.find(d => d.type === 'INSURANCE_POLICY');
-    badges.push({ label: 'Sigortalı', verified: insuranceDoc?.isApproved ?? false });
-    return badges;
-  }, [data]);
-
   /* ─── Guards ─── */
 
   if (!carrierId) {
@@ -236,18 +221,15 @@ const CarrierDetailPage = () => {
 
   /* ─── Derived values ─── */
 
-  const profilePercent = clampPercentage(data.profile.overallPercentage ?? 0);
-  const ratingValue = Number(data.rating.average ?? 0);
-  const ratingCount = activeReviews.length;
+  const ratingValue = Number(data.rating ?? 0);
+  const ratingCount = Number(data.reviewCount ?? activeReviews.length);
   const initials = buildInitials(data.companyName);
-  const successRatePercent = normalizeSuccessRate(data.stats.successRate);
   const experienceText = data.experienceYears != null && data.experienceYears > 0
     ? `${data.experienceYears} yıl deneyim`
     : 'Deneyim bilgisi paylaşılmadı';
   const serviceAreas = data.serviceAreas?.length ? data.serviceAreas : [];
   const serviceShowcase = data.services ?? [];
   const vehicles = data.vehicles ?? [];
-  const documents = data.documents ?? [];
   const startingPriceText = typeof data.startingPrice === 'number' && data.startingPrice > 0
     ? formatPrice(data.startingPrice)
     : 'Belirtilmedi';
@@ -315,7 +297,7 @@ const CarrierDetailPage = () => {
                       {initials}
                     </AvatarFallback>
                   </Avatar>
-                  {data.documentsApproved && (
+                  {data.isVerified && (
                     <div className="absolute -bottom-1 -right-1 bg-emerald-500 rounded-full p-0.5">
                       <CheckCircle2 className="h-4 w-4 text-white" />
                     </div>
@@ -330,7 +312,7 @@ const CarrierDetailPage = () => {
                     >
                       {data.companyName}
                     </span>
-                    {data.documentsApproved && (
+                    {data.isVerified && (
                       <Badge className="bg-emerald-500/20 text-emerald-300 border-emerald-500/30 text-xs">
                         <BadgeCheck className="h-3 w-3 mr-1" /> Onaylı
                       </Badge>
@@ -383,13 +365,13 @@ const CarrierDetailPage = () => {
                 />
                 <MetricCard
                   icon={<Package className="h-4 w-4 text-emerald-400" />}
-                  label="Tamamlanan"
-                  value={String(data.stats.completedShipments)}
+                  label="Hizmet Bölgesi"
+                  value={String(serviceAreas.length)}
                 />
                 <MetricCard
                   icon={<TrendingUp className="h-4 w-4 text-purple-400" />}
-                  label="Başarı"
-                  value={`%${successRatePercent}`}
+                  label="Deneyim"
+                  value={data.experienceYears !== null ? `${data.experienceYears} yıl` : '—'}
                 />
               </div>
             </div>
@@ -410,21 +392,6 @@ const CarrierDetailPage = () => {
 
                 {/* ── Hakkında ── */}
                 <TabsContent value="about" className="space-y-5">
-                  {/* Performance stats */}
-                  <Card>
-                    <CardHeader className="pb-3">
-                      <CardTitle className="text-base">Performans Özeti</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                        <StatCard label="Tamamlanan" value={data.stats.completedShipments} color="emerald" />
-                        <StatCard label="İptaller" value={data.stats.cancelledShipments} color="rose" />
-                        <StatCard label="Başarı Oranı" value={`%${successRatePercent}`} color="blue" />
-                        <StatCard label="Toplam Teklif" value={data.stats.totalOffers} color="amber" />
-                      </div>
-                    </CardContent>
-                  </Card>
-
                   {/* Service areas */}
                   {serviceAreas.length > 0 && (
                     <Card>
@@ -457,32 +424,10 @@ const CarrierDetailPage = () => {
                       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                         <InfoItem label="Konum" value={formatLocation(data.city, data.district)} icon={<MapPin className="h-4 w-4" />} />
                         <InfoItem label="Deneyim" value={experienceText} icon={<Calendar className="h-4 w-4" />} />
-                        <InfoItem label="Kuruluş Yılı" value={data.foundedYear ? String(data.foundedYear) : 'Belirtilmedi'} icon={<Award className="h-4 w-4" />} />
-                        <InfoItem label="Vergi No" value={data.taxNumber || 'Belirtilmedi'} icon={<ClipboardList className="h-4 w-4" />} />
                         <InfoItem label="Başlangıç Fiyat" value={startingPriceText} icon={<TrendingUp className="h-4 w-4" />} />
-                        <InfoItem label="Adres" value={data.address || 'Belirtilmedi'} icon={<MapPin className="h-4 w-4" />} />
                       </div>
                     </CardContent>
                   </Card>
-
-                  {/* Documents */}
-                  {documents.length > 0 && (
-                    <Card>
-                      <CardHeader className="pb-3">
-                        <CardTitle className="text-base">Belgeler</CardTitle>
-                        <CardDescription>
-                          Belge dosyaları gizlilik için gösterilmiyor. Yalnızca onay durumu paylaşılır.
-                        </CardDescription>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="space-y-2.5">
-                          {documents.map(doc => (
-                            <DocumentRow key={doc.id} document={doc} />
-                          ))}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  )}
                 </TabsContent>
 
                 {/* ── Araçlar ── */}
@@ -624,7 +569,6 @@ const CarrierDetailPage = () => {
                         <ReviewCard
                           key={review.id}
                           review={review}
-                          myId={sessionUser?.id}
                           onEdit={r => { setEditingReview(r); setEditRating(r.rating); setEditComment(r.comment ?? ''); }}
                           onDelete={r => { setReviewToDelete(r); setDeleteDialogOpen(true); }}
                         />
@@ -703,56 +647,18 @@ const CarrierDetailPage = () => {
                 </CardContent>
               </Card>
 
-              <TrustChecklist data={data} />
-
-              {/* Trust badges */}
+              {/* Public trust badge */}
               <Card>
                 <CardHeader className="pb-3">
-                  <CardTitle className="text-sm">Güven Rozetleri</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2.5">
-                  {trustBadges.map(badge => (
-                    <div
-                      key={badge.label}
-                      className={cn(
-                        'flex items-center gap-3 rounded-lg p-2.5',
-                        badge.verified ? 'bg-emerald-50 dark:bg-emerald-950/30' : 'bg-muted/50'
-                      )}
-                    >
-                      <div
-                        className={cn(
-                          'h-7 w-7 rounded-full flex items-center justify-center',
-                          badge.verified ? 'bg-emerald-100 dark:bg-emerald-900/50' : 'bg-muted'
-                        )}
-                      >
-                        {badge.verified
-                          ? <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                          : <ShieldCheck className="h-4 w-4 text-muted-foreground" />}
-                      </div>
-                      <p
-                        className={cn(
-                          'text-sm font-medium',
-                          badge.verified ? 'text-emerald-700 dark:text-emerald-300' : 'text-muted-foreground'
-                        )}
-                      >
-                        {badge.label}
-                      </p>
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
-
-              {/* Profile completion */}
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm">Profil Tamamlanma</CardTitle>
+                  <CardTitle className="text-sm">Doğrulama</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="flex items-center justify-between text-xs text-muted-foreground mb-1.5">
-                    <span>Genel durum</span>
-                    <span className="font-medium">%{profilePercent}</span>
+                  <div className="flex items-center gap-3 rounded-lg bg-emerald-50 p-3 dark:bg-emerald-950/30">
+                    <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                    <span className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
+                      Doğrulanmış nakliyeci
+                    </span>
                   </div>
-                  <Progress value={profilePercent} className="h-1.5" />
                 </CardContent>
               </Card>
             </div>
@@ -878,37 +784,6 @@ const buildInitials = (name: string): string => {
   return `${first}${second}`.toUpperCase();
 };
 
-const clampPercentage = (value: number): number => {
-  if (!Number.isFinite(value)) return 0;
-  return Math.max(0, Math.min(100, Math.round(value)));
-};
-
-const normalizeSuccessRate = (value: number): number => {
-  if (!Number.isFinite(value)) return 0;
-  const normalized = value > 1 ? value : value * 100;
-  return clampPercentage(normalized);
-};
-
-const documentLabel = (type: string): string => {
-  const map: Record<string, string> = {
-    AUTHORIZATION_CERT: 'Yetki belgesi',
-    SRC_CERT: 'SRC belgesi',
-    VEHICLE_LICENSE: 'Ruhsat',
-    TAX_PLATE: 'Vergi levhası',
-    INSURANCE_POLICY: 'Sigorta poliçesi'
-  };
-  return map[type] || type;
-};
-
-const friendlyStatus = (status: string): string => {
-  const map: Record<string, string> = {
-    APPROVED: 'Onaylı',
-    PENDING: 'Beklemede',
-    REJECTED: 'Reddedildi'
-  };
-  return map[status] || status;
-};
-
 /* ─── Sub-components ─── */
 
 const MetricCard = ({ icon, label, value }: { icon: ReactNode; label: string; value: string }) => (
@@ -920,29 +795,6 @@ const MetricCard = ({ icon, label, value }: { icon: ReactNode; label: string; va
     <p className="text-xs text-white/60">{label}</p>
   </div>
 );
-
-const StatCard = ({
-  label,
-  value,
-  color
-}: {
-  label: string;
-  value: string | number;
-  color: 'emerald' | 'rose' | 'blue' | 'amber';
-}) => {
-  const colorMap = {
-    emerald: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300',
-    rose: 'bg-rose-50 text-rose-700 dark:bg-rose-950/30 dark:text-rose-300',
-    blue: 'bg-blue-50 text-blue-700 dark:bg-blue-950/30 dark:text-blue-300',
-    amber: 'bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-300',
-  };
-  return (
-    <div className={cn('rounded-xl p-4 text-center', colorMap[color])}>
-      <p className="text-lg font-bold">{value}</p>
-      <p className="text-xs mt-0.5 opacity-70">{label}</p>
-    </div>
-  );
-};
 
 const InfoItem = ({ label, value, icon }: { label: string; value: string; icon: ReactNode }) => (
   <div className="flex items-start gap-3">
@@ -1015,47 +867,12 @@ const ServiceShowcaseCard = ({ services }: { services: CarrierDetailServiceGroup
   </Card>
 );
 
-const DocumentRow = ({ document }: { document: CarrierDetailDocument }) => {
-  const isApproved = document.isApproved;
-  const isRejected = !isApproved && document.status === 'REJECTED';
-  const Icon = isApproved ? CheckCircle2 : isRejected ? XCircle : Clock;
-  const iconClass = isApproved ? 'text-emerald-600' : isRejected ? 'text-destructive' : 'text-amber-600';
-  const rowClass = isApproved
-    ? 'bg-emerald-50/30'
-    : isRejected
-      ? 'bg-destructive/5'
-      : 'bg-amber-50/30';
-  const badgeClass = isApproved
-    ? 'border-transparent bg-emerald-100 text-emerald-700 hover:bg-emerald-100'
-    : undefined;
-
-  return (
-    <div className={cn('flex items-center justify-between rounded-lg border p-3', rowClass)}>
-      <div className="flex items-center gap-3">
-        <Icon className={cn('h-5 w-5', iconClass)} />
-        <div>
-          <p className="font-medium text-foreground">{documentLabel(document.type)}</p>
-          <p className="text-xs italic text-muted-foreground">{document.isRequired ? 'Zorunlu belge' : 'İsteğe bağlı belge'}</p>
-        </div>
-      </div>
-      <Badge
-        variant={isApproved ? 'secondary' : isRejected ? 'destructive' : 'secondary'}
-        className={cn('text-xs', badgeClass)}
-      >
-        {friendlyStatus(document.status)}
-      </Badge>
-    </div>
-  );
-};
-
 const ReviewCard = ({
   review,
-  myId,
   onEdit,
   onDelete
 }: {
   review: CarrierDetailReview;
-  myId?: string;
   onEdit?: (r: CarrierDetailReview) => void;
   onDelete?: (r: CarrierDetailReview) => void;
 }) => {
@@ -1080,7 +897,7 @@ const ReviewCard = ({
               <p className="font-semibold text-sm text-foreground">{review.author}</p>
               <div className="flex items-center gap-1">
                 <span className="text-xs text-muted-foreground">{formatDate(new Date(review.createdAt))}</span>
-                {myId && review.customerId === myId && onEdit && onDelete && (
+                {review.isOwnReview === true && onEdit && onDelete && (
                   <>
                     <Button variant="ghost" size="sm" className="h-6 w-6 p-0 ml-1" onClick={() => onEdit(review)}>
                       <Pencil className="h-3 w-3" />

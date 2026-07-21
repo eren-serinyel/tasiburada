@@ -11,14 +11,15 @@ interface FavoriteCarrierItem {
     id: string;
     companyName: string;
     city: string | null;
+    district?: string | null;
     rating: number;
     reviewCount: number;
     vehicleSummary: string | null;
     serviceAreas: string[];
     startingPrice: number | null;
     experienceYears: number | null;
-    profileCompletion: number | null;
     pictureUrl: string | null;
+    isVerified?: boolean;
   };
 }
 
@@ -86,14 +87,21 @@ export default function FavoriteCarriers() {
                 id: fav.carrier.id,
                 companyName: fav.carrier.companyName,
                 city: fav.carrier.city,
+                district: fav.carrier.district ?? null,
                 rating: fav.carrier.rating ?? 0,
                 reviewCount: fav.carrier.reviewCount ?? 0,
                 vehicleSummary: fav.carrier.vehicleSummary,
                 serviceAreas: fav.carrier.serviceAreas ?? [],
                 startingPrice: fav.carrier.startingPrice,
                 experienceYears: fav.carrier.experienceYears,
-                profileCompletion: fav.carrier.profileCompletion,
-                pictureUrl: fav.carrier.pictureUrl
+                pictureUrl: fav.carrier.pictureUrl,
+                isVerified: fav.carrier.isVerified === true,
+                catalogExtraServiceIds: [],
+                scopes: [],
+                vehicles: [],
+                serviceTypes: [],
+                services: [],
+                recentReviews: [],
               }}
             />
           ))}

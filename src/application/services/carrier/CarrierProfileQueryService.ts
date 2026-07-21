@@ -1,68 +1,32 @@
 import { CarrierRepository } from '../../../infrastructure/repositories/CarrierRepository';
-import { CarrierApprovalState } from '../../../domain/entities/Carrier';
 import { CarrierProfileStatusService } from './CarrierProfileStatusService';
-
-export interface CarrierOverviewOptions {
-  enforcePublicTrustGate?: boolean;
-}
+import {
+  toOwnerCarrierOverviewDto,
+  toPublicCarrierDto,
+} from '../../dto/carrier/CarrierResponseProjection';
 
 export class CarrierProfileQueryService {
   private carrierRepository = new CarrierRepository();
   private profileStatusService = new CarrierProfileStatusService();
 
-  async getCarrierOverview(carrierId: string, options: CarrierOverviewOptions = {}) {
-    const carrier = await this.carrierRepository.findFullById(carrierId);
+  async getPublicCarrierOverview(carrierId: string) {
+    const carrier = await this.carrierRepository.findPublicById(carrierId);
     if (!carrier) return null;
-    if (
-      options.enforcePublicTrustGate &&
-      (!carrier.isActive || !carrier.verifiedByAdmin || carrier.approvalState !== CarrierApprovalState.APPROVED)
-    ) {
-      return null;
-    }
-
-    const status = await this.profileStatusService.updateProfileCompletion(carrierId);
 
     return {
-      carrier,
-      activity: this.toActivityResponse(carrier.activity),
-      status,
-      earnings: carrier.earnings ?? null,
-      documents: carrier.documents ?? [],
-      securitySettings: carrier.securitySettings ?? null,
-      serviceTypes: carrier.serviceTypeLinks ?? [],
-      vehicleTypes: carrier.vehicleTypeLinks ?? [],
-      scopeOfWorks: carrier.scopeLinks ?? [],
+      carrier: toPublicCarrierDto({ carrier }),
     };
+  }
+
+  async getOwnerCarrierOverview(carrierId: string) {
+    const carrier = await this.carrierRepository.findFullById(carrierId);
+    if (!carrier) return null;
+
+    const status = await this.profileStatusService.getStatusSummary(carrierId);
+    return toOwnerCarrierOverviewDto(carrier, status);
   }
 
   async getProfileStatus(carrierId: string) {
     return this.profileStatusService.getStatusSummary(carrierId);
-  }
-
-  private toActivityResponse(activity: any) {
-    if (!activity) return null;
-    const serviceAreas = this.parseStringArray(activity.serviceAreasJson);
-    return {
-      ...activity,
-      serviceAreas,
-    };
-  }
-
-  private parseStringArray(raw: unknown): string[] {
-    if (!raw) return [];
-    if (Array.isArray(raw)) {
-      return raw.map(item => String(item).trim()).filter(Boolean);
-    }
-    if (typeof raw === 'string') {
-      try {
-        const parsed = JSON.parse(raw);
-        return Array.isArray(parsed)
-          ? parsed.map(item => String(item).trim()).filter(Boolean)
-          : [];
-      } catch {
-        return [];
-      }
-    }
-    return [];
   }
 }

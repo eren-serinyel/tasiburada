@@ -22,6 +22,15 @@ import type { SidebarKey } from '@/components/profile';
 
 const API_BASE_URL = '/api/v1';
 
+const APPROVAL_SECTION_LABELS: Record<string, string> = {
+  companyInfo: 'Firma bilgileri',
+  activityInfo: 'Faaliyet bilgileri',
+  services: 'Hizmet bilgileri',
+  documents: 'Zorunlu belgeler',
+  vehicles: 'Araç bilgileri',
+  paymentInfo: 'Ödeme bilgileri',
+};
+
 const normalizeProfileTab = (raw: string | null, isCarrier: boolean): SidebarKey | null => {
   const value = String(raw ?? '').trim().toLowerCase();
   const aliases: Record<string, SidebarKey> = {
@@ -261,11 +270,24 @@ export default function Profile() {
   // Approval
   const submitForApproval = async () => {
     if (!user) return;
-    if (profileCompletion < 100) { toast.error('Lütfen tüm bölümleri tamamlayın.'); return; }
     try {
-      const res = await apiClient(`${API_BASE_URL}/carriers/me/submit-for-approval`, { method: 'POST' });
+      const res = await apiClient(`${API_BASE_URL}/carriers/me/submit-for-approval`, {
+        method: 'POST',
+        suppressErrorToast: true,
+      });
       const json = await res.json().catch(() => null);
-      if (!res.ok) { toast.error(json?.message || 'Onay talebi gönderilemedi.'); return; }
+      if (!res.ok) {
+        const missingSections = Array.isArray(json?.missingSections) ? json.missingSections : [];
+        if (missingSections.length > 0) {
+          const details = missingSections
+            .map((section: string) => `${APPROVAL_SECTION_LABELS[section] ?? section} eksik.`)
+            .join('\n');
+          toast.error('Profil onaya gönderilemedi.', { description: details });
+        } else {
+          toast.error(json?.message || 'Onay talebi gönderilemedi.');
+        }
+        return;
+      }
       setApprovalStatus('pending');
       try { localStorage.setItem(`carrier_approval_${user.id}`, 'pending'); } catch {
         // Local approval hint is best-effort only.
@@ -342,7 +364,7 @@ export default function Profile() {
                     <Item id="services" label="Hizmetlerim" icon={Sparkles} />
                     <Item id="documents" label="Belgeler" icon={FileBadge} />
                     <Item id="vehicles" label="Araçlarım" icon={Truck} />
-                    <Item id="payouts" label="Kazanç Bilgileri" icon={Wallet2} />
+                    <Item id="payouts" label="Ödeme Bilgileri" icon={Wallet2} />
                     <Item id="security" label="Güvenlik" icon={Lock} />
                     <Item id="notifications" label="Bildirimler" icon={Bell} />
                   </>
@@ -358,9 +380,9 @@ export default function Profile() {
                 <>
                   <div className="border-t border-slate-100 mx-4" />
                   <div className="px-4 py-4">
-                    <Button onClick={submitForApproval} disabled={approvalStatus === 'pending' || profileCompletion < 100}
+                    <Button onClick={submitForApproval} disabled={approvalStatus === 'pending'}
                       className={cn('w-full text-xs h-9 rounded-lg bg-gradient-to-r from-emerald-600 to-blue-600 text-white shadow hover:shadow-md',
-                        (approvalStatus === 'pending' || profileCompletion < 100) && 'opacity-60 cursor-not-allowed')}>
+                        approvalStatus === 'pending' && 'opacity-60 cursor-not-allowed')}>
                       <Send className="h-3.5 w-3.5 mr-1.5" />{approvalStatus === 'pending' ? 'Onay Beklemede' : 'Onaya Gönder'}
                     </Button>
                   </div>

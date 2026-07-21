@@ -1,120 +1,86 @@
 import 'reflect-metadata';
-import { AppDataSource, initializeDatabase, closeDatabase } from '../../infrastructure/database/data-source';
-import { clearDatabase } from './clearDatabase';
-import { seedPlatformSettings } from './seeders/settingsSeeder';
-import { seedAdmins } from './seeders/adminSeeder';
-import { seedLookupTables } from './seeders/lookupSeeder';
-import { seedExtraServices } from './seeders/extraServiceSeeder';
-import { seedCarriers } from './seeders/carrierSeeder';
-import { seedCustomers } from './seeders/customerSeeder';
-import { seedShipments } from './seeders/shipmentSeeder';
-import { seedOffers } from './seeders/offerSeeder';
-import { seedCompletedFlow } from './seeders/completedFlowSeeder';
-import { seedNotifications } from './seeders/notificationSeeder';
-import { seedAuditLogs } from './seeders/auditLogSeeder';
-import { seedConverterCatalog, seedConverterVehicleRules } from './seeders/converterSeeder';
+import {
+  AppDataSource,
+  closeDatabase,
+  initializeDatabase,
+} from '../../infrastructure/database/data-source';
 import { MatchingService } from '../../application/services/MatchingService';
 import { ShipmentRepository } from '../../infrastructure/repositories/ShipmentRepository';
+import { assertSafeSeedDatabase } from '../../infrastructure/database/seedSafety';
+import { withSeedDataSource } from './seedDataSource';
+import { runSeedWorkflow } from './seedWorkflow';
 
-async function main() {
+async function main(): Promise<void> {
+  assertSafeSeedDatabase(process.env, 'reset');
   console.log('🚀 TaşıBurada Seed Başlıyor...\n');
 
   try {
     await initializeDatabase();
     console.log('');
 
-    // 1. Temizle
-    console.log('🧹 Veritabanı temizleniyor...');
-    await clearDatabase();
-
-    // 2. Platform ayarları
-    console.log('⚙️  Platform ayarları oluşturuluyor...');
-    await seedPlatformSettings();
-
-    // 3. Lookup tablolar (VehicleType, ServiceType, ScopeOfWork)
-    console.log('📋 Referans veriler oluşturuluyor...');
-    const { vehicleTypeMap, serviceTypeMap, scopeMap } = await seedLookupTables();
-    const vehicleTypeIdMap = new Map(Object.entries(vehicleTypeMap).map(([name, vehicleType]) => [name, vehicleType.id]));
-    const extraServiceMap = await seedExtraServices();
-
-    // 3.1 Converter referans tabloları
-    console.log('🧮 Converter referans verileri oluşturuluyor...');
-    await seedConverterCatalog();
-    await seedConverterVehicleRules();
-
-    // 4. Admin kullanıcılar
-    console.log('👤 Admin kullanıcılar oluşturuluyor...');
-    const admins = await seedAdmins();
-
-    // 5. Nakliyeciler
-    console.log('🚛 Nakliyeciler oluşturuluyor...');
-    const carriers = await seedCarriers(vehicleTypeMap, serviceTypeMap, scopeMap);
-
-    // 6. Müşteriler
-    console.log('👥 Müşteriler oluşturuluyor...');
-    const customers = await seedCustomers();
-
-    // 7. Taşıma talepleri
-    console.log('📦 Taşıma talepleri oluşturuluyor...');
-    const shipments = await seedShipments(customers, carriers, vehicleTypeIdMap, extraServiceMap);
-
-    // 8. Teklifler
-    console.log('💬 Teklifler oluşturuluyor...');
-    const offers = await seedOffers(shipments, carriers);
-
-    // 9. Tamamlanan akış (Kabul → taşıma → tamamlama → yorum → ödeme)
-    console.log('✅ Tamamlanan işler işleniyor...');
-    await seedCompletedFlow(shipments, offers, carriers, customers);
-
-    // 10. Bildirimler
-    console.log('🔔 Bildirimler oluşturuluyor...');
-    await seedNotifications(customers, carriers, shipments);
-
-    // 11. Audit log
-    console.log('📋 Audit log oluşturuluyor...');
-    await seedAuditLogs(admins, carriers);
+    const result = await withSeedDataSource(AppDataSource, () =>
+      runSeedWorkflow({ clearFirst: true, env: process.env }),
+    );
 
     console.log('\n🎉 Seed tamamlandı!\n');
     console.log('📊 Özet:');
-    console.log(`   Nakliyeci: ${carriers.length}`);
-    console.log(`   Müşteri: ${customers.length}`);
-    console.log(`   Taşıma: ${shipments.length}`);
-    console.log(`   Teklif: ${offers.length}`);
+    console.log(`   Nakliyeci: ${result.carriers.length}`);
+    console.log(`   Müşteri: ${result.customers.length}`);
+    console.log(`   Taşıma: ${result.shipments.length}`);
+    console.log(`   Teklif: ${result.offers.length}`);
+
     const matchingService = new MatchingService();
     const shipmentRepository = new ShipmentRepository();
-    const eliteCarrier = carriers.find(carrier => carrier.email === 'info@silenakliyat.com');
+    const eliteCarrier = result.carriers.find(
+      carrier => carrier.email === 'info@silenakliyat.com',
+    );
     if (eliteCarrier) {
-      const carrierForMatching = await matchingService.getCarrierForMatching(eliteCarrier.id);
-      const candidates = await shipmentRepository.findPendingShipmentsForCarrier(eliteCarrier.id);
+      const carrierForMatching =
+        await matchingService.getCarrierForMatching(eliteCarrier.id);
+      const candidates =
+        await shipmentRepository.findPendingShipmentsForCarrier(
+          eliteCarrier.id,
+        );
       const matchingCount = candidates.filter(shipment =>
-        matchingService.isShipmentMatchingCarrier(shipment, carrierForMatching)
+        matchingService.isShipmentMatchingCarrier(
+          shipment,
+          carrierForMatching,
+        ),
       ).length;
       console.log(`   Elite matching pending: ${matchingCount}`);
     }
+
     console.log('');
     console.log('🔑 Giriş bilgileri:');
     console.log('   Admin:     superadmin@tasiburadan.com / [seed şifresi]');
     console.log('   Nakliyeci: info@silenakliyat.com / [seed şifresi]');
     console.log('   Müşteri:   ahmet.yilmaz0@gmail.com / [seed şifresi]');
-
   } catch (error) {
     console.error('\n❌ Seed hatası:', error);
 
     if (error instanceof Error) {
       if (error.message.includes('ER_NO_SUCH_TABLE')) {
-        console.error('\n💡 Çözüm: Migration\'ları çalıştır: npm run migration:run');
+        console.error(
+          "\n💡 Çözüm: Migration'ları çalıştır: npm run migration:run",
+        );
       } else if (error.message.includes('ER_DUP_ENTRY')) {
-        console.error('\n💡 Çözüm: DB zaten dolu. clearDatabase() ilk adımda temizler, tekrar dene.');
+        console.error(
+          '\n💡 Çözüm: DB zaten dolu. clearDatabase() ilk adımda temizler, tekrar dene.',
+        );
       } else if (error.message.includes('ECONNREFUSED')) {
-        console.error('\n💡 Çözüm: MySQL sunucusu çalışıyor mu? docker-compose up -d');
+        console.error(
+          '\n💡 Çözüm: MySQL sunucusu çalışıyor mu? docker-compose up -d',
+        );
       } else if (error.message.includes('Cannot find module')) {
-        console.error('\n💡 Çözüm: Import yollarını kontrol et veya npm install yap.');
+        console.error(
+          '\n💡 Çözüm: Import yollarını kontrol et veya npm install yap.',
+        );
       }
     }
-    process.exit(1);
+    process.exitCode = 1;
   } finally {
     await closeDatabase();
   }
 }
 
-main();
+void main();

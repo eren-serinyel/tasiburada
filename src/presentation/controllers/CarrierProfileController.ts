@@ -10,7 +10,10 @@ import { CarrierProfileQueryService } from '../../application/services/carrier/C
 import { CarrierServiceTypeService } from '../../application/services/carrier/CarrierServiceTypeService';
 import { CarrierProfileStatusService } from '../../application/services/carrier/CarrierProfileStatusService';
 import { CarrierScopeOfWorkService } from '../../application/services/carrier/CarrierScopeOfWorkService';
-import { CarrierApprovalService } from '../../application/services/carrier/CarrierApprovalService';
+import {
+  CarrierApprovalReadinessError,
+  CarrierApprovalService,
+} from '../../application/services/carrier/CarrierApprovalService';
 import { CarrierCapabilityService } from '../../application/services/carrier/CarrierCapabilityService';
 import { NotificationService } from '../../application/services/NotificationService';
 import { AppDataSource } from '../../infrastructure/database/data-source';
@@ -88,7 +91,7 @@ export class CarrierProfileController {
     }
 
     try {
-      const overview = await this.profileQueryService.getCarrierOverview(carrierId, { enforcePublicTrustGate: true });
+      const overview = await this.profileQueryService.getPublicCarrierOverview(carrierId);
       if (!overview) {
         res.status(404).json({ success: false, message: 'Nakliyeci bulunamadı.' });
         return;
@@ -365,9 +368,9 @@ export class CarrierProfileController {
 
     try {
       const earnings = await this.earningsService.upsert(carrierId, req.body);
-      res.status(200).json({ success: true, message: 'Kazanç bilgileri güncellendi.', data: earnings });
+      res.status(200).json({ success: true, message: 'Ödeme bilgileri güncellendi.', data: earnings });
     } catch (error: any) {
-      res.status(400).json({ success: false, message: error.message || 'Kazanç bilgileri güncellenemedi.' });
+      res.status(400).json({ success: false, message: error.message || 'Ödeme bilgileri güncellenemedi.' });
     }
   };
 
@@ -412,11 +415,7 @@ export class CarrierProfileController {
     if (!carrierId) return;
 
     try {
-      const status = await this.profileStatusService.updateProfileCompletion(carrierId);
-      if (status.overallPercentage < 100) {
-        res.status(400).json({ success: false, message: 'Tüm profil bölümlerini tamamlamanız gerekiyor.' });
-        return;
-      }
+      await this.profileStatusService.updateProfileCompletion(carrierId);
 
       const result = await this.approvalService.submitForReview(carrierId);
 
@@ -449,6 +448,18 @@ export class CarrierProfileController {
       });
     } catch (error: any) {
       const statusCode = typeof error?.statusCode === 'number' ? error.statusCode : 500;
+      if (error instanceof CarrierApprovalReadinessError) {
+        res.status(statusCode).json({
+          success: false,
+          code: 'CARRIER_APPROVAL_INCOMPLETE',
+          message: 'Profil onaya gönderilemedi. Eksik bölümleri tamamlayın.',
+          missingSections: error.readiness.missingSections,
+          missingFields: error.readiness.missingFields,
+          missingDocuments: error.readiness.missingDocuments,
+          rejectedDocuments: error.readiness.rejectedDocuments,
+        });
+        return;
+      }
       res.status(statusCode).json({ success: false, message: 'Onay talebi gönderilemedi: ' + error.message });
     }
   };

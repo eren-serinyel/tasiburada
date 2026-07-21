@@ -5,6 +5,7 @@ const config: Config = {
   testEnvironment: 'node',
   roots: ['<rootDir>/src'],
   testMatch: ['<rootDir>/src/__tests__/**/*.test.ts'],
+  setupFiles: ['<rootDir>/src/__tests__/setup/testDatabaseGuard.ts'],
   setupFilesAfterEnv: ['<rootDir>/src/__tests__/setup/setupTests.ts'],
   testTimeout: 30000,
   verbose: true,

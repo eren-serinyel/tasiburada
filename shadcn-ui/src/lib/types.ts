@@ -57,29 +57,37 @@ export interface Carrier extends User {
   capacityAdequate?: boolean;
 }
 
-export interface CarrierSearchItem {
+export interface PublicCarrier {
   id: string;
   companyName: string;
   city: string | null;
+  district: string | null;
   rating: number;
   reviewCount: number;
   vehicleSummary: string | null;
   serviceAreas: string[];
   startingPrice: number | null;
   experienceYears: number | null;
-  profileCompletion: number | null;
   pictureUrl: string | null;
-  isVerified?: boolean;
-  catalogExtraServiceIds?: string[];
-  scopes?: Array<'sehirici' | 'sehirlerarasi'>;
+  isVerified: boolean;
+  catalogExtraServiceIds: string[];
+  scopes: Array<'sehirici' | 'sehirlerarasi'>;
+  vehicles: CarrierDetailVehicle[];
+  serviceTypes: string[];
+  services: CarrierDetailServiceGroup[];
+  recentReviews: CarrierDetailReview[];
   capacityAdequate?: boolean;
 }
+
+export type CarrierSearchItem = PublicCarrier;
 
 export interface CarrierDetailProfile {
   overallPercentage: number;
   companyInfoCompleted: boolean;
   activityInfoCompleted: boolean;
+  servicesCompleted: boolean;
   documentsCompleted: boolean;
+  vehiclesCompleted: boolean;
   earningsCompleted: boolean;
 }
 
@@ -111,11 +119,11 @@ export interface CarrierDetailStats {
 
 export interface CarrierDetailReview {
   id: string;
-  customerId: string;
   author: string;
   rating: number;
   comment: string;
   createdAt: string;
+  isOwnReview?: boolean;
 }
 
 export type CarrierDetailServiceSource = 'catalog' | 'custom';
@@ -136,29 +144,7 @@ export interface CarrierDetailServiceGroup {
   items: CarrierDetailServiceItem[];
 }
 
-export interface CarrierDetail {
-  id: string;
-  companyName: string;
-  pictureUrl: string | null;
-  phone: string | null;
-  email: string | null;
-  taxNumber: string;
-  city: string | null;
-  district: string | null;
-  address: string | null;
-  foundedYear: number | null;
-  experienceYears: number | null;
-  serviceAreas: string[];
-  vehicles: CarrierDetailVehicle[];
-  profile: CarrierDetailProfile;
-  rating: CarrierDetailRating;
-  stats: CarrierDetailStats;
-  startingPrice: number | null;
-  documents: CarrierDetailDocument[];
-  documentsApproved: boolean;
-  recentReviews: CarrierDetailReview[];
-  services?: CarrierDetailServiceGroup[];
-}
+export type CarrierDetail = PublicCarrier;
 
 export interface Customer extends User {
   type: 'customer';

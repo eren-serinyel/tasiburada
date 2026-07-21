@@ -3432,10 +3432,10 @@ export default function OfferRequestForm({ showHeader = false }: { showHeader: b
                   }}>
                     <Star style={{ width: '14px', height: '14px', color: 'var(--tb-rating)', fill: 'var(--tb-rating)' }} />
                     <span style={{ fontSize: '13px', fontWeight: 700, color: 'white' }}>
-                      {reviewCarrierDetail.rating.count > 0 ? reviewCarrierDetail.rating.average : '—'}
+                      {reviewCarrierDetail.reviewCount > 0 ? reviewCarrierDetail.rating : '—'}
                     </span>
                     <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.55)' }}>
-                      ({reviewCarrierDetail.rating.count} yorum)
+                      ({reviewCarrierDetail.reviewCount} yorum)
                     </span>
                   </div>
                   {reviewCarrierDetail.serviceAreas.slice(0, 3).map((area) => (

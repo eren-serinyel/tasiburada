@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { formatDistanceToNow } from 'date-fns';
 import { tr } from 'date-fns/locale';
-import { CheckCircle, ChevronLeft, ChevronRight, Download, Eye, MoreHorizontal, Search, Star } from 'lucide-react';
+import { BadgeCheck, CheckCircle, ChevronLeft, ChevronRight, Download, Eye, MoreHorizontal, Search, Star } from 'lucide-react';
 import { adminApiClient } from '@/lib/adminAuth';
 import { resolveApprovalState, type CarrierApprovalState } from '@/lib/admin-approval';
 import { APPROVAL_STATUS } from '@/lib/admin-constants';
@@ -254,7 +254,12 @@ export default function AdminCarriers() {
                     >
                       <TableCell>
                         <div>
-                          <p className="text-sm font-medium text-slate-800">{carrier.companyName}</p>
+                          <p className="text-sm font-medium text-slate-800 flex items-center gap-1.5">
+                            {carrier.companyName}
+                            {carrier.verifiedByAdmin && approvalState === 'APPROVED' && (
+                              <BadgeCheck className="h-4 w-4 flex-shrink-0 fill-blue-600 text-white" aria-label="Onaylı nakliyeci" />
+                            )}
+                          </p>
                           <p className="text-xs text-slate-400">{carrier.email}</p>
                         </div>
                       </TableCell>

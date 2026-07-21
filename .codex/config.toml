@@ -1,0 +1,20 @@
+# Merge these keys into the existing repository .codex/config.toml.
+# Do not overwrite existing MCP or project settings.
+
+project_doc_fallback_filenames = ["GPT_AGENTS.md"]
+
+[agents]
+max_threads = 4
+max_depth = 1
+
+[mcp_servers.codebase-memory-mcp]
+command = "codebase-memory-mcp"
+args = ["--ui=true", "--port=9749"]
+
+[mcp_servers.codebase-memory-mcp.tools.index_repository]
+approval_mode = "approve"
+
+[mcp_servers.codebase-memory-mcp.tools.get_architecture]
+approval_mode = "approve"
+
+# >>> codebase-memory-mcp SessionStart >>>

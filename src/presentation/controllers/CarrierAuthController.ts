@@ -53,7 +53,10 @@ export class CarrierAuthController {
       if (!req.carrierId) {
         return res.status(401).json({ success: false, message: 'Kimlik doğrulaması gerekli.' });
       }
-  const overview = await this.profileQueryService.getCarrierOverview(req.carrierId);
+      const overview = await this.profileQueryService.getOwnerCarrierOverview(req.carrierId);
+      if (!overview) {
+        return res.status(404).json({ success: false, message: 'Nakliyeci bulunamadı.' });
+      }
       res.status(200).json({ success: true, data: overview });
     } catch (error: any) {
       res.status(400).json({ success: false, message: error.message || 'Profil bilgileri alınamadı.' });
@@ -71,6 +74,9 @@ export class CarrierAuthController {
       pictureUrl: carrier.pictureUrl ?? null,
       profileCompletion: carrier.profileCompletion,
       isActive: carrier.isActive,
+      verifiedByAdmin: Boolean(carrier.verifiedByAdmin),
+      approvalState: carrier.approvalState ?? null,
+      pendingApproval: Boolean(carrier.pendingApproval),
       createdAt: carrier.createdAt,
       updatedAt: carrier.updatedAt
     };

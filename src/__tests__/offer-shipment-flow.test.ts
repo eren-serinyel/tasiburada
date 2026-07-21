@@ -8,6 +8,7 @@ import { testApp } from './helpers/testApp';
 import { createHash } from 'crypto';
 import { AppDataSource } from '../infrastructure/database/data-source';
 import { ContactFilterLog } from '../domain/entities/ContactFilterLog';
+import { restoreSilenCarrierBaseline } from './setup/seedContract';
 
 const skipDB = () => process.env.SKIP_DB_TESTS === 'true';
 
@@ -20,6 +21,7 @@ describe('Offer + Shipment Akışı', () => {
 
   beforeAll(async () => {
     if (skipDB()) return;
+    await restoreSilenCarrierBaseline();
     const cRes = await request(testApp).post('/api/v1/customers/login').send(CUSTOMER);
     if (cRes.status === 200) customerToken = cRes.body.data?.token;
 

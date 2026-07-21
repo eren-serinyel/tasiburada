@@ -31,7 +31,7 @@ export class CarrierVehicleService {
     const payload = this.buildPayload(carrierId, vehicle);
     const created = await this.vehicleRepository.create(payload as any);
     await this.syncVehicleTypeProjection(carrierId);
-    await this.profileStatusService.updateAuxSectionCompleted(carrierId, 'vehicles', true);
+    await this.profileStatusService.updateProfileCompletion(carrierId);
     return this.vehicleRepository.findOwnedById(created.id, carrierId);
   }
 
@@ -60,7 +60,7 @@ export class CarrierVehicleService {
     await this.vehicleRepository.delete(vehicleId);
     const saved = await this.vehicleRepository.findByCarrierId(carrierId);
     await this.syncVehicleTypeProjection(carrierId, saved);
-    await this.profileStatusService.updateAuxSectionCompleted(carrierId, 'vehicles', saved.length > 0);
+    await this.profileStatusService.updateProfileCompletion(carrierId);
     return { success: true };
   }
 
@@ -100,7 +100,7 @@ export class CarrierVehicleService {
 
   async upsertVehicles(carrierId: string, vehicles: CarrierVehicleMutableInput[]) {
     if (!vehicles?.length) {
-      await this.profileStatusService.updateAuxSectionCompleted(carrierId, 'vehicles', false);
+      await this.profileStatusService.updateProfileCompletion(carrierId);
       return [];
     }
 
@@ -113,7 +113,7 @@ export class CarrierVehicleService {
     }
 
     const saved = await this.vehicleRepository.findByCarrierId(carrierId);
-    await this.profileStatusService.updateAuxSectionCompleted(carrierId, 'vehicles', saved.length > 0);
+    await this.profileStatusService.updateProfileCompletion(carrierId);
     return saved;
   }
 

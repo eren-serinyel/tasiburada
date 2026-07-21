@@ -81,12 +81,14 @@ describe('Customer Offers Enhancements', () => {
     const applicabilityRepo = AppDataSource.getRepository(ExtraServiceApplicability);
 
     const serviceA = await serviceRepo.save(serviceRepo.create({
+      code: `TEST_EXTRA_SERVICE_A_${randomUUID().replace(/-/g, '').toUpperCase()}`,
       name: `Test Ek Hizmet A ${randomUUID().slice(0, 8)}`,
       description: 'test',
       status: 'ACTIVE',
       sortOrder: 500,
     }));
     const serviceB = await serviceRepo.save(serviceRepo.create({
+      code: `TEST_EXTRA_SERVICE_B_${randomUUID().replace(/-/g, '').toUpperCase()}`,
       name: `Test Ek Hizmet B ${randomUUID().slice(0, 8)}`,
       description: 'test',
       status: 'ACTIVE',

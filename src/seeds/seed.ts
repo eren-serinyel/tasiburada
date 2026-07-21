@@ -1,11 +1,7 @@
 import 'reflect-metadata';
 import * as bcrypt from 'bcryptjs';
 import { AppDataSource, initializeDatabase, closeDatabase } from '../infrastructure/database/data-source';
-
-if (process.env.NODE_ENV === 'production') {
-  console.error('Seed production ortamında çalıştırılamaz!');
-  process.exit(1);
-}
+import { assertSafeSeedDatabase } from '../infrastructure/database/seedSafety';
 
 /**
  * Veritabanına temel (lookup) verileri yükler.
@@ -14,6 +10,7 @@ if (process.env.NODE_ENV === 'production') {
  * Kullanım: npx ts-node src/seeds/seed.ts
  */
 async function seed() {
+  assertSafeSeedDatabase(process.env, 'seed');
   await initializeDatabase();
   const qr = AppDataSource.createQueryRunner();
 

@@ -1,4 +1,4 @@
-import { AppDataSource } from '../../../infrastructure/database/data-source';
+import { SeedDataSource as AppDataSource } from '../seedDataSource';
 import { VehicleType } from '../../../domain/entities/VehicleType';
 import { ServiceType } from '../../../domain/entities/ServiceType';
 import { ScopeOfWork } from '../../../domain/entities/ScopeOfWork';

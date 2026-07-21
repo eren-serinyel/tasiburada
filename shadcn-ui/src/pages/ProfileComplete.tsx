@@ -12,14 +12,18 @@ import { useToast } from '@/hooks/use-toast';
 type ProfileSections = {
   companyInfoCompleted: boolean;
   activityInfoCompleted: boolean;
+  servicesCompleted: boolean;
   documentsCompleted: boolean;
+  vehiclesCompleted: boolean;
   earningsCompleted: boolean;
 };
 
 const SECTION_LIST: { key: keyof ProfileSections; label: string }[] = [
   { key: 'companyInfoCompleted', label: 'Firma Bilgileri' },
   { key: 'activityInfoCompleted', label: 'Faaliyet Bilgileri' },
+  { key: 'servicesCompleted', label: 'Hizmetlerim' },
   { key: 'documentsCompleted', label: 'Belgeler' },
+  { key: 'vehiclesCompleted', label: 'Araçlarım' },
   { key: 'earningsCompleted', label: 'Ödeme Bilgileri' },
 ];
 
@@ -31,7 +35,9 @@ export default function ProfileComplete() {
   const [sections, setSections] = useState<ProfileSections>({
     companyInfoCompleted: false,
     activityInfoCompleted: false,
+    servicesCompleted: false,
     documentsCompleted: false,
+    vehiclesCompleted: false,
     earningsCompleted: false,
   });
 
@@ -63,7 +69,9 @@ export default function ProfileComplete() {
   const handleGoProfile = () => {
     if (!sections.companyInfoCompleted) navigate('/profilim?tab=firma');
     else if (!sections.activityInfoCompleted) navigate('/profilim?tab=faaliyet');
+    else if (!sections.servicesCompleted) navigate('/profilim?tab=hizmetlerim');
     else if (!sections.documentsCompleted) navigate('/profilim?tab=belgeler');
+    else if (!sections.vehiclesCompleted) navigate('/profilim?tab=araclar');
     else if (!sections.earningsCompleted) navigate('/profilim?tab=odeme');
     else navigate('/nakliyeci/panel');
   };
@@ -78,7 +86,7 @@ export default function ProfileComplete() {
           </CardHeader>
           <CardContent className="space-y-4">
             <Skeleton className="h-3 w-full" />
-            {[1, 2, 3, 4].map(i => (
+            {[1, 2, 3, 4, 5, 6].map(i => (
               <Skeleton key={i} className="h-12 w-full rounded-lg" />
             ))}
             <Skeleton className="h-12 w-full rounded-lg mt-4" />
@@ -97,7 +105,7 @@ export default function ProfileComplete() {
           </CardTitle>
           <CardDescription>
             {completion === 100
-              ? 'Tüm bölümleri tamamladınız. Artık müşterilerden teklif alabilirsiniz.'
+              ? 'Tüm bölümleri tamamladınız. Profilinizi onaya gönderebilirsiniz.'
               : 'Eksik bölümleri tamamlayarak müşterilere görünürlüğünüzü artırabilirsiniz.'}
           </CardDescription>
         </CardHeader>

@@ -42,12 +42,14 @@ const createEmptyVehicle = (): OnboardingVehicle => ({
 const REQUIRED_DOC_KEYS = ['k_belgesi', 'src', 'ruhsat', 'vergi_levhasi'] as const;
 
 const DOC_LIST = [
-  { key: 'k_belgesi', label: 'K Belgesi', required: true },
-  { key: 'src', label: 'SRC Belgesi', required: true },
-  { key: 'ruhsat', label: 'Araç Ruhsatı', required: true },
-  { key: 'vergi_levhasi', label: 'Vergi Levhası', required: true },
-  { key: 'sigorta', label: 'Sigorta Poliçesi', required: false },
+  { key: 'k_belgesi', type: 'AUTHORIZATION_CERT', label: 'K Belgesi', required: true },
+  { key: 'src', type: 'SRC_CERT', label: 'SRC Belgesi', required: true },
+  { key: 'ruhsat', type: 'VEHICLE_LICENSE', label: 'Araç Ruhsatı', required: true },
+  { key: 'vergi_levhasi', type: 'TAX_PLATE', label: 'Vergi Levhası', required: true },
+  { key: 'sigorta', type: 'INSURANCE_POLICY', label: 'Sigorta Poliçesi', required: false },
 ] as const;
+
+const DOC_KEY_BY_TYPE = Object.fromEntries(DOC_LIST.map(doc => [doc.type, doc.key]));
 
 type OnboardingStep = 1 | 2 | 3;
 
@@ -90,6 +92,23 @@ export default function CarrierOnboarding() {
       })
       .catch(() => setVehicleTypes([]));
   }, []);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    apiClient('/api/v1/carriers/me/documents')
+      .then(async response => ({ response, json: await response.json().catch(() => ({})) }))
+      .then(({ response, json }) => {
+        if (!response.ok || !json?.success) return;
+        const documents = Array.isArray(json.data?.documents) ? json.data.documents : [];
+        const persisted = documents.reduce((result: Record<string, boolean>, document: any) => {
+          const key = DOC_KEY_BY_TYPE[String(document?.type || '')];
+          if (key && document?.id) result[key] = true;
+          return result;
+        }, {});
+        setUploadedDocs(persisted);
+      })
+      .catch(() => undefined);
+  }, [user?.id]);
 
   useEffect(() => {
     setDistrict('');
@@ -241,18 +260,18 @@ export default function CarrierOnboarding() {
     }
   };
 
-  const handleDocUpload = async (docKey: string, file: File) => {
+  const handleDocUpload = async (docKey: string, documentType: string, file: File) => {
     setUploadingDoc(docKey);
     try {
       const formData = new FormData();
       formData.append('file', file);
-      formData.append('type', docKey);
+      formData.append('type', documentType);
       const res = await apiClient('/api/v1/carriers/me/documents', {
         method: 'PUT',
         body: formData,
       });
-      if (!res.ok) {
-        const json = await res.json().catch(() => ({}));
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !(json as any)?.success || !(json as any)?.document?.id) {
         toast({ title: 'Yükleme Hatası', description: (json as any).message ?? 'Belge yüklenemedi.', variant: 'destructive' });
         return;
       }
@@ -541,7 +560,7 @@ export default function CarrierOnboarding() {
                         disabled={uploadingDoc !== null}
                         onChange={e => {
                           const file = e.target.files?.[0];
-                          if (file) handleDocUpload(doc.key, file);
+                          if (file) handleDocUpload(doc.key, doc.type, file);
                           e.target.value = '';
                         }}
                       />

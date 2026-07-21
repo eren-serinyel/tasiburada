@@ -3,7 +3,12 @@ import { CarrierAuthController } from '../controllers/CarrierAuthController';
 import { CarrierProfileController } from '../controllers/CarrierProfileController';
 import { CarrierCapabilityController } from '../controllers/CarrierCapabilityController';
 import { CarrierDocumentController } from '../controllers/CarrierDocumentController';
-import { authenticateCarrier, authenticateToken, requireVerifiedCarrier } from '../middleware/auth';
+import {
+  authenticateCarrier,
+  authenticateToken,
+  optionalAuthenticateToken,
+  requireVerifiedCarrier,
+} from '../middleware/auth';
 import { CarrierSearchController } from '../controllers/CarrierSearchController';
 import { CarrierDetailController } from '../controllers/CarrierDetailController';
 import { CarrierDashboardController } from '../controllers/CarrierDashboardController';
@@ -31,7 +36,7 @@ router.post('/register', authLimiter, authController.register);
 router.post('/login', authLimiter, authController.login);
 router.get('/availability-summary', searchController.getAvailabilitySummary);
 router.get('/search', searchController.search);
-router.get('/:carrierId/detail', detailController.getDetail);
+router.get('/:carrierId/detail', optionalAuthenticateToken, detailController.getDetail);
 
 // Authenticated carrier routes
 router.get('/me', authenticateCarrier, authController.me);

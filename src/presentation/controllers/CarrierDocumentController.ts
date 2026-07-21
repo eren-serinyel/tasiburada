@@ -40,6 +40,7 @@ export class CarrierDocumentController {
   updateDocuments = async (req: Request, res: Response) => {
     const carrierId = this.ensureCarrier(req, res);
     if (!carrierId) return;
+    let uploadedFilePersisted = false;
 
     try {
       if (req.file) {
@@ -52,6 +53,10 @@ export class CarrierDocumentController {
         const fileUrl = `/uploads/documents/${req.file.filename}`;
         const result = await this.documentService.saveDocumentsDraft(carrierId, [{ type: rawType, fileUrl }]);
         const savedDocument = result.documents?.[0];
+        if (!savedDocument?.id) {
+          throw new Error('Belge kalıcı olarak kaydedilemedi.');
+        }
+        uploadedFilePersisted = true;
         const readiness = await this.approvalService.markDraftChanged(carrierId);
         res.status(200).json({
           success: true,
@@ -73,6 +78,13 @@ export class CarrierDocumentController {
         approvalReadiness: readiness,
       });
     } catch (error: any) {
+      if (!uploadedFilePersisted && req.file?.path && fs.existsSync(req.file.path)) {
+        try {
+          fs.unlinkSync(req.file.path);
+        } catch {
+          // DB kaydı oluşmadıysa orphan dosya temizliği best-effort yapılır.
+        }
+      }
       res.status(400).json({ success: false, message: error.message || 'Belgeler güncellenemedi.' });
     }
   };

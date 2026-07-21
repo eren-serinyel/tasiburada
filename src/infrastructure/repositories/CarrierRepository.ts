@@ -187,16 +187,40 @@ export class CarrierRepository extends BaseRepository<Carrier> {
   async findPublicById(carrierId: string): Promise<Carrier | null> {
     const qb = this.repository
       .createQueryBuilder('carrier')
+      .leftJoin('carrier.activity', 'activity')
+      .leftJoin('carrier.vehicleTypeLinks', 'vehicleLink')
+      .leftJoin('vehicleLink.vehicleType', 'vehicleType')
+      .leftJoin('carrier.serviceTypeLinks', 'serviceTypeLink')
+      .leftJoin('serviceTypeLink.serviceType', 'serviceType')
+      .leftJoin('carrier.scopeLinks', 'scopeLink')
+      .leftJoin('scopeLink.scope', 'scope')
       .select([
         'carrier.id',
         'carrier.companyName',
-        'carrier.contactName',
-        'carrier.phone',
-        'carrier.email',
         'carrier.pictureUrl',
+        'carrier.foundedYear',
         'carrier.rating',
-        'carrier.completedShipments',
-        'carrier.isActive'
+        'carrier.isActive',
+        'carrier.verifiedByAdmin',
+        'carrier.approvalState',
+        'activity.id',
+        'activity.city',
+        'activity.district',
+        'activity.serviceAreasJson',
+        'vehicleLink.id',
+        'vehicleLink.vehicleTypeId',
+        'vehicleLink.capacityKg',
+        'vehicleType.id',
+        'vehicleType.name',
+        'vehicleType.defaultCapacityKg',
+        'serviceTypeLink.id',
+        'serviceTypeLink.serviceTypeId',
+        'serviceType.id',
+        'serviceType.name',
+        'scopeLink.id',
+        'scopeLink.scopeId',
+        'scope.id',
+        'scope.name',
       ])
       .where('carrier.id = :carrierId', { carrierId });
 
@@ -361,12 +385,38 @@ export class CarrierRepository extends BaseRepository<Carrier> {
   async searchCarriers(filters: CarrierSearchFilters): Promise<{ total: number; items: CarrierSearchRepositoryItem[] }> {
     const qb = this.repository
       .createQueryBuilder('carrier')
-      .leftJoinAndSelect('carrier.activity', 'activity')
-      .leftJoinAndSelect('carrier.profileStatus', 'profileStatus')
-      .leftJoinAndSelect('carrier.vehicleTypeLinks', 'vehicleLink')
-      .leftJoinAndSelect('vehicleLink.vehicleType', 'vehicleType')
-      .leftJoinAndSelect('carrier.scopeLinks', 'scopeResultLink')
-      .leftJoinAndSelect('scopeResultLink.scope', 'scopeResult')
+      .leftJoin('carrier.activity', 'activity')
+      .leftJoin('carrier.profileStatus', 'profileStatus')
+      .leftJoin('carrier.vehicleTypeLinks', 'vehicleLink')
+      .leftJoin('vehicleLink.vehicleType', 'vehicleType')
+      .leftJoin('carrier.scopeLinks', 'scopeResultLink')
+      .leftJoin('scopeResultLink.scope', 'scopeResult')
+      .select([
+        'carrier.id',
+        'carrier.companyName',
+        'carrier.pictureUrl',
+        'carrier.foundedYear',
+        'carrier.rating',
+        'carrier.completedShipments',
+        'carrier.createdAt',
+        'carrier.isActive',
+        'carrier.verifiedByAdmin',
+        'carrier.approvalState',
+        'activity.id',
+        'activity.city',
+        'activity.district',
+        'activity.serviceAreasJson',
+        'vehicleLink.id',
+        'vehicleLink.vehicleTypeId',
+        'vehicleLink.capacityKg',
+        'vehicleType.id',
+        'vehicleType.name',
+        'vehicleType.defaultCapacityKg',
+        'scopeResultLink.id',
+        'scopeResultLink.scopeId',
+        'scopeResult.id',
+        'scopeResult.name',
+      ])
       .leftJoin(
         qb => qb
           .select('review.carrierId', 'carrierId')

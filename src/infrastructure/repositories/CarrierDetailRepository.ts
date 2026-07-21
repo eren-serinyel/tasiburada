@@ -2,7 +2,6 @@ import { BaseRepository } from './BaseRepository';
 import { AppDataSource } from '../database/data-source';
 import { Carrier, CarrierApprovalState } from '../../domain/entities/Carrier';
 import { Offer } from '../../domain/entities/Offer';
-import { CarrierDocument, CarrierDocumentStatus } from '../../domain/entities/CarrierDocument';
 import { CarrierVehicle } from '../../domain/entities/CarrierVehicle';
 import { CarrierVehicleType } from '../../domain/entities/CarrierVehicleType';
 import { Review } from '../../domain/entities/Review';
@@ -14,34 +13,6 @@ export interface CarrierDetailVehicleDto {
   id: string;
   typeName: string;
   capacityKg: number | null;
-}
-
-export interface CarrierDetailDocumentDto {
-  id: string;
-  type: string;
-  status: string;
-  isRequired: boolean;
-  isApproved: boolean;
-}
-
-export interface CarrierDetailRatingDto {
-  average: number;
-  count: number;
-}
-
-export interface CarrierDetailProfileDto {
-  overallPercentage: number;
-  companyInfoCompleted: boolean;
-  activityInfoCompleted: boolean;
-  documentsCompleted: boolean;
-  earningsCompleted: boolean;
-}
-
-export interface CarrierDetailStatsDto {
-  completedShipments: number;
-  cancelledShipments: number;
-  successRate: number;
-  totalOffers: number;
 }
 
 export interface CarrierReviewSummaryDto {
@@ -69,26 +40,11 @@ export interface CarrierDetailServiceGroupDto {
   items: CarrierDetailServiceItemDto[];
 }
 
-export interface CarrierDetailDto {
-  id: string;
-  companyName: string;
-  pictureUrl: string | null;
-  phone: string | null;
-  email: string | null;
-  taxNumber: string;
-  city: string | null;
-  district: string | null;
-  address: string | null;
-  foundedYear: number | null;
-  experienceYears: number | null;
-  serviceAreas: string[];
+export interface CarrierDetailProjection {
+  carrier: Carrier;
   vehicles: CarrierDetailVehicleDto[];
-  profile: CarrierDetailProfileDto;
-  rating: CarrierDetailRatingDto;
-  stats: CarrierDetailStatsDto;
+  reviewCount: number;
   startingPrice: number | null;
-  documents: CarrierDetailDocumentDto[];
-  documentsApproved: boolean;
   recentReviews: CarrierReviewSummaryDto[];
   services: CarrierDetailServiceGroupDto[];
 }
@@ -98,22 +54,64 @@ export class CarrierDetailRepository extends BaseRepository<Carrier> {
     super(Carrier);
   }
 
-  async getCarrierDetail(carrierId: string, loadType?: ExtraServiceLoadType | null): Promise<CarrierDetailDto | null> {
+  async getCarrierDetailProjection(
+    carrierId: string,
+    loadType?: ExtraServiceLoadType | null,
+  ): Promise<CarrierDetailProjection | null> {
     const qb = this.repository
       .createQueryBuilder('carrier')
-      .leftJoinAndSelect('carrier.profileStatus', 'profileStatus')
-      .leftJoinAndSelect('carrier.activity', 'activity')
-      .leftJoinAndSelect('carrier.vehicleTypeLinks', 'vehicleLink')
-      .leftJoinAndSelect('vehicleLink.vehicleType', 'vehicleType')
-      .leftJoinAndSelect('carrier.carrierVehicles', 'carrierVehicle', 'carrierVehicle.is_active = :cvActive', { cvActive: true })
-      .leftJoinAndSelect('carrierVehicle.vehicleType', 'cvVehicleType')
-      .leftJoinAndSelect('carrier.documents', 'documents')
-      .leftJoinAndSelect('carrier.earnings', 'earnings')
+      .leftJoin('carrier.activity', 'activity')
+      .leftJoin('carrier.vehicleTypeLinks', 'vehicleLink')
+      .leftJoin('vehicleLink.vehicleType', 'vehicleType')
+      .leftJoin(
+        'carrier.carrierVehicles',
+        'carrierVehicle',
+        'carrierVehicle.is_active = :cvActive',
+        { cvActive: true },
+      )
+      .leftJoin('carrierVehicle.vehicleType', 'cvVehicleType')
+      .leftJoin('carrier.serviceTypeLinks', 'serviceTypeLink')
+      .leftJoin('serviceTypeLink.serviceType', 'serviceType')
+      .leftJoin('carrier.scopeLinks', 'scopeLink')
+      .leftJoin('scopeLink.scope', 'scope')
+      .select([
+        'carrier.id',
+        'carrier.companyName',
+        'carrier.pictureUrl',
+        'carrier.foundedYear',
+        'carrier.rating',
+        'carrier.isActive',
+        'carrier.verifiedByAdmin',
+        'carrier.approvalState',
+        'activity.id',
+        'activity.city',
+        'activity.district',
+        'activity.serviceAreasJson',
+        'vehicleLink.id',
+        'vehicleLink.vehicleTypeId',
+        'vehicleLink.capacityKg',
+        'vehicleType.id',
+        'vehicleType.name',
+        'vehicleType.defaultCapacityKg',
+        'carrierVehicle.id',
+        'carrierVehicle.vehicleTypeId',
+        'carrierVehicle.capacityKg',
+        'cvVehicleType.id',
+        'cvVehicleType.name',
+        'cvVehicleType.defaultCapacityKg',
+        'serviceTypeLink.id',
+        'serviceTypeLink.serviceTypeId',
+        'serviceType.id',
+        'serviceType.name',
+        'scopeLink.id',
+        'scopeLink.scopeId',
+        'scope.id',
+        'scope.name',
+      ])
       .leftJoin(
         qb => qb
           .select('offer.carrierId', 'carrierId')
           .addSelect('MIN(offer.price)', 'minPrice')
-          .addSelect('COUNT(offer.id)', 'offerCount')
           .from(Offer, 'offer')
           .groupBy('offer.carrierId'),
         'pricing',
@@ -123,8 +121,7 @@ export class CarrierDetailRepository extends BaseRepository<Carrier> {
       .andWhere('carrier.isActive = :isActive', { isActive: true })
       .andWhere('carrier.verifiedByAdmin = :verifiedByAdmin', { verifiedByAdmin: true })
       .andWhere('carrier.approvalState = :approvalState', { approvalState: CarrierApprovalState.APPROVED })
-      .addSelect('pricing.minPrice', 'pricing_minPrice')
-      .addSelect('pricing.offerCount', 'pricing_offerCount');
+      .addSelect('pricing.minPrice', 'pricing_minPrice');
 
     const { entities, raw } = await qb.getRawAndEntities();
     const carrierEntity = entities[0];
@@ -133,59 +130,21 @@ export class CarrierDetailRepository extends BaseRepository<Carrier> {
     }
 
     const pricingRow = raw[0] ?? {};
-    const serviceAreas = this.parseServiceAreas(carrierEntity.activity?.serviceAreasJson);
     const vehicles = this.mapVehiclesFromBothSources(
       carrierEntity.carrierVehicles || [],
       carrierEntity.vehicleTypeLinks || [],
     );
-    const documents = this.mapDocuments(carrierEntity.documents || []);
-    const allDocumentsApproved = documents.length > 0 && documents.every(doc => doc.isApproved);
+    const recentReviewResult = await this.fetchRecentReviews(carrierId);
 
-    const foundedYear = carrierEntity.foundedYear ?? null;
-    const experienceYears = foundedYear
-      ? Math.max(0, new Date().getFullYear() - foundedYear)
-      : null;
-
-    const profilePercentage = carrierEntity.profileStatus?.overallPercentage ?? 0;  
-    
     return {
-      id: carrierEntity.id,
-      companyName: carrierEntity.companyName,
-      pictureUrl: carrierEntity.pictureUrl ?? null,
-      phone: null,
-      email: null,
-      taxNumber: carrierEntity.taxNumber,
-      city: carrierEntity.activity?.city ?? null,
-      district: carrierEntity.activity?.district ?? null,
-      address: carrierEntity.activity?.address ?? null,
-      foundedYear,
-      experienceYears,
-      serviceAreas,
+      carrier: carrierEntity,
       vehicles,
-      profile: {
-        overallPercentage: profilePercentage,
-        companyInfoCompleted: carrierEntity.profileStatus?.companyInfoCompleted ?? false,
-        activityInfoCompleted: carrierEntity.profileStatus?.activityInfoCompleted ?? false,
-        documentsCompleted: carrierEntity.profileStatus?.documentsCompleted ?? false,
-        earningsCompleted: carrierEntity.profileStatus?.earningsCompleted ?? false
-      },
-      rating: {
-        average: Number(carrierEntity.rating ?? 0),
-        count: Number(pricingRow.pricing_offerCount ?? carrierEntity.totalOffers ?? 0)
-      },
-      stats: {
-        completedShipments: carrierEntity.completedShipments ?? 0,
-        cancelledShipments: carrierEntity.cancelledShipments ?? 0,
-        successRate: Number(carrierEntity.successRate ?? 0),
-        totalOffers: carrierEntity.totalOffers ?? 0
-      },
+      reviewCount: recentReviewResult.total,
       startingPrice: pricingRow.pricing_minPrice !== undefined && pricingRow.pricing_minPrice !== null
         ? Number(pricingRow.pricing_minPrice)
         : null,
-      documents,
-      documentsApproved: allDocumentsApproved,
-      recentReviews: await this.fetchRecentReviews(carrierId),
-      services: await this.fetchServiceShowcase(carrierId, loadType)
+      recentReviews: recentReviewResult.items,
+      services: await this.fetchServiceShowcase(carrierId, loadType),
     };
   }
 
@@ -228,7 +187,7 @@ export class CarrierDetailRepository extends BaseRepository<Carrier> {
       pushItem(capability.loadType, {
         id: capability.extraServiceId,
         name: serviceName,
-        description: capability.extraService?.description || capability.notes || null,
+        description: capability.extraService?.description || null,
         priceMode: capability.priceMode,
         basePrice: this.toNullableNumber(capability.basePrice),
         minPrice: this.toNullableNumber(capability.quoteMinPrice),
@@ -244,7 +203,7 @@ export class CarrierDetailRepository extends BaseRepository<Carrier> {
       pushItem(service.loadType, {
         id: service.id,
         name: serviceName,
-        description: service.description || null,
+        description: null,
         priceMode: service.priceMode,
         basePrice: this.toNullableNumber(service.basePrice),
         minPrice: this.toNullableNumber(service.quoteMinPrice),
@@ -271,40 +230,37 @@ export class CarrierDetailRepository extends BaseRepository<Carrier> {
       }));
   }
 
-  private async fetchRecentReviews(carrierId: string): Promise<CarrierReviewSummaryDto[]> {
-    const reviews = await AppDataSource.getRepository(Review)
+  private async fetchRecentReviews(
+    carrierId: string,
+  ): Promise<{ items: CarrierReviewSummaryDto[]; total: number }> {
+    const [reviews, total] = await AppDataSource.getRepository(Review)
       .createQueryBuilder('review')
-      .innerJoinAndSelect('review.customer', 'customer')
+      .innerJoin('review.customer', 'customer')
+      .select([
+        'review.id',
+        'review.rating',
+        'review.comment',
+        'review.createdAt',
+        'customer.id',
+        'customer.firstName',
+        'customer.lastName',
+      ])
       .where('review.carrierId = :carrierId', { carrierId })
       .orderBy('review.createdAt', 'DESC')
-      .getMany();
+      .take(5)
+      .getManyAndCount();
 
-    return reviews.map(r => ({
-      id: r.id,
-      customerId: r.customerId,
-      author: `${(r.customer as any)?.firstName || ''} ${(r.customer as any)?.lastName?.charAt(0) || ''}.`.trim(),
-      rating: r.rating,
-      comment: r.comment || '',
-      createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : String(r.createdAt)
-    }));
-  }
-
-  private parseServiceAreas(raw: unknown): string[] {
-    if (!raw) return [];
-    if (Array.isArray(raw)) {
-      return raw.map(area => String(area).trim()).filter(Boolean);
-    }
-    if (typeof raw === 'string') {
-      try {
-        const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed)) {
-          return parsed.map(area => String(area).trim()).filter(Boolean);
-        }
-      } catch {
-        return raw.split(',').map(area => area.trim()).filter(Boolean);
-      }
-    }
-    return [];
+    return {
+      items: reviews.map(r => ({
+        id: r.id,
+        customerId: r.customer.id,
+        author: `${r.customer.firstName || ''} ${r.customer.lastName?.charAt(0) || ''}.`.trim(),
+        rating: r.rating,
+        comment: r.comment || '',
+        createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : String(r.createdAt),
+      })),
+      total,
+    };
   }
 
   private mapVehiclesFromBothSources(
@@ -341,21 +297,6 @@ export class CarrierDetailRepository extends BaseRepository<Carrier> {
     }
 
     return Array.from(result.values());
-  }
-
-  private mapDocuments(docs: CarrierDocument[]): CarrierDetailDocumentDto[] {
-    const unique = new Map<string, CarrierDetailDocumentDto>();
-    docs.forEach(doc => {
-      if (!doc || !doc.id) return;
-      unique.set(doc.id, {
-        id: doc.id,
-        type: doc.type,
-        status: doc.status,
-        isRequired: doc.isRequired,
-        isApproved: doc.isApproved || doc.status === CarrierDocumentStatus.APPROVED
-      });
-    });
-    return Array.from(unique.values());
   }
 
   private toNullableNumber(value: unknown): number | null {

@@ -2,6 +2,7 @@ import { ShipmentRepository } from '../../infrastructure/repositories/ShipmentRe
 import { OfferRepository } from '../../infrastructure/repositories/OfferRepository';
 import fs from 'node:fs';
 import path from 'node:path';
+import { EntityManager } from 'typeorm';
 import { Shipment, ShipmentStatus, ShipmentCategory, PlaceType, InsuranceType, LoadProfile, AccessDistance, DateFlexibility } from '../../domain/entities/Shipment';
 import { Offer, OfferStatus } from '../../domain/entities/Offer';
 import { ExtraService } from '../../domain/entities/ExtraService';
@@ -342,8 +343,8 @@ export class ShipmentService {
     transportType?: string | null,
     loadType?: ExtraServiceLoadType | string | null,
   ): ExtraServiceLoadType | null {
-    return this.normalizeExtraServiceLoadType(loadType)
-      ?? inferExtraServiceLoadTypeFromShipmentCategory(shipmentCategory)
+    return inferExtraServiceLoadTypeFromShipmentCategory(shipmentCategory)
+      ?? this.normalizeExtraServiceLoadType(loadType)
       ?? inferExtraServiceLoadTypeFromTransportType(transportType);
   }
 
@@ -623,11 +624,12 @@ export class ShipmentService {
   private async resolveValidatedExtraServices(
     extraServices: string[] | undefined,
     loadType: ExtraServiceLoadType | null,
+    manager: EntityManager = AppDataSource.manager,
   ): Promise<ExtraService[]> {
     const normalizedValues = this.normalizeExtraServiceInputs(extraServices);
     if (!normalizedValues.length) return [];
 
-    const repo = AppDataSource.getRepository(ExtraService);
+    const repo = manager.getRepository(ExtraService);
     const uuidValues = normalizedValues.filter((value) => /^[0-9a-f-]{36}$/i.test(value));
     const nameValues = normalizedValues.filter((value) => !uuidValues.includes(value));
 
@@ -668,10 +670,13 @@ export class ShipmentService {
     shipmentId: string,
     extraServices: string[] | undefined,
     loadType: ExtraServiceLoadType | null,
+    manager: EntityManager = AppDataSource.manager,
+    validatedServices?: ExtraService[],
   ): Promise<string[]> {
-    const resolvedServices = await this.resolveValidatedExtraServices(extraServices, loadType);
+    const resolvedServices = validatedServices
+      ?? await this.resolveValidatedExtraServices(extraServices, loadType, manager);
 
-    const shipmentWithRelations = await AppDataSource.getRepository(Shipment).findOne({
+    const shipmentWithRelations = await manager.getRepository(Shipment).findOne({
       where: { id: shipmentId },
       relations: ['extraServices'],
     });
@@ -679,7 +684,7 @@ export class ShipmentService {
 
     if (!resolvedServices.length) {
       if (currentIds.length) {
-        await AppDataSource.createQueryBuilder()
+        await manager.createQueryBuilder()
           .relation(Shipment, 'extraServices')
           .of(shipmentId)
           .remove(currentIds);
@@ -688,7 +693,7 @@ export class ShipmentService {
     }
 
     const targetIds = resolvedServices.map((item) => item.id);
-    await AppDataSource.createQueryBuilder()
+    await manager.createQueryBuilder()
       .relation(Shipment, 'extraServices')
       .of(shipmentId)
       .addAndRemove(
@@ -993,18 +998,43 @@ export class ShipmentService {
     );
     const requestedCarrierServices = this.normalizeRequestedCarrierServices(payload.requestedCarrierServices);
     const hasRequestedCarrierServices = Object.keys(requestedCarrierServices).length > 0;
+    const supportsCarrierIndependentCatalogSelection = normalizedShipmentCategory === ShipmentCategory.HOME_MOVE
+      || normalizedShipmentCategory === ShipmentCategory.OFFICE_MOVE
+      || normalizedShipmentCategory === ShipmentCategory.PARTIAL_ITEM;
+    const requestedCatalogServiceIds = Object.values(requestedCarrierServices)
+      .flatMap((services) => services.catalogServiceIds ?? []);
+    const selectedCatalogServices = supportsCarrierIndependentCatalogSelection
+      ? this.normalizeExtraServiceInputs([
+          ...(payload.extraServices ?? []),
+          ...requestedCatalogServiceIds,
+        ])
+      : [];
+    const resolvedCatalogServices = supportsCarrierIndependentCatalogSelection
+      ? await this.resolveValidatedExtraServices(selectedCatalogServices, extraServiceLoadType)
+      : [];
     let validatedRequestedServices: ValidatedCarrierRequestedServices = {
       catalogServiceIds: [],
       customServiceIds: [],
     };
 
     if (hasRequestedCarrierServices) {
+      const carrierServicesToValidate = supportsCarrierIndependentCatalogSelection
+        ? Object.fromEntries(Object.entries(requestedCarrierServices).map(([carrierId, services]) => [
+            carrierId,
+            { ...services, catalogServiceIds: [] },
+          ]))
+        : requestedCarrierServices;
       validatedRequestedServices = await this.validateRequestedCarrierServices(
-        requestedCarrierServices,
+        carrierServicesToValidate,
         extraServiceLoadType,
       );
-      this.assertLoosePayloadMatchesCarrierSelection(payload, validatedRequestedServices);
-    } else if (this.hasLooseExtraServicePayload(payload)) {
+      this.assertLoosePayloadMatchesCarrierSelection(
+        supportsCarrierIndependentCatalogSelection ? { ...payload, extraServices: undefined } : payload,
+        validatedRequestedServices,
+      );
+    } else if (supportsCarrierIndependentCatalogSelection
+      ? this.normalizeCustomExtraServiceIds(payload.customExtraServices, payload.customExtraServiceIds).length > 0
+      : this.hasLooseExtraServicePayload(payload)) {
       throw new ValidationError('Seçilen ek hizmet bu nakliyeci tarafından sunulmuyor.');
     }
 
@@ -1050,7 +1080,9 @@ export class ShipmentService {
 
     shipment.extraServices = await this.applyShipmentExtraServices(
       shipment.id,
-      validatedRequestedServices.catalogServiceIds,
+      supportsCarrierIndependentCatalogSelection
+        ? resolvedCatalogServices.map((service) => service.id)
+        : validatedRequestedServices.catalogServiceIds,
       extraServiceLoadType,
     ) as any;
     const customExtraServices = await this.applyShipmentCustomExtraServices(
@@ -1281,54 +1313,106 @@ export class ShipmentService {
       shipmentId,
     });
 
-    const normalizedShipmentCategory = (payload.shipmentCategory as ShipmentCategory | undefined)
-      ?? shipment.shipmentCategory
-      ?? inferShipmentCategoryFromTransportType(payload.transportType)
-      ?? null;
-    const extraServiceLoadType = this.resolveExtraServiceLoadType(
-      normalizedShipmentCategory,
-      payload.transportType,
-      payload.loadType,
-    );
+    const hasExtraServicesField = Object.prototype.hasOwnProperty.call(payload, 'extraServices');
+    const updateResult = await AppDataSource.manager.transaction(async (manager) => {
+      const lockedShipment = await manager
+        .createQueryBuilder(Shipment, 'shipment')
+        .setLock('pessimistic_write')
+        .where('shipment.id = :shipmentId', { shipmentId })
+        .andWhere('shipment.customerId = :customerId', { customerId })
+        .getOne();
+      if (!lockedShipment) {
+        throw new NotFoundError('Taşıma talebi bulunamadı.');
+      }
+      if (lockedShipment.status !== ShipmentStatus.PENDING) {
+        throw new ValidationError('Sadece bekleyen taşıma talepleri güncellenebilir.');
+      }
 
-    const updatedShipment = await this.shipmentRepository.update(shipmentId, {
-      originCity: payload.originCity,
-      originDistrict: payload.originDistrict,
-      originPlaceType: payload.originPlaceType ? this.normalizePlaceType(payload.originPlaceType) : undefined,
-      originFloor: payload.originFloor,
-      originHasElevator: payload.originHasElevator,
-      originAccessDistance: payload.originAccessDistance as AccessDistance | undefined,
-      destinationCity: payload.destinationCity,
-      destinationDistrict: payload.destinationDistrict,
-      destinationPlaceType: payload.destinationPlaceType ? this.normalizePlaceType(payload.destinationPlaceType) : undefined,
-      destinationFloor: payload.destinationFloor,
-      destinationHasElevator: payload.destinationHasElevator,
-      destinationAccessDistance: payload.destinationAccessDistance as AccessDistance | undefined,
-      originAddressId: payload.originAddressId !== undefined ? payload.originAddressId : undefined,
-      originAddressText: payload.originAddressText !== undefined ? payload.originAddressText : undefined,
-      destinationAddressId: payload.destinationAddressId !== undefined ? payload.destinationAddressId : undefined,
-      destinationAddressText: payload.destinationAddressText !== undefined ? payload.destinationAddressText : undefined,
-      loadDetails: payload.loadDetails,
-      loadProfile: payload.loadProfile as LoadProfile | undefined,
-      shipmentCategory: normalizedShipmentCategory,
-      insuranceType: payload.insuranceType ? this.normalizeInsuranceType(payload.insuranceType) : undefined,
-      timePreference: payload.timePreference,
-      dateFlexibility: payload.dateFlexibility ? this.normalizeDateFlexibility(payload.dateFlexibility) : undefined,
-      weight: payload.weight,
-      estimatedWeight: payload.estimatedWeight,
-      shipmentDate: payload.shipmentDate ? new Date(payload.shipmentDate) : undefined,
-      price: payload.price,
-      vehicleTypePreferenceId: payload.vehicleTypePreferenceId,
-      photoUrls: payload.photoUrls !== undefined ? this.normalizeShipmentPhotoUrls(payload.photoUrls) : undefined,
+      const shipmentWithExtraServices = await manager.getRepository(Shipment).findOne({
+        where: { id: shipmentId, customerId },
+        relations: ['extraServices', 'customExtraServices'],
+      });
+      if (!shipmentWithExtraServices) {
+        throw new NotFoundError('Taşıma talebi bulunamadı.');
+      }
+
+      const normalizedShipmentCategory = (payload.shipmentCategory as ShipmentCategory | undefined)
+        ?? shipmentWithExtraServices.shipmentCategory
+        ?? inferShipmentCategoryFromTransportType(payload.transportType)
+        ?? null;
+      const isLegacyStorageTarget = normalizedShipmentCategory === ShipmentCategory.STORAGE;
+      const extraServiceLoadType = isLegacyStorageTarget
+        ? ExtraServiceLoadType.STORAGE
+        : this.resolveExtraServiceLoadType(
+            normalizedShipmentCategory,
+            payload.transportType,
+            payload.loadType,
+          );
+      const supportsCurrentCatalogSelection = normalizedShipmentCategory === ShipmentCategory.HOME_MOVE
+        || normalizedShipmentCategory === ShipmentCategory.OFFICE_MOVE
+        || normalizedShipmentCategory === ShipmentCategory.PARTIAL_ITEM;
+      const categoryChanged = normalizedShipmentCategory !== shipmentWithExtraServices.shipmentCategory;
+      const shouldReconcileExtraServices = hasExtraServicesField
+        || (categoryChanged && (supportsCurrentCatalogSelection || isLegacyStorageTarget));
+      const requestedExtraServices = hasExtraServicesField
+        ? payload.extraServices
+        : shipmentWithExtraServices.extraServices.map((service) => service.id);
+      const validatedExtraServices = shouldReconcileExtraServices
+        ? await this.resolveValidatedExtraServices(requestedExtraServices, extraServiceLoadType, manager)
+        : undefined;
+
+      await manager.getRepository(Shipment).update(shipmentId, {
+        originCity: payload.originCity,
+        originDistrict: payload.originDistrict,
+        originPlaceType: payload.originPlaceType ? this.normalizePlaceType(payload.originPlaceType) : undefined,
+        originFloor: payload.originFloor,
+        originHasElevator: payload.originHasElevator,
+        originAccessDistance: payload.originAccessDistance as AccessDistance | undefined,
+        destinationCity: payload.destinationCity,
+        destinationDistrict: payload.destinationDistrict,
+        destinationPlaceType: payload.destinationPlaceType ? this.normalizePlaceType(payload.destinationPlaceType) : undefined,
+        destinationFloor: payload.destinationFloor,
+        destinationHasElevator: payload.destinationHasElevator,
+        destinationAccessDistance: payload.destinationAccessDistance as AccessDistance | undefined,
+        originAddressId: payload.originAddressId !== undefined ? payload.originAddressId : undefined,
+        originAddressText: payload.originAddressText !== undefined ? payload.originAddressText : undefined,
+        destinationAddressId: payload.destinationAddressId !== undefined ? payload.destinationAddressId : undefined,
+        destinationAddressText: payload.destinationAddressText !== undefined ? payload.destinationAddressText : undefined,
+        loadDetails: payload.loadDetails,
+        loadProfile: payload.loadProfile as LoadProfile | undefined,
+        shipmentCategory: normalizedShipmentCategory,
+        insuranceType: payload.insuranceType ? this.normalizeInsuranceType(payload.insuranceType) : undefined,
+        timePreference: payload.timePreference,
+        dateFlexibility: payload.dateFlexibility ? this.normalizeDateFlexibility(payload.dateFlexibility) : undefined,
+        weight: payload.weight,
+        estimatedWeight: payload.estimatedWeight,
+        shipmentDate: payload.shipmentDate ? new Date(payload.shipmentDate) : undefined,
+        price: payload.price,
+        vehicleTypePreferenceId: payload.vehicleTypePreferenceId,
+        photoUrls: payload.photoUrls !== undefined ? this.normalizeShipmentPhotoUrls(payload.photoUrls) : undefined,
+      });
+
+      if (shouldReconcileExtraServices) {
+        await this.applyShipmentExtraServices(
+          shipmentId,
+          requestedExtraServices,
+          extraServiceLoadType,
+          manager,
+          validatedExtraServices,
+        );
+      }
+
+      const updatedShipment = await manager.getRepository(Shipment).findOne({
+        where: { id: shipmentId, customerId },
+        relations: ['extraServices', 'customExtraServices'],
+      });
+      if (!updatedShipment) {
+        throw new ValidationError('Taşıma talebi güncellenemedi.');
+      }
+
+      return { updatedShipment, extraServiceLoadType };
     });
-
-    if (payload.extraServices !== undefined) {
-      (updatedShipment as any).extraServices = await this.applyShipmentExtraServices(
-        shipmentId,
-        payload.extraServices,
-        extraServiceLoadType,
-      );
-    }
+    const { updatedShipment, extraServiceLoadType } = updateResult;
 
     if (payload.customExtraServices !== undefined || payload.customExtraServiceIds !== undefined) {
       (updatedShipment as any).customExtraServices = await this.applyShipmentCustomExtraServices(
@@ -1340,11 +1424,7 @@ export class ShipmentService {
       this.flattenExtraServices(updatedShipment as Shipment);
     }
 
-    if (!updatedShipment) {
-      throw new ValidationError('TaÅŸÄ±ma talebi gÃ¼ncellenemedi.');
-    }
-
-    return this.exposeShipmentPhotos(updatedShipment, true);
+    return this.exposeShipmentPhotos(this.flattenExtraServices(updatedShipment), true);
   }
 
   async cancel(customerId: string, shipmentId: string, reason?: string, note?: string): Promise<Shipment> {
