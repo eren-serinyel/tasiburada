@@ -342,8 +342,8 @@ export class ShipmentService {
     transportType?: string | null,
     loadType?: ExtraServiceLoadType | string | null,
   ): ExtraServiceLoadType | null {
-    return this.normalizeExtraServiceLoadType(loadType)
-      ?? inferExtraServiceLoadTypeFromShipmentCategory(shipmentCategory)
+    return inferExtraServiceLoadTypeFromShipmentCategory(shipmentCategory)
+      ?? this.normalizeExtraServiceLoadType(loadType)
       ?? inferExtraServiceLoadTypeFromTransportType(transportType);
   }
 
@@ -993,18 +993,43 @@ export class ShipmentService {
     );
     const requestedCarrierServices = this.normalizeRequestedCarrierServices(payload.requestedCarrierServices);
     const hasRequestedCarrierServices = Object.keys(requestedCarrierServices).length > 0;
+    const supportsCarrierIndependentCatalogSelection = normalizedShipmentCategory === ShipmentCategory.HOME_MOVE
+      || normalizedShipmentCategory === ShipmentCategory.OFFICE_MOVE
+      || normalizedShipmentCategory === ShipmentCategory.PARTIAL_ITEM;
+    const requestedCatalogServiceIds = Object.values(requestedCarrierServices)
+      .flatMap((services) => services.catalogServiceIds ?? []);
+    const selectedCatalogServices = supportsCarrierIndependentCatalogSelection
+      ? this.normalizeExtraServiceInputs([
+          ...(payload.extraServices ?? []),
+          ...requestedCatalogServiceIds,
+        ])
+      : [];
+    const resolvedCatalogServices = supportsCarrierIndependentCatalogSelection
+      ? await this.resolveValidatedExtraServices(selectedCatalogServices, extraServiceLoadType)
+      : [];
     let validatedRequestedServices: ValidatedCarrierRequestedServices = {
       catalogServiceIds: [],
       customServiceIds: [],
     };
 
     if (hasRequestedCarrierServices) {
+      const carrierServicesToValidate = supportsCarrierIndependentCatalogSelection
+        ? Object.fromEntries(Object.entries(requestedCarrierServices).map(([carrierId, services]) => [
+            carrierId,
+            { ...services, catalogServiceIds: [] },
+          ]))
+        : requestedCarrierServices;
       validatedRequestedServices = await this.validateRequestedCarrierServices(
-        requestedCarrierServices,
+        carrierServicesToValidate,
         extraServiceLoadType,
       );
-      this.assertLoosePayloadMatchesCarrierSelection(payload, validatedRequestedServices);
-    } else if (this.hasLooseExtraServicePayload(payload)) {
+      this.assertLoosePayloadMatchesCarrierSelection(
+        supportsCarrierIndependentCatalogSelection ? { ...payload, extraServices: undefined } : payload,
+        validatedRequestedServices,
+      );
+    } else if (supportsCarrierIndependentCatalogSelection
+      ? this.normalizeCustomExtraServiceIds(payload.customExtraServices, payload.customExtraServiceIds).length > 0
+      : this.hasLooseExtraServicePayload(payload)) {
       throw new ValidationError('Seçilen ek hizmet bu nakliyeci tarafından sunulmuyor.');
     }
 
@@ -1050,7 +1075,9 @@ export class ShipmentService {
 
     shipment.extraServices = await this.applyShipmentExtraServices(
       shipment.id,
-      validatedRequestedServices.catalogServiceIds,
+      supportsCarrierIndependentCatalogSelection
+        ? resolvedCatalogServices.map((service) => service.id)
+        : validatedRequestedServices.catalogServiceIds,
       extraServiceLoadType,
     ) as any;
     const customExtraServices = await this.applyShipmentCustomExtraServices(

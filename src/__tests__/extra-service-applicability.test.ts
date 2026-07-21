@@ -3,6 +3,7 @@ import { AppDataSource } from '../infrastructure/database/data-source';
 import { testApp } from './helpers/testApp';
 import { restoreSilenCarrierBaseline } from './setup/seedContract';
 import { seedExtraServices } from '../database/seed/seeders/extraServiceSeeder';
+import { withSeedDataSource } from '../database/seed/seedDataSource';
 import { ExtraService, ExtraServiceApplicability, ExtraServiceLoadType } from '../domain/entities';
 import { PlaceType } from '../domain/entities/Shipment';
 import { CarrierCustomExtraService, CarrierCustomExtraServicePriceMode } from '../domain/entities/CarrierCustomExtraService';
@@ -17,7 +18,7 @@ const skipDB = () => process.env.SKIP_DB_TESTS === 'true';
 describe('extra service applicability', () => {
   beforeAll(async () => {
     if (skipDB()) return;
-    await seedExtraServices();
+    await withSeedDataSource(AppDataSource, () => seedExtraServices());
   });
 
   test('HOME loadType servisleri dogru geliyor', async () => {
@@ -129,7 +130,7 @@ describe('extra service applicability', () => {
     expect(await AppDataSource.getRepository(ExtraServiceApplicability).count()).toBeGreaterThan(0);
   });
 
-  test('shipment create carrier-scoped secim olmadan extra service secimini reddeder', async () => {
+  test('shipment create carrier secimi olmadan uygulanabilir extra service secimini kabul eder', async () => {
     if (skipDB()) return;
 
     const login = await request(testApp)
@@ -139,6 +140,15 @@ describe('extra service applicability', () => {
     expect(login.status).toBe(200);
     const token = login.body.data?.token;
     expect(token).toBeTruthy();
+
+    const officeService = await AppDataSource.getRepository(ExtraService)
+      .createQueryBuilder('extraService')
+      .innerJoin('extraService.applicabilityRules', 'applicability', 'applicability.loadType = :loadType', {
+        loadType: ExtraServiceLoadType.OFFICE,
+      })
+      .where('extraService.status = :status', { status: 'ACTIVE' })
+      .getOne();
+    expect(officeService).toBeTruthy();
 
     const unique = Date.now();
     const response = await request(testApp)
@@ -150,12 +160,12 @@ describe('extra service applicability', () => {
         loadDetails: 'Ofis mobilyalari ve evrak klasorleri tasinacak.',
         shipmentDate: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString(),
         shipmentCategory: 'OFFICE_MOVE',
-        extraServices: ['Beyaz Eşya Kurulumu'],
+        extraServices: [officeService!.id],
       });
 
-    expect(response.status).toBe(400);
-    expect(response.body.success).toBe(false);
-    expect(response.body.message).toBe('Seçilen ek hizmet bu nakliyeci tarafından sunulmuyor.');
+    expect(response.status).toBe(201);
+    expect(response.body.success).toBe(true);
+    expect(response.body.data?.extraServices).toContain(officeService!.name);
   });
 
   test('shipment create OFFICE loadType ile carrier-scoped aktif extra service secimini kabul eder', async () => {
@@ -216,7 +226,7 @@ describe('extra service applicability', () => {
     );
   });
 
-  test('shipment create carrier sunmadigi extra service id secilirse reddeder', async () => {
+  test('shipment create kategoriye uygulanamayan extra service id secilirse reddeder', async () => {
     if (skipDB()) return;
 
     const login = await request(testApp)
@@ -258,7 +268,8 @@ describe('extra service applicability', () => {
 
     expect(response.status).toBe(400);
     expect(response.body.success).toBe(false);
-    expect(response.body.message).toBe('Seçilen ek hizmet bu nakliyeci tarafından sunulmuyor.');
+    expect(response.body.message).toContain('Tanimsiz veya bu yuk turu icin gecersiz ek hizmet');
+    expect(response.body.message).toContain('loadType=OFFICE');
   });
 
   test('shipment create detayli frontend placeType degerlerini enum kategoriye normalize eder', async () => {
